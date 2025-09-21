@@ -1,0 +1,5 @@
+# Basic dependencies that should work
+typing-extensions>=4.0.0
+
+# Optional: for enhanced testing
+pytest>=7.0.0

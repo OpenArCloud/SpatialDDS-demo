@@ -1,0 +1,221 @@
+/*
+ * SpatialDDS IDL Definitions v1.2
+ * Based on SpatialDDS specification
+ * https://github.com/OpenArCloud/SpatialDDS-spec
+ */
+
+module SpatialDDS {
+
+    // Basic data types
+    typedef sequence<octet> Bytes;
+    typedef string UUID;
+    typedef string Geohash;
+    typedef string URI;
+    typedef string JSON;
+
+    // Geometric primitives
+    struct Vector3 {
+        double x;
+        double y;
+        double z;
+    };
+
+    struct Quaternion {
+        double x;
+        double y;
+        double z;
+        double w;
+    };
+
+    struct Pose {
+        Vector3 position;
+        Quaternion orientation;
+    };
+
+    struct Transform {
+        Vector3 translation;
+        Quaternion rotation;
+        Vector3 scale;
+    };
+
+    // Bounding box
+    struct BoundingBox {
+        Vector3 min_point;
+        Vector3 max_point;
+    };
+
+    // Geographic location
+    struct GeoLocation {
+        double latitude;
+        double longitude;
+        double altitude;
+        double accuracy;
+    };
+
+    // Coverage area using geohash
+    struct CoverageArea {
+        sequence<Geohash> geohashes;
+        BoundingBox bounds;
+        double resolution;
+    };
+
+    // Service announcement for Discovery Profile
+    struct ServiceAnnouncement {
+        UUID service_id;
+        string service_type;
+        string service_name;
+        string version;
+        CoverageArea coverage;
+        URI manifest_uri;
+        JSON capabilities;
+        long long timestamp;
+        long long ttl;
+    };
+
+    // VPS (Visual Positioning Service) specific announcement
+    struct VPSAnnouncement {
+        ServiceAnnouncement base;
+        sequence<string> supported_formats; // e.g., "image/jpeg", "pointcloud/ply"
+        double accuracy_estimate;
+        boolean real_time_capable;
+        JSON feature_types; // Supported feature types
+    };
+
+    // Client request for VPS localization
+    struct VPSRequest {
+        UUID request_id;
+        UUID client_id;
+        long long timestamp;
+        GeoLocation approximate_location;
+
+        // Sensor data
+        Bytes image_data;
+        string image_format;
+        JSON camera_intrinsics;
+
+        // Optional additional sensor data
+        JSON imu_data;
+        JSON gps_data;
+
+        // Request parameters
+        double desired_accuracy;
+        boolean include_features;
+        sequence<string> requested_data_types;
+    };
+
+    // VPS response with pose estimation
+    struct VPSResponse {
+        UUID request_id;
+        UUID service_id;
+        long long timestamp;
+
+        // Pose estimation result
+        boolean success;
+        Pose estimated_pose;
+        double confidence;
+        double accuracy_estimate;
+
+        // Reference frame information
+        string coordinate_system;
+        Transform world_to_local;
+
+        // Optional feature data
+        JSON feature_points;
+        JSON descriptor_data;
+
+        // Error information
+        string error_message;
+        long error_code;
+    };
+
+    // Anchor data structure
+    struct Anchor {
+        UUID anchor_id;
+        string anchor_type;
+        Pose pose;
+        JSON metadata;
+        GeoLocation geo_location;
+        double persistence_score;
+        long long created_timestamp;
+        long long last_seen_timestamp;
+    };
+
+    // Geometry tile for spatial data
+    struct GeometryTile {
+        UUID tile_id;
+        BoundingBox bounds;
+        string tile_type; // "mesh", "pointcloud", "features"
+        Bytes geometry_data;
+        string format; // "ply", "obj", "json", etc.
+        double resolution;
+        JSON metadata;
+        long long timestamp;
+    };
+
+    // Pose graph node
+    struct PoseNode {
+        UUID node_id;
+        Pose pose;
+        JSON sensor_data;
+        sequence<UUID> connected_edges;
+        double confidence;
+        long long timestamp;
+    };
+
+    // Pose graph edge
+    struct PoseEdge {
+        UUID edge_id;
+        UUID from_node;
+        UUID to_node;
+        Transform relative_transform;
+        double confidence;
+        string constraint_type;
+        JSON constraint_data;
+    };
+
+    // Service discovery request
+    struct DiscoveryRequest {
+        UUID request_id;
+        UUID client_id;
+        string service_type;
+        CoverageArea area_of_interest;
+        JSON requirements;
+        long long timestamp;
+    };
+
+    // Service discovery response
+    struct DiscoveryResponse {
+        UUID request_id;
+        sequence<ServiceAnnouncement> services;
+        long long timestamp;
+    };
+
+    // Feature descriptor
+    struct FeatureDescriptor {
+        UUID feature_id;
+        Vector3 position;
+        string descriptor_type;
+        Bytes descriptor_data;
+        double scale;
+        double orientation;
+        double confidence;
+    };
+
+    // Blob transport for large data
+    struct BlobInfo {
+        UUID blob_id;
+        string content_type;
+        unsigned long long size;
+        string checksum;
+        URI download_uri;
+        JSON metadata;
+    };
+
+    struct BlobChunk {
+        UUID blob_id;
+        unsigned long chunk_index;
+        unsigned long total_chunks;
+        Bytes chunk_data;
+    };
+
+};

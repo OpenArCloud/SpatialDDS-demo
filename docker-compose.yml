@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  cyclonedds-publisher:
+    build: .
+    container_name: cyclonedds-publisher
+    network_mode: host
+    environment:
+      - CYCLONEDDS_HOME=/opt/cyclonedds
+      - DDS_MODE=publisher
+    volumes:
+      - .:/app
+    command: python test_app.py --mode publisher
+    restart: unless-stopped
+
+  cyclonedds-subscriber:
+    build: .
+    container_name: cyclonedds-subscriber
+    network_mode: host
+    environment:
+      - CYCLONEDDS_HOME=/opt/cyclonedds
+      - DDS_MODE=subscriber
+    volumes:
+      - .:/app
+    command: python test_app.py --mode subscriber
+    restart: unless-stopped
+    depends_on:
+      - cyclonedds-publisher
+
+  # Single container for testing both publisher and subscriber
+  cyclonedds-test:
+    build: .
+    container_name: cyclonedds-test
+    network_mode: host
+    environment:
+      - CYCLONEDDS_HOME=/opt/cyclonedds
+    volumes:
+      - .:/app
+    command: python test_app.py --mode test
+    profiles:
+      - test
+
+networks:
+  default:
+    driver: bridge
