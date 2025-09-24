@@ -266,6 +266,7 @@ This project follows the Eclipse Cyclone DDS licensing terms.
 
 ## References
 
+- [SpatialDDS Specification](https://github.com/OpenArCloud/SpatialDDS-spec) - Official SpatialDDS protocol specification
 - [Eclipse Cyclone DDS](https://github.com/eclipse-cyclonedds/cyclonedds)
 - [Cyclone DDS Python Bindings](https://github.com/eclipse-cyclonedds/cyclonedds-python)
 - [DDS Documentation](https://cyclonedds.io/docs/)
