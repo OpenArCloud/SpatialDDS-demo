@@ -301,7 +301,7 @@ class VPSService:
                 })
 
             now_ms = int(time.time() * 1000)
-            now_iso = datetime.utcnow().isoformat() + 'Z'
+            now_iso = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
             response = {
                 'request_id': request['request_id'],
@@ -325,7 +325,7 @@ class VPSService:
             }
         else:
             now_ms = int(time.time() * 1000)
-            now_iso = datetime.utcnow().isoformat() + 'Z'
+            now_iso = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
             response = {
                 'request_id': request['request_id'],
@@ -505,7 +505,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     # VPS responds with matching ContentAnnounce (simulated)
     # In v1.3, response is an array of ContentAnnounce objects
     now_ms = int(time.time() * 1000)
-    now_iso = datetime.utcnow().isoformat() + 'Z'
+    now_iso = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
     discovery_response = {
         'query_id': content_query['query_id'],
