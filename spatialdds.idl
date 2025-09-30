@@ -1,6 +1,6 @@
 /*
- * SpatialDDS IDL Definitions v1.2
- * Based on SpatialDDS specification
+ * SpatialDDS IDL Definitions v1.3
+ * Based on SpatialDDS specification v1.3
  * https://github.com/OpenArCloud/SpatialDDS-spec
  */
 
@@ -11,6 +11,7 @@ module SpatialDDS {
     typedef string UUID;
     typedef string Geohash;
     typedef string URI;
+    typedef string SpatialUri;  // Format: spatialdds://<authority>/zone:<zone_id>/<rtype>:<rid>
     typedef string JSON;
 
     // Geometric primitives
@@ -27,9 +28,14 @@ module SpatialDDS {
         double w;
     };
 
+    // v1.3: Quaternion in [w,x,y,z] order (preferred format)
+    typedef double QuaternionWXYZ[4];  // [w, x, y, z]
+
     struct Pose {
         Vector3 position;
-        Quaternion orientation;
+        Quaternion orientation;  // deprecated: use orientation_wxyz
+        QuaternionWXYZ orientation_wxyz;  // v1.3: preferred quaternion format
+        string frame;  // v1.3: e.g., "earth-fixed", "map:<name>", "anchor:<id>"
     };
 
     struct Transform {
@@ -38,10 +44,22 @@ module SpatialDDS {
         Vector3 scale;
     };
 
-    // Bounding box
+    // Bounding box (deprecated in v1.3, use CoverageElement)
     struct BoundingBox {
         Vector3 min_point;
         Vector3 max_point;
+    };
+
+    // v1.3: CoverageElement - new coverage model
+    struct CoverageElement {
+        string type;  // "bbox", "geohash", "sphere", etc.
+        string frame;  // "earth-fixed", "local", etc.
+        string crs;  // e.g., "EPSG:4979" for earth-fixed
+        sequence<double> bbox;  // For bbox type: [min_lon, min_lat, max_lon, max_lat] or [min_x, min_y, min_z, max_x, max_y, max_z]
+        sequence<string> geohashes;  // For geohash type
+        Vector3 center;  // For sphere type
+        double radius;  // For sphere type
+        JSON properties;  // Additional properties
     };
 
     // Geographic location
@@ -52,24 +70,52 @@ module SpatialDDS {
         double accuracy;
     };
 
-    // Coverage area using geohash
+    // Coverage area using geohash (deprecated in v1.3, use CoverageElement sequence)
     struct CoverageArea {
         sequence<Geohash> geohashes;
         BoundingBox bounds;
         double resolution;
     };
 
-    // Service announcement for Discovery Profile
+    // v1.3: Coverage container
+    struct Coverage {
+        sequence<CoverageElement> elements;
+    };
+
+    // Service announcement for Discovery Profile (deprecated in v1.3, use ContentAnnounce)
     struct ServiceAnnouncement {
         UUID service_id;
+        SpatialUri self_uri;  // v1.3: URI alongside ID
         string service_type;
         string service_name;
         string version;
-        CoverageArea coverage;
+        CoverageArea coverage_area;  // deprecated: use coverage_v13
+        Coverage coverage_v13;  // v1.3: new coverage model
         URI manifest_uri;
         JSON capabilities;
         long long timestamp;
         long long ttl;
+    };
+
+    // v1.3: ContentAnnounce - replaces ServiceAnnouncement
+    struct ContentAnnounce {
+        string content_id;  // Key field
+        SpatialUri self_uri;  // v1.3: spatialdds:// URI
+        string provider_id;
+        string rtype;  // Resource type: "service", "anchor", "tile", etc.
+        string title;
+        string summary;
+        sequence<string> tags;
+        string class_id;
+        SpatialUri manifest_uri;
+        Coverage spatial_coverage;  // v1.3: new coverage model (renamed to avoid keyword conflict)
+        sequence<Transform> transforms;
+        long long available_from;
+        long long available_until;
+        long long timestamp;
+        unsigned long ttl_sec;
+        JSON endpoint;  // Service endpoint information
+        string mime;  // MIME type for content
     };
 
     // VPS (Visual Positioning Service) specific announcement
@@ -84,7 +130,9 @@ module SpatialDDS {
     // Client request for VPS localization
     struct VPSRequest {
         UUID request_id;
+        SpatialUri request_uri;  // v1.3: URI alongside ID
         UUID client_id;
+        SpatialUri client_uri;  // v1.3: URI alongside ID
         long long timestamp;
         GeoLocation approximate_location;
 
@@ -106,12 +154,14 @@ module SpatialDDS {
     // VPS response with pose estimation
     struct VPSResponse {
         UUID request_id;
+        SpatialUri request_uri;  // v1.3: URI alongside ID
         UUID service_id;
+        SpatialUri service_uri;  // v1.3: URI alongside ID
         long long timestamp;
 
         // Pose estimation result
         boolean success;
-        Pose estimated_pose;
+        Pose estimated_pose;  // v1.3: includes frame and orientation_wxyz
         double confidence;
         double accuracy_estimate;
 
@@ -130,9 +180,11 @@ module SpatialDDS {
 
     // Anchor data structure
     struct Anchor {
-        UUID anchor_id;
+        UUID anchor_id;  // deprecated: use self_uri
+        SpatialUri self_uri;  // v1.3: spatialdds://<authority>/zone:<zone_id>/anchor:<aid>
+        string rtype;  // v1.3: "anchor"
         string anchor_type;
-        Pose pose;
+        Pose anchor_pose;  // v1.3: includes frame and orientation_wxyz (renamed to avoid type conflict)
         JSON metadata;
         GeoLocation geo_location;
         double persistence_score;
@@ -155,7 +207,7 @@ module SpatialDDS {
     // Pose graph node
     struct PoseNode {
         UUID node_id;
-        Pose pose;
+        Pose node_pose;  // Renamed to avoid type conflict
         JSON sensor_data;
         sequence<UUID> connected_edges;
         double confidence;
@@ -173,7 +225,7 @@ module SpatialDDS {
         JSON constraint_data;
     };
 
-    // Service discovery request
+    // Service discovery request (deprecated in v1.3, use ContentQuery)
     struct DiscoveryRequest {
         UUID request_id;
         UUID client_id;
@@ -183,11 +235,23 @@ module SpatialDDS {
         long long timestamp;
     };
 
-    // Service discovery response
+    // Service discovery response (deprecated in v1.3)
     struct DiscoveryResponse {
         UUID request_id;
         sequence<ServiceAnnouncement> services;
         long long timestamp;
+    };
+
+    // v1.3: ContentQuery - replaces DiscoveryRequest
+    struct ContentQuery {
+        UUID query_id;
+        SpatialUri query_uri;  // v1.3: URI for query
+        string rtype;  // Required: resource type to query
+        Coverage volume;  // Required: spatial volume to search (using CoverageElement)
+        sequence<string> tags;  // Optional: filter by tags
+        string class_id;  // Optional: filter by class
+        long long timestamp;
+        JSON filter;  // Additional filter criteria
     };
 
     // Feature descriptor

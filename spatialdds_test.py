@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-SpatialDDS Test Implementation
+SpatialDDS Test Implementation v1.3
 Demonstrates VPS announcement, client discovery, and request/response flow
+Updated for SpatialDDS v1.3 specification
 """
 
 import json
@@ -11,10 +12,15 @@ import random
 import base64
 import hashlib
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 import subprocess
 import sys
+from spatialdds_validation import (
+    SpatialDDSValidator,
+    create_spatial_uri,
+    create_coverage_bbox_earth_fixed
+)
 
 class SpatialDDSLogger:
     """Logger for detailed message tracking"""
@@ -172,15 +178,26 @@ class MockSensorData:
 
 
 class VPSService:
-    """Mock VPS (Visual Positioning Service)"""
+    """Mock VPS (Visual Positioning Service) - v1.3"""
 
     def __init__(self, service_id: str, logger: SpatialDDSLogger):
         self.service_id = service_id
         self.logger = logger
         self.service_name = f"MockVPS-{service_id[-8:]}"
+        self.authority = "vps.example.com"
+        self.zone_id = "sf-downtown"
+        # v1.3: Create self_uri
+        self.self_uri = create_spatial_uri(
+            self.authority, self.zone_id, "service", service_id
+        )
         self.running = False
 
-        # Mock service capabilities
+        # v1.3: Use new 2D coverage model (west, south, east, north)
+        self.coverage_v13 = create_coverage_bbox_earth_fixed(
+            -122.52, 37.70, -122.35, 37.85
+        )
+
+        # Legacy coverage for compatibility
         self.coverage_area = {
             'geohashes': ['9q8yy', '9q8yz', '9q9p0', '9q9p1'],
             'bounds': {
@@ -200,17 +217,41 @@ class VPSService:
         }
 
     def create_announcement(self) -> Dict[str, Any]:
-        """Create VPS service announcement"""
+        """Create VPS ContentAnnounce (v1.3)"""
+        # v1.3: Use slim bounds field (single CoverageElement) instead of full coverage block
+        bounds_element = self.coverage_v13['elements'][0]
+
+        now_ms = int(time.time() * 1000)
+        now_iso = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
         announcement = {
-            'service_id': self.service_id,
-            'service_type': 'VPS',
-            'service_name': self.service_name,
-            'version': '1.2.0',
-            'coverage': self.coverage_area,
-            'manifest_uri': f'https://vps.example.com/manifest/{self.service_id}',
-            'capabilities': self.capabilities,
-            'timestamp': int(time.time() * 1000),
-            'ttl': 300000  # 5 minutes
+            '_legacy_id': self.service_id,  # v1.3: Mark UUID as legacy
+            'self_uri': self.self_uri,  # v1.3: URI is canonical identifier
+            'provider_id': self.authority,  # Note: duplicates authority in self_uri, kept for routing
+            'rtype': 'service',  # v1.3: resource type
+            'title': self.service_name,
+            'summary': 'Visual Positioning Service for SF Downtown',
+            'tags': ['vps', 'localization', 'computer-vision'],
+            'class_id': 'spatial.service.vps',
+            'manifest_uri': create_spatial_uri(self.authority, self.zone_id, 'manifest', self.service_id),
+            'bounds': bounds_element,  # v1.3: slim bounds (single CoverageElement)
+            # Omit empty arrays to keep payload slim
+            'available_from': now_ms,
+            'available_until': now_ms + 86400000,  # 24 hours
+            'timestamp': now_ms,
+            'stamp': now_iso,  # v1.3: ISO8601 mirror for readability
+            'ttl_sec': 300,  # 5 minutes
+            'endpoint': {
+                'protocol': 'dds',
+                'topic': 'SpatialDDS/VPS/Request',
+                'qos': 'reliable'
+            },
+            'mime': 'application/vnd.spatialdds.vps+json',
+            # Include legacy fields for backward compatibility
+            '_legacy': {
+                'version': '1.3.0',
+                'capabilities': self.capabilities
+            }
         }
         return announcement
 
@@ -225,19 +266,24 @@ class VPSService:
         success = random.random() > 0.1  # 90% success rate
 
         if success:
-            # Generate mock pose estimation
-            estimated_pose = {
-                'position': {
-                    'x': random.uniform(-10, 10),
-                    'y': random.uniform(-10, 10),
-                    'z': random.uniform(0, 5)
-                },
-                'orientation': {
-                    'x': random.uniform(-0.1, 0.1),
-                    'y': random.uniform(-0.1, 0.1),
-                    'z': random.uniform(-1, 1),
-                    'w': random.uniform(0.9, 1.0)
-                }
+            # Generate mock pose estimation with v1.3 GeoPose format
+            # Create a random rotation quaternion and normalize it
+            q_xyzw = {
+                'x': random.uniform(-0.1, 0.1),
+                'y': random.uniform(-0.1, 0.1),
+                'z': random.uniform(-1, 1),
+                'w': random.uniform(0.9, 1.0)
+            }
+            # Convert to wxyz and normalize
+            q_wxyz_unnorm = SpatialDDSValidator.convert_quaternion_xyzw_to_wxyz(q_xyzw)
+            q_wxyz = SpatialDDSValidator.normalize_quaternion_wxyz(q_wxyz_unnorm)
+
+            # v1.3: For earth-fixed frame, use GeoPose format (lat, lon, h, q_wxyz)
+            estimated_geopose = {
+                'lat': request['approximate_location']['latitude'] + random.uniform(-0.0001, 0.0001),
+                'lon': request['approximate_location']['longitude'] + random.uniform(-0.0001, 0.0001),
+                'h': request['approximate_location']['altitude'] + random.uniform(-5, 5),
+                'q_wxyz': q_wxyz  # v1.3: canonical quaternion format [w,x,y,z]
             }
 
             confidence = random.uniform(0.7, 0.95)
@@ -254,20 +300,20 @@ class VPSService:
                     'confidence': random.uniform(0.5, 1.0)
                 })
 
+            now_ms = int(time.time() * 1000)
+            now_iso = datetime.utcnow().isoformat() + 'Z'
+
             response = {
                 'request_id': request['request_id'],
-                'service_id': self.service_id,
-                'timestamp': int(time.time() * 1000),
+                'request_uri': request.get('request_uri', ''),  # v1.3
+                '_legacy_service_id': self.service_id,  # v1.3: Mark UUID as legacy
+                'service_uri': self.self_uri,  # v1.3: URI is canonical
+                'timestamp': now_ms,
+                'stamp': now_iso,  # v1.3: ISO8601 mirror
                 'success': True,
-                'estimated_pose': estimated_pose,
+                'estimated_geopose': estimated_geopose,  # v1.3: GeoPose implies earth-fixed frame
                 'confidence': confidence,
                 'accuracy_estimate': accuracy,
-                'coordinate_system': 'WGS84',
-                'world_to_local': {
-                    'translation': {'x': 0, 'y': 0, 'z': 0},
-                    'rotation': {'x': 0, 'y': 0, 'z': 0, 'w': 1},
-                    'scale': {'x': 1, 'y': 1, 'z': 1}
-                },
                 'feature_points': feature_points[:10],  # Limit for readability
                 'descriptor_data': {
                     'format': 'ORB',
@@ -278,16 +324,20 @@ class VPSService:
                 'error_code': 0
             }
         else:
+            now_ms = int(time.time() * 1000)
+            now_iso = datetime.utcnow().isoformat() + 'Z'
+
             response = {
                 'request_id': request['request_id'],
-                'service_id': self.service_id,
-                'timestamp': int(time.time() * 1000),
+                'request_uri': request.get('request_uri', ''),  # v1.3
+                '_legacy_service_id': self.service_id,  # v1.3: Mark UUID as legacy
+                'service_uri': self.self_uri,  # v1.3: URI is canonical
+                'timestamp': now_ms,
+                'stamp': now_iso,  # v1.3: ISO8601 mirror
                 'success': False,
-                'estimated_pose': None,
+                'estimated_geopose': None,
                 'confidence': 0.0,
                 'accuracy_estimate': 0.0,
-                'coordinate_system': '',
-                'world_to_local': None,
                 'feature_points': [],
                 'descriptor_data': {},
                 'error_message': 'Insufficient visual features for localization',
@@ -298,38 +348,52 @@ class VPSService:
 
 
 class SpatialDDSClient:
-    """Mock SpatialDDS client"""
+    """Mock SpatialDDS client - v1.3"""
 
     def __init__(self, client_id: str, logger: SpatialDDSLogger):
         self.client_id = client_id
+        self.authority = "client.example.com"
+        self.zone_id = "sf-client"
+        # v1.3: Create client URI
+        self.client_uri = create_spatial_uri(
+            self.authority, self.zone_id, "client", client_id
+        )
         self.logger = logger
         self.discovered_services = []
 
     def create_discovery_request(self) -> Dict[str, Any]:
-        """Create service discovery request"""
-        request = {
-            'request_id': str(uuid.uuid4()),
-            'client_id': self.client_id,
-            'service_type': 'VPS',
-            'area_of_interest': {
-                'geohashes': ['9q8yy'],
-                'bounds': {
-                    'min_point': {'x': -122.45, 'y': 37.75, 'z': 0},
-                    'max_point': {'x': -122.40, 'y': 37.80, 'z': 100}
-                },
-                'resolution': 0.001
-            },
-            'requirements': {
+        """Create ContentQuery (v1.3 - replaces DiscoveryRequest)"""
+        query_id = str(uuid.uuid4())
+        now_ms = int(time.time() * 1000)
+        now_iso = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+        # v1.3: volume is a single CoverageElement, not an array
+        volume_element = {
+            'type': 'bbox',
+            'frame': 'earth-fixed',
+            'crs': 'EPSG:4979',
+            'bbox': [-122.45, 37.75, -122.40, 37.80]  # 2D bbox for earth-fixed
+        }
+
+        query = {
+            'query_id': query_id,
+            'query_uri': create_spatial_uri(self.authority, self.zone_id, 'query', query_id),  # v1.3
+            'rtype': 'service',  # v1.3: Required resource type
+            'volume': volume_element,  # v1.3: single CoverageElement (not array)
+            'tags': ['vps', 'localization'],  # v1.3: Optional filter
+            'class_id': 'spatial.service.vps',  # v1.3: Optional filter
+            'timestamp': now_ms,
+            'stamp': now_iso,  # v1.3: ISO8601 mirror
+            'filter': {  # v1.3: Additional criteria
                 'min_accuracy': 0.1,
                 'real_time': True,
                 'supported_formats': ['image/jpeg']
-            },
-            'timestamp': int(time.time() * 1000)
+            }
         }
-        return request
+        return query
 
-    def create_vps_request(self, service_id: str) -> Dict[str, Any]:
-        """Create VPS localization request"""
+    def create_vps_request(self, service_id: str, service_uri: str) -> Dict[str, Any]:
+        """Create VPS localization request (v1.3)"""
 
         # Generate mock sensor data
         image_data = MockSensorData.generate_image_data()
@@ -337,10 +401,17 @@ class SpatialDDSClient:
         imu_data = MockSensorData.generate_imu_data()
         gps_data = MockSensorData.generate_gps_data()
 
+        request_id = str(uuid.uuid4())
+        now_ms = int(time.time() * 1000)
+        now_iso = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
         request = {
-            'request_id': str(uuid.uuid4()),
-            'client_id': self.client_id,
-            'timestamp': int(time.time() * 1000),
+            'request_id': request_id,
+            'request_uri': create_spatial_uri(self.authority, self.zone_id, 'request', request_id),  # v1.3
+            '_legacy_client_id': self.client_id,  # v1.3: Mark UUID as legacy
+            'client_uri': self.client_uri,  # v1.3: URI is canonical
+            'timestamp': now_ms,
+            'stamp': now_iso,  # v1.3: ISO8601 mirror
             'approximate_location': {
                 'latitude': gps_data['latitude'],
                 'longitude': gps_data['longitude'],
@@ -375,8 +446,15 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     logger.detailed_content = detailed_content
 
     print("=" * 80)
-    print("🚀 SPATIALDDS PROTOCOL TEST")
+    print("🚀 SPATIALDDS PROTOCOL TEST v1.3")
     print("=" * 80)
+    print("📋 Testing SpatialDDS v1.3 features:")
+    print("   • URI-based identification (spatialdds://)")
+    print("   • CoverageElement with frame/CRS metadata")
+    print("   • Quaternion normalization (wxyz format)")
+    print("   • ContentQuery/ContentAnnounce discovery")
+    print("   • Frame-aware poses")
+    print()
     if show_message_content:
         print("📄 Message content display: ENABLED")
         if detailed_content:
@@ -398,40 +476,46 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     client_id = str(uuid.uuid4())
     client = SpatialDDSClient(client_id, logger)
 
-    print("📡 Phase 1: VPS Service Announcement")
+    print("📡 Phase 1: VPS Service Announcement (ContentAnnounce v1.3)")
     print("-" * 40)
 
     # VPS announces itself
     announcement = vps_service.create_announcement()
     logger.log_message(
-        'VPS_ANNOUNCEMENT', 'SEND',
+        'CONTENT_ANNOUNCE', 'SEND',
         f'VPS:{vps_service.service_name}', 'DDS_NETWORK',
         announcement, show_message_content
     )
 
     time.sleep(0.5)
 
-    print("🔍 Phase 2: Client Service Discovery")
+    print("🔍 Phase 2: Client Service Discovery (ContentQuery v1.3)")
     print("-" * 40)
 
-    # Client sends discovery request
-    discovery_request = client.create_discovery_request()
+    # Client sends discovery request (ContentQuery in v1.3)
+    content_query = client.create_discovery_request()
     logger.log_message(
-        'DISCOVERY_REQUEST', 'SEND',
+        'CONTENT_QUERY', 'SEND',
         f'Client:{client_id[-8:]}', 'DDS_NETWORK',
-        discovery_request, show_message_content
+        content_query, show_message_content
     )
 
     time.sleep(0.2)
 
-    # VPS responds to discovery (simulated)
+    # VPS responds with matching ContentAnnounce (simulated)
+    # In v1.3, response is an array of ContentAnnounce objects
+    now_ms = int(time.time() * 1000)
+    now_iso = datetime.utcnow().isoformat() + 'Z'
+
     discovery_response = {
-        'request_id': discovery_request['request_id'],
-        'services': [announcement],
-        'timestamp': int(time.time() * 1000)
+        'query_id': content_query['query_id'],
+        'announces': [announcement],  # v1.3: array of ContentAnnounce (renamed from 'results')
+        'timestamp': now_ms,
+        'stamp': now_iso,  # v1.3: ISO8601 mirror
+        'count': 1
     }
     logger.log_message(
-        'DISCOVERY_RESPONSE', 'RECV',
+        'CONTENT_QUERY_RESULT', 'RECV',  # v1.3: renamed from CONTENT_QUERY_RESPONSE
         f'VPS:{vps_service.service_name}', f'Client:{client_id[-8:]}',
         discovery_response, show_message_content
     )
@@ -441,8 +525,8 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     print("📤 Phase 3: VPS Localization Request")
     print("-" * 40)
 
-    # Client sends VPS request
-    vps_request = client.create_vps_request(vps_service_id)
+    # Client sends VPS request (v1.3)
+    vps_request = client.create_vps_request(vps_service_id, vps_service.self_uri)
     logger.log_message(
         'VPS_REQUEST', 'SEND',
         f'Client:{client_id[-8:]}', f'VPS:{vps_service.service_name}',
@@ -472,9 +556,10 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
 
     # Print detailed response analysis
     if vps_response['success']:
-        pose = vps_response['estimated_pose']
+        geopose = vps_response['estimated_geopose']
         print(f"✅ Localization successful!")
-        print(f"   Position: ({pose['position']['x']:.3f}, {pose['position']['y']:.3f}, {pose['position']['z']:.3f})")
+        print(f"   GeoPose: lat={geopose['lat']:.7f}°, lon={geopose['lon']:.7f}°, h={geopose['h']:.2f}m")
+        print(f"   Quaternion: [{geopose['q_wxyz'][0]:.4f}, {geopose['q_wxyz'][1]:.4f}, {geopose['q_wxyz'][2]:.4f}, {geopose['q_wxyz'][3]:.4f}]")
         print(f"   Confidence: {vps_response['confidence']:.3f}")
         print(f"   Accuracy: {vps_response['accuracy_estimate']:.3f}m")
         print(f"   Features: {len(vps_response['feature_points'])} points")
@@ -488,19 +573,27 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     print("-" * 40)
 
     if vps_response['success']:
+        anchor_id = str(uuid.uuid4())
+        now_ms = int(time.time() * 1000)
+        now_iso = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
         anchor_update = {
-            'anchor_id': str(uuid.uuid4()),
+            '_legacy_anchor_id': anchor_id,  # v1.3: Mark UUID as legacy
+            'self_uri': create_spatial_uri(vps_service.authority, vps_service.zone_id, 'anchor', anchor_id),  # v1.3: URI is canonical
+            'rtype': 'anchor',  # v1.3
             'anchor_type': 'visual_landmark',
-            'pose': vps_response['estimated_pose'],
+            'geopose': vps_response['estimated_geopose'],  # v1.3: GeoPose implies earth-fixed frame
             'metadata': {
-                'created_by': client_id,
+                '_legacy_created_by': client_id,  # v1.3: Mark UUID as legacy
+                'created_by_uri': client.client_uri,  # v1.3: URI is canonical
                 'feature_count': len(vps_response['feature_points']),
                 'source': 'vps_localization'
             },
-            'geo_location': vps_request['approximate_location'],
             'persistence_score': vps_response['confidence'],
-            'created_timestamp': int(time.time() * 1000),
-            'last_seen_timestamp': int(time.time() * 1000)
+            'created_timestamp': now_ms,
+            'created_stamp': now_iso,  # v1.3: ISO8601 mirror
+            'last_seen_timestamp': now_ms,
+            'last_seen_stamp': now_iso  # v1.3: ISO8601 mirror
         }
 
         logger.log_message(

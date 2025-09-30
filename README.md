@@ -6,11 +6,25 @@ A dockerized setup for Eclipse Cyclone DDS with SpatialDDS protocol implementati
 
 This project provides:
 - Docker container with Cyclone DDS built from source
-- Complete SpatialDDS v1.2 protocol implementation
+- **Complete SpatialDDS v1.3 protocol implementation** (updated from v1.2)
 - VPS (Visual Positioning Service) mock implementation
+- HTTP binding with REST API endpoints for content discovery
+- Validation utilities for URIs, coverage, and quaternions
 - Comprehensive test suite with detailed message logging
-- IDL definitions for SpatialDDS data structures
+- IDL definitions for SpatialDDS v1.3 data structures
 - Docker Compose configuration for distributed testing
+
+## SpatialDDS v1.3 Features
+
+This implementation includes all v1.3 specification updates:
+
+1. **URI-based Identification**: Resources use `spatialdds://` URIs alongside legacy IDs
+2. **Enhanced Coverage Model**: New `CoverageElement` structure with frame, CRS, and geometry types
+3. **Quaternion Normalization**: Support for `q_wxyz` [w,x,y,z] format with validation
+4. **Frame Metadata**: Poses include explicit frame references (earth-fixed, local, map, anchor)
+5. **ContentQuery/ContentAnnounce**: Updated discovery protocol (replaces ServiceAnnouncement)
+6. **HTTP Binding**: REST API at `/.well-known/spatialdds/search` for web integration
+7. **Validation**: Comprehensive validation for all v1.3 structures
 
 ## Prerequisites
 
@@ -25,19 +39,33 @@ This project provides:
 docker build -t cyclonedds-python .
 ```
 
+**Note:** The build includes all v1.3 files:
+- `spatialdds.idl` - v1.3 IDL definitions
+- `spatialdds_test.py` - v1.3 protocol test
+- `spatialdds_validation.py` - Validation utilities
+- `http_binding.py` - HTTP REST API server
+
 ### 2. Run Comprehensive Tests
 
-Test both DDS and SpatialDDS functionality:
+Test both DDS and SpatialDDS v1.3 functionality:
 
 ```bash
 docker run --rm --network host cyclonedds-python
 ```
 
-This runs the comprehensive test suite that validates:
+Or run the v1.3 test directly:
+
+```bash
+docker run --rm --network host cyclonedds-python python3 spatialdds_test.py
+```
+
+This validates:
 - Cyclone DDS environment setup and basic functionality
-- SpatialDDS IDL compilation
-- VPS service announcement and discovery
-- Client-server request/response flow with mock sensor data
+- SpatialDDS v1.3 IDL compilation
+- ContentAnnounce/ContentQuery discovery protocol
+- VPS request/response with normalized quaternions
+- Frame-aware poses with URI-based identification
+- Anchor updates with v1.3 format
 - Detailed message logging and protocol visualization
 
 ### 3. Run Publisher/Subscriber Test
@@ -57,31 +85,11 @@ docker-compose logs -f
 
 ## Usage Options
 
-### Built-in Tests
+### SpatialDDS v1.3 Tests
 
-Run the comprehensive test suite (default):
+Run the v1.3 protocol test (demonstrates all new features):
 ```bash
-docker run --rm --network host cyclonedds-python
-```
-
-Run specific test modes:
-```bash
-# Only basic DDS tests
-docker run --rm --network host cyclonedds-python python3 comprehensive_test.py --mode basic
-
-# Only SpatialDDS tests
-docker run --rm --network host cyclonedds-python python3 comprehensive_test.py --mode spatial
-
-# Only IDL compilation tests
-docker run --rm --network host cyclonedds-python python3 comprehensive_test.py --mode idl
-
-# Interactive SpatialDDS demo
-docker run --rm --network host -it cyclonedds-python python3 comprehensive_test.py --mode demo
-```
-
-Run the SpatialDDS test directly:
-```bash
-# Default: Show message content (without large sensor data)
+# Default: Show message content with v1.3 features
 docker run --rm --network host cyclonedds-python python3 spatialdds_test.py
 
 # Show detailed content including full sensor data
@@ -91,9 +99,58 @@ docker run --rm --network host cyclonedds-python python3 spatialdds_test.py --de
 docker run --rm --network host cyclonedds-python python3 spatialdds_test.py --summary-only
 ```
 
-Run basic DDS diagnostic test:
+### Validation Tests
+
+Test v1.3 validation utilities:
 ```bash
-docker run --rm --network host cyclonedds-python python3 simple_test.py
+docker run --rm cyclonedds-python python3 spatialdds_validation.py
+```
+
+### HTTP Binding Server
+
+Start the HTTP REST API server:
+```bash
+# Start server on port 8080
+docker run --rm -p 8080:8080 cyclonedds-python python3 http_binding.py
+
+# Custom port
+docker run --rm -p 9000:9000 cyclonedds-python python3 http_binding.py --port 9000
+```
+
+Test the HTTP endpoints:
+```bash
+# Search for content
+curl -X POST http://localhost:8080/.well-known/spatialdds/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rtype": "service",
+    "volume": {
+      "elements": [{
+        "type": "bbox",
+        "frame": "earth-fixed",
+        "crs": "EPSG:4979",
+        "bbox": [-122.5, 37.7, 0, -122.3, 37.8, 100]
+      }]
+    }
+  }'
+
+# Register content
+curl -X POST http://localhost:8080/.well-known/spatialdds/register \
+  -H "Content-Type: application/json" \
+  -d @example_content_announce.json
+
+# List all content
+curl http://localhost:8080/.well-known/spatialdds/list
+```
+
+### Built-in Tests
+
+Run the comprehensive test suite (legacy tests):
+```bash
+docker run --rm --network host cyclonedds-python
+
+# Or specific test modes
+docker run --rm --network host cyclonedds-python python3 comprehensive_test.py --mode spatial
 ```
 
 ### DDS Performance Tools
@@ -122,45 +179,35 @@ Compile IDL files:
 docker run --rm -v $(pwd):/data cyclonedds-python idlc /data/your_file.idl
 ```
 
-### SpatialDDS Protocol Testing
+### SpatialDDS v1.3 Protocol Testing
 
-Test VPS (Visual Positioning Service) workflow:
-```bash
-# Complete SpatialDDS VPS workflow test
-docker run --rm --network host cyclonedds-python python3 spatialdds_test.py
-```
-
-Compile SpatialDDS IDL definitions:
-```bash
-# Generate Python bindings from IDL
-docker run --rm -v $(pwd):/output cyclonedds-python idlc -l py -o /output spatialdds.idl
-```
-
-The SpatialDDS test demonstrates:
-1. **Service Discovery**: VPS announces capabilities, client discovers services
-2. **Sensor Data Exchange**: Mock camera, IMU, and GPS data transmission
-3. **Pose Estimation**: VPS processes sensor data and returns pose estimates
-4. **Feature Extraction**: Visual feature points and descriptors
-5. **Anchor Management**: Persistent world-anchored reference points
-6. **Detailed Logging**: Complete message flow with JSON content visualization
+The v1.3 test demonstrates:
+1. **ContentAnnounce**: VPS announces capabilities using v1.3 format with URI and coverage
+2. **ContentQuery**: Client discovers services using spatial volume queries
+3. **URI Validation**: Automatic validation of `spatialdds://` URIs
+4. **Coverage Intersection**: Spatial matching using CoverageElement structure
+5. **Sensor Data Exchange**: Mock camera, IMU, and GPS data transmission
+6. **Pose Estimation**: VPS returns poses with normalized quaternions (wxyz) and frame metadata
+7. **Feature Extraction**: Visual feature points and descriptors
+8. **Anchor Management**: Persistent world-anchored reference points with v1.3 structure
+9. **Detailed Logging**: Complete message flow with JSON content visualization
 
 #### Message Content Display Options:
 - **Default Mode**: Shows all message content with large data fields truncated for readability
 - **Detailed Mode**: Shows complete message content including full sensor data payloads
 - **Summary Mode**: Shows only message headers, timing, and sizes without content
-- **Custom Fields**: Key fields like request_id, success status, and confidence are always shown
+- **Custom Fields**: Key fields like URIs, request_id, success status, and confidence are always shown
 
-## Command Line Options
+### Compile SpatialDDS IDL
 
-The test application supports several command-line options:
-
+Generate code from v1.3 IDL definitions:
 ```bash
-python test_app.py --help
-```
+# Generate Python bindings
+docker run --rm -v $(pwd):/output cyclonedds-python idlc -l py -o /output spatialdds.idl
 
-- `--mode`: Choose between `publisher`, `subscriber`, or `test` (default: test)
-- `--duration`: Duration to run in seconds (default: 10)
-- `--interval`: Publisher message interval in seconds (default: 1.0)
+# Generate C bindings
+docker run --rm -v $(pwd):/output cyclonedds-python idlc -l c -o /output spatialdds.idl
+```
 
 ## Network Configuration
 
@@ -176,11 +223,20 @@ This setup uses `network_mode: host` for Docker containers to ensure proper DDS 
 
 ```
 .
-├── Dockerfile              # Multi-stage build for Cyclone DDS
-├── docker-compose.yml      # Container orchestration
-├── requirements.txt        # Python dependencies
-├── test_app.py            # Test application
-└── README.md              # This file
+├── Dockerfile                  # Multi-stage build for Cyclone DDS
+├── docker-compose.yml          # Container orchestration
+├── requirements.txt            # Python dependencies
+├── spatialdds.idl             # v1.3 IDL definitions
+├── spatialdds_test.py         # v1.3 protocol test suite
+├── spatialdds_validation.py   # v1.3 validation utilities
+├── http_binding.py            # HTTP REST API server
+├── comprehensive_test.py      # DDS + SpatialDDS test suite
+├── run_all_tests.sh           # Test runner script
+├── SPEC_COMPLIANCE.md         # v1.3 spec compliance documentation
+├── DOCKER_GUIDE.md            # Docker usage reference
+├── CONTRIBUTING.md            # Contribution guidelines
+├── LICENSE                    # MIT license
+└── README.md                  # This file
 ```
 
 ## Dockerfile Details
@@ -195,15 +251,6 @@ Key features:
 - Cyclone DDS built with `ENABLE_TYPELIB=ON`
 - Non-root user for security
 - Proper environment variable setup
-
-## Test Application Features
-
-The `test_app.py` includes:
-
-- **Publisher**: Sends test messages with timestamps and counters
-- **Subscriber**: Listens for and displays received messages
-- **Test Mode**: Validates DDS initialization and basic functionality
-- **Error Handling**: Comprehensive error reporting and cleanup
 
 ## Troubleshooting
 
@@ -244,13 +291,14 @@ docker run --rm --network host -e CYCLONEDDS_URI='<General><NetworkInterfaceAddr
 
 ## Development
 
-To modify the test application:
-
-1. Edit `test_app.py` locally
-2. Use volume mounts to test changes without rebuilding:
+To modify and test the implementation:
 
 ```bash
-docker run --rm --network host -v $(pwd):/app cyclonedds-python python test_app.py
+# Test SpatialDDS changes without rebuilding
+docker run --rm --network host -v $(pwd):/app cyclonedds-python python3 spatialdds_test.py
+
+# Test HTTP binding
+docker run --rm -p 8080:8080 -v $(pwd):/app cyclonedds-python python3 http_binding.py
 ```
 
 ## Contributing
@@ -264,9 +312,26 @@ docker run --rm --network host -v $(pwd):/app cyclonedds-python python test_app.
 
 This project follows the Eclipse Cyclone DDS licensing terms.
 
+## v1.3 Specification Compliance
+
+This implementation is **fully compliant** with SpatialDDS v1.3 specification:
+
+- ✅ URI-based identification with `spatialdds://` scheme
+- ✅ Earth-fixed bbox as 2D `[west, south, east, north]`
+- ✅ GeoPose format `{lat, lon, h, q_wxyz}` for earth-fixed frames
+- ✅ Single canonical quaternion format `q_wxyz` [w,x,y,z]
+- ✅ Slim announce payloads with `bounds` (single CoverageElement)
+- ✅ Query `volume` as single CoverageElement
+- ✅ ISO8601 timestamps alongside epoch milliseconds
+- ✅ Omitted redundant fields (pose_frame, empty arrays)
+
+See [SPEC_COMPLIANCE.md](SPEC_COMPLIANCE.md) for detailed before/after examples and all 11 refinements.
+
 ## References
 
-- [SpatialDDS Specification](https://github.com/OpenArCloud/SpatialDDS-spec) - Official SpatialDDS protocol specification
+- [SpatialDDS Specification v1.3](https://github.com/OpenArCloud/SpatialDDS-spec/blob/main/SpatialDDS-1.3-full.md) - Official v1.3 specification
+- [SpatialDDS v1.3 IDL](https://github.com/OpenArCloud/SpatialDDS-spec/tree/main/idl/v1.3) - Official IDL definitions
+- [SpatialDDS Specification Repository](https://github.com/OpenArCloud/SpatialDDS-spec) - Full specification with examples
 - [Eclipse Cyclone DDS](https://github.com/eclipse-cyclonedds/cyclonedds)
 - [Cyclone DDS Python Bindings](https://github.com/eclipse-cyclonedds/cyclonedds-python)
 - [DDS Documentation](https://cyclonedds.io/docs/)

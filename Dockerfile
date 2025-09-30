@@ -36,7 +36,7 @@ RUN ldconfig
 
 # Set environment variables
 ENV CYCLONEDDS_HOME=/usr/local
-ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 ENV PATH=/usr/local/bin:$PATH
 
 # Install Python dependencies
@@ -51,9 +51,11 @@ COPY test_app.py .
 COPY alternative_test.py .
 COPY simple_test.py .
 
-# Copy SpatialDDS files
+# Copy SpatialDDS v1.3 files
 COPY spatialdds.idl .
 COPY spatialdds_test.py .
+COPY spatialdds_validation.py .
+COPY http_binding.py .
 COPY comprehensive_test.py .
 
 # Create a non-root user
