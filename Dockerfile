@@ -46,11 +46,6 @@ RUN pip3 install --upgrade pip
 # Try to install cyclonedds Python bindings
 RUN pip3 install cyclonedds || echo "cyclonedds pip install failed, using alternative approach"
 
-# Copy application files
-COPY test_app.py .
-COPY alternative_test.py .
-COPY simple_test.py .
-
 # Copy SpatialDDS v1.3 files
 COPY spatialdds.idl .
 COPY spatialdds_test.py .
