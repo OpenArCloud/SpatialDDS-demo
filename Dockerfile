@@ -36,7 +36,7 @@ RUN ldconfig
 
 # Set environment variables
 ENV CYCLONEDDS_HOME=/usr/local
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV PATH=/usr/local/bin:$PATH
 
 # Install Python dependencies
