@@ -360,14 +360,11 @@ docker run --rm -p 8080:8080 -v $(pwd):/app cyclonedds-python python3 http_bindi
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Test your changes with the provided test suite
-4. Submit a pull request
+Issues and pull requests are welcome. See the [CONTRIBUTING](CONTRIBUTING) file for more details.
 
 ## License
 
-This project follows the Eclipse Cyclone DDS licensing terms.
+See the [LICENSE](LICENSE) file for details.
 
 ## v1.3 Specification Compliance
 
