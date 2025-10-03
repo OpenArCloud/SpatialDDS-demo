@@ -360,7 +360,7 @@ docker run --rm -p 8080:8080 -v $(pwd):/app cyclonedds-python python3 http_bindi
 
 ## Contributing
 
-Issues and pull requests are welcome. See the [CONTRIBUTING](CONTRIBUTING) file for more details.
+Issues and pull requests are welcome. See the [CONTRIBUTING.md](CONTRIBUTING.md) file for more details.
 
 ## License
 
