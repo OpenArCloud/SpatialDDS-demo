@@ -99,11 +99,30 @@ docker run --rm --network host cyclonedds-python python3 spatialdds_test.py --de
 ```bash
 # Start HTTP REST API server
 docker run --rm -p 8080:8080 cyclonedds-python python3 http_binding.py
+```
 
-# Test the endpoints
+Then in another terminal, test the endpoints:
+
+```bash
+# 1. Get API info
 curl http://localhost:8080/
 
-# Search for content
+# 2. Register a VPS service
+curl -X POST http://localhost:8080/.well-known/spatialdds/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "self_uri": "spatialdds://example.com/zone:downtown/service:vps-001",
+    "rtype": "service",
+    "title": "Test VPS Service",
+    "bounds": {
+      "type": "bbox",
+      "frame": "earth-fixed",
+      "crs": "EPSG:4979",
+      "bbox": [-122.5, 37.7, -122.3, 37.9]
+    }
+  }'
+
+# 3. Search for services (should find the one we just registered)
 curl -X POST http://localhost:8080/.well-known/spatialdds/search \
   -H "Content-Type: application/json" \
   -d '{
@@ -115,6 +134,9 @@ curl -X POST http://localhost:8080/.well-known/spatialdds/search \
       "bbox": [-122.45, 37.75, -122.35, 37.85]
     }
   }'
+
+# 4. List all registered content
+curl http://localhost:8080/.well-known/spatialdds/list
 ```
 
 ## v1.3 Specification Compliance
