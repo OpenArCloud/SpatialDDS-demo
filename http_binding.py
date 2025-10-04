@@ -24,11 +24,17 @@ except ImportError:
     SpatialDDSValidator = None
 
 
+# Module-level registry (shared across all request handlers)
+_content_registry: List[Dict[str, Any]] = []
+
+
 class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
     """HTTP handler for SpatialDDS v1.3 endpoints"""
 
-    # In-memory storage for ContentAnnounce objects
-    content_registry: List[Dict[str, Any]] = []
+    @property
+    def content_registry(self):
+        """Access module-level registry"""
+        return _content_registry
 
     def _set_headers(self, status_code: int = 200, content_type: str = 'application/json'):
         """Set response headers"""
@@ -296,17 +302,18 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
 
     def _register_content(self, announce: Dict[str, Any]):
         """Register or update ContentAnnounce"""
+        global _content_registry
         # v1.3: Use self_uri as canonical identifier
         self_uri = announce['self_uri']
 
         # Remove existing entry with same self_uri
-        self.content_registry = [
-            c for c in self.content_registry
+        _content_registry = [
+            c for c in _content_registry
             if c.get('self_uri') != self_uri
         ]
 
         # Add new entry
-        self.content_registry.append(announce)
+        _content_registry.append(announce)
 
         # Log registration
         print(f"Registered: {announce.get('rtype')}/{self_uri} - {announce.get('title', 'Untitled')}")
