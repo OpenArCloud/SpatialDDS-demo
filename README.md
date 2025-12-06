@@ -1,196 +1,98 @@
-# SpatialDDS v1.3 Demo Implementation
+# SpatialDDS v1.4 Demo
 
-A complete reference implementation of the SpatialDDS v1.3 specification using Eclipse Cyclone DDS, demonstrating VPS (Visual Positioning Service) discovery, localization, and anchor management.
+This repo tracks the SpatialDDS 1.4 draft. It bundles the upstream IDL under `idl/v1.4`, mirrors the manifest examples in `manifests/v1.4`, and provides a runnable mock flow that follows the new Discovery model and sensing/anchor shapes.
 
-## Overview
+## What's Inside
+- v1.4 IDL bundle with a convenience `spatialdds.idl` wrapper
+- Discovery walkthrough using `disco.Announce` + `disco.CoverageQuery/Response`
+- Mock VPS-style localization built from 1.4 primitives (`core.GeoPose`, `sensing.vision`, `argeo.NodeGeo`)
+- HTTP REST binding that mirrors the 1.4 discovery payloads
+- Validation helpers for Time, FrameRef, coverage elements, GeoPose quaternions
+- Docker image for quick runs and IDL compilation
 
-This project provides:
-- **Complete SpatialDDS v1.3 protocol implementation**
-- VPS mock service with GeoPose-based localization
-- HTTP REST API binding for content discovery
-- Comprehensive validation utilities
-- Full message logging and visualization
-- Docker containerization for easy deployment
-
-## Protocol Flow
-
-### DDS-based Communication
+## Protocol Flow (v1.4)
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Client
-    participant DDS as DDS Network
+    participant DDS as DDS Bus
     participant VPS as VPS Service
 
-    %% Phase 1 — Service announcement
-    Note over VPS,DDS: Phase 1 — ContentAnnounce (v1.3)
-    VPS->>DDS: CONTENT_ANNOUNCE<br/>self_uri, rtype:"service"<br/>**bounds** (bbox EPSG:4979)<br/>endpoint{protocol:"dds", topic:"SpatialDDS/VPS/Request"}<br/>mime, title, summary, tags, class_id, manifest_uri<br/>stamp/timestamp, ttl_sec, _legacy_id
+    Note over VPS,DDS: Phase 1 — discovery.Announce (caps + typed topics)
+    VPS->>DDS: ANNOUNCE<br/>service_id, kind:VPS<br/>coverage_frame_ref + coverage[]<br/>topics[{name,type,version,qos_profile}]<br/>caps.supported_profiles<br/>manifest_uri (spatialdds://...)
+    VPS->>DDS: COVERAGE_HINT<br/>optional periodic refresh of coverage/transform TTL
 
-    %% Phase 2 — Discovery query → result (wrapper with announces[])
-    Note over Client,DDS: Phase 2 — ContentQuery (v1.3)
-    Client->>DDS: CONTENT_QUERY<br/>query_id, query_uri<br/>rtype:"service"<br/>**volume** (bbox EPSG:4979)<br/>tags, class_id, filter{min_accuracy, real_time, supported_formats}<br/>stamp/timestamp
-    Note over DDS,VPS: Matching by INTERSECTS(volume, bounds)
-    VPS-->>DDS: CONTENT_QUERY_RESULT (to requester)<br/>query_id, **announces[]** (slim ContentAnnounce objects)<br/>stamp/timestamp, count
-    DDS-->>Client: CONTENT_QUERY_RESULT<br/>announces[0] → self_uri, rtype, **bounds**, endpoint, mime,<br/>(title/summary/tags/class_id/manifest_uri), stamp/timestamp
+    Note over Client,DDS: Phase 2 — CoverageQuery/Response
+    Client->>DDS: COVERAGE_QUERY<br/>query_id<br/>coverage[] (bbox/aabb) + coverage_frame_ref<br/>expr filter<br/>reply_topic
+    DDS-->>VPS: Routed query by bbox intersection
+    VPS-->>DDS: COVERAGE_RESPONSE page<br/>query_id, results[Announce], next_page_token
+    DDS-->>Client: COVERAGE_RESPONSE page
 
-    %% Phase 3 — Service request (VPS API)
-    Note over Client,VPS: Phase 3 — VPS_REQUEST
-    Client->>VPS: VPS_REQUEST<br/>request_id, request_uri<br/>client_uri, _legacy_client_id<br/>approximate_location (LLA)<br/>image_data (JPEG), camera_intrinsics<br/>IMU, GNSS, desired_accuracy, requested_data_types<br/>stamp/timestamp
+    Note over Client,VPS: Phase 3 — Localization exchange (demo)
+    Client->>VPS: LOCALIZE_REQUEST<br/>VisionFrame + KeyframeFeatures + prior GeoPose
+    VPS-->>Client: LOCALIZE_RESPONSE<br/>argeo.NodeGeo (GeoPose + covariance), quality
 
-    %% Phase 4 — Processing
-    Note over VPS: Phase 4 — feature extraction → map match → pose estimate
-
-    %% Phase 5 — Service response with GeoPose
-    Note over VPS,Client: Phase 5 — VPS_RESPONSE
-    VPS-->>Client: VPS_RESPONSE<br/>request_uri, service_uri, _legacy_service_id<br/>success, **estimated_geopose {lat, lon, h, q_wxyz}**<br/>confidence, accuracy_estimate<br/>(optional) feature_points[], descriptor_data<br/>stamp/timestamp, error_code/message
-
-    %% Phase 6 — Anchor update to DDS
-    Note over Client,DDS: Phase 6 — ANCHOR_UPDATE
-    Client->>DDS: ANCHOR_UPDATE<br/>self_uri (anchor), rtype:"anchor", anchor_type<br/>**geopose {lat, lon, h, q_wxyz}**<br/>metadata{created_by_uri, source, feature_count, _legacy_created_by}<br/>persistence_score<br/>created/last_seen timestamps + ISO stamps
-```
-
-### HTTP-based Communication
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Resolver as HTTP Resolver
-    participant VPS as VPS Service
-
-    Note over VPS,Resolver: Providers may pre-register or Resolver proxies DDS announces
-    Client->>Resolver: POST /.well-known/spatialdds/search<br/>Body: ContentQuery { rtype, volume bbox EPSG:4979, tags, class_id, filter, stamp }
-    Resolver-->>Client: 200 OK<br/>Body: [ ContentAnnounce ... ]  // slim objects: self_uri, rtype, bounds, endpoint, mime, etc.
-
-    Note over Client,VPS: Use endpoint from announce
-    Client->>VPS: VPS_REQUEST (as in DDS demo)<br/>request_uri, client_uri, sensor payloads, desired_accuracy
-    VPS-->>Client: VPS_RESPONSE<br/>estimated_geopose {lat, lon, h, q_wxyz}, confidence, accuracy_estimate, stamp
-    Client->>Resolver: optional POST anchor (out of scope) or
-    Client->>DDS: ANCHOR_UPDATE (as in DDS demo)
+    Note over Client,DDS: Phase 4 — Anchor publication (demo)
+    Client->>DDS: ANCHOR_DELTA<br/>op:ADD, anchor entry with GeoPose + checksum
 ```
 
 ## Quick Start
-
-### Build and Run
 
 ```bash
 # Build the Docker image
 docker build -t cyclonedds-python .
 
-# Run the SpatialDDS v1.3 demo
+# Run the SpatialDDS v1.4 demo
 docker run --rm --network host cyclonedds-python
 ```
 
-### Run SpatialDDS Tests
+## Run Tests
 
 ```bash
-# Default: Show full message content
-docker run --rm --network host cyclonedds-python python3 spatialdds_test.py
+# Default: full logs
+python3 spatialdds_test.py
 
-# Summary only (no message content)
-docker run --rm --network host cyclonedds-python python3 spatialdds_test.py --summary-only
+# Summary only
+python3 spatialdds_test.py --summary-only
 
-# Detailed mode (includes full sensor data)
-docker run --rm --network host cyclonedds-python python3 spatialdds_test.py --detailed
+# Validation utilities self-test
+python3 spatialdds_validation.py
+
+# Full suite wrapper
+./run_all_tests.sh
 ```
 
-### HTTP Binding Server
+## HTTP Binding
 
 ```bash
-# Start HTTP REST API server
-docker run --rm -p 8080:8080 cyclonedds-python python3 http_binding.py
-```
+# Start the REST API
+python3 http_binding.py
 
-Then in another terminal, test the endpoints:
-
-```bash
-# 1. Get API info
-curl http://localhost:8080/
-
-# 2. Register a VPS service
+# Register an announce
 curl -X POST http://localhost:8080/.well-known/spatialdds/register \
   -H "Content-Type: application/json" \
-  -d '{
-    "self_uri": "spatialdds://example.com/zone:downtown/service:vps-001",
-    "rtype": "service",
-    "title": "Test VPS Service",
-    "bounds": {
-      "type": "bbox",
-      "frame": "earth-fixed",
-      "crs": "EPSG:4979",
-      "bbox": [-122.5, 37.7, -122.3, 37.9]
-    }
-  }'
+  -d @manifests/v1.4/vps_manifest.json
 
-# 3. Search for services (should find the one we just registered)
+# Search by coverage
 curl -X POST http://localhost:8080/.well-known/spatialdds/search \
   -H "Content-Type: application/json" \
   -d '{
-    "rtype": "service",
-    "volume": {
-      "type": "bbox",
-      "frame": "earth-fixed",
-      "crs": "EPSG:4979",
-      "bbox": [-122.45, 37.75, -122.35, 37.85]
-    }
+    "coverage": [{"type":"bbox","has_crs":true,"crs":"EPSG:4979","has_bbox":true,"bbox":[-122.45,37.75,-122.35,37.85],"has_aabb":false,"global":false,"has_frame_ref":false}],
+    "coverage_frame_ref": {"uuid":"00000000-0000-0000-0000-000000000000","fqn":"earth-fixed"},
+    "expr": "kind==\"VPS\""
   }'
-
-# 4. List all registered content
-curl http://localhost:8080/.well-known/spatialdds/list
 ```
 
-## v1.3 Specification Compliance
-
-This implementation is **fully compliant** with SpatialDDS v1.3:
-
-- ✅ URI-based identification with `spatialdds://` scheme
-- ✅ Earth-fixed bbox as 2D `[west, south, east, north]`
-- ✅ GeoPose format `{lat, lon, h, q_wxyz}` for earth-fixed frames
-- ✅ Single canonical quaternion format `q_wxyz` [w,x,y,z]
-- ✅ Slim announce payloads with `bounds` (single CoverageElement)
-- ✅ Query `volume` as single CoverageElement
-- ✅ ISO8601 timestamps alongside epoch milliseconds
-- ✅ Omitted redundant fields (pose_frame, empty arrays)
-
-See [SPEC_COMPLIANCE.md](SPEC_COMPLIANCE.md) for detailed before/after examples and all 11 refinements.
-
-## Project Structure
+## Repository Layout
 
 ```
 .
-├── Dockerfile                  # Cyclone DDS + Python environment
-├── docker-compose.yml          # Container orchestration
-├── spatialdds.idl             # v1.3 IDL definitions
-├── spatialdds_test.py         # v1.3 protocol demo
-├── spatialdds_validation.py   # Validation utilities
-├── http_binding.py            # HTTP REST API server
-├── comprehensive_test.py      # Full test suite
-├── SPEC_COMPLIANCE.md         # Compliance documentation
-├── DOCKER_GUIDE.md            # Docker reference
-└── README.md                  # This file
+├── idl/v1.4/                 # Canonical IDL pulled from SpatialDDS-spec
+├── manifests/v1.4/           # Manifest examples from SpatialDDS-spec
+├── spatialdds_test.py        # v1.4 discovery + localization demo
+├── spatialdds_validation.py  # FrameRef/Time/Coverage/GeoPose helpers
+├── http_binding.py           # REST wrapper for discovery payloads
+├── run_all_tests.sh          # Convenience test runner
+└── spatialdds.idl            # Convenience include aggregator for idlc
 ```
-
-## Development
-
-Test changes without rebuilding:
-
-```bash
-# Test SpatialDDS protocol
-docker run --rm --network host -v $(pwd):/app cyclonedds-python python3 spatialdds_test.py
-
-# Test HTTP binding
-docker run --rm -p 8080:8080 -v $(pwd):/app cyclonedds-python python3 http_binding.py
-
-# Run validation tests
-docker run --rm -v $(pwd):/app cyclonedds-python python3 spatialdds_validation.py
-```
-
-## References
-
-- [SpatialDDS Specification v1.3](https://github.com/OpenArCloud/SpatialDDS-spec/blob/main/SpatialDDS-1.3-full.md)
-- [SpatialDDS v1.3 IDL](https://github.com/OpenArCloud/SpatialDDS-spec/tree/main/idl/v1.3)
-- [Eclipse Cyclone DDS](https://github.com/eclipse-cyclonedds/cyclonedds)
-
-## License
-
-See the [LICENSE](LICENSE) file for details.

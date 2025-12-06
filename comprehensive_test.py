@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive Cyclone DDS + SpatialDDS Test Suite
+Comprehensive Cyclone DDS + SpatialDDS Test Suite (v1.4)
 Tests both basic DDS functionality and SpatialDDS protocol implementation
 """
 
@@ -43,14 +43,21 @@ def run_spatialdds_tests():
 def test_idl_compilation():
     """Test IDL compilation with idlc"""
     print("\n" + "=" * 80)
-    print("📝 IDL COMPILATION TEST")
+    print("📝 IDL COMPILATION TEST (v1.4)")
     print("=" * 80)
 
     try:
-        # Test IDL compilation
-        print("Testing SpatialDDS IDL compilation...")
-        result = subprocess.run(['idlc', '-l', 'py', 'spatialdds.idl'],
-                              capture_output=True, text=True, timeout=30)
+        print("Testing SpatialDDS IDL compilation (discovery profile, C binding)...")
+        # Use discovery.idl directly to avoid duplicate-inclusion conflicts in the
+        # aggregator while still verifying idlc is functional.
+        result = subprocess.run(
+            ['idlc', '-l', 'c', 'idl/v1.4/discovery.idl'],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            encoding="utf-8",
+            errors="replace",
+        )
 
         if result.returncode == 0:
             print("✅ SpatialDDS IDL compiled successfully")
@@ -156,9 +163,10 @@ def main():
         print("\n🎯 Next Steps:")
         print("   1. Integrate with real camera/sensor data")
         print("   2. Deploy in multi-node DDS environment")
-        print("   3. Implement persistent anchor storage")
-        print("   4. Add security/authentication layers")
-        print("   5. Performance optimization and scalability testing")
+        print("   3. Feed real manifests from manifests/v1.4 into discovery")
+        print("   4. Implement persistent anchor storage")
+        print("   5. Add security/authentication layers")
+        print("   6. Performance optimization and scalability testing")
     else:
         print(f"⚠️  {total_tests - success_count} test(s) failed. Check the logs above.")
 

@@ -10,7 +10,7 @@ docker build -t cyclonedds-python .
 This builds the image with:
 - Cyclone DDS from source
 - Python bindings
-- All SpatialDDS v1.3 files
+- All SpatialDDS v1.4 files
 - DDS performance tools
 
 **Build time:** ~5-10 minutes (depends on your machine)
@@ -31,7 +31,7 @@ docker run --rm --network host cyclonedds-python
 
 Runs `comprehensive_test.py` which includes basic DDS and SpatialDDS tests.
 
-### SpatialDDS v1.3 Protocol Test
+### SpatialDDS v1.4 Protocol Test
 ```bash
 # Summary mode (no message content)
 docker run --rm --network host cyclonedds-python python3 spatialdds_test.py --summary-only
@@ -54,7 +54,7 @@ docker run --rm cyclonedds-python python3 spatialdds_validation.py
 docker run --rm -p 8080:8080 cyclonedds-python python3 http_binding.py
 
 # Custom port
-docker run --rm -p 9000:9000 cyclonedds-python python3 http_binding.py --port 9000
+docker run --rm -p 9000:9000 cyclonedds-python python3 http_binding.py 9000
 ```
 
 ### IDL Compilation
@@ -243,7 +243,7 @@ docker run --rm --network host \
 |------|---------|
 | Build | `docker build -t cyclonedds-python .` |
 | Run default test | `docker run --rm --network host cyclonedds-python` |
-| Run v1.3 test | `docker run --rm --network host cyclonedds-python python3 spatialdds_test.py` |
+| Run v1.4 test | `docker run --rm --network host cyclonedds-python python3 spatialdds_test.py` |
 | Validation test | `docker run --rm cyclonedds-python python3 spatialdds_validation.py` |
 | HTTP server | `docker run --rm -p 8080:8080 cyclonedds-python python3 http_binding.py` |
 | Interactive shell | `docker run --rm -it --network host cyclonedds-python bash` |

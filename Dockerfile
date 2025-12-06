@@ -46,12 +46,14 @@ RUN pip3 install --upgrade pip
 # Try to install cyclonedds Python bindings
 RUN pip3 install cyclonedds || echo "cyclonedds pip install failed, using alternative approach"
 
-# Copy SpatialDDS v1.3 files
+# Copy SpatialDDS v1.4 files
 COPY spatialdds.idl .
 COPY spatialdds_test.py .
 COPY spatialdds_validation.py .
 COPY http_binding.py .
 COPY comprehensive_test.py .
+COPY idl ./idl
+COPY manifests ./manifests
 
 # Create a non-root user
 RUN useradd -m -u 1000 ddsuser && chown -R ddsuser:ddsuser /app

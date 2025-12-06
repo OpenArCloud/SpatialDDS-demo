@@ -1,11 +1,11 @@
 #!/bin/bash
-# SpatialDDS v1.3 - Run All Tests
-# This script runs the complete test suite for v1.3 implementation
+# SpatialDDS v1.4 - Run All Tests
+# This script runs the complete test suite for v1.4 implementation
 
 set -e  # Exit on error
 
 echo "╔══════════════════════════════════════════════════════════════════════════════╗"
-echo "║              SPATIALDDS v1.3 - COMPREHENSIVE TEST SUITE                      ║"
+echo "║              SPATIALDDS v1.4 - COMPREHENSIVE TEST SUITE                      ║"
 echo "╚══════════════════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -41,34 +41,41 @@ echo " TEST 3: HTTP Binding (Logic Test)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 python3 -c "
 from http_binding import SpatialDDSHTTPHandler
-from spatialdds_validation import create_coverage_bbox_earth_fixed
+from spatialdds_validation import create_coverage_bbox_earth_fixed, SpatialDDSValidator
+import uuid
 
-# Test registration and search
 handler = SpatialDDSHTTPHandler
 
+frame_ref, cov_elem = create_coverage_bbox_earth_fixed(-122.5, 37.7, -122.3, 37.8)
+
 announce = {
-    'content_id': 'test-001',
-    'self_uri': 'spatialdds://test.com/zone:test/service:test-001',
-    'rtype': 'service',
-    'title': 'Test Service',
-    'coverage': create_coverage_bbox_earth_fixed(-122.5, 37.7, -122.3, 37.8),
-    'tags': ['vps'],
-    'class_id': 'spatial.service.vps'
+    'service_id': 'svc:vps:test/001',
+    'name': 'Test Service',
+    'kind': 'VPS',
+    'coverage': [cov_elem],
+    'coverage_frame_ref': frame_ref,
+    'manifest_uri': 'spatialdds://test.com/zone:test/manifest:svc',
+    'caps': {},
+    'topics': [],
+    'stamp': SpatialDDSValidator.now_time(),
+    'ttl_sec': 60
 }
 
-handler.content_registry.append(announce)
+handler._register_announce(handler, announce)
 
+frame_ref_q, cov_elem_q = create_coverage_bbox_earth_fixed(-122.45, 37.75, -122.4, 37.8)
 query = {
-    'rtype': 'service',
-    'volume': create_coverage_bbox_earth_fixed(-122.45, 37.75, -122.4, 37.8),
-    'tags': ['vps']
+    'query_id': str(uuid.uuid4()),
+    'coverage': [cov_elem_q],
+    'coverage_frame_ref': frame_ref_q,
+    'expr': 'kind==\"VPS\"'
 }
 
-results = handler._search_content(handler, query)
+results = handler._search_announces(handler, query)
 
 if len(results) == 1:
     print('✅ HTTP binding logic: PASSED')
-    print(f'   - Registration: OK')
+    print('   - Registration: OK')
     print(f'   - Search: OK ({len(results)} result found)')
     exit(0)
 else:
@@ -90,18 +97,14 @@ echo ""
 echo "✅ All tests passed successfully!"
 echo ""
 echo "Test Coverage:"
-echo "  ✅ URI validation and parsing"
-echo "  ✅ Coverage model with CoverageElement"
-echo "  ✅ Quaternion normalization"
-echo "  ✅ Coverage intersection detection"
-echo "  ✅ ContentQuery/ContentAnnounce protocol"
+echo "  ✅ FrameRef/Time validation"
+echo "  ✅ CoverageElement presence flags"
+echo "  ✅ Quaternion normalization (x,y,z,w)"
+echo "  ✅ CoverageQuery/Response flow"
 echo "  ✅ HTTP binding registration and search"
-echo "  ✅ Frame-aware poses"
-echo "  ✅ Anchor updates with v1.3 format"
+echo "  ✅ GeoPose + AnchorDelta demo"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "📋 For detailed results, see: TEST_REPORT.md"
-echo "📋 For migration guide, see: MIGRATION_GUIDE.md"
-echo "📋 For usage examples, see: README.md"
+echo "📋 See README.md for usage and protocol notes"
 echo ""
