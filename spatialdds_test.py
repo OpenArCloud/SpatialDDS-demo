@@ -27,6 +27,14 @@ def _time_to_iso(t: Dict[str, int]) -> str:
     return dt.isoformat().replace("+00:00", "Z")
 
 
+TOPICS = {
+    "ANNOUNCE": "spatialdds/discovery/announce/v1",
+    "COVERAGE_QUERY": "spatialdds/vps/coverage/query/v1",
+    "LOCALIZE_REQUEST": "vps/localize_request/v1",
+    "LOCALIZE_RESPONSE": "vps/localize_response/v1",
+}
+
+
 class SpatialDDSLogger:
     """Logger for detailed message tracking"""
 
@@ -42,6 +50,7 @@ class SpatialDDSLogger:
         source: str,
         destination: str,
         data: Dict[str, Any],
+        topic_name: Optional[str] = None,
         show_content: bool = True,
     ):
         """Log a message with timestamp and details"""
@@ -54,12 +63,14 @@ class SpatialDDSLogger:
             "source": source,
             "destination": destination,
             "data": data,
+            "topic": topic_name,
             "size_bytes": len(json.dumps(data).encode("utf-8")),
         }
         self.messages.append(log_entry)
 
+        topic_label = topic_name or "?"
         direction_symbol = "→" if direction == "SEND" else "←"
-        print(f"[{timestamp:6.3f}s] {direction_symbol} {msg_type}")
+        print(f"[{timestamp:6.3f}s] {direction_symbol} {msg_type}   topic={topic_label}")
         print(f"  From: {source}")
         print(f"  To:   {destination}")
         print(f"  Size: {log_entry['size_bytes']} bytes")
@@ -463,6 +474,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         f"VPS:{service.service_name}",
         "DDS_NETWORK",
         announce,
+        TOPICS.get("ANNOUNCE"),
         show_message_content,
     )
 
@@ -477,6 +489,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         "Client",
         "DDS_NETWORK",
         coverage_query,
+        TOPICS.get("COVERAGE_QUERY"),
         show_message_content,
     )
 
@@ -489,6 +502,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         f"VPS:{service.service_name}",
         "Client",
         coverage_response,
+        coverage_query.get("reply_topic"),
         show_message_content,
     )
 
@@ -507,6 +521,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         "Client",
         f"VPS:{service.service_name}",
         loc_request,
+        TOPICS.get("LOCALIZE_REQUEST"),
         show_message_content,
     )
 
@@ -521,6 +536,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         f"VPS:{service.service_name}",
         "Client",
         loc_response,
+        TOPICS.get("LOCALIZE_RESPONSE"),
         show_message_content,
     )
 
@@ -544,12 +560,16 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     anchor_delta = client.create_anchor_delta(
         loc_response["node_geo"], loc_response["quality"]["confidence"]
     )
+    anchor_topic = (
+        f"{anchor_delta.get('set_id')}/delta/v1" if anchor_delta.get("set_id") else None
+    )
     logger.log_message(
         "ANCHOR_DELTA",
         "SEND",
         "Client",
         "DDS_NETWORK",
         anchor_delta,
+        anchor_topic,
         show_message_content,
     )
 
