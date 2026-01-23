@@ -8,6 +8,7 @@ import sys
 import subprocess
 import argparse
 import os
+import shutil
 
 
 def run_basic_dds_tests():
@@ -47,11 +48,21 @@ def test_idl_compilation():
     print("=" * 80)
 
     try:
+        idlc_path = os.environ.get("IDLC_PATH") or shutil.which("idlc")
+        if not idlc_path:
+            for candidate in ("/usr/local/bin/idlc", "/opt/homebrew/bin/idlc"):
+                if os.path.exists(candidate):
+                    idlc_path = candidate
+                    break
+        if not idlc_path:
+            print("⚠️  idlc not found on PATH; skipping IDL compilation test")
+            return True
+
         print("Testing SpatialDDS IDL compilation (discovery profile, C binding)...")
         # Use discovery.idl directly to avoid duplicate-inclusion conflicts in the
         # aggregator while still verifying idlc is functional.
         result = subprocess.run(
-            ['idlc', '-l', 'c', 'idl/v1.4/discovery.idl'],
+            [idlc_path, '-l', 'c', 'idl/v1.4/discovery.idl'],
             capture_output=True,
             text=True,
             timeout=30,
