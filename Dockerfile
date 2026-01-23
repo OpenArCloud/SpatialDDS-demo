@@ -23,11 +23,11 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # Set working directory
 WORKDIR /workspace
 
-# Clone and build Cyclone DDS
-RUN git clone https://github.com/eclipse-cyclonedds/cyclonedds.git
+# Clone and build Cyclone DDS (match Python bindings version)
+RUN git clone --depth 1 --branch 0.10.5 https://github.com/eclipse-cyclonedds/cyclonedds.git
 WORKDIR /workspace/cyclonedds
 RUN mkdir build && cd build && \
-    cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local -DENABLE_TYPELIB=ON -DBUILD_IDLC=ON -DBUILD_TOOLS=ON && \
+    cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_SHARED_LIBS=ON -DENABLE_SECURITY=OFF -DBUILD_DDSPERF=OFF -DBUILD_IDLC=OFF && \
     make -j$(nproc) && \
     make install
 
@@ -43,15 +43,22 @@ ENV PATH=/usr/local/bin:$PATH
 WORKDIR /app
 RUN pip3 install --upgrade pip
 
-# Try to install cyclonedds Python bindings
-RUN pip3 install cyclonedds || echo "cyclonedds pip install failed, using alternative approach"
+# Install cyclonedds Python bindings (fail build if missing)
+ENV CMAKE_PREFIX_PATH=/usr/local
+RUN python3 -m pip install --no-cache-dir cyclonedds==0.10.5
 
 # Copy SpatialDDS v1.4 files
 COPY spatialdds.idl .
+COPY spatialdds_demo ./spatialdds_demo
+COPY spatialdds_demo_client.py .
+COPY spatialdds_demo_server.py .
+COPY spatialdds_demo_tests.py .
 COPY spatialdds_test.py .
 COPY spatialdds_validation.py .
 COPY http_binding.py .
 COPY comprehensive_test.py .
+COPY run_all_tests.sh .
+COPY cyclonedds.xml /etc/cyclonedds.xml
 COPY idl ./idl
 COPY manifests ./manifests
 
