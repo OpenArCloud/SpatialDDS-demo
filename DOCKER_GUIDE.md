@@ -8,7 +8,7 @@ docker build -t cyclonedds-python .
 ```
 
 This builds the image with:
-- Cyclone DDS 0.10.5 from source
+- A prebuilt Cyclone DDS base image (0.10.5)
 - Python bindings (cyclonedds==0.10.5)
 - All SpatialDDS v1.4 files
 - DDS performance tools
@@ -21,6 +21,16 @@ docker build -t cyclonedds-python --no-cache .
 ```
 
 Use `--no-cache` to force a complete rebuild if you've updated files.
+
+### Base Image (Cyclone DDS + idlc + Python bindings)
+The main Dockerfile uses:
+`ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04`
+
+To rebuild/publish the base image:
+```bash
+docker build -f Dockerfile.base -t ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04 .
+docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
+```
 
 ## Running Tests
 

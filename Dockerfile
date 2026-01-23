@@ -1,51 +1,7 @@
-# Working Cyclone DDS with Python bindings using Ubuntu
-FROM ubuntu:22.04
+# SpatialDDS demo image built on top of the prebuilt Cyclone DDS base
+FROM ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 
-# Prevent interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-dev \
-    build-essential \
-    cmake \
-    git \
-    libssl-dev \
-    pkg-config \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create symlinks for python
-RUN ln -s /usr/bin/python3 /usr/bin/python
-
-# Set working directory
-WORKDIR /workspace
-
-# Clone and build Cyclone DDS (match Python bindings version)
-RUN git clone --depth 1 --branch 0.10.5 https://github.com/eclipse-cyclonedds/cyclonedds.git
-WORKDIR /workspace/cyclonedds
-RUN mkdir build && cd build && \
-    cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_SHARED_LIBS=ON -DENABLE_SECURITY=OFF -DBUILD_DDSPERF=OFF -DBUILD_IDLC=OFF && \
-    make -j$(nproc) && \
-    make install
-
-# Update library cache
-RUN ldconfig
-
-# Set environment variables
-ENV CYCLONEDDS_HOME=/usr/local
-ENV LD_LIBRARY_PATH=/usr/local/lib
-ENV PATH=/usr/local/bin:$PATH
-
-# Install Python dependencies
 WORKDIR /app
-RUN pip3 install --upgrade pip
-
-# Install cyclonedds Python bindings (fail build if missing)
-ENV CMAKE_PREFIX_PATH=/usr/local
-RUN python3 -m pip install --no-cache-dir cyclonedds==0.10.5
 
 # Copy SpatialDDS v1.4 files
 COPY spatialdds.idl .

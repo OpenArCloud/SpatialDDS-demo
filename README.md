@@ -51,6 +51,15 @@ docker build -t cyclonedds-python --no-cache .
 docker run --rm --network host cyclonedds-python
 ```
 
+The Dockerfile pulls a prebuilt base image with Cyclone DDS + idlc + Python bindings:
+`ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04`.
+
+To rebuild/publish the base image:
+```bash
+docker build -f Dockerfile.base -t ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04 .
+docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
+```
+
 ## DDS Two-Process Demo (Cyclone DDS)
 
 The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and requires
