@@ -35,9 +35,22 @@ else
 fi
 echo ""
 
-# Test 3: HTTP binding (unit test style)
+# Test 3: Demo topic + manifest checks
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " TEST 3: HTTP Binding (Logic Test)"
+echo " TEST 3: Demo Topic + Manifest Checks"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+python3 spatialdds_demo_tests.py
+if [ $? -eq 0 ]; then
+    echo "✅ Demo topic + manifest checks: PASSED"
+else
+    echo "❌ Demo topic + manifest checks: FAILED"
+    exit 1
+fi
+echo ""
+
+# Test 4: HTTP binding (unit test style)
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " TEST 4: HTTP Binding (Logic Test)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 python3 -c "
 from http_binding import SpatialDDSHTTPHandler

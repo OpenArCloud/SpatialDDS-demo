@@ -43,9 +43,30 @@ sequenceDiagram
 # Build the Docker image
 docker build -t cyclonedds-python .
 
-# Run the SpatialDDS v1.4 demo
+# Run the SpatialDDS v1.4 demo (mock transport)
 docker run --rm --network host cyclonedds-python
 ```
+
+## DDS Two-Process Demo (Cyclone DDS)
+
+The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and requires
+Cyclone DDS to be enabled explicitly.
+
+```bash
+# In one terminal (server)
+export SPATIALDDS_TRANSPORT=dds
+export SPATIALDDS_DDS_DOMAIN=0
+export CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+python3 spatialdds_demo_server.py
+
+# In another terminal (client)
+export SPATIALDDS_TRANSPORT=dds
+export SPATIALDDS_DDS_DOMAIN=0
+export CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+python3 spatialdds_demo_client.py
+```
+
+Use `--summary-only` for headers only, or omit it for full message details.
 
 ## Run Tests
 

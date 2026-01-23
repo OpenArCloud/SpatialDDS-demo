@@ -1,0 +1,44 @@
+{
+  "schema_version": "spatialdds.demo/1.4",
+  "service_id": "svc:vps:demo/sf-downtown",
+  "name": "MockVPS-v1.4",
+  "topics": [
+    {
+      "name": "spatialdds/vps/localize/request/v1",
+      "role": "localize_request",
+      "type": "vision.localize.request",
+      "qos_profile": "VIDEO_LIVE"
+    },
+    {
+      "name": "spatialdds/vps/localize/response/v1",
+      "role": "localize_response",
+      "type": "vision.localize.response",
+      "qos_profile": "VIDEO_LIVE"
+    },
+    {
+      "name": "spatialdds/vps/coverage/query/v1",
+      "role": "coverage_query",
+      "type": "discovery.coverage.query",
+      "qos_profile": "REQUEST_REPLY"
+    },
+    {
+      "name": "spatialdds/vps/coverage/replies/v1",
+      "role": "coverage_replies",
+      "type": "discovery.coverage.response",
+      "qos_profile": "REQUEST_REPLY"
+    },
+    {
+      "name": "spatialdds/anchors/sf-downtown/delta/v1",
+      "role": "anchor_delta",
+      "type": "anchors.delta",
+      "qos_profile": "RELIABLE_STREAM"
+    }
+  ],
+  "assets": [
+    {
+      "name": "anchor_preview",
+      "type": "model/gltf+json",
+      "uri": "https://registry.example/anchors/sf-downtown/scene.glb"
+    }
+  ]
+}

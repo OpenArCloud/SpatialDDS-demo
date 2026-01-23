@@ -6,6 +6,32 @@
     "SLAM Frontend",
     "AR+Geo"
   ],
+  "topics": [
+    {
+      "name": "spatialdds/vps/localize/request/v1",
+      "role": "localize_request",
+      "type": "vision.localize.request",
+      "qos_profile": "VIDEO_LIVE"
+    },
+    {
+      "name": "spatialdds/vps/localize/response/v1",
+      "role": "localize_response",
+      "type": "vision.localize.response",
+      "qos_profile": "VIDEO_LIVE"
+    },
+    {
+      "name": "spatialdds/vps/coverage/query/v1",
+      "role": "coverage_query",
+      "type": "discovery.coverage.query",
+      "qos_profile": "REQUEST_REPLY"
+    },
+    {
+      "name": "spatialdds/vps/coverage/replies/v1",
+      "role": "coverage_replies",
+      "type": "discovery.coverage.response",
+      "qos_profile": "REQUEST_REPLY"
+    }
+  ],
   "request": {
     "features_topic": "feat.keyframe",
     "image_blob_role": "image/jpeg",

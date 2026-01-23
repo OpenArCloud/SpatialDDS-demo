@@ -6,12 +6,13 @@ using 1.4 primitives, and an anchor delta publication.
 """
 
 import json
+import os
 import time
 import uuid
 import random
 import hashlib
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 import subprocess
 import sys
 
@@ -20,6 +21,21 @@ from spatialdds_validation import (
     create_coverage_bbox_earth_fixed,
     demo_geo_pose,
 )
+from spatialdds_demo.manifest_resolver import resolve_manifest
+from spatialdds_demo.topics import (
+    TOPIC_ANCHORS_DELTA,
+    TOPIC_DISCOVERY_ANNOUNCE_V1,
+    TOPIC_SOURCE_ANNOUNCE_PREVIEW,
+    TOPIC_SOURCE_FALLBACK,
+    TOPIC_SOURCE_MANIFEST,
+    TOPIC_SOURCE_REQUEST,
+    TOPIC_SOURCE_SPEC,
+    TOPIC_VPS_COVERAGE_QUERY_V1,
+    TOPIC_VPS_COVERAGE_REPLIES_V1,
+    TOPIC_VPS_LOCALIZE_REQUEST_V1,
+    TOPIC_VPS_LOCALIZE_RESPONSE_V1,
+    validate_topics_are_canonical,
+)
 
 
 def _time_to_iso(t: Dict[str, int]) -> str:
@@ -27,12 +43,8 @@ def _time_to_iso(t: Dict[str, int]) -> str:
     return dt.isoformat().replace("+00:00", "Z")
 
 
-TOPICS = {
-    "ANNOUNCE": "spatialdds/discovery/announce/v1",
-    "COVERAGE_QUERY": "spatialdds/vps/coverage/query/v1",
-    "LOCALIZE_REQUEST": "vps/localize_request/v1",
-    "LOCALIZE_RESPONSE": "vps/localize_response/v1",
-}
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "0").lower() in {"1", "true", "yes"}
 
 
 class SpatialDDSLogger:
@@ -42,6 +54,7 @@ class SpatialDDSLogger:
         self.messages: List[Dict[str, Any]] = []
         self.start_time = time.time()
         self.detailed_content = False
+        self.slide_mode = _env_flag("SLIDE_MODE")
 
     def log_message(
         self,
@@ -51,6 +64,7 @@ class SpatialDDSLogger:
         destination: str,
         data: Dict[str, Any],
         topic_name: Optional[str] = None,
+        topic_source: Optional[str] = None,
         show_content: bool = True,
     ):
         """Log a message with timestamp and details"""
@@ -64,13 +78,18 @@ class SpatialDDSLogger:
             "destination": destination,
             "data": data,
             "topic": topic_name,
+            "topic_source": topic_source,
             "size_bytes": len(json.dumps(data).encode("utf-8")),
         }
         self.messages.append(log_entry)
 
         topic_label = topic_name or "?"
+        topic_source_label = topic_source or "?"
         direction_symbol = "→" if direction == "SEND" else "←"
-        print(f"[{timestamp:6.3f}s] {direction_symbol} {msg_type}   topic={topic_label}")
+        print(
+            f"[{timestamp:6.3f}s] {direction_symbol} {msg_type}   "
+            f"topic={topic_label}   topic_source={topic_source_label}"
+        )
         print(f"  From: {source}")
         print(f"  To:   {destination}")
         print(f"  Size: {log_entry['size_bytes']} bytes")
@@ -81,13 +100,59 @@ class SpatialDDSLogger:
             if "quality" in data and "confidence" in data["quality"]:
                 print(f"  Confidence: {data['quality']['confidence']:.3f}")
 
-        if show_content:
+        if self.slide_mode:
+            self._print_slide_fields(msg_type, data)
+        elif show_content:
             display_data = self._shrink_payload(data)
             formatted_json = json.dumps(display_data, indent=4, default=str)
             for line in formatted_json.split("\n"):
                 print(f"    {line}")
 
         print()
+
+    def _print_slide_fields(self, msg_type: str, data: Dict[str, Any]) -> None:
+        fields = []
+        if msg_type == "ANNOUNCE":
+            fields.append(("service_id", data.get("service_id")))
+            fields.append(("manifest_uri", data.get("manifest_uri")))
+            coverage = data.get("coverage", [])
+            if coverage:
+                bbox = coverage[0].get("bbox")
+                fields.append(("coverage_bbox", bbox))
+            topics = data.get("topics", [])
+            if topics:
+                fields.append(("qos_profile", topics[0].get("qos_profile")))
+        elif msg_type in ["COVERAGE_QUERY", "COVERAGE_RESPONSE"]:
+            fields.append(("query_id", data.get("query_id")))
+            coverage = data.get("coverage", [])
+            if coverage:
+                fields.append(("coverage_bbox", coverage[0].get("bbox")))
+        elif msg_type in ["LOCALIZE_REQUEST", "LOCALIZE_RESPONSE"]:
+            fields.append(("request_id", data.get("request_id")))
+            if msg_type == "LOCALIZE_RESPONSE":
+                quality = data.get("quality", {})
+                if "confidence" in quality:
+                    fields.append(("confidence", f"{quality['confidence']:.3f}"))
+                if "rmse_m" in quality:
+                    fields.append(("rmse_m", f"{quality['rmse_m']:.3f}"))
+                node_geo = data.get("node_geo", {})
+                geopose = node_geo.get("geopose", {})
+                if {"lat_deg", "lon_deg", "alt_m"} <= geopose.keys():
+                    summary = (
+                        f"lat={geopose['lat_deg']:.6f}, "
+                        f"lon={geopose['lon_deg']:.6f}, "
+                        f"alt={geopose['alt_m']:.2f}m"
+                    )
+                    fields.append(("geopose", summary))
+        elif msg_type == "ANCHOR_DELTA":
+            fields.append(("set_id", data.get("set_id")))
+            fields.append(("op", data.get("op")))
+            entry = data.get("entry", {})
+            fields.append(("anchor_id", entry.get("anchor_id")))
+
+        for key, value in fields:
+            if value is not None:
+                print(f"  {key}: {value}")
 
     def _shrink_payload(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Trim heavy payloads for display"""
@@ -170,7 +235,10 @@ class VPSServiceV14:
         self.logger = logger
         self.service_id = "svc:vps:demo/sf-downtown"
         self.service_name = "MockVPS-v1.4"
-        self.manifest_uri = "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps"
+        self.manifest_uri = os.getenv(
+            "SPATIALDDS_DEMO_MANIFEST_URI",
+            "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+        )
         self.coverage_frame_ref, bbox_elem = create_coverage_bbox_earth_fixed(
             -122.52, 37.70, -122.35, 37.85
         )
@@ -207,22 +275,16 @@ class VPSServiceV14:
             "features": [{"name": "blob.crc32"}, {"name": "vision.codec.jpeg"}],
         }
 
-    def _topics(self) -> List[Dict[str, Any]]:
+    def _topic_preview(self) -> List[Dict[str, Any]]:
         return [
             {
-                "name": "spatialdds/vps/locate/v1",
-                "type": "geo.fix",
+                "name": TOPIC_VPS_LOCALIZE_REQUEST_V1,
+                "type": "vision.localize.request",
                 "version": "v1",
                 "qos_profile": "VIDEO_LIVE",
                 "target_rate_hz": 10.0,
-            },
-            {
-                "name": "spatialdds/vps/features/v1",
-                "type": "slam.keyframe",
-                "version": "v1",
-                "qos_profile": "DESC_BATCH",
-                "target_rate_hz": 5.0,
-            },
+                "preview_only": True,
+            }
         ]
 
     def create_announce(self) -> Dict[str, Any]:
@@ -235,7 +297,8 @@ class VPSServiceV14:
             "org": "ExampleOrg",
             "hints": [{"key": "priority", "value": "edge"}],
             "caps": self._capabilities(),
-            "topics": self._topics(),
+            "topics": self._topic_preview(),
+            "topics_preview_only": True,
             "coverage": self.coverage,
             "coverage_frame_ref": self.coverage_frame_ref,
             "has_coverage_eval_time": False,
@@ -331,7 +394,7 @@ class SpatialDDSClientV14:
             "coverage_frame_ref": coverage_frame_ref,
             "has_coverage_eval_time": False,
             "expr": 'kind=="VPS"',
-            "reply_topic": "spatialdds/vps/query/replies",
+            "reply_topic": TOPIC_VPS_COVERAGE_REPLIES_V1,
             "stamp": SpatialDDSValidator.now_time(),
             "ttl_sec": 60,
         }
@@ -409,7 +472,7 @@ class SpatialDDSClientV14:
         anchor_id = f"anchor-{uuid.uuid4()}"
         checksum = hashlib.sha256(anchor_id.encode()).hexdigest()
         delta = {
-            "set_id": "anchors/sf-downtown",
+            "set_id": "sf-downtown",
             "op": "ADD",
             "entry": {
                 "anchor_id": anchor_id,
@@ -435,10 +498,76 @@ def simulate_dds_communication(logger: SpatialDDSLogger):
     print("   - Blob references for heavy payloads\n")
 
 
+def _index_manifest_topics(manifest: Dict[str, Any]) -> Dict[str, str]:
+    indexed = {}
+    for entry in manifest.get("topics", []):
+        role = entry.get("role")
+        name = entry.get("name")
+        if role and name:
+            indexed[role] = name
+    return indexed
+
+
+def _select_topic(
+    manifest_topics: Dict[str, str],
+    role: str,
+    fallback: str,
+) -> Tuple[str, str]:
+    if role in manifest_topics:
+        return manifest_topics[role], TOPIC_SOURCE_MANIFEST
+    return fallback, TOPIC_SOURCE_FALLBACK
+
+
+def _load_manifest(announce: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Dict[str, str]]:
+    manifest_uri = announce.get("manifest_uri")
+    if not manifest_uri:
+        print("No manifest_uri provided; using spec defaults for topics")
+        print("manifest_resolver: MISSING")
+        print("manifest_loaded: no\n")
+        return None, {"mode": "MISSING", "path": ""}
+
+    ttl_sec = announce.get("ttl_sec", 300)
+    manifest, status = resolve_manifest(manifest_uri, ttl_sec=ttl_sec)
+
+    print(f"manifest_uri: {manifest_uri}")
+    status_mode = status.get("mode", "UNKNOWN")
+    status_path = status.get("path", "")
+    if status_path:
+        print(f"manifest_resolver: {status_mode} (path={status_path})")
+    else:
+        print(f"manifest_resolver: {status_mode}")
+    print(f"manifest_loaded: {'yes' if manifest else 'no'}\n")
+
+    if not manifest:
+        return None, status
+
+    manifest_service_id = manifest.get("service_id")
+    if manifest_service_id != announce.get("service_id"):
+        print(
+            "Manifest service_id mismatch; using spec defaults for topics "
+            f"(announce={announce.get('service_id')}, manifest={manifest_service_id})"
+        )
+        return None, status
+
+    topic_names = [entry.get("name") for entry in manifest.get("topics", []) if entry.get("name")]
+    valid, errors = validate_topics_are_canonical(topic_names, service_kind=announce.get("kind"))
+    if not valid:
+        print("Manifest topics failed canonical validation:")
+        for error in errors:
+            print(f"  - {error}")
+        if _env_flag("STRICT"):
+            raise ValueError("Manifest topics failed canonical validation")
+        print("Falling back to spec defaults for topics")
+        return None, status
+
+    return manifest, status
+
+
 def run_spatialdds_test(show_message_content: bool = True, detailed_content: bool = False):
     """Run comprehensive SpatialDDS test"""
     logger = SpatialDDSLogger()
     logger.detailed_content = detailed_content
+    anchor_zone = "sf-downtown"
 
     print("=" * 80)
     print("🚀 SPATIALDDS PROTOCOL TEST v1.4")
@@ -462,19 +591,39 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
 
     simulate_dds_communication(logger)
 
+    canonical_topics = [
+        TOPIC_DISCOVERY_ANNOUNCE_V1,
+        TOPIC_VPS_COVERAGE_QUERY_V1,
+        TOPIC_VPS_COVERAGE_REPLIES_V1,
+        TOPIC_VPS_LOCALIZE_REQUEST_V1,
+        TOPIC_VPS_LOCALIZE_RESPONSE_V1,
+        TOPIC_ANCHORS_DELTA(anchor_zone),
+    ]
+    valid, errors = validate_topics_are_canonical(canonical_topics, service_kind="VPS")
+    if not valid:
+        print("Canonical topic validation failed:")
+        for error in errors:
+            print(f"  - {error}")
+        if _env_flag("STRICT"):
+            raise ValueError("Canonical topic validation failed")
+
     service = VPSServiceV14(logger)
     client = SpatialDDSClientV14(logger)
 
+    announce = service.create_announce()
+    manifest, _ = _load_manifest(announce)
+    manifest_topics = _index_manifest_topics(manifest) if manifest else {}
+
     print("📡 Phase 1: Service Announcement (discovery.Announce)")
     print("-" * 40)
-    announce = service.create_announce()
     logger.log_message(
         "ANNOUNCE",
         "SEND",
         f"VPS:{service.service_name}",
         "DDS_NETWORK",
         announce,
-        TOPICS.get("ANNOUNCE"),
+        TOPIC_DISCOVERY_ANNOUNCE_V1,
+        TOPIC_SOURCE_ANNOUNCE_PREVIEW,
         show_message_content,
     )
 
@@ -489,7 +638,8 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         "Client",
         "DDS_NETWORK",
         coverage_query,
-        TOPICS.get("COVERAGE_QUERY"),
+        TOPIC_VPS_COVERAGE_QUERY_V1,
+        TOPIC_SOURCE_SPEC,
         show_message_content,
     )
 
@@ -503,6 +653,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         "Client",
         coverage_response,
         coverage_query.get("reply_topic"),
+        TOPIC_SOURCE_REQUEST,
         show_message_content,
     )
 
@@ -515,13 +666,17 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     print("📤 Phase 3: Localization Request")
     print("-" * 40)
     loc_request = client.create_localize_request(service.service_id)
+    loc_request_topic, loc_request_source = _select_topic(
+        manifest_topics, "localize_request", TOPIC_VPS_LOCALIZE_REQUEST_V1
+    )
     logger.log_message(
         "LOCALIZE_REQUEST",
         "SEND",
         "Client",
         f"VPS:{service.service_name}",
         loc_request,
-        TOPICS.get("LOCALIZE_REQUEST"),
+        loc_request_topic,
+        loc_request_source,
         show_message_content,
     )
 
@@ -530,13 +685,17 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     print("📥 Phase 4: Localization Response")
     print("-" * 40)
     loc_response = service.process_localize_request(loc_request)
+    loc_response_topic, loc_response_source = _select_topic(
+        manifest_topics, "localize_response", TOPIC_VPS_LOCALIZE_RESPONSE_V1
+    )
     logger.log_message(
         "LOCALIZE_RESPONSE",
         "RECV",
         f"VPS:{service.service_name}",
         "Client",
         loc_response,
-        TOPICS.get("LOCALIZE_RESPONSE"),
+        loc_response_topic,
+        loc_response_source,
         show_message_content,
     )
 
@@ -561,7 +720,9 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         loc_response["node_geo"], loc_response["quality"]["confidence"]
     )
     anchor_topic = (
-        f"{anchor_delta.get('set_id')}/delta/v1" if anchor_delta.get("set_id") else None
+        TOPIC_ANCHORS_DELTA(anchor_delta.get("set_id"))
+        if anchor_delta.get("set_id")
+        else None
     )
     logger.log_message(
         "ANCHOR_DELTA",
@@ -570,6 +731,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         "DDS_NETWORK",
         anchor_delta,
         anchor_topic,
+        TOPIC_SOURCE_SPEC,
         show_message_content,
     )
 
@@ -586,9 +748,9 @@ def test_dds_integration():
 
     try:
         result = subprocess.run(
-            ["ddsperf", "--help"], capture_output=True, text=True, timeout=5
+            ["ddsperf", "help"], capture_output=True, text=True, timeout=5
         )
-        if result.returncode == 0:
+        if result.returncode in (0, 3):
             print("✅ DDS tools available")
             return True
         print("⚠️  DDS tools not available, continuing without live DDS")
@@ -626,6 +788,11 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if os.getenv("SPATIALDDS_TRANSPORT", "mock") == "dds":
+        print("SPATIALDDS_TRANSPORT=dds is set.")
+        print("Run the DDS demo with spatialdds_demo_server.py and spatialdds_demo_client.py.")
+        return False
 
     if args.hide_content or args.summary_only:
         show_content = False
