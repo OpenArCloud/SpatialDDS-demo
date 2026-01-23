@@ -43,6 +43,10 @@ sequenceDiagram
 # Build the Docker image
 docker build -t cyclonedds-python .
 
+# If the build fails on cyclonedds bindings, rebuild clean
+# (the image requires cyclonedds==0.10.5 and will fail if missing)
+docker build -t cyclonedds-python --no-cache .
+
 # Run the SpatialDDS v1.4 demo (mock transport)
 docker run --rm --network host cyclonedds-python
 ```

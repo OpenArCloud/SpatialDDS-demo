@@ -8,8 +8,8 @@ docker build -t cyclonedds-python .
 ```
 
 This builds the image with:
-- Cyclone DDS from source
-- Python bindings
+- Cyclone DDS 0.10.5 from source
+- Python bindings (cyclonedds==0.10.5)
 - All SpatialDDS v1.4 files
 - DDS performance tools
 
@@ -158,7 +158,7 @@ docker run --rm cyclonedds-python
 
 ### Module Not Found
 ```bash
-# Rebuild with no cache
+# Rebuild with no cache (bindings must install successfully)
 docker build -t cyclonedds-python --no-cache .
 
 # Verify files are copied
