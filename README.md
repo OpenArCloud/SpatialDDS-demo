@@ -66,20 +66,25 @@ The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and re
 Cyclone DDS to be enabled explicitly.
 
 ```bash
-# In one terminal (server)
-export SPATIALDDS_TRANSPORT=dds
-export SPATIALDDS_DDS_DOMAIN=0
-export CYCLONEDDS_URI=file:///etc/cyclonedds.xml
-python3 spatialdds_demo_server.py
+# In one terminal (server, Docker)
+docker run --rm --network host \
+  -e SPATIALDDS_TRANSPORT=dds \
+  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
+  cyclonedds-python python3 spatialdds_demo_server.py
 
-# In another terminal (client)
-export SPATIALDDS_TRANSPORT=dds
-export SPATIALDDS_DDS_DOMAIN=0
-export CYCLONEDDS_URI=file:///etc/cyclonedds.xml
-python3 spatialdds_demo_client.py
+# In another terminal (client, Docker)
+docker run --rm --network host \
+  -e SPATIALDDS_TRANSPORT=dds \
+  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
+  cyclonedds-python python3 spatialdds_demo_client.py
 ```
 
 Use `--summary-only` for headers only, or omit it for full message details.
+
+If running directly on the host instead of Docker, you must install the
+Cyclone DDS Python bindings (`cyclonedds==0.10.5`) and ensure `idlc` is on PATH.
 
 ## Run Tests
 
