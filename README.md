@@ -66,7 +66,7 @@ docker build -f Dockerfile.base -t ghcr.io/openarcloud/cyclonedds-python-base:0.
 docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 ```
 
-## DDS Two-Process Demo (Cyclone DDS)
+## DDS Three-Process Demo (Cyclone DDS)
 
 The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and requires
 Cyclone DDS to be enabled explicitly.
