@@ -331,7 +331,7 @@ class VPSServiceV14:
         pose_local = {
             "t": [random.uniform(-2, 2), random.uniform(-2, 2), random.uniform(0, 2)],
             "q_xyzw": SpatialDDSValidator.normalize_quaternion_xyzw(
-                [random.uniform(-0.1, 0.1), random.uniform(-0.1, 0.1), random.uniform(-0.1, 0.1), 1.0]
+                [random.uniform(-0.05, 0.05), random.uniform(-0.05, 0.05), random.uniform(-0.05, 0.05), 1.0]
             ),
         }
 
