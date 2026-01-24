@@ -111,7 +111,11 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
                 show_message_content,
             )
 
-    transport = DDSTransport(on_message_callback=on_message, domain_id=domain_id)
+    transport = DDSTransport(
+        on_message_callback=on_message,
+        domain_id=domain_id,
+        local_sender_id=service.service_id,
+    )
     transport.start()
 
     ttl_sec = int(announce.get("ttl_sec", 300) or 300)

@@ -78,7 +78,9 @@ def _bootstrap_domain(logger: SpatialDDSLogger, show_message_content: bool) -> O
     def on_message(envelope: object) -> None:
         inbox.put(envelope)
 
-    transport = DDSTransport(on_message_callback=on_message, domain_id=0)
+    transport = DDSTransport(
+        on_message_callback=on_message, domain_id=0, local_sender_id=client_id
+    )
     transport.start()
 
     transport.publish(TOPIC_BOOTSTRAP_QUERY_V1, "BOOTSTRAP_QUERY", json.dumps(query), client_id)
@@ -153,7 +155,11 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     def on_message(envelope: object) -> None:
         inbox.put(envelope)
 
-    transport = DDSTransport(on_message_callback=on_message, domain_id=domain_id)
+    transport = DDSTransport(
+        on_message_callback=on_message,
+        domain_id=domain_id,
+        local_sender_id=client.client_ref["fqn"],
+    )
     transport.start()
 
     announce_reader = transport.create_announce_reader(300)
@@ -304,7 +310,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
             show_message_content,
         )
 
-        catalog_env = _wait_for(inbox, "CATALOG_RESPONSE", timeout=2)
+        catalog_env = _wait_for(inbox, "CATALOG_RESPONSE", timeout=3)
         if not catalog_env:
             print("⚠️  catalog timeout (no CATALOG_RESPONSE)")
         else:

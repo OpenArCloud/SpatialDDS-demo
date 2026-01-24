@@ -99,6 +99,13 @@ Use `--summary-only` for headers only, or omit it for full message details.
 If running directly on the host instead of Docker, you must install the
 Cyclone DDS Python bindings (`cyclonedds==0.10.5`) and ensure `idlc` is on PATH.
 
+### Self-Echo Filtering
+
+The demo drops DDS envelopes that appear to be sent by the same process to avoid
+self-echo on the shared envelope topic. Sender identity is inferred from payload
+fields (for example, client uses `client_frame_ref.fqn`, VPS uses `service_id`,
+bootstrap uses `client_id`).
+
 ## DDS Bootstrap Demo (Optional)
 
 The bootstrap service runs on DDS domain 0 and returns the domain to use for the

@@ -87,7 +87,11 @@ def run_server(
             show_message_content,
         )
 
-    transport = DDSTransport(on_message_callback=on_message, domain_id=0)
+    transport = DDSTransport(
+        on_message_callback=on_message,
+        domain_id=0,
+        local_sender_id="BootstrapService",
+    )
     transport.start()
 
     try:

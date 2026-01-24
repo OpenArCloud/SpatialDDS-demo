@@ -181,7 +181,7 @@ docker run --rm cyclonedds-python ls -la /app/
 docker run --rm --network host cyclonedds-python ip addr
 
 # Test with explicit interface
-docker run --rm --network host -e CYCLONEDDS_URI='<General><NetworkInterfaceAddress>eth0</NetworkInterfaceAddress></General>' cyclonedds-python
+docker run --rm --network host -e CYCLONEDDS_URI='<General><Interfaces><NetworkInterface address="eth0"/></Interfaces></General>' cyclonedds-python
 ```
 
 ## Performance Testing
@@ -236,7 +236,7 @@ docker system prune -a
 ### Set Cyclone DDS Config
 ```bash
 docker run --rm --network host \
-  -e CYCLONEDDS_URI='<General><NetworkInterfaceAddress>auto</NetworkInterfaceAddress></General>' \
+  -e CYCLONEDDS_URI='<General><Interfaces><NetworkInterface autodetermine="true"/></Interfaces></General>' \
   cyclonedds-python
 ```
 

@@ -1,15 +1,23 @@
+import hashlib
+import json
 import os
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, Deque, Optional, Set, Tuple
 
 from spatialdds_demo.topics import TOPIC_DISCOVERY_ANNOUNCE_V1, TOPIC_DDS_ENVELOPE_V1
 
 
 class DDSTransport:
-    def __init__(self, on_message_callback: Callable[[object], None], domain_id: int):
+    def __init__(
+        self,
+        on_message_callback: Callable[[object], None],
+        domain_id: int,
+        local_sender_id: Optional[str] = None,
+    ):
         try:
             from cyclonedds.domain import DomainParticipant
             from cyclonedds.topic import Topic
@@ -43,6 +51,9 @@ class DDSTransport:
         self._callback = on_message_callback
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._local_sender_id = local_sender_id
+        self._sent_fingerprints: Deque[Tuple[str, str, str, str]] = deque(maxlen=512)
+        self._sent_fingerprint_set: Set[Tuple[str, str, str, str]] = set()
 
     def start(self) -> None:
         self._thread.start()
@@ -71,6 +82,7 @@ class DDSTransport:
             stamp_ns=time.time_ns(),
             request_id=request_id or "",
         )
+        self._record_sent(envelope)
         print(f"DDS_TX msg_type={msg_type} logical_topic={logical_topic}")
         writer.write(envelope)
 
@@ -102,6 +114,8 @@ class DDSTransport:
                 for sample in samples:
                     if sample is None:
                         continue
+                    if self._is_self_echo(sample):
+                        continue
                     print(
                         "DDS_RX msg_type="
                         f"{sample.msg_type} logical_topic={sample.logical_topic}"
@@ -111,6 +125,58 @@ class DDSTransport:
                     except Exception as exc:
                         print(f"DDS_RX callback error: {exc}")
             time.sleep(0.01)
+
+    def _record_sent(self, envelope: object) -> None:
+        fingerprint = self._fingerprint(
+            envelope.msg_type,
+            envelope.logical_topic,
+            envelope.request_id,
+            envelope.payload_json,
+        )
+        if fingerprint in self._sent_fingerprint_set:
+            return
+        if len(self._sent_fingerprints) == self._sent_fingerprints.maxlen:
+            oldest = self._sent_fingerprints.popleft()
+            self._sent_fingerprint_set.discard(oldest)
+        self._sent_fingerprints.append(fingerprint)
+        self._sent_fingerprint_set.add(fingerprint)
+
+    def _is_self_echo(self, envelope: object) -> bool:
+        if self._local_sender_id:
+            sender = _sender_id_from_payload(envelope.payload_json)
+            if sender and sender == self._local_sender_id:
+                return True
+        fingerprint = self._fingerprint(
+            envelope.msg_type,
+            envelope.logical_topic,
+            envelope.request_id,
+            envelope.payload_json,
+        )
+        return fingerprint in self._sent_fingerprint_set
+
+    @staticmethod
+    def _fingerprint(msg_type: str, logical_topic: str, request_id: str, payload_json: str):
+        payload_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+        return (msg_type or "", logical_topic or "", request_id or "", payload_hash)
+
+
+def _sender_id_from_payload(payload_json: str) -> Optional[str]:
+    try:
+        payload = json.loads(payload_json or "{}")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    for key in ("from", "source_id", "sender_id", "service_id", "client_id"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    frame = payload.get("client_frame_ref")
+    if isinstance(frame, dict):
+        fqn = frame.get("fqn")
+        if isinstance(fqn, str) and fqn:
+            return fqn
+    return None
 
 
 def require_dds_env() -> int:

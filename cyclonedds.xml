@@ -2,7 +2,9 @@
 <CycloneDDS>
   <Domain id="any">
     <General>
-      <NetworkInterfaceAddress>auto</NetworkInterfaceAddress>
+      <Interfaces>
+        <NetworkInterface autodetermine="true"/>
+      </Interfaces>
     </General>
   </Domain>
 </CycloneDDS>

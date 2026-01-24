@@ -149,7 +149,11 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
             f"catalog: results={len(page)} next_page_token={next_token or 'none'}"
         )
 
-    transport = DDSTransport(on_message_callback=on_message, domain_id=domain_id)
+    transport = DDSTransport(
+        on_message_callback=on_message,
+        domain_id=domain_id,
+        local_sender_id="Catalog:MockCatalog-v1",
+    )
     transport.start()
 
     try:
