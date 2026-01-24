@@ -24,6 +24,8 @@ from spatialdds_validation import (
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
+    TOPIC_BOOTSTRAP_QUERY_V1,
+    TOPIC_BOOTSTRAP_RESPONSE_V1,
     TOPIC_CATALOG_QUERY_V1,
     TOPIC_CATALOG_REPLIES,
     TOPIC_DISCOVERY_ANNOUNCE_V1,
@@ -610,6 +612,12 @@ def _parse_page_token(token: str) -> int:
     return 0
 
 
+def _manifest_list(raw: str) -> List[str]:
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 def _matches_expr(entry: Dict[str, Any], expr: str) -> bool:
     if not expr:
         return True
@@ -692,6 +700,8 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     simulate_dds_communication(logger)
 
     canonical_topics = [
+        TOPIC_BOOTSTRAP_QUERY_V1,
+        TOPIC_BOOTSTRAP_RESPONSE_V1,
         TOPIC_DISCOVERY_ANNOUNCE_V1,
         TOPIC_VPS_COVERAGE_QUERY_V1,
         TOPIC_VPS_COVERAGE_REPLIES_V1,
@@ -709,6 +719,53 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
 
     service = VPSServiceV14(logger)
     client = SpatialDDSClientV14(logger)
+
+    if os.getenv("SPATIALDDS_BOOTSTRAP", "0") == "1":
+        print("🧭 Phase 0: DDS Bootstrap (bootstrap.Query → bootstrap.Response)")
+        print("-" * 40)
+        client_id = f"client-{uuid.uuid4().hex[:6]}"
+        site = os.getenv("SPATIALDDS_BOOTSTRAP_SITE", "sf-downtown")
+        query = {
+            "client_id": client_id,
+            "client_kind": os.getenv("SPATIALDDS_BOOTSTRAP_KIND", "robot"),
+            "capabilities": ["localize", "catalog"],
+            "location_hint": site,
+            "stamp": SpatialDDSValidator.now_time(),
+        }
+        logger.log_message(
+            "BOOTSTRAP_QUERY",
+            "SEND",
+            client_id,
+            "BootstrapService",
+            query,
+            TOPIC_BOOTSTRAP_QUERY_V1,
+            TOPIC_SOURCE_SPEC,
+            show_message_content,
+        )
+        response = {
+            "client_id": client_id,
+            "dds_domain": int(os.getenv("SPATIALDDS_BOOTSTRAP_DOMAIN", "1")),
+            "cyclonedds_profile": "",
+            "manifest_uris": _manifest_list(
+                os.getenv(
+                    "SPATIALDDS_BOOTSTRAP_MANIFESTS",
+                    "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+                )
+            ),
+            "ttl_sec": int(os.getenv("SPATIALDDS_BOOTSTRAP_TTL", "300")),
+            "stamp": SpatialDDSValidator.now_time(),
+        }
+        logger.log_message(
+            "BOOTSTRAP_RESPONSE",
+            "RECV",
+            "BootstrapService",
+            client_id,
+            response,
+            TOPIC_BOOTSTRAP_RESPONSE_V1,
+            TOPIC_SOURCE_REQUEST,
+            show_message_content,
+        )
+        print(f"bootstrap: using dds_domain={response['dds_domain']}\n")
 
     announce = service.create_announce()
     manifest, _ = _load_manifest(announce)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import queue
 import sys
 import time
@@ -10,6 +11,8 @@ from typing import Any, Dict, Optional
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
+    TOPIC_BOOTSTRAP_QUERY_V1,
+    TOPIC_BOOTSTRAP_RESPONSE_V1,
     TOPIC_CATALOG_QUERY_V1,
     TOPIC_CATALOG_REPLIES,
     TOPIC_DISCOVERY_ANNOUNCE_V1,
@@ -29,6 +32,7 @@ from spatialdds_test import (
     _load_manifest,
     _select_topic,
 )
+from spatialdds_validation import SpatialDDSValidator
 
 
 def _topic_source_for(manifest_topics: Dict[str, str], role: str, logical_topic: str) -> str:
@@ -52,6 +56,72 @@ def _wait_for(queue_obj: queue.Queue, msg_type: str, timeout: float) -> Optional
     return None
 
 
+def _bootstrap_domain(logger: SpatialDDSLogger, show_message_content: bool) -> Optional[int]:
+    client_id = f"client-{uuid.uuid4().hex[:6]}"
+    client_kind = os.getenv("SPATIALDDS_BOOTSTRAP_KIND", "robot")
+    capabilities = [
+        item.strip()
+        for item in os.getenv("SPATIALDDS_BOOTSTRAP_CAPS", "localize,catalog").split(",")
+        if item.strip()
+    ]
+    site = os.getenv("SPATIALDDS_BOOTSTRAP_SITE", "sf-downtown")
+    query = {
+        "client_id": client_id,
+        "client_kind": client_kind,
+        "capabilities": capabilities,
+        "location_hint": site,
+        "stamp": SpatialDDSValidator.now_time(),
+    }
+
+    inbox: queue.Queue = queue.Queue()
+
+    def on_message(envelope: object) -> None:
+        inbox.put(envelope)
+
+    transport = DDSTransport(on_message_callback=on_message, domain_id=0)
+    transport.start()
+
+    transport.publish(TOPIC_BOOTSTRAP_QUERY_V1, "BOOTSTRAP_QUERY", json.dumps(query), client_id)
+    logger.log_message(
+        "BOOTSTRAP_QUERY",
+        "SEND",
+        client_id,
+        "BootstrapService",
+        query,
+        TOPIC_BOOTSTRAP_QUERY_V1,
+        TOPIC_SOURCE_SPEC,
+        show_message_content,
+    )
+
+    response_env = _wait_for(inbox, "BOOTSTRAP_RESPONSE", timeout=5)
+    transport.stop()
+    if not response_env:
+        print("Client timed out waiting for BOOTSTRAP_RESPONSE.")
+        return None
+
+    response = json.loads(response_env.payload_json)
+    logger.log_message(
+        "BOOTSTRAP_RESPONSE",
+        "RECV",
+        "BootstrapService",
+        client_id,
+        response,
+        response_env.logical_topic,
+        TOPIC_SOURCE_REQUEST,
+        show_message_content,
+    )
+
+    domain = response.get("dds_domain")
+    manifests = response.get("manifest_uris", [])
+    if manifests:
+        print(f"bootstrap: manifest_uris={', '.join(manifests)}")
+    try:
+        return int(domain)
+    except (TypeError, ValueError):
+        print(f"Invalid dds_domain in bootstrap response: {domain}")
+        return None
+
+
 def _announce_fresh(announce: Dict[str, Any]) -> bool:
     ttl_sec = announce.get("ttl_sec")
     stamp = announce.get("stamp")
@@ -65,9 +135,17 @@ def _announce_fresh(announce: Dict[str, Any]) -> bool:
 
 
 def run_client(show_message_content: bool, detailed_content: bool) -> int:
-    domain_id = require_dds_env()
     logger = SpatialDDSLogger()
     logger.detailed_content = detailed_content
+
+    require_dds_env()
+    domain_id = None
+    if os.getenv("SPATIALDDS_BOOTSTRAP", "0") == "1":
+        print("🧭 Bootstrap phase: querying DDS domain on bootstrap domain 0")
+        domain_id = _bootstrap_domain(logger, show_message_content)
+    if domain_id is None:
+        domain_id = int(os.getenv("SPATIALDDS_DDS_DOMAIN", "0"))
+        print(f"Using DDS domain: {domain_id}")
 
     client = SpatialDDSClientV14(logger)
     inbox: queue.Queue = queue.Queue()

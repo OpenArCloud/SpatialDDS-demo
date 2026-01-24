@@ -6,6 +6,8 @@ TOPIC_VPS_COVERAGE_REPLIES_V1 = "spatialdds/vps/coverage/replies/v1"
 TOPIC_VPS_LOCALIZE_REQUEST_V1 = "spatialdds/vps/localize/request/v1"
 TOPIC_VPS_LOCALIZE_RESPONSE_V1 = "spatialdds/vps/localize/response/v1"
 TOPIC_CATALOG_QUERY_V1 = "spatialdds/catalog/query/v1"
+TOPIC_BOOTSTRAP_QUERY_V1 = "spatialdds/bootstrap/query/v1"
+TOPIC_BOOTSTRAP_RESPONSE_V1 = "spatialdds/bootstrap/response/v1"
 TOPIC_DDS_ENVELOPE_V1 = "spatialdds/envelope/v1"
 
 

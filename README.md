@@ -99,6 +99,44 @@ Use `--summary-only` for headers only, or omit it for full message details.
 If running directly on the host instead of Docker, you must install the
 Cyclone DDS Python bindings (`cyclonedds==0.10.5`) and ensure `idlc` is on PATH.
 
+## DDS Bootstrap Demo (Optional)
+
+The bootstrap service runs on DDS domain 0 and returns the domain to use for the
+actual SpatialDDS demo. Start it first, then run the VPS and catalog servers on
+the returned domain (default: 1). The client queries the bootstrap service and
+switches domains automatically.
+
+```bash
+# Bootstrap server (domain 0, Docker)
+docker run --rm --network host \
+  -e SPATIALDDS_TRANSPORT=dds \
+  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
+  cyclonedds-python python3 spatialdds_bootstrap_server.py --domain 1
+
+# VPS server (domain 1, Docker)
+docker run --rm --network host \
+  -e SPATIALDDS_TRANSPORT=dds \
+  -e SPATIALDDS_DDS_DOMAIN=1 \
+  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
+  cyclonedds-python python3 spatialdds_vps_server.py
+
+# Catalog server (domain 1, Docker)
+docker run --rm --network host \
+  -e SPATIALDDS_TRANSPORT=dds \
+  -e SPATIALDDS_DDS_DOMAIN=1 \
+  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
+  cyclonedds-python python3 spatialdds_catalog_server.py
+
+# Client (starts on domain 0, switches to domain 1)
+docker run --rm --network host \
+  -e SPATIALDDS_TRANSPORT=dds \
+  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e SPATIALDDS_BOOTSTRAP=1 \
+  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
+  cyclonedds-python python3 spatialdds_demo_client.py
+```
+
 ## Run Tests
 
 ```bash
