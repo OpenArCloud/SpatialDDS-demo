@@ -106,7 +106,10 @@ class DDSTransport:
                         "DDS_RX msg_type="
                         f"{sample.msg_type} logical_topic={sample.logical_topic}"
                     )
-                    self._callback(sample)
+                    try:
+                        self._callback(sample)
+                    except Exception as exc:
+                        print(f"DDS_RX callback error: {exc}")
             time.sleep(0.01)
 
 

@@ -88,13 +88,16 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     while time.time() < deadline:
         samples = announce_reader.take()
         if samples:
-            sample = samples[0]
-            if sample and sample.msg_type == "ANNOUNCE":
+            for sample in samples:
+                if not sample or sample.msg_type != "ANNOUNCE":
+                    continue
                 candidate = json.loads(sample.payload_json)
                 if _announce_fresh(candidate):
                     announce = candidate
                     announce_env = sample
                     break
+        if announce:
+            break
         time.sleep(0.05)
 
     if not announce:
