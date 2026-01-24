@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import subprocess
 import sys
@@ -94,6 +95,24 @@ def test_no_identity_transforms() -> bool:
     return not announce.get("transforms")
 
 
+def test_catalog_seed() -> bool:
+    try:
+        with open("catalog_seed.json", "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except Exception:
+        return False
+    if not isinstance(data, list) or len(data) < 25:
+        return False
+    sample = data[0]
+    return (
+        "content_id" in sample
+        and "kind" in sample
+        and "coverage" in sample
+        and "frame_ref" in sample
+        and "formats" in sample
+    )
+
+
 def main() -> int:
     tests = [
         ("manifest_resolver", test_manifest_resolver),
@@ -102,6 +121,7 @@ def main() -> int:
         ("manifest_fallback", test_manifest_fallback),
         ("volume_frame_ref", test_volume_aabb_frame_ref),
         ("no_identity_transforms", test_no_identity_transforms),
+        ("catalog_seed", test_catalog_seed),
     ]
     failures = []
     for name, func in tests:

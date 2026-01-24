@@ -39,3 +39,6 @@ Thumbs.db
 # Generated files
 *.pyc
 *.log
+dds_demo_server.log
+dds_demo_client.log
+dds_catalog_server.log

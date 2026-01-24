@@ -4,11 +4,14 @@ import json
 import queue
 import sys
 import time
+import uuid
 from typing import Dict, Optional
 
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
+    TOPIC_CATALOG_QUERY_V1,
+    TOPIC_CATALOG_REPLIES,
     TOPIC_DISCOVERY_ANNOUNCE_V1,
     TOPIC_SOURCE_ANNOUNCE_PREVIEW,
     TOPIC_SOURCE_FALLBACK,
@@ -161,6 +164,58 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         loc_response_source,
         show_message_content,
     )
+
+    if loc_response.get("quality", {}).get("success"):
+        print("🔎 Phase 5: Content Discovery (catalog.CatalogQuery → CatalogResponse)")
+        print("-" * 40)
+        client_id = f"client-{uuid.uuid4().hex[:6]}"
+        reply_topic = TOPIC_CATALOG_REPLIES(client_id)
+        geopose = loc_response.get("node_geo", {}).get("geopose", {})
+        catalog_query = client.create_catalog_query(
+            geopose.get("lat_deg", 37.7749),
+            geopose.get("lon_deg", -122.4194),
+            reply_topic,
+            limit=20,
+            expr='kind=="mesh" OR kind=="poi"',
+        )
+        transport.publish(
+            TOPIC_CATALOG_QUERY_V1,
+            "CATALOG_QUERY",
+            json.dumps(catalog_query),
+            catalog_query.get("query_id", ""),
+        )
+        logger.log_message(
+            "CATALOG_QUERY",
+            "SEND",
+            "Client",
+            "DDS_NETWORK",
+            catalog_query,
+            TOPIC_CATALOG_QUERY_V1,
+            TOPIC_SOURCE_SPEC,
+            show_message_content,
+        )
+
+        catalog_env = _wait_for(inbox, "CATALOG_RESPONSE", timeout=2)
+        if not catalog_env:
+            print("⚠️  catalog timeout (no CATALOG_RESPONSE)")
+        else:
+            catalog_response = json.loads(catalog_env.payload_json)
+            logger.log_message(
+                "CATALOG_RESPONSE",
+                "RECV",
+                "Catalog:MockCatalog-v1",
+                "Client",
+                catalog_response,
+                catalog_env.logical_topic,
+                TOPIC_SOURCE_REQUEST,
+                show_message_content,
+            )
+            count = len(catalog_response.get("results", []))
+            next_token = catalog_response.get("next_page_token", "")
+            print(
+                f"✅ Content discovery: {count} results"
+                f"{' (next_page_token=' + next_token + ')' if next_token else ''}"
+            )
 
     anchor_delta = client.create_anchor_delta(
         loc_response["node_geo"], loc_response["quality"]["confidence"]

@@ -1,0 +1,947 @@
+[
+  {
+    "content_id": "mesh/sf-downtown/item-000",
+    "kind": "mesh",
+    "name": "SF Downtown Mesh 000",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4259,
+          37.7704,
+          -122.4249,
+          37.7714
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "gltf",
+      "3dtiles"
+    ],
+    "updated_sec": 1769057000,
+    "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-000"
+  },
+  {
+    "content_id": "poi/sf-downtown/item-001",
+    "kind": "poi",
+    "name": "SF Downtown Poi 001",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4239,
+          37.7707,
+          -122.4229,
+          37.7717
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "json"
+    ],
+    "updated_sec": 1769057060,
+    "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-001"
+  },
+  {
+    "content_id": "anchor_set/sf-downtown/item-002",
+    "kind": "anchor_set",
+    "name": "SF Downtown Anchor Set 002",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4219,
+          37.771,
+          -122.4209,
+          37.772
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "anchors"
+    ],
+    "updated_sec": 1769057120,
+    "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-002"
+  },
+  {
+    "content_id": "image_set/sf-downtown/item-003",
+    "kind": "image_set",
+    "name": "SF Downtown Image Set 003",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4199,
+          37.7713,
+          -122.4189,
+          37.7723
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "jpeg",
+      "png"
+    ],
+    "updated_sec": 1769057180,
+    "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-003"
+  },
+  {
+    "content_id": "mesh/sf-downtown/item-004",
+    "kind": "mesh",
+    "name": "SF Downtown Mesh 004",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4179,
+          37.7716,
+          -122.4169,
+          37.7726
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "gltf",
+      "3dtiles"
+    ],
+    "updated_sec": 1769057240,
+    "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-004"
+  },
+  {
+    "content_id": "poi/sf-downtown/item-005",
+    "kind": "poi",
+    "name": "SF Downtown Poi 005",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4159,
+          37.7719,
+          -122.4149,
+          37.7729
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "json"
+    ],
+    "updated_sec": 1769057300,
+    "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-005"
+  },
+  {
+    "content_id": "anchor_set/sf-downtown/item-006",
+    "kind": "anchor_set",
+    "name": "SF Downtown Anchor Set 006",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4257,
+          37.7724,
+          -122.4247,
+          37.7734
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "anchors"
+    ],
+    "updated_sec": 1769057360,
+    "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-006"
+  },
+  {
+    "content_id": "image_set/sf-downtown/item-007",
+    "kind": "image_set",
+    "name": "SF Downtown Image Set 007",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4237,
+          37.7727,
+          -122.4227,
+          37.7737
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "jpeg",
+      "png"
+    ],
+    "updated_sec": 1769057420,
+    "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-007"
+  },
+  {
+    "content_id": "mesh/sf-downtown/item-008",
+    "kind": "mesh",
+    "name": "SF Downtown Mesh 008",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4217,
+          37.773,
+          -122.4207,
+          37.774
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "gltf",
+      "3dtiles"
+    ],
+    "updated_sec": 1769057480,
+    "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-008"
+  },
+  {
+    "content_id": "poi/sf-downtown/item-009",
+    "kind": "poi",
+    "name": "SF Downtown Poi 009",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4197,
+          37.7733,
+          -122.4187,
+          37.7743
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "json"
+    ],
+    "updated_sec": 1769057540,
+    "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-009"
+  },
+  {
+    "content_id": "anchor_set/sf-downtown/item-010",
+    "kind": "anchor_set",
+    "name": "SF Downtown Anchor Set 010",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4177,
+          37.7736,
+          -122.4167,
+          37.7746
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "anchors"
+    ],
+    "updated_sec": 1769057600,
+    "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-010"
+  },
+  {
+    "content_id": "image_set/sf-downtown/item-011",
+    "kind": "image_set",
+    "name": "SF Downtown Image Set 011",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4157,
+          37.7739,
+          -122.4147,
+          37.7749
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "jpeg",
+      "png"
+    ],
+    "updated_sec": 1769057660,
+    "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-011"
+  },
+  {
+    "content_id": "mesh/sf-downtown/item-012",
+    "kind": "mesh",
+    "name": "SF Downtown Mesh 012",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4255,
+          37.7744,
+          -122.4245,
+          37.7754
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "gltf",
+      "3dtiles"
+    ],
+    "updated_sec": 1769057720,
+    "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-012"
+  },
+  {
+    "content_id": "poi/sf-downtown/item-013",
+    "kind": "poi",
+    "name": "SF Downtown Poi 013",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4235,
+          37.7747,
+          -122.4225,
+          37.7757
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "json"
+    ],
+    "updated_sec": 1769057780,
+    "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-013"
+  },
+  {
+    "content_id": "anchor_set/sf-downtown/item-014",
+    "kind": "anchor_set",
+    "name": "SF Downtown Anchor Set 014",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4215,
+          37.775,
+          -122.4205,
+          37.776
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "anchors"
+    ],
+    "updated_sec": 1769057840,
+    "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-014"
+  },
+  {
+    "content_id": "image_set/sf-downtown/item-015",
+    "kind": "image_set",
+    "name": "SF Downtown Image Set 015",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4195,
+          37.7753,
+          -122.4185,
+          37.7763
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "jpeg",
+      "png"
+    ],
+    "updated_sec": 1769057900,
+    "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-015"
+  },
+  {
+    "content_id": "mesh/sf-downtown/item-016",
+    "kind": "mesh",
+    "name": "SF Downtown Mesh 016",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4175,
+          37.7756,
+          -122.4165,
+          37.7766
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "gltf",
+      "3dtiles"
+    ],
+    "updated_sec": 1769057960,
+    "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-016"
+  },
+  {
+    "content_id": "poi/sf-downtown/item-017",
+    "kind": "poi",
+    "name": "SF Downtown Poi 017",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4155,
+          37.7759,
+          -122.4145,
+          37.7769
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "json"
+    ],
+    "updated_sec": 1769058020,
+    "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-017"
+  },
+  {
+    "content_id": "anchor_set/sf-downtown/item-018",
+    "kind": "anchor_set",
+    "name": "SF Downtown Anchor Set 018",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4253,
+          37.7764,
+          -122.4243,
+          37.7774
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "anchors"
+    ],
+    "updated_sec": 1769058080,
+    "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-018"
+  },
+  {
+    "content_id": "image_set/sf-downtown/item-019",
+    "kind": "image_set",
+    "name": "SF Downtown Image Set 019",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4233,
+          37.7767,
+          -122.4223,
+          37.7777
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "jpeg",
+      "png"
+    ],
+    "updated_sec": 1769058140,
+    "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-019"
+  },
+  {
+    "content_id": "mesh/sf-downtown/item-020",
+    "kind": "mesh",
+    "name": "SF Downtown Mesh 020",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4213,
+          37.777,
+          -122.4203,
+          37.778
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "gltf",
+      "3dtiles"
+    ],
+    "updated_sec": 1769058200,
+    "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-020"
+  },
+  {
+    "content_id": "poi/sf-downtown/item-021",
+    "kind": "poi",
+    "name": "SF Downtown Poi 021",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4193,
+          37.7773,
+          -122.4183,
+          37.7783
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "json"
+    ],
+    "updated_sec": 1769058260,
+    "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-021"
+  },
+  {
+    "content_id": "anchor_set/sf-downtown/item-022",
+    "kind": "anchor_set",
+    "name": "SF Downtown Anchor Set 022",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4173,
+          37.7776,
+          -122.4163,
+          37.7786
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "anchors"
+    ],
+    "updated_sec": 1769058320,
+    "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-022"
+  },
+  {
+    "content_id": "image_set/sf-downtown/item-023",
+    "kind": "image_set",
+    "name": "SF Downtown Image Set 023",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4153,
+          37.7779,
+          -122.4143,
+          37.7789
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "jpeg",
+      "png"
+    ],
+    "updated_sec": 1769058380,
+    "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-023"
+  },
+  {
+    "content_id": "mesh/sf-downtown/item-024",
+    "kind": "mesh",
+    "name": "SF Downtown Mesh 024",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4251,
+          37.7784,
+          -122.4241,
+          37.7794
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "gltf",
+      "3dtiles"
+    ],
+    "updated_sec": 1769058440,
+    "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-024"
+  },
+  {
+    "content_id": "poi/sf-downtown/item-025",
+    "kind": "poi",
+    "name": "SF Downtown Poi 025",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4231,
+          37.7787,
+          -122.4221,
+          37.7797
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "json"
+    ],
+    "updated_sec": 1769058500,
+    "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-025"
+  },
+  {
+    "content_id": "anchor_set/sf-downtown/item-026",
+    "kind": "anchor_set",
+    "name": "SF Downtown Anchor Set 026",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4211,
+          37.779,
+          -122.4201,
+          37.78
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "anchors"
+    ],
+    "updated_sec": 1769058560,
+    "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-026"
+  },
+  {
+    "content_id": "image_set/sf-downtown/item-027",
+    "kind": "image_set",
+    "name": "SF Downtown Image Set 027",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4191,
+          37.7793,
+          -122.4181,
+          37.7803
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "jpeg",
+      "png"
+    ],
+    "updated_sec": 1769058620,
+    "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-027"
+  },
+  {
+    "content_id": "mesh/sf-downtown/item-028",
+    "kind": "mesh",
+    "name": "SF Downtown Mesh 028",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4171,
+          37.7796,
+          -122.4161,
+          37.7806
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "gltf",
+      "3dtiles"
+    ],
+    "updated_sec": 1769058680,
+    "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-028"
+  },
+  {
+    "content_id": "poi/sf-downtown/item-029",
+    "kind": "poi",
+    "name": "SF Downtown Poi 029",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -122.4151,
+          37.7799,
+          -122.4141,
+          37.7809
+        ],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": {
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown"
+    },
+    "formats": [
+      "json"
+    ],
+    "updated_sec": 1769058740,
+    "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-029"
+  }
+]

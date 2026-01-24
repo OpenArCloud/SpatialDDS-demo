@@ -73,6 +73,13 @@ docker run --rm --network host \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python python3 spatialdds_demo_server.py
 
+# In another terminal (catalog server, Docker)
+docker run --rm --network host \
+  -e SPATIALDDS_TRANSPORT=dds \
+  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
+  cyclonedds-python python3 spatialdds_catalog_server.py
+
 # In another terminal (client, Docker)
 docker run --rm --network host \
   -e SPATIALDDS_TRANSPORT=dds \

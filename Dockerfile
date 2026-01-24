@@ -8,12 +8,14 @@ COPY spatialdds.idl .
 COPY spatialdds_demo ./spatialdds_demo
 COPY spatialdds_demo_client.py .
 COPY spatialdds_demo_server.py .
+COPY spatialdds_catalog_server.py .
 COPY spatialdds_demo_tests.py .
 COPY spatialdds_test.py .
 COPY spatialdds_validation.py .
 COPY http_binding.py .
 COPY comprehensive_test.py .
 COPY run_all_tests.sh .
+COPY catalog_seed.json .
 COPY cyclonedds.xml /etc/cyclonedds.xml
 COPY idl ./idl
 COPY manifests ./manifests

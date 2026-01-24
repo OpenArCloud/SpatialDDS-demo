@@ -484,6 +484,37 @@ class SpatialDDSClientV14:
         }
         return delta
 
+    def create_catalog_query(
+        self,
+        lat_deg: float,
+        lon_deg: float,
+        reply_topic: str,
+        limit: int = 20,
+        page_token: str = "",
+        expr: str = "",
+    ) -> Dict[str, Any]:
+        query_id = str(uuid.uuid4())
+        padding = 0.005
+        coverage_frame_ref, coverage_elem = create_coverage_bbox_earth_fixed(
+            lon_deg - padding,
+            lat_deg - padding,
+            lon_deg + padding,
+            lat_deg + padding,
+        )
+        query = {
+            "query_id": query_id,
+            "reply_topic": reply_topic,
+            "coverage": [coverage_elem],
+            "coverage_frame_ref": coverage_frame_ref,
+            "has_coverage_eval_time": False,
+            "expr": expr,
+            "limit": limit,
+            "page_token": page_token,
+            "stamp": SpatialDDSValidator.now_time(),
+            "ttl_sec": 30,
+        }
+        return query
+
 
 def simulate_dds_communication(logger: SpatialDDSLogger):
     """Simulate the DDS communication layer"""
