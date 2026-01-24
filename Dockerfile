@@ -8,6 +8,7 @@ COPY spatialdds.idl .
 COPY spatialdds_demo ./spatialdds_demo
 COPY spatialdds_demo_client.py .
 COPY spatialdds_demo_server.py .
+COPY spatialdds_vps_server.py .
 COPY spatialdds_catalog_server.py .
 COPY spatialdds_demo_tests.py .
 COPY spatialdds_test.py .

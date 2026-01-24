@@ -72,12 +72,12 @@ The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and re
 Cyclone DDS to be enabled explicitly.
 
 ```bash
-# In one terminal (server, Docker)
+# In one terminal (VPS server, Docker)
 docker run --rm --network host \
   -e SPATIALDDS_TRANSPORT=dds \
   -e SPATIALDDS_DDS_DOMAIN=0 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  cyclonedds-python python3 spatialdds_demo_server.py
+  cyclonedds-python python3 spatialdds_vps_server.py
 
 # In another terminal (catalog server, Docker)
 docker run --rm --network host \

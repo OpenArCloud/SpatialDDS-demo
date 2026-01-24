@@ -2,7 +2,6 @@
 import argparse
 import json
 import sys
-import threading
 import time
 from typing import Dict
 
@@ -43,8 +42,6 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     announce = service.create_announce()
     manifest, _ = _load_manifest(announce)
     manifest_topics = _index_manifest_topics(manifest) if manifest else {}
-
-    done = threading.Event()
 
     def on_message(envelope: object) -> None:
         msg_type = envelope.msg_type
@@ -113,7 +110,6 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
                 response_source,
                 show_message_content,
             )
-            done.set()
 
     transport = DDSTransport(on_message_callback=on_message, domain_id=domain_id)
     transport.start()
@@ -140,12 +136,12 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
         show_message_content,
     )
 
-    if not done.wait(timeout=30):
-        print("Server timed out waiting for LOCALIZE_REQUEST.")
-        transport.stop()
-        return 1
+    try:
+        while True:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        pass
 
-    time.sleep(0.2)
     transport.stop()
     return 0
 
