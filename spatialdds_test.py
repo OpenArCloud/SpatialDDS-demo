@@ -24,6 +24,8 @@ from spatialdds_validation import (
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
+    TOPIC_CATALOG_QUERY_V1,
+    TOPIC_CATALOG_REPLIES,
     TOPIC_DISCOVERY_ANNOUNCE_V1,
     TOPIC_SOURCE_ANNOUNCE_PREVIEW,
     TOPIC_SOURCE_FALLBACK,
@@ -589,6 +591,77 @@ def _load_manifest(announce: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], 
     return manifest, status
 
 
+def _load_catalog_seed(seed_path: str) -> List[Dict[str, Any]]:
+    with open(seed_path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, list):
+        raise ValueError("catalog_seed.json must be a list")
+    return payload
+
+
+def _parse_page_token(token: str) -> int:
+    if not token:
+        return 0
+    if token.startswith("o="):
+        try:
+            return max(0, int(token.split("=", 1)[1]))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _matches_expr(entry: Dict[str, Any], expr: str) -> bool:
+    if not expr:
+        return True
+    kinds = []
+    for part in expr.split("kind=="):
+        if '"' in part:
+            value = part.split('"', 2)[1]
+            kinds.append(value)
+    if not kinds:
+        return True
+    return entry.get("kind") in kinds
+
+
+def _catalog_response(
+    dataset: List[Dict[str, Any]],
+    query: Dict[str, Any],
+) -> Dict[str, Any]:
+    query_coverage = query.get("coverage", [])
+    results = []
+    for entry in dataset:
+        if not _matches_expr(entry, query.get("expr", "")):
+            continue
+        entry_coverage = entry.get("coverage", [])
+        if query_coverage and entry_coverage:
+            if not SpatialDDSValidator.check_coverage_intersection(
+                query_coverage, entry_coverage
+            ):
+                continue
+        results.append(entry)
+
+    results.sort(
+        key=lambda item: (
+            -(item.get("updated_sec") or 0),
+            item.get("content_id") or "",
+        )
+    )
+
+    limit = int(query.get("limit", 20) or 20)
+    offset = _parse_page_token(query.get("page_token", ""))
+    page = results[offset : offset + limit]
+    next_token = ""
+    if offset + limit < len(results):
+        next_token = f"o={offset + limit}"
+
+    return {
+        "query_id": query.get("query_id", ""),
+        "results": page,
+        "next_page_token": next_token,
+        "stamp": SpatialDDSValidator.now_time(),
+    }
+
+
 def run_spatialdds_test(show_message_content: bool = True, detailed_content: bool = False):
     """Run comprehensive SpatialDDS test"""
     logger = SpatialDDSLogger()
@@ -603,6 +676,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     print("   • CoverageElement presence flags")
     print("   • discovery.Announce/CoverageQuery/Response")
     print("   • GeoPose (x,y,z,w) quaternions")
+    print("   • catalog content discovery")
     print("   • AnchorDelta publication\n")
 
     if show_message_content:
@@ -740,7 +814,59 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
 
     time.sleep(0.2)
 
-    print("🔗 Phase 5: Anchor Delta (anchors.AnchorDelta)")
+    print("🔎 Phase 5: Content Discovery (catalog.CatalogQuery → CatalogResponse)")
+    print("-" * 40)
+    seed_path = os.getenv("SPATIALDDS_CATALOG_SEED", "catalog_seed.json")
+    try:
+        dataset = _load_catalog_seed(seed_path)
+    except Exception as exc:
+        print(f"⚠️  catalog seed load failed: {exc}")
+        dataset = []
+
+    client_id = f"client-{uuid.uuid4().hex[:6]}"
+    reply_topic = TOPIC_CATALOG_REPLIES(client_id)
+    geopose = loc_response["node_geo"]["geopose"]
+    catalog_query = client.create_catalog_query(
+        geopose["lat_deg"],
+        geopose["lon_deg"],
+        reply_topic,
+        limit=20,
+        expr='kind=="mesh" OR kind=="poi"',
+    )
+    logger.log_message(
+        "CATALOG_QUERY",
+        "SEND",
+        "Client",
+        "DDS_NETWORK",
+        catalog_query,
+        TOPIC_CATALOG_QUERY_V1,
+        TOPIC_SOURCE_SPEC,
+        show_message_content,
+    )
+    catalog_response = _catalog_response(dataset, catalog_query) if dataset else None
+    if catalog_response:
+        logger.log_message(
+            "CATALOG_RESPONSE",
+            "RECV",
+            "Catalog:MockCatalog-v1",
+            "Client",
+            catalog_response,
+            reply_topic,
+            TOPIC_SOURCE_REQUEST,
+            show_message_content,
+        )
+        count = len(catalog_response.get("results", []))
+        next_token = catalog_response.get("next_page_token", "")
+        print(
+            f"✅ Content discovery: {count} results"
+            f"{' (next_page_token=' + next_token + ')' if next_token else ''}"
+        )
+    else:
+        print("⚠️  catalog timeout (no CATALOG_RESPONSE)")
+
+    time.sleep(0.2)
+
+    print("🔗 Phase 6: Anchor Delta (anchors.AnchorDelta)")
     print("-" * 40)
     anchor_delta = client.create_anchor_delta(
         loc_response["node_geo"], loc_response["quality"]["confidence"]

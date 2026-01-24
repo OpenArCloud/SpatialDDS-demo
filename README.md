@@ -33,7 +33,13 @@ sequenceDiagram
     Client->>VPS: LOCALIZE_REQUEST<br/>VisionFrame + KeyframeFeatures + prior GeoPose
     VPS-->>Client: LOCALIZE_RESPONSE<br/>argeo.NodeGeo (GeoPose + covariance), quality
 
-    Note over Client,DDS: Phase 4 — Anchor publication (demo)
+    Note over Client,DDS: Phase 4 — Content discovery (catalog)
+    Client->>DDS: CATALOG_QUERY<br/>query_id + coverage[] + reply_topic
+    DDS-->>Catalog: Routed query by bbox intersection
+    Catalog-->>DDS: CATALOG_RESPONSE<br/>query_id, results[], next_page_token
+    DDS-->>Client: CATALOG_RESPONSE
+
+    Note over Client,DDS: Phase 5 — Anchor publication (demo)
     Client->>DDS: ANCHOR_DELTA<br/>op:ADD, anchor entry with GeoPose + checksum
 ```
 

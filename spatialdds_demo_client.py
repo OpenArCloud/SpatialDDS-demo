@@ -5,7 +5,7 @@ import queue
 import sys
 import time
 import uuid
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
 from spatialdds_demo.topics import (
@@ -52,6 +52,18 @@ def _wait_for(queue_obj: queue.Queue, msg_type: str, timeout: float) -> Optional
     return None
 
 
+def _announce_fresh(announce: Dict[str, Any]) -> bool:
+    ttl_sec = announce.get("ttl_sec")
+    stamp = announce.get("stamp")
+    if not ttl_sec or not stamp:
+        return True
+    try:
+        stamp_time = float(stamp.get("sec", 0)) + float(stamp.get("nanosec", 0)) / 1_000_000_000.0
+    except (TypeError, ValueError):
+        return True
+    return (time.time() - stamp_time) <= float(ttl_sec)
+
+
 def run_client(show_message_content: bool, detailed_content: bool) -> int:
     domain_id = require_dds_env()
     logger = SpatialDDSLogger()
@@ -66,13 +78,29 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     transport = DDSTransport(on_message_callback=on_message, domain_id=domain_id)
     transport.start()
 
-    announce_env = _wait_for(inbox, "ANNOUNCE", timeout=10)
-    if not announce_env:
+    announce_reader = transport.create_announce_reader(300)
+    print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")
+    print(f"announce qos: {transport.announce_qos_summary(300)}")
+
+    announce_env = None
+    announce = None
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        samples = announce_reader.take()
+        if samples:
+            sample = samples[0]
+            if sample and sample.msg_type == "ANNOUNCE":
+                candidate = json.loads(sample.payload_json)
+                if _announce_fresh(candidate):
+                    announce = candidate
+                    announce_env = sample
+                    break
+        time.sleep(0.05)
+
+    if not announce:
         print("Client timed out waiting for ANNOUNCE.")
         transport.stop()
         return 1
-
-    announce = json.loads(announce_env.payload_json)
     logger.log_message(
         "ANNOUNCE",
         "RECV",

@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from spatialdds_demo.topics import TOPIC_DDS_ENVELOPE_V1
+from spatialdds_demo.topics import TOPIC_DISCOVERY_ANNOUNCE_V1, TOPIC_DDS_ENVELOPE_V1
 
 
 class DDSTransport:
@@ -54,6 +54,16 @@ class DDSTransport:
     def publish(
         self, logical_topic: str, msg_type: str, payload_json: str, request_id: str = ""
     ) -> None:
+        self.publish_on(self._writer, logical_topic, msg_type, payload_json, request_id)
+
+    def publish_on(
+        self,
+        writer: object,
+        logical_topic: str,
+        msg_type: str,
+        payload_json: str,
+        request_id: str = "",
+    ) -> None:
         envelope = self._envelope_type(
             msg_type=msg_type,
             logical_topic=logical_topic,
@@ -62,7 +72,28 @@ class DDSTransport:
             request_id=request_id or "",
         )
         print(f"DDS_TX msg_type={msg_type} logical_topic={logical_topic}")
-        self._writer.write(envelope)
+        writer.write(envelope)
+
+    def create_announce_writer(self, ttl_sec: int) -> object:
+        qos = _announce_qos(ttl_sec)
+        topic = self._topic.__class__(
+            self._participant, TOPIC_DISCOVERY_ANNOUNCE_V1, self._envelope_type
+        )
+        return self._writer.__class__(self._participant, topic, qos=qos)
+
+    def create_announce_reader(self, ttl_sec: int) -> object:
+        qos = _announce_qos(ttl_sec)
+        topic = self._topic.__class__(
+            self._participant, TOPIC_DISCOVERY_ANNOUNCE_V1, self._envelope_type
+        )
+        return self._reader.__class__(self._participant, topic, qos=qos)
+
+    @staticmethod
+    def announce_qos_summary(ttl_sec: int) -> str:
+        return (
+            "durability=TRANSIENT_LOCAL reliability=RELIABLE "
+            f"history=KEEP_LAST(1) lifespan={ttl_sec}s"
+        )
 
     def _poll(self) -> None:
         while not self._stop.is_set():
@@ -115,3 +146,15 @@ def _idl_uint64(types_module):
         if hasattr(types_module, name):
             return getattr(types_module, name)
     return int
+
+
+def _announce_qos(ttl_sec: int):
+    from cyclonedds import qos, util
+
+    ttl = max(1, int(ttl_sec))
+    return qos.Qos(
+        qos.Policy.Durability.TransientLocal,
+        qos.Policy.Reliability.Reliable(util.duration(seconds=1)),
+        qos.Policy.History.KeepLast(1),
+        qos.Policy.Lifespan(util.duration(seconds=ttl)),
+    )

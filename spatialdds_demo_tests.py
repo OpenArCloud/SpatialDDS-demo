@@ -53,6 +53,8 @@ def test_demo_output() -> bool:
         "topic=spatialdds/vps/localize/response/v1",
         "topic=spatialdds/vps/coverage/replies/v1",
         "topic=spatialdds/anchors/",
+        "topic=spatialdds/catalog/query/v1",
+        "topic=spatialdds/catalog/replies/",
         "topic_source=manifest",
     ]
     return result.returncode == 0 and all(item in output for item in required)

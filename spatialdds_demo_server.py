@@ -118,42 +118,34 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     transport = DDSTransport(on_message_callback=on_message, domain_id=domain_id)
     transport.start()
 
-    def announce_loop() -> None:
-        first = True
-        while not done.is_set():
-            transport.publish(
-                TOPIC_DISCOVERY_ANNOUNCE_V1,
-                "ANNOUNCE",
-                json.dumps(announce),
-                "",
-            )
-            if first:
-                logger.log_message(
-                    "ANNOUNCE",
-                    "SEND",
-                    f"VPS:{service.service_name}",
-                    "DDS_NETWORK",
-                    announce,
-                    TOPIC_DISCOVERY_ANNOUNCE_V1,
-                    TOPIC_SOURCE_ANNOUNCE_PREVIEW,
-                    show_message_content,
-                )
-                first = False
-            time.sleep(1.0)
-
-    announce_thread = threading.Thread(target=announce_loop, daemon=True)
-    announce_thread.start()
+    ttl_sec = int(announce.get("ttl_sec", 300) or 300)
+    announce_writer = transport.create_announce_writer(ttl_sec)
+    print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")
+    print(f"announce qos: {transport.announce_qos_summary(ttl_sec)}")
+    transport.publish_on(
+        announce_writer,
+        TOPIC_DISCOVERY_ANNOUNCE_V1,
+        "ANNOUNCE",
+        json.dumps(announce),
+        "",
+    )
+    logger.log_message(
+        "ANNOUNCE",
+        "SEND",
+        f"VPS:{service.service_name}",
+        "DDS_NETWORK",
+        announce,
+        TOPIC_DISCOVERY_ANNOUNCE_V1,
+        TOPIC_SOURCE_ANNOUNCE_PREVIEW,
+        show_message_content,
+    )
 
     if not done.wait(timeout=30):
         print("Server timed out waiting for LOCALIZE_REQUEST.")
-        done.set()
-        announce_thread.join(timeout=1)
         transport.stop()
         return 1
 
     time.sleep(0.2)
-    done.set()
-    announce_thread.join(timeout=1)
     transport.stop()
     return 0
 
