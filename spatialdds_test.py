@@ -242,25 +242,19 @@ class VPSServiceV14:
         self.coverage_frame_ref, bbox_elem = create_coverage_bbox_earth_fixed(
             -122.52, 37.70, -122.35, 37.85
         )
+        volume_frame_ref = SpatialDDSValidator.create_frame_ref("map/sf-downtown")
         volume_elem = {
             "type": "volume",
             "has_crs": False,
             "has_bbox": False,
             "has_aabb": True,
-            "aabb": {"min_xyz": [-122.52, 37.70, -10.0], "max_xyz": [-122.35, 37.85, 40.0]},
+            "aabb": {"min_xyz": [-100.0, -100.0, -10.0], "max_xyz": [100.0, 100.0, 40.0]},
             "global": False,
-            "has_frame_ref": False,
+            "has_frame_ref": True,
+            "frame_ref": volume_frame_ref,
         }
         self.coverage = [bbox_elem, volume_elem]
-        self.transforms = [
-            {
-                "from": "rig",
-                "to": "earth-fixed",
-                "pose": {"t_m": [0.0, 0.0, 0.0], "q_xyzw": [0.0, 0.0, 0.0, 1.0]},
-                "stamp": SpatialDDSValidator.now_time(),
-                "has_validity": False,
-            }
-        ]
+        self.transforms = []
         self.seq = 0
 
     def _capabilities(self) -> Dict[str, Any]:
@@ -302,12 +296,13 @@ class VPSServiceV14:
             "coverage": self.coverage,
             "coverage_frame_ref": self.coverage_frame_ref,
             "has_coverage_eval_time": False,
-            "transforms": self.transforms,
             "manifest_uri": self.manifest_uri,
             "auth_hint": "oauth2:https://auth.example.com",
             "stamp": stamp,
             "ttl_sec": 300,
         }
+        if self.transforms:
+            announce["transforms"] = self.transforms
         SpatialDDSValidator.validate_coverage(self.coverage, self.coverage_frame_ref)
         return announce
 

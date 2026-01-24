@@ -81,25 +81,30 @@
         "$comment": "Earth-fixed bbox uses degrees [west,south,east,north]. If crossing 180°, west may be > east.",
         "global": false
       },
-      {
-        "type": "volume",
-        "has_bbox": false,
-        "has_aabb": true,
-        "aabb": {
-          "min_xyz": [
-            -122.4186,
-            37.7931,
-            -5.0
-          ],
-          "max_xyz": [
-            -122.4123,
-            37.7982,
-            20.0
-          ]
-        },
-        "$comment": "AABB expressed in coverage.frame_ref coordinates [xmin,ymin,zmin,xmax,ymax,zmax].",
-        "global": false
-      }
+    {
+      "type": "volume",
+      "has_bbox": false,
+      "has_aabb": true,
+      "aabb": {
+        "min_xyz": [
+          -100.0,
+          -100.0,
+          -10.0
+        ],
+        "max_xyz": [
+          100.0,
+          100.0,
+          40.0
+        ]
+      },
+      "has_frame_ref": true,
+      "frame_ref": {
+        "fqn": "map/sf-downtown",
+        "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3"
+      },
+      "$comment": "AABB expressed in frame_ref meters [xmin,ymin,zmin,xmax,ymax,zmax].",
+      "global": false
+    }
     ],
     "global": false
   },

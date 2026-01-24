@@ -176,6 +176,24 @@ class SpatialDDSValidator:
                 raise ValidationError("aabb vectors must have 3 components each")
             if not all(math.isfinite(v) for v in aabb["min_xyz"] + aabb["max_xyz"]):
                 raise ValidationError("aabb values must be finite numbers")
+            if cov_type == "volume":
+                if element.get("has_crs"):
+                    raise ValidationError("volume aabb must not set has_crs; use frame_ref instead")
+                frame_ref = element.get("frame_ref") if element.get("has_frame_ref") else coverage_frame_ref
+                if not frame_ref:
+                    raise ValidationError("volume aabb requires frame_ref (or coverage_frame_ref)")
+                if frame_ref.get("fqn") == "earth-fixed":
+                    min_xyz = aabb["min_xyz"]
+                    max_xyz = aabb["max_xyz"]
+                    looks_like_lon_lat = (
+                        all(abs(v) <= 180.0 for v in (min_xyz[0], max_xyz[0]))
+                        and all(abs(v) <= 90.0 for v in (min_xyz[1], max_xyz[1]))
+                        and all(abs(v) <= 1000.0 for v in (min_xyz[2], max_xyz[2]))
+                    )
+                    if looks_like_lon_lat:
+                        raise ValidationError(
+                            "volume aabb appears to be lon/lat; use meters with a frame_ref"
+                        )
 
         if element.get("has_frame_ref"):
             frame_ref = element.get("frame_ref")

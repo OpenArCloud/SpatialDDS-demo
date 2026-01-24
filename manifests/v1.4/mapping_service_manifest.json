@@ -57,25 +57,30 @@
         "$comment": "Earth-fixed bbox uses degrees [west,south,east,north]. If crossing 180°, west may be > east.",
         "global": false
       },
-      {
-        "type": "volume",
-        "has_bbox": false,
-        "has_aabb": true,
-        "aabb": {
-          "min_xyz": [
-            -122.4195,
-            37.7925,
-            -10.0
-          ],
-          "max_xyz": [
-            -122.4115,
-            37.799,
-            250.0
-          ]
-        },
-        "$comment": "AABB expressed in coverage.frame_ref coordinates [xmin,ymin,zmin,xmax,ymax,zmax].",
-        "global": false
-      }
+    {
+      "type": "volume",
+      "has_bbox": false,
+      "has_aabb": true,
+      "aabb": {
+        "min_xyz": [
+          -200.0,
+          -200.0,
+          -20.0
+        ],
+        "max_xyz": [
+          200.0,
+          200.0,
+          80.0
+        ]
+      },
+      "has_frame_ref": true,
+      "frame_ref": {
+        "fqn": "map/sf-mapping",
+        "uuid": "ce29c2df-5205-5dbe-8859-9050b34bb0c5"
+      },
+      "$comment": "AABB expressed in frame_ref meters [xmin,ymin,zmin,xmax,ymax,zmax].",
+      "global": false
+    }
     ],
     "global": false
   },

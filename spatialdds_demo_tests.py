@@ -9,6 +9,8 @@ from spatialdds_demo.topics import (
     TOPIC_VPS_LOCALIZE_RESPONSE_V1,
     validate_topics_are_canonical,
 )
+from spatialdds_test import SpatialDDSLogger, VPSServiceV14
+from spatialdds_validation import SpatialDDSValidator
 
 
 def test_manifest_resolver() -> bool:
@@ -77,12 +79,29 @@ def test_manifest_fallback() -> bool:
     return result.returncode == 0 and all(item in output for item in required)
 
 
+def test_volume_aabb_frame_ref() -> bool:
+    service = VPSServiceV14(SpatialDDSLogger())
+    volume = next((elem for elem in service.coverage if elem.get("type") == "volume"), None)
+    if not volume:
+        return False
+    SpatialDDSValidator.validate_coverage(service.coverage, service.coverage_frame_ref)
+    return volume.get("has_aabb") and (volume.get("has_frame_ref") or service.coverage_frame_ref)
+
+
+def test_no_identity_transforms() -> bool:
+    service = VPSServiceV14(SpatialDDSLogger())
+    announce = service.create_announce()
+    return not announce.get("transforms")
+
+
 def main() -> int:
     tests = [
         ("manifest_resolver", test_manifest_resolver),
         ("topic_validator", test_topic_validator),
         ("demo_output", test_demo_output),
         ("manifest_fallback", test_manifest_fallback),
+        ("volume_frame_ref", test_volume_aabb_frame_ref),
+        ("no_identity_transforms", test_no_identity_transforms),
     ]
     failures = []
     for name, func in tests:
