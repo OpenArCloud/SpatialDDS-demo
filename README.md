@@ -66,10 +66,11 @@ docker build -f Dockerfile.base -t ghcr.io/openarcloud/cyclonedds-python-base:0.
 docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 ```
 
-## DDS Demo (Bootstrap-Only, Cyclone DDS)
+## DDS Demo (Cyclone DDS)
 
 The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and requires
-Cyclone DDS to be enabled explicitly. The demo runs in bootstrap-only mode.
+Cyclone DDS to be enabled explicitly. The client always starts with bootstrap
+domain discovery.
 
 ```bash
 Use `--summary-only` for headers only, or omit it for full message details.
@@ -84,12 +85,21 @@ self-echo on the shared envelope topic. Sender identity is inferred from payload
 fields (for example, `from`, `source_id`, `sender_id`, or
 `client_frame_ref.fqn`).
 
-### Bootstrap-Only Flow
+### Bootstrap Flow
 
 The bootstrap service runs on DDS domain 0 and returns the domain to use for the
 actual SpatialDDS demo. Start it first, then run the VPS and catalog servers on
 the returned domain (default: 1). The client queries the bootstrap service and
 switches domains automatically.
+
+### Call Flow (Bootstrap + Discovery + Content)
+
+1) BOOTSTRAP_QUERY → BOOTSTRAP_RESPONSE (domain discovery on DDS domain 0)  
+2) ANNOUNCE (VPS service announces on domain 1)  
+3) COVERAGE_QUERY → COVERAGE_RESPONSE  
+4) LOCALIZE_REQUEST → LOCALIZE_RESPONSE  
+5) CATALOG_QUERY → CATALOG_RESPONSE  
+6) ANCHOR_DELTA publish
 
 ```bash
 # Bootstrap server (domain 0, Docker)
