@@ -18,6 +18,11 @@ sequenceDiagram
     participant Client
     participant DDS as DDS Bus
     participant VPS as VPS Service
+    participant Bootstrap as Bootstrap Service
+
+    Note over Client,Bootstrap: Phase 0 — bootstrap.Query/Response (domain discovery)
+    Client->>Bootstrap: BOOTSTRAP_QUERY<br/>client_id, capabilities, location_hint
+    Bootstrap-->>Client: BOOTSTRAP_RESPONSE<br/>dds_domain, manifest_uris
 
     Note over VPS,DDS: Phase 1 — discovery.Announce (caps + typed topics)
     VPS->>DDS: ANNOUNCE<br/>service_id, kind:VPS<br/>coverage_frame_ref + coverage[]<br/>topics[{name,type,version,qos_profile}]<br/>caps.supported_profiles<br/>manifest_uri (spatialdds://...)
@@ -91,15 +96,6 @@ The bootstrap service runs on DDS domain 0 and returns the domain to use for the
 actual SpatialDDS demo. Start it first, then run the VPS and catalog servers on
 the returned domain (default: 1). The client queries the bootstrap service and
 switches domains automatically.
-
-### Call Flow (Bootstrap + Discovery + Content)
-
-1) BOOTSTRAP_QUERY → BOOTSTRAP_RESPONSE (domain discovery on DDS domain 0)  
-2) ANNOUNCE (VPS service announces on domain 1)  
-3) COVERAGE_QUERY → COVERAGE_RESPONSE  
-4) LOCALIZE_REQUEST → LOCALIZE_RESPONSE  
-5) CATALOG_QUERY → CATALOG_RESPONSE  
-6) ANCHOR_DELTA publish
 
 ```bash
 # Bootstrap server (domain 0, Docker)
