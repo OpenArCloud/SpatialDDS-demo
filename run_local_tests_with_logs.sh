@@ -51,72 +51,21 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
+cleanup_stale() {
+  local containers
+  containers="$(docker ps -q --filter "name=dds_server_" --filter "name=dds_catalog_" --filter "name=dds_bootstrap_")"
+  if [[ -n "${containers}" ]]; then
+    echo "Stopping lingering DDS containers..."
+    docker rm -f ${containers} >/dev/null 2>&1 || true
+  fi
+}
+
+cleanup_stale
+
 if ! docker image inspect cyclonedds-python:latest >/dev/null 2>&1; then
   echo "Docker image cyclonedds-python:latest not found. Building from Dockerfile..."
   docker build -t cyclonedds-python .
 fi
-
-ts="$(date +%Y%m%d_%H%M%S)"
-
-mock_log="mock_test_${ts}.log"
-dds_server_log="vps_server_${ts}.log"
-dds_catalog_log="dds_catalog_${ts}.log"
-dds_client_log="dds_client_${ts}.log"
-
-echo "Running mock test -> ${mock_log}"
-docker run --rm --network host cyclonedds-python \
-  python3 spatialdds_test.py --detailed >"${mock_log}" 2>&1
-mock_status=$?
-
-echo "Running DDS demo (server/catalog/client) on domain 1 -> ${dds_server_log}, ${dds_catalog_log}, ${dds_client_log}"
-server_name="dds_server_${ts}"
-catalog_name="dds_catalog_${ts}"
-docker run --rm --network host --name "${server_name}" \
-  -e PYTHONUNBUFFERED=1 \
-  -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=1 \
-  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  cyclonedds-python python3 spatialdds_demo_server.py --detailed >"${dds_server_log}" 2>&1 &
-server_pid=$!
-
-docker run --rm --network host --name "${catalog_name}" \
-  -e PYTHONUNBUFFERED=1 \
-  -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=1 \
-  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  cyclonedds-python python3 spatialdds_catalog_server.py --detailed >"${dds_catalog_log}" 2>&1 &
-catalog_pid=$!
-
-sleep 2
-
-docker run --rm --network host \
-  -e PYTHONUNBUFFERED=1 \
-  -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=1 \
-  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  cyclonedds-python python3 spatialdds_demo_client.py --detailed >"${dds_client_log}" 2>&1
-client_status=$?
-
-echo "Summary:"
-if [[ "${mock_status}" -eq 0 ]]; then
-  echo "- Mock test: PASS (${mock_log})"
-else
-  echo "- Mock test: FAIL (${mock_log})"
-fi
-if [[ "${client_status}" -eq 0 ]]; then
-  echo "- DDS demo: PASS (${dds_client_log})"
-else
-  echo "- DDS demo: FAIL (${dds_client_log})"
-fi
-  echo "- VPS server log: ${dds_server_log}"
-echo "- Catalog log: ${dds_catalog_log}"
-
-summarize_messages "mock" "${mock_log}"
-summarize_messages "dds_client" "${dds_client_log}"
-
-echo "Mock test exit: ${mock_status}"
-echo "DDS client exit: ${client_status}"
-echo "LOGS: ${mock_log} ${dds_server_log} ${dds_catalog_log} ${dds_client_log}"
 
 bts="$(date +%Y%m%d_%H%M%S)"
 mock_bootstrap_log="mock_bootstrap_${bts}.log"

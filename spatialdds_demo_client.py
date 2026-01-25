@@ -146,13 +146,13 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     logger.detailed_content = detailed_content
 
     require_dds_env()
-    domain_id = None
-    if os.getenv("SPATIALDDS_BOOTSTRAP", "0") == "1":
-        print("🧭 Bootstrap phase: querying DDS domain on bootstrap domain 0")
-        domain_id = _bootstrap_domain(logger, show_message_content)
+    if os.getenv("SPATIALDDS_BOOTSTRAP", "0") != "1":
+        print("SPATIALDDS_BOOTSTRAP must be set to 1 (bootstrap-only mode).")
+        return 1
+    print("🧭 Bootstrap phase: querying DDS domain on bootstrap domain 0")
+    domain_id = _bootstrap_domain(logger, show_message_content)
     if domain_id is None:
-        domain_id = int(os.getenv("SPATIALDDS_DDS_DOMAIN", "0"))
-        print(f"Using DDS domain: {domain_id}")
+        return 1
 
     client = SpatialDDSClientV14(logger)
     inbox: queue.Queue = queue.Queue()
@@ -166,7 +166,6 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         local_sender_id=client.client_ref["fqn"],
     )
     transport.start()
-
     announce_reader = transport.create_announce_reader(300)
     print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")
     print(f"announce qos: {transport.announce_qos_summary(300)}")

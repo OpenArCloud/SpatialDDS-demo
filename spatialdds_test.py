@@ -460,7 +460,6 @@ class SpatialDDSClientV14:
             "service_id": service_id,
             "prior_geopose": prior,
             "vision_frame": self._vision_frame(),
-            "keyframe_features": self._keyframe_features(request_id),
             "stamp": SpatialDDSValidator.now_time(),
             "quality_requirements": {"max_rmse_m": 0.2, "min_confidence": 0.6},
         }
@@ -1001,6 +1000,9 @@ def main():
     if os.getenv("SPATIALDDS_TRANSPORT", "mock") == "dds":
         print("SPATIALDDS_TRANSPORT=dds is set.")
         print("Run the DDS demo with spatialdds_demo_server.py and spatialdds_demo_client.py.")
+        return False
+    if os.getenv("SPATIALDDS_BOOTSTRAP", "0") != "1":
+        print("SPATIALDDS_BOOTSTRAP must be set to 1 (bootstrap-only mode).")
         return False
 
     if args.hide_content or args.summary_only:

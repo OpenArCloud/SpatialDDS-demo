@@ -66,34 +66,13 @@ docker build -f Dockerfile.base -t ghcr.io/openarcloud/cyclonedds-python-base:0.
 docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 ```
 
-## DDS Three-Process Demo (Cyclone DDS)
+## DDS Demo (Bootstrap-Only, Cyclone DDS)
 
 The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and requires
-Cyclone DDS to be enabled explicitly.
+Cyclone DDS to be enabled explicitly. The demo runs in bootstrap-only mode; the
+client requires `SPATIALDDS_BOOTSTRAP=1`.
 
 ```bash
-# In one terminal (VPS server, Docker)
-docker run --rm --network host \
-  -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=1 \
-  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  cyclonedds-python python3 spatialdds_vps_server.py
-
-# In another terminal (catalog server, Docker)
-docker run --rm --network host \
-  -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=1 \
-  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  cyclonedds-python python3 spatialdds_catalog_server.py
-
-# In another terminal (client, Docker)
-docker run --rm --network host \
-  -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=1 \
-  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  cyclonedds-python python3 spatialdds_demo_client.py
-```
-
 Use `--summary-only` for headers only, or omit it for full message details.
 
 If running directly on the host instead of Docker, you must install the
@@ -106,7 +85,7 @@ self-echo on the shared envelope topic. Sender identity is inferred from payload
 fields (for example, `from`, `source_id`, `sender_id`, or
 `client_frame_ref.fqn`).
 
-## DDS Bootstrap Demo (Optional)
+### Bootstrap-Only Flow
 
 The bootstrap service runs on DDS domain 0 and returns the domain to use for the
 actual SpatialDDS demo. Start it first, then run the VPS and catalog servers on
@@ -147,11 +126,11 @@ docker run --rm --network host \
 ## Run Tests
 
 ```bash
-# Default: full logs
-python3 spatialdds_test.py
+# Default: full logs (requires SPATIALDDS_BOOTSTRAP=1)
+SPATIALDDS_BOOTSTRAP=1 python3 spatialdds_test.py
 
 # Summary only
-python3 spatialdds_test.py --summary-only
+SPATIALDDS_BOOTSTRAP=1 python3 spatialdds_test.py --summary-only
 
 # Validation utilities self-test
 python3 spatialdds_validation.py
