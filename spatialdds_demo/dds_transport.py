@@ -51,6 +51,7 @@ class DDSTransport:
         self._callback = on_message_callback
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._domain_id = domain_id
         self._local_sender_id = local_sender_id
         self._sent_fingerprints: Deque[Tuple[str, str, str, str]] = deque(maxlen=512)
         self._sent_fingerprint_set: Set[Tuple[str, str, str, str]] = set()
@@ -84,7 +85,10 @@ class DDSTransport:
             request_id=request_id or "",
         )
         self._record_sent(envelope)
-        print(f"DDS_TX msg_type={msg_type} logical_topic={logical_topic}")
+        print(
+            f"DDS_TX domain={self._domain_id} msg_type={msg_type} "
+            f"logical_topic={logical_topic}"
+        )
         writer.write(envelope)
 
     def create_announce_writer(self, ttl_sec: int) -> object:
@@ -118,8 +122,9 @@ class DDSTransport:
                     if self._is_self_echo(sample):
                         continue
                     print(
-                        "DDS_RX msg_type="
-                        f"{sample.msg_type} logical_topic={sample.logical_topic}"
+                        "DDS_RX domain="
+                        f"{self._domain_id} msg_type={sample.msg_type} "
+                        f"logical_topic={sample.logical_topic}"
                     )
                     try:
                         self._callback(sample)
