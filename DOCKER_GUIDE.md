@@ -44,15 +44,15 @@ Runs `comprehensive_test.py` which includes basic DDS and SpatialDDS tests.
 ### SpatialDDS v1.4 Protocol Test
 ```bash
 # Summary mode (no message content)
-docker run --rm --network host -e SPATIALDDS_BOOTSTRAP=1 \
+docker run --rm --network host \
   cyclonedds-python python3 spatialdds_test.py --summary-only
 
 # Default mode (shows message content)
-docker run --rm --network host -e SPATIALDDS_BOOTSTRAP=1 \
+docker run --rm --network host \
   cyclonedds-python python3 spatialdds_test.py
 
 # Detailed mode (includes full sensor data)
-docker run --rm --network host -e SPATIALDDS_BOOTSTRAP=1 \
+docker run --rm --network host \
   cyclonedds-python python3 spatialdds_test.py --detailed
 ```
 

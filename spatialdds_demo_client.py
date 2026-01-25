@@ -146,9 +146,6 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     logger.detailed_content = detailed_content
 
     require_dds_env()
-    if os.getenv("SPATIALDDS_BOOTSTRAP", "0") != "1":
-        print("SPATIALDDS_BOOTSTRAP must be set to 1 (bootstrap-only mode).")
-        return 1
     print("🧭 Bootstrap phase: querying DDS domain on bootstrap domain 0")
     domain_id = _bootstrap_domain(logger, show_message_content)
     if domain_id is None:

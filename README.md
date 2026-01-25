@@ -69,8 +69,7 @@ docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 ## DDS Demo (Bootstrap-Only, Cyclone DDS)
 
 The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and requires
-Cyclone DDS to be enabled explicitly. The demo runs in bootstrap-only mode; the
-client requires `SPATIALDDS_BOOTSTRAP=1`.
+Cyclone DDS to be enabled explicitly. The demo runs in bootstrap-only mode.
 
 ```bash
 Use `--summary-only` for headers only, or omit it for full message details.
@@ -118,7 +117,6 @@ docker run --rm --network host \
 docker run --rm --network host \
   -e SPATIALDDS_TRANSPORT=dds \
   -e SPATIALDDS_DDS_DOMAIN=0 \
-  -e SPATIALDDS_BOOTSTRAP=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python python3 spatialdds_demo_client.py
 ```
@@ -126,11 +124,11 @@ docker run --rm --network host \
 ## Run Tests
 
 ```bash
-# Default: full logs (requires SPATIALDDS_BOOTSTRAP=1)
-SPATIALDDS_BOOTSTRAP=1 python3 spatialdds_test.py
+# Default: full logs
+python3 spatialdds_test.py
 
 # Summary only
-SPATIALDDS_BOOTSTRAP=1 python3 spatialdds_test.py --summary-only
+python3 spatialdds_test.py --summary-only
 
 # Validation utilities self-test
 python3 spatialdds_validation.py
