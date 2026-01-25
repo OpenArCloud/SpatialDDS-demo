@@ -75,21 +75,21 @@ Cyclone DDS to be enabled explicitly.
 # In one terminal (VPS server, Docker)
 docker run --rm --network host \
   -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python python3 spatialdds_vps_server.py
 
 # In another terminal (catalog server, Docker)
 docker run --rm --network host \
   -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python python3 spatialdds_catalog_server.py
 
 # In another terminal (client, Docker)
 docker run --rm --network host \
   -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python python3 spatialdds_demo_client.py
 ```
@@ -103,8 +103,8 @@ Cyclone DDS Python bindings (`cyclonedds==0.10.5`) and ensure `idlc` is on PATH.
 
 The demo drops DDS envelopes that appear to be sent by the same process to avoid
 self-echo on the shared envelope topic. Sender identity is inferred from payload
-fields (for example, client uses `client_frame_ref.fqn`, VPS uses `service_id`,
-bootstrap uses `client_id`).
+fields (for example, `from`, `source_id`, `sender_id`, or
+`client_frame_ref.fqn`).
 
 ## DDS Bootstrap Demo (Optional)
 
