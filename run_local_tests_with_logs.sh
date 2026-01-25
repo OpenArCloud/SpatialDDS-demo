@@ -75,7 +75,7 @@ dds_bootstrap_catalog_log="dds_catalog_${bts}.log"
 dds_bootstrap_client_log="dds_client_${bts}.log"
 
 echo "Running mock test with bootstrap -> ${mock_bootstrap_log}"
-python3 spatialdds_test.py --detailed >"${mock_bootstrap_log}" 2>&1
+SPATIALDDS_TRANSPORT=mock python3 spatialdds_test.py --detailed >"${mock_bootstrap_log}" 2>&1
 mock_bootstrap_status=$?
 
 echo "Running DDS demo with bootstrap -> ${bootstrap_log}, ${dds_bootstrap_server_log}, ${dds_bootstrap_catalog_log}, ${dds_bootstrap_client_log}"
