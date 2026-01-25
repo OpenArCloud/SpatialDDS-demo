@@ -54,6 +54,7 @@ class DDSTransport:
         self._local_sender_id = local_sender_id
         self._sent_fingerprints: Deque[Tuple[str, str, str, str]] = deque(maxlen=512)
         self._sent_fingerprint_set: Set[Tuple[str, str, str, str]] = set()
+        self._sent_msg_types: Set[str] = set()
 
     def start(self) -> None:
         self._thread.start()
@@ -127,6 +128,8 @@ class DDSTransport:
             time.sleep(0.01)
 
     def _record_sent(self, envelope: object) -> None:
+        if envelope.msg_type:
+            self._sent_msg_types.add(envelope.msg_type)
         fingerprint = self._fingerprint(
             envelope.msg_type,
             envelope.logical_topic,
@@ -152,7 +155,9 @@ class DDSTransport:
             envelope.request_id,
             envelope.payload_json,
         )
-        return fingerprint in self._sent_fingerprint_set
+        if envelope.msg_type in self._sent_msg_types:
+            return fingerprint in self._sent_fingerprint_set
+        return False
 
     @staticmethod
     def _fingerprint(msg_type: str, logical_topic: str, request_id: str, payload_json: str):
@@ -167,7 +172,7 @@ def _sender_id_from_payload(payload_json: str) -> Optional[str]:
         return None
     if not isinstance(payload, dict):
         return None
-    for key in ("from", "source_id", "sender_id", "service_id", "client_id"):
+    for key in ("from", "source_id", "sender_id"):
         value = payload.get(key)
         if isinstance(value, str) and value:
             return value

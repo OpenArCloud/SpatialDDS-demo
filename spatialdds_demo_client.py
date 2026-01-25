@@ -83,19 +83,24 @@ def _bootstrap_domain(logger: SpatialDDSLogger, show_message_content: bool) -> O
     )
     transport.start()
 
-    transport.publish(TOPIC_BOOTSTRAP_QUERY_V1, "BOOTSTRAP_QUERY", json.dumps(query), client_id)
-    logger.log_message(
-        "BOOTSTRAP_QUERY",
-        "SEND",
-        client_id,
-        "BootstrapService",
-        query,
-        TOPIC_BOOTSTRAP_QUERY_V1,
-        TOPIC_SOURCE_SPEC,
-        show_message_content,
-    )
+    deadline = time.time() + 5
+    response_env = None
+    while time.time() < deadline and not response_env:
+        transport.publish(
+            TOPIC_BOOTSTRAP_QUERY_V1, "BOOTSTRAP_QUERY", json.dumps(query), client_id
+        )
+        logger.log_message(
+            "BOOTSTRAP_QUERY",
+            "SEND",
+            client_id,
+            "BootstrapService",
+            query,
+            TOPIC_BOOTSTRAP_QUERY_V1,
+            TOPIC_SOURCE_SPEC,
+            show_message_content,
+        )
+        response_env = _wait_for(inbox, "BOOTSTRAP_RESPONSE", timeout=1)
 
-    response_env = _wait_for(inbox, "BOOTSTRAP_RESPONSE", timeout=5)
     transport.stop()
     if not response_env:
         print("Client timed out waiting for BOOTSTRAP_RESPONSE.")

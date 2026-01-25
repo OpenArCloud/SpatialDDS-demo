@@ -68,13 +68,13 @@ docker run --rm --network host cyclonedds-python \
   python3 spatialdds_test.py --detailed >"${mock_log}" 2>&1
 mock_status=$?
 
-echo "Running DDS demo (server/catalog/client) -> ${dds_server_log}, ${dds_catalog_log}, ${dds_client_log}"
+echo "Running DDS demo (server/catalog/client) on domain 1 -> ${dds_server_log}, ${dds_catalog_log}, ${dds_client_log}"
 server_name="dds_server_${ts}"
 catalog_name="dds_catalog_${ts}"
 docker run --rm --network host --name "${server_name}" \
   -e PYTHONUNBUFFERED=1 \
   -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python python3 spatialdds_demo_server.py --detailed >"${dds_server_log}" 2>&1 &
 server_pid=$!
@@ -82,7 +82,7 @@ server_pid=$!
 docker run --rm --network host --name "${catalog_name}" \
   -e PYTHONUNBUFFERED=1 \
   -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python python3 spatialdds_catalog_server.py --detailed >"${dds_catalog_log}" 2>&1 &
 catalog_pid=$!
@@ -92,7 +92,7 @@ sleep 2
 docker run --rm --network host \
   -e PYTHONUNBUFFERED=1 \
   -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=0 \
+  -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python python3 spatialdds_demo_client.py --detailed >"${dds_client_log}" 2>&1
 client_status=$?
