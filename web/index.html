@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpatialDDS Demo - Cesium Option C</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="toolbar">
+        <div id="controls">
+          <button id="btnLocalize" type="button">Localize (Mock VPS)</button>
+          <button id="btnDiscover" type="button">Discover Content (Mock Catalog)</button>
+          <button id="btnToggleDepth" type="button">Show Items Through Buildings: Off</button>
+          <button id="btnClear" type="button">Clear</button>
+        </div>
+        <pre id="readout">status: idle</pre>
+      </div>
+      <div id="hud">
+        <div>Click map to focus</div>
+        <div>Mouse drag to look</div>
+        <div>WASD move</div>
+        <div>Arrows rotate</div>
+        <div>Q/E up/down</div>
+      </div>
+      <div id="cesiumContainer"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

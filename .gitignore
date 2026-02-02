@@ -43,3 +43,19 @@ dds_demo_server.log
 dds_demo_client.log
 dds_catalog_server.log
 CONTEXT.md
+CONTEXT-WEB.md
+
+# Web (Vite/Node/Playwright)
+web/.env.local
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+web/.vite/
+web/.cache/
+web/.env*
+!web/.env.example
+web/coverage/
+web/.eslintcache
+web/.stylelintcache
+web/.nyc_output/
