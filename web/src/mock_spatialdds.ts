@@ -11,10 +11,10 @@ const FIXED_STAMP: TimeStamp = {
 };
 
 const BASE_GEOPOSE: GeoPose = {
-  lat_deg: 30.2847,
-  lon_deg: -97.739475,
+  lat_deg: 30.284996,
+  lon_deg: -97.739494,
   alt_m: 18,
-  q_xyzw: [0, 0, 0, 1],
+  q_xyzw: [0.4967, -0.0336, -0.0585, 0.8653],
   frame_kind: 'ENU',
   frame_ref: FRAME_REF,
   stamp: FIXED_STAMP,
@@ -50,28 +50,24 @@ export async function mockLocalize(): Promise<LocalizeResponse> {
 export async function mockDiscover(geopose: GeoPose): Promise<DiscoverResponse> {
   const items: CatalogItem[] = [
     {
-      id: 'overlay-001',
-      name: 'Congress Ave Overlay',
-      kind: 'overlay',
-      geopose: offsetGeoPose(geopose, 3, 1)
-    },
-    {
-      id: 'poi-001',
-      name: 'Capitol POI',
+      id: '5f8b2f2a-7c2b-4f15-9b68-8a9a7c5f7e01',
+      name: 'POI-001',
       kind: 'poi',
-      geopose: offsetGeoPose(geopose, -3, -2)
+      geopose: {
+        ...geopose,
+        lat_deg: 30.285201,
+        lon_deg: -97.73939
+      }
     },
     {
-      id: 'overlay-002',
-      name: 'Lady Bird Lake',
-      kind: 'overlay',
-      geopose: offsetGeoPose(geopose, 4, -3)
-    },
-    {
-      id: 'poi-002',
-      name: 'Downtown Plaza',
+      id: '3c1a0fd2-2e4b-4c0e-9b12-6d2c3c1b7e02',
+      name: 'POI-002',
       kind: 'poi',
-      geopose: offsetGeoPose(geopose, -3, 4)
+      geopose: {
+        ...geopose,
+        lat_deg: 30.285223,
+        lon_deg: -97.739542
+      }
     }
   ];
 

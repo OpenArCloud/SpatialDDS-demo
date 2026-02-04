@@ -143,6 +143,33 @@ python3 spatialdds_validation.py
 ./run_all_tests.sh
 ```
 
+## Web Demo + DDS Bridge (Docker)
+
+Run the DDS-backed bridge in Docker, then start the web UI on the host:
+
+```bash
+# Start VPS + catalog + bridge (Docker)
+./run_bridge_server_docker.sh
+
+# Verify bridge is reachable
+curl http://localhost:8088/health
+
+# Start web UI (host)
+cd web
+npm install
+npm run dev
+```
+
+Logs are written to `bridge/logs/`:
+- `bridge/logs/vps_server_<timestamp>.log`
+- `bridge/logs/catalog_server_<timestamp>.log`
+- `bridge/logs/bridge_server_<timestamp>.log`
+
+Stop the bridge when done:
+```bash
+./stop_bridge_server_docker.sh
+```
+
 ## HTTP Binding
 
 ```bash

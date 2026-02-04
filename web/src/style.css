@@ -32,6 +32,33 @@ body {
   backdrop-filter: blur(6px);
 }
 
+#modeRow {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+#modeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  background: rgba(96, 165, 250, 0.2);
+  color: #bfdbfe;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+
+#modeBadge[data-mode='mock'] {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
 #controls {
   display: flex;
   flex-direction: column;

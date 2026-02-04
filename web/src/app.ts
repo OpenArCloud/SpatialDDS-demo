@@ -1,13 +1,15 @@
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
+import { bridgeDiscover, bridgeHealth, bridgeLocalize } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
 
 const readoutEl = document.getElementById('readout') as HTMLPreElement | null;
 const localizeBtn = document.getElementById('btnLocalize') as HTMLButtonElement | null;
 const discoverBtn = document.getElementById('btnDiscover') as HTMLButtonElement | null;
-const toggleDepthBtn = document.getElementById('btnToggleDepth') as HTMLButtonElement | null;
+const toggleTilesBtn = document.getElementById('btnToggleTiles') as HTMLButtonElement | null;
 const clearBtn = document.getElementById('btnClear') as HTMLButtonElement | null;
+const modeBadgeEl = document.getElementById('modeBadge') as HTMLSpanElement | null;
 
 const markerSvg = encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
@@ -27,23 +29,99 @@ let viewer: Cesium.Viewer | null = null;
 let currentPose: GeoPose | null = null;
 const entityIds = new Set<string>();
 const appLogs: string[] = [];
-let showThroughBuildings = false;
 let readoutItems = 0;
 let readoutMessage = 'ready';
+let bridgeActive = false;
+let photorealisticTileset: Cesium.Cesium3DTileset | null = null;
+let photorealisticEnabled = false;
+const GEOPOSE_QUAT_IS_ENU_TO_BODY = false;
 
-const START_LON = -97.739475;
-const START_LAT = 30.2847;
+const START_LON = -97.739494;
+const START_LAT = 30.284996;
 const EYE_HEIGHT_M = 1.7;
 const START_HEIGHT_M = 20_000_000.0;
 const START_HEADING_DEG = 160.0;
 const START_PITCH_DEG = -10.0;
 const START_VIEW_HEADING_DEG = 0.0;
 const START_VIEW_PITCH_DEG = -90.0;
+const START_Q_XYZW: [number, number, number, number] = [0.4967, -0.0336, -0.0585, 0.8653];
+// START_Q_XYZW is a body->ENU quaternion (ROS REP-103: x-forward, y-left, z-up).
+
+const ENV = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env;
+const PHOTOREAL_ASSET_ID = ENV.VITE_CESIUM_ION_ASSET_ID
+  ? Number(ENV.VITE_CESIUM_ION_ASSET_ID)
+  : undefined;
 
 function appLog(message: string) {
   appLogs.push(message);
   (window as Window & { __appLogs?: string[] }).__appLogs = appLogs;
   console.log(message);
+}
+
+function seedPriorGeopose(): GeoPose {
+  const nowMs = Date.now();
+  return {
+    lat_deg: START_LAT,
+    lon_deg: START_LON,
+    alt_m: 18,
+    q_xyzw: START_Q_XYZW,
+    frame_kind: 'ENU',
+    frame_ref: { uuid: 'web-seed', fqn: 'earth.enu' },
+    stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
+    cov: 'COV_NONE'
+  };
+}
+
+function orientationFromGeoPose(geopose: GeoPose) {
+  const qRaw = new Cesium.Quaternion(
+    geopose.q_xyzw[0],
+    geopose.q_xyzw[1],
+    geopose.q_xyzw[2],
+    geopose.q_xyzw[3]
+  );
+  const qBodyToEnu = GEOPOSE_QUAT_IS_ENU_TO_BODY
+    ? Cesium.Quaternion.inverse(qRaw, new Cesium.Quaternion())
+    : qRaw;
+
+  const rBodyToEnu = Cesium.Matrix3.fromQuaternion(qBodyToEnu, new Cesium.Matrix3());
+  const xBodyInEnu = Cesium.Matrix3.multiplyByVector(
+    rBodyToEnu,
+    new Cesium.Cartesian3(1, 0, 0),
+    new Cesium.Cartesian3()
+  );
+  const yBodyInEnu = Cesium.Matrix3.multiplyByVector(
+    rBodyToEnu,
+    new Cesium.Cartesian3(0, 1, 0),
+    new Cesium.Cartesian3()
+  );
+  const zBodyInEnu = Cesium.Matrix3.multiplyByVector(
+    rBodyToEnu,
+    new Cesium.Cartesian3(0, 0, 1),
+    new Cesium.Cartesian3()
+  );
+
+  const originEcef = Cesium.Cartesian3.fromDegrees(
+    geopose.lon_deg,
+    geopose.lat_deg,
+    geopose.alt_m
+  );
+  const enuToEcef = Cesium.Transforms.eastNorthUpToFixedFrame(originEcef);
+  const rEnuToEcef = Cesium.Matrix4.getMatrix3(enuToEcef, new Cesium.Matrix3());
+
+  // NOTE: For this dataset, body +Y maps to forward (instead of +X).
+  const direction = Cesium.Matrix3.multiplyByVector(
+    rEnuToEcef,
+    yBodyInEnu,
+    new Cesium.Cartesian3()
+  );
+  const up = Cesium.Matrix3.multiplyByVector(
+    rEnuToEcef,
+    zBodyInEnu,
+    new Cesium.Cartesian3()
+  );
+  Cesium.Cartesian3.normalize(direction, direction);
+  Cesium.Cartesian3.normalize(up, up);
+  return { direction, up };
 }
 
 function formatGeoPose(geopose: GeoPose | null): string {
@@ -52,6 +130,17 @@ function formatGeoPose(geopose: GeoPose | null): string {
   }
   const q = geopose.q_xyzw.map((value) => value.toFixed(4)).join(', ');
   return `GeoPose: lat=${geopose.lat_deg.toFixed(6)} lon=${geopose.lon_deg.toFixed(6)} alt=${geopose.alt_m.toFixed(2)}m\nq_xyzw: [${q}]`;
+}
+
+function setModeBadge(mode: 'bridge' | 'mock', detail: string) {
+  if (!modeBadgeEl) {
+    return;
+  }
+  modeBadgeEl.textContent = mode === 'bridge' ? 'DDS Bridge' : 'Mock Mode';
+  modeBadgeEl.dataset.mode = mode;
+  if (detail) {
+    modeBadgeEl.title = detail;
+  }
 }
 
 function renderReadout(geopose: GeoPose | null) {
@@ -94,7 +183,7 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string)
       image: imageUrl,
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: showThroughBuildings ? Number.POSITIVE_INFINITY : 0,
+      disableDepthTestDistance: 0,
       height: 32,
       width: 32
     },
@@ -108,7 +197,7 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string)
       verticalOrigin: Cesium.VerticalOrigin.TOP,
       pixelOffset: new Cesium.Cartesian2(0, -36),
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: showThroughBuildings ? Number.POSITIVE_INFINITY : 0
+      disableDepthTestDistance: 0
     }
   });
 
@@ -124,7 +213,8 @@ function clearEntities() {
 }
 
 async function handleLocalize() {
-  const response = await mockLocalize();
+  const prior = seedPriorGeopose();
+  const response = bridgeActive ? await bridgeLocalize(prior) : await mockLocalize();
   currentPose = response.geopose;
   clearEntities();
   addMarker('user-location', 'You are here', response.geopose, markerUrl);
@@ -139,11 +229,7 @@ async function handleLocalize() {
           response.geopose.lat_deg,
           response.geopose.alt_m + 2
         ),
-        orientation: {
-          heading: Cesium.Math.toRadians(START_HEADING_DEG),
-          pitch: Cesium.Math.toRadians(START_PITCH_DEG),
-          roll: 0.0
-        },
+        orientation: orientationFromGeoPose(response.geopose),
         duration: 1.0
       });
     } catch (error) {
@@ -164,7 +250,7 @@ async function handleDiscover() {
     return;
   }
 
-  const response = await mockDiscover(currentPose);
+  const response = bridgeActive ? await bridgeDiscover(currentPose) : await mockDiscover(currentPose);
   response.items.forEach((item) => addItemEntity(item));
   readoutItems = response.items.length;
   readoutMessage = '';
@@ -181,7 +267,7 @@ function addItemEntity(item: CatalogItem) {
     id: `${item.id}-box`,
     position: Cesium.Cartesian3.fromDegrees(item.geopose.lon_deg, item.geopose.lat_deg, item.geopose.alt_m),
     box: {
-      dimensions: new Cesium.Cartesian3(1.2, 1.2, 2.2),
+      dimensions: new Cesium.Cartesian3(1.2, 1.2, 1.1),
       material: Cesium.Color.ORANGE.withAlpha(0.7),
       outline: true,
       outlineColor: Cesium.Color.BLACK,
@@ -200,28 +286,35 @@ function handleClear() {
   appLog('clear:done');
 }
 
-function toggleDepthTest() {
-  showThroughBuildings = !showThroughBuildings;
-  if (toggleDepthBtn) {
-    toggleDepthBtn.textContent = `Show Items Through Buildings: ${showThroughBuildings ? 'On' : 'Off'}`;
-  }
+async function togglePhotorealisticTiles() {
   if (!viewer) {
     return;
   }
-  viewer.scene.globe.depthTestAgainstTerrain = !showThroughBuildings;
-  entityIds.forEach((id) => {
-    const entity = viewer?.entities.getById(id);
-    if (!entity) {
+  if (!PHOTOREAL_ASSET_ID) {
+    readoutMessage = 'missing VITE_CESIUM_ION_ASSET_ID';
+    renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
+    return;
+  }
+
+  if (!photorealisticTileset) {
+    try {
+      const resource = await Cesium.IonResource.fromAssetId(PHOTOREAL_ASSET_ID);
+      photorealisticTileset = await Cesium.Cesium3DTileset.fromUrl(resource);
+      viewer.scene.primitives.add(photorealisticTileset);
+    } catch (error) {
+      console.warn('photorealistic tileset load failed', error);
+      readoutMessage = 'failed to load photorealistic tiles';
+      renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
       return;
     }
-    if (entity.billboard) {
-      entity.billboard.disableDepthTestDistance = showThroughBuildings ? Number.POSITIVE_INFINITY : 0;
-    }
-    if (entity.label) {
-      entity.label.disableDepthTestDistance = showThroughBuildings ? Number.POSITIVE_INFINITY : 0;
-    }
-  });
-  appLog(`depthTest:items ${showThroughBuildings ? 'on' : 'off'}`);
+  }
+
+  photorealisticEnabled = !photorealisticEnabled;
+  photorealisticTileset.show = photorealisticEnabled;
+  if (toggleTilesBtn) {
+    toggleTilesBtn.textContent = `Photorealistic 3D Tiles: ${photorealisticEnabled ? 'On' : 'Off'}`;
+  }
+  appLog(`tileset:photorealistic ${photorealisticEnabled ? 'on' : 'off'}`);
 }
 
 function enableFpsControls(activeViewer: Cesium.Viewer) {
@@ -348,12 +441,35 @@ export function initApp() {
     handleClear();
   });
 
-  toggleDepthBtn?.addEventListener('click', () => {
-    toggleDepthTest();
+  toggleTilesBtn?.addEventListener('click', () => {
+    void togglePhotorealisticTiles();
   });
+
 
   void loadSceneAssets(viewer);
 
-  // Future hook: replace mockLocalize() with DDS localization response handler.
-  // Future hook: replace mockDiscover() with DDS catalog query/response.
+  void togglePhotorealisticTiles();
+
+  void initBridgeMode();
+}
+
+async function initBridgeMode() {
+  const status = await bridgeHealth();
+  bridgeActive = status.ok;
+
+  if (bridgeActive) {
+    setModeBadge('bridge', `DDS domain ${status.dds_domain ?? 'unknown'}`);
+    if (localizeBtn) localizeBtn.textContent = 'Localize (DDS)';
+    if (discoverBtn) discoverBtn.textContent = 'Discover Content (DDS)';
+    readoutMessage = 'dds bridge online';
+    appLog('bridge:online');
+  } else {
+    setModeBadge('mock', status.message);
+    if (localizeBtn) localizeBtn.textContent = 'Localize (Mock VPS)';
+    if (discoverBtn) discoverBtn.textContent = 'Discover Content (Mock Catalog)';
+    readoutMessage = `mock mode (${status.message})`;
+    appLog(`bridge:offline ${status.message}`);
+  }
+
+  renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
 }

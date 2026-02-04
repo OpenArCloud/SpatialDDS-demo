@@ -1,0 +1,44 @@
+[
+  {
+    "content_id": "5f8b2f2a-7c2b-4f15-9b68-8a9a7c5f7e01",
+    "kind": "poi",
+    "name": "POI-001",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [-97.739440, 30.285151, -97.739340, 30.285251],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": { "uuid": "austin-map-001", "fqn": "map/austin" },
+    "formats": ["poi"],
+    "updated_sec": 1769057000,
+    "href": "spatialdds+http://content.example.com/poi-001"
+  },
+  {
+    "content_id": "3c1a0fd2-2e4b-4c0e-9b12-6d2c3c1b7e02",
+    "kind": "poi",
+    "name": "POI-002",
+    "coverage": [
+      {
+        "type": "bbox",
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [-97.739592, 30.285173, -97.739492, 30.285273],
+        "has_aabb": false,
+        "global": false,
+        "has_frame_ref": false
+      }
+    ],
+    "frame_ref": { "uuid": "austin-map-001", "fqn": "map/austin" },
+    "formats": ["poi"],
+    "updated_sec": 1769057001,
+    "href": "spatialdds+http://content.example.com/poi-002"
+  }
+]

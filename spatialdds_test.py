@@ -237,16 +237,27 @@ class VPSServiceV14:
 
     def __init__(self, logger: SpatialDDSLogger):
         self.logger = logger
-        self.service_id = "svc:vps:demo/sf-downtown"
-        self.service_name = "MockVPS-v1.4"
+        self.service_id = os.getenv("SPATIALDDS_VPS_SERVICE_ID", "svc:vps:demo/sf-downtown")
+        self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.4")
         self.manifest_uri = os.getenv(
             "SPATIALDDS_DEMO_MANIFEST_URI",
             "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
         )
+        bbox_env = os.getenv("SPATIALDDS_VPS_COVERAGE_BBOX", "")
+        if bbox_env:
+            try:
+                lon_min, lat_min, lon_max, lat_max = [float(p.strip()) for p in bbox_env.split(",")]
+            except ValueError:
+                lon_min, lat_min, lon_max, lat_max = (-122.52, 37.70, -122.35, 37.85)
+        else:
+            lon_min, lat_min, lon_max, lat_max = (-122.52, 37.70, -122.35, 37.85)
         self.coverage_frame_ref, bbox_elem = create_coverage_bbox_earth_fixed(
-            -122.52, 37.70, -122.35, 37.85
+            lon_min, lat_min, lon_max, lat_max
         )
-        volume_frame_ref = SpatialDDSValidator.create_frame_ref("map/sf-downtown")
+        map_fqn = os.getenv("SPATIALDDS_VPS_MAP_FQN", "map/sf-downtown")
+        self.map_frame_ref = SpatialDDSValidator.create_frame_ref(map_fqn)
+        self.map_id = os.getenv("SPATIALDDS_VPS_MAP_ID", "sf-downtown-map")
+        volume_frame_ref = self.map_frame_ref
         volume_elem = {
             "type": "volume",
             "has_crs": False,
@@ -344,13 +355,13 @@ class VPSServiceV14:
         )
 
         node_geo = {
-            "map_id": "sf-downtown-map",
+            "map_id": self.map_id,
             "node_id": f"node-{self.seq:04d}",
             "pose": pose_local,
             "geopose": geopose,
             "cov": "COV_NONE",
             "stamp": SpatialDDSValidator.now_time(),
-            "frame_ref": SpatialDDSValidator.create_frame_ref("map/sf-downtown"),
+            "frame_ref": self.map_frame_ref,
             "source_id": self.service_id,
             "seq": self.seq,
             "graph_epoch": 1,
