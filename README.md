@@ -1,6 +1,6 @@
 # SpatialDDS v1.4 Demo
 
-This repo tracks the SpatialDDS 1.4 draft and runs on CycloneDDS. It bundles the upstream IDL under `idl/v1.4`, mirrors the manifest examples in `manifests/v1.4`, and provides a runnable mock flow that follows the new Discovery model and sensing/anchor shapes.
+This repo tracks the SpatialDDS 1.4 draft spec (https://spatialdds.org) and runs on CycloneDDS. It bundles the upstream IDL under `idl/v1.4`, mirrors the manifest examples in `manifests/v1.4`, and provides a runnable mock flow that follows the new Discovery model and sensing/anchor shapes.
 
 ![Web demo screenshot](web/screenshot.png)
 
