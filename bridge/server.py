@@ -6,9 +6,10 @@ import os
 import queue
 import time
 import uuid
+import asyncio
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
@@ -50,6 +51,17 @@ class SpatialDDSBridge:
 
     def _start_transport(self, domain_id: int) -> None:
         def on_message(envelope: object) -> None:
+            _emit_dds_event(
+                {
+                    "ts": time.time(),
+                    "dir": "rx",
+                    "domain": domain_id,
+                    "msg_type": envelope.msg_type,
+                    "logical_topic": envelope.logical_topic,
+                    "request_id": envelope.request_id,
+                    "payload": _safe_json(envelope.payload_json),
+                }
+            )
             self._inbox.put(envelope)
 
         self._transport = DDSTransport(
@@ -113,6 +125,17 @@ class SpatialDDSBridge:
                 json.dumps(request),
                 request.get("request_id", ""),
             )
+            _emit_dds_event(
+                {
+                    "ts": time.time(),
+                    "dir": "tx",
+                    "domain": self._domain_id,
+                    "msg_type": "LOCALIZE_REQUEST",
+                    "logical_topic": TOPIC_VPS_LOCALIZE_REQUEST_V1,
+                    "request_id": request.get("request_id", ""),
+                    "payload": request,
+                }
+            )
 
             env = _wait_for(self._inbox, "LOCALIZE_RESPONSE", timeout=8)
             if not env:
@@ -141,6 +164,17 @@ class SpatialDDSBridge:
                 "CATALOG_QUERY",
                 json.dumps(query),
                 query.get("query_id", ""),
+            )
+            _emit_dds_event(
+                {
+                    "ts": time.time(),
+                    "dir": "tx",
+                    "domain": self._domain_id,
+                    "msg_type": "CATALOG_QUERY",
+                    "logical_topic": TOPIC_CATALOG_QUERY_V1,
+                    "request_id": query.get("query_id", ""),
+                    "payload": query,
+                }
             )
 
             env = _wait_for(self._inbox, "CATALOG_RESPONSE", timeout=6)
@@ -250,6 +284,51 @@ def _env_domain_id() -> Optional[int]:
         return None
 
 
+def _safe_json(payload_json: str) -> Any:
+    try:
+        return json.loads(payload_json or "{}")
+    except json.JSONDecodeError:
+        return payload_json
+
+
+class DDSEventBroadcaster:
+    def __init__(self) -> None:
+        self._queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
+        self._clients: set[WebSocket] = set()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
+
+    def emit(self, event: Dict[str, Any]) -> None:
+        if not self._loop:
+            return
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
+
+    async def run(self) -> None:
+        while True:
+            event = await self._queue.get()
+            dead: list[WebSocket] = []
+            for ws in self._clients:
+                try:
+                    await ws.send_json(event)
+                except Exception:
+                    dead.append(ws)
+            for ws in dead:
+                self._clients.discard(ws)
+
+    async def connect(self, ws: WebSocket) -> None:
+        await ws.accept()
+        self._clients.add(ws)
+
+    def disconnect(self, ws: WebSocket) -> None:
+        self._clients.discard(ws)
+
+
+def _emit_dds_event(event: Dict[str, Any]) -> None:
+    broadcaster.emit(event)
+
+
 def _wait_for(queue_obj: queue.Queue, msg_type: str, timeout: float) -> Optional[object]:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -281,6 +360,7 @@ app.add_middleware(
 )
 
 bridge = SpatialDDSBridge()
+broadcaster = DDSEventBroadcaster()
 
 
 @app.on_event("startup")
@@ -291,6 +371,9 @@ def on_startup() -> None:
         raise RuntimeError("SPATIALDDS_DDS_DOMAIN is required")
     bridge._domain_id = domain_id
     bridge._start_transport(domain_id)
+    loop = asyncio.get_event_loop()
+    broadcaster.attach_loop(loop)
+    loop.create_task(broadcaster.run())
 
 
 @app.get("/health")
@@ -325,6 +408,18 @@ def catalog_query(payload: Dict[str, Any]) -> Dict[str, Any]:
         return bridge.catalog_query(geopose, expr=expr, limit=limit)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.websocket("/v1/stream")
+async def stream(websocket: WebSocket) -> None:
+    await broadcaster.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        broadcaster.disconnect(websocket)
 
 
 if __name__ == "__main__":

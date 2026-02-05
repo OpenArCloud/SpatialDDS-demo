@@ -8,8 +8,11 @@ const readoutEl = document.getElementById('readout') as HTMLPreElement | null;
 const localizeBtn = document.getElementById('btnLocalize') as HTMLButtonElement | null;
 const discoverBtn = document.getElementById('btnDiscover') as HTMLButtonElement | null;
 const toggleTilesBtn = document.getElementById('btnToggleTiles') as HTMLButtonElement | null;
+const toggleDdsOverlayBtn = document.getElementById('btnToggleDdsOverlay') as HTMLButtonElement | null;
 const clearBtn = document.getElementById('btnClear') as HTMLButtonElement | null;
 const modeBadgeEl = document.getElementById('modeBadge') as HTMLSpanElement | null;
+const ddsOverlayEl = document.getElementById('ddsOverlay') as HTMLDivElement | null;
+const ddsOverlayBodyEl = document.getElementById('ddsOverlayBody') as HTMLPreElement | null;
 
 const markerSvg = encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
@@ -35,6 +38,9 @@ let bridgeActive = false;
 let photorealisticTileset: Cesium.Cesium3DTileset | null = null;
 let photorealisticEnabled = false;
 const GEOPOSE_QUAT_IS_ENU_TO_BODY = false;
+let ddsOverlayVisible = false;
+let ddsSocket: WebSocket | null = null;
+const ddsMessages: string[] = [];
 
 const START_LON = -97.739494;
 const START_LAT = 30.284996;
@@ -51,6 +57,7 @@ const ENV = (import.meta as ImportMeta & { env: Record<string, string | undefine
 const PHOTOREAL_ASSET_ID = ENV.VITE_CESIUM_ION_ASSET_ID
   ? Number(ENV.VITE_CESIUM_ION_ASSET_ID)
   : undefined;
+const BRIDGE_URL = ENV.VITE_SPATIALDDS_BRIDGE_URL || 'http://localhost:8088';
 
 function appLog(message: string) {
   appLogs.push(message);
@@ -317,6 +324,97 @@ async function togglePhotorealisticTiles() {
   appLog(`tileset:photorealistic ${photorealisticEnabled ? 'on' : 'off'}`);
 }
 
+function wsUrlFromBridgeUrl(url: string): string {
+  if (url.startsWith('https://')) {
+    return url.replace('https://', 'wss://');
+  }
+  if (url.startsWith('http://')) {
+    return url.replace('http://', 'ws://');
+  }
+  return `ws://${url}`;
+}
+
+function renderDdsOverlay() {
+  if (!ddsOverlayBodyEl) {
+    return;
+  }
+  ddsOverlayBodyEl.textContent = ddsMessages.join('\n\n');
+}
+
+function pushDdsMessage(entry: string) {
+  ddsMessages.push(entry);
+  const limit = 50;
+  if (ddsMessages.length > limit) {
+    ddsMessages.splice(0, ddsMessages.length - limit);
+  }
+  renderDdsOverlay();
+}
+
+function connectDdsOverlay() {
+  if (ddsSocket) {
+    return;
+  }
+  const wsUrl = `${wsUrlFromBridgeUrl(BRIDGE_URL)}/v1/stream`;
+  try {
+    ddsSocket = new WebSocket(wsUrl);
+  } catch (error) {
+    pushDdsMessage(`ws: failed to connect (${String(error)})`);
+    ddsSocket = null;
+    return;
+  }
+
+  ddsSocket.onopen = () => {
+    pushDdsMessage(`ws: connected ${wsUrl}`);
+  };
+  ddsSocket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data as string) as {
+        ts?: number;
+        dir?: string;
+        msg_type?: string;
+        logical_topic?: string;
+        payload?: unknown;
+      };
+      const ts = payload.ts ? new Date(payload.ts * 1000).toISOString() : new Date().toISOString();
+      const header = `[${ts}] ${payload.dir || '?'} ${payload.msg_type || '?'} ${payload.logical_topic || ''}`.trim();
+      const body = payload.payload ? JSON.stringify(payload.payload, null, 2) : '';
+      pushDdsMessage(body ? `${header}\n${body}` : header);
+    } catch (error) {
+      pushDdsMessage(`ws: parse error ${String(error)}`);
+    }
+  };
+  ddsSocket.onerror = () => {
+    pushDdsMessage('ws: error');
+  };
+  ddsSocket.onclose = () => {
+    pushDdsMessage('ws: closed');
+    ddsSocket = null;
+  };
+}
+
+function disconnectDdsOverlay() {
+  if (!ddsSocket) {
+    return;
+  }
+  ddsSocket.close();
+  ddsSocket = null;
+}
+
+function toggleDdsOverlay() {
+  ddsOverlayVisible = !ddsOverlayVisible;
+  if (toggleDdsOverlayBtn) {
+    toggleDdsOverlayBtn.textContent = `DDS Messages: ${ddsOverlayVisible ? 'On' : 'Off'}`;
+  }
+  if (ddsOverlayEl) {
+    ddsOverlayEl.classList.toggle('hidden', !ddsOverlayVisible);
+  }
+  if (ddsOverlayVisible) {
+    connectDdsOverlay();
+  } else {
+    disconnectDdsOverlay();
+  }
+}
+
 function enableFpsControls(activeViewer: Cesium.Viewer) {
   const scene = activeViewer.scene;
   const camera = scene.camera;
@@ -443,6 +541,10 @@ export function initApp() {
 
   toggleTilesBtn?.addEventListener('click', () => {
     void togglePhotorealisticTiles();
+  });
+
+  toggleDdsOverlayBtn?.addEventListener('click', () => {
+    toggleDdsOverlay();
   });
 
 
