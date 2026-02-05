@@ -1,14 +1,42 @@
 # SpatialDDS v1.4 Demo
 
-This repo tracks the SpatialDDS 1.4 draft. It bundles the upstream IDL under `idl/v1.4`, mirrors the manifest examples in `manifests/v1.4`, and provides a runnable mock flow that follows the new Discovery model and sensing/anchor shapes.
+This repo tracks the SpatialDDS 1.4 draft and runs on CycloneDDS. It bundles the upstream IDL under `idl/v1.4`, mirrors the manifest examples in `manifests/v1.4`, and provides a runnable mock flow that follows the new Discovery model and sensing/anchor shapes.
 
-## What's Inside
-- v1.4 IDL bundle with a convenience `spatialdds.idl` wrapper
-- Discovery walkthrough using `disco.Announce` + `disco.CoverageQuery/Response`
-- Mock VPS-style localization built from 1.4 primitives (`core.GeoPose`, `sensing.vision`, `argeo.NodeGeo`)
-- HTTP REST binding that mirrors the 1.4 discovery payloads
-- Validation helpers for Time, FrameRef, coverage elements, GeoPose quaternions
-- Docker image for quick runs and IDL compilation
+![Web demo screenshot](web/screenshot.png)
+
+## Web Demo (DDS Bridge)
+
+Create `web/.env.local` with required values:
+```bash
+VITE_CESIUM_ION_TOKEN=your_token
+VITE_CESIUM_ION_ASSET_ID=your_asset_id
+VITE_SPATIALDDS_BRIDGE_URL=http://localhost:8088
+```
+
+Run the DDS-backed bridge in Docker, then start the web UI on the host:
+
+```bash
+# Start VPS + catalog + bridge (Docker)
+./run_bridge_server_docker.sh
+
+# Verify bridge is reachable
+curl http://localhost:8088/health
+
+# Start web UI (host)
+cd web
+npm install
+npm run dev
+```
+
+Logs are written to `bridge/logs/`:
+- `bridge/logs/vps_server_<timestamp>.log`
+- `bridge/logs/catalog_server_<timestamp>.log`
+- `bridge/logs/bridge_server_<timestamp>.log`
+
+Stop the bridge when done:
+```bash
+./stop_bridge_server_docker.sh
+```
 
 ## Protocol Flow (v1.4)
 
@@ -48,18 +76,11 @@ sequenceDiagram
     Client->>DDS: ANCHOR_DELTA<br/>op:ADD, anchor entry with GeoPose + checksum
 ```
 
-## Quick Start
+## Quick Start (non-web)
 
 ```bash
-# Build the Docker image
-docker build -t cyclonedds-python .
-
-# If the build fails on cyclonedds bindings, rebuild clean
-# (the image requires cyclonedds==0.10.5 and will fail if missing)
-docker build -t cyclonedds-python --no-cache .
-
-# Run the SpatialDDS v1.4 demo (mock transport)
-docker run --rm --network host cyclonedds-python
+# Full mock + DDS bootstrap run with logs
+./run_local_tests_with_logs.sh
 ```
 
 The Dockerfile pulls a prebuilt base image with Cyclone DDS + idlc + Python bindings:
@@ -71,13 +92,12 @@ docker build -f Dockerfile.base -t ghcr.io/openarcloud/cyclonedds-python-base:0.
 docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 ```
 
-## DDS Demo (Cyclone DDS)
+## DDS Demo (controlling services separately)
 
 The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and requires
 Cyclone DDS to be enabled explicitly. The client always starts with bootstrap
 domain discovery.
 
-```bash
 Use `--summary-only` for headers only, or omit it for full message details.
 
 If running directly on the host instead of Docker, you must install the
@@ -127,49 +147,6 @@ docker run --rm --network host \
   cyclonedds-python python3 spatialdds_demo_client.py
 ```
 
-## Run Tests
-
-```bash
-# Default: full logs
-python3 spatialdds_test.py
-
-# Summary only
-python3 spatialdds_test.py --summary-only
-
-# Validation utilities self-test
-python3 spatialdds_validation.py
-
-# Full suite wrapper
-./run_all_tests.sh
-```
-
-## Web Demo + DDS Bridge (Docker)
-
-Run the DDS-backed bridge in Docker, then start the web UI on the host:
-
-```bash
-# Start VPS + catalog + bridge (Docker)
-./run_bridge_server_docker.sh
-
-# Verify bridge is reachable
-curl http://localhost:8088/health
-
-# Start web UI (host)
-cd web
-npm install
-npm run dev
-```
-
-Logs are written to `bridge/logs/`:
-- `bridge/logs/vps_server_<timestamp>.log`
-- `bridge/logs/catalog_server_<timestamp>.log`
-- `bridge/logs/bridge_server_<timestamp>.log`
-
-Stop the bridge when done:
-```bash
-./stop_bridge_server_docker.sh
-```
-
 ## HTTP Binding
 
 ```bash
@@ -200,6 +177,5 @@ curl -X POST http://localhost:8080/.well-known/spatialdds/search \
 ├── spatialdds_test.py        # v1.4 discovery + localization demo
 ├── spatialdds_validation.py  # FrameRef/Time/Coverage/GeoPose helpers
 ├── http_binding.py           # REST wrapper for discovery payloads
-├── run_all_tests.sh          # Convenience test runner
 └── spatialdds.idl            # Convenience include aggregator for idlc
 ```
