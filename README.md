@@ -153,7 +153,7 @@ docker run --rm --network host \
 # Start the REST API
 python3 http_binding.py
 
-# Register an announce
+# Register a service manifest (spatial.manifest@1.5)
 curl -X POST http://localhost:8080/.well-known/spatialdds/register \
   -H "Content-Type: application/json" \
   -d @manifests/v1.5/vps_manifest.json

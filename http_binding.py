@@ -18,6 +18,8 @@ from spatialdds_validation import (
 )
 
 # Module-level registry (shared across all request handlers)
+# Each entry: { "kind": "announce"|"manifest", "payload": dict,
+#               "coverage": List[CoverageElement], "coverage_frame_ref": FrameRef }
 _announce_registry: List[Dict[str, Any]] = []
 
 
@@ -131,7 +133,7 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
 
     def _handle_register(self):
         """
-        Handle discovery.Announce registration
+        Handle discovery.Announce or service manifest registration
         POST /.well-known/spatialdds/register
         """
         try:
@@ -141,29 +143,21 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
                 return
 
             body = self.rfile.read(content_length).decode("utf-8")
-            announce = json.loads(body)
+            payload = json.loads(body)
 
-            required = ["service_id", "coverage", "coverage_frame_ref", "manifest_uri"]
-            for field in required:
-                if field not in announce:
-                    self._send_error_json(f"Announce missing required '{field}' field", 400)
-                    return
+            if _is_service_manifest(payload):
+                entry = _normalize_manifest(payload)
+            else:
+                entry = _normalize_announce(payload)
 
-            SpatialDDSValidator.validate_frame_ref(announce["coverage_frame_ref"])
-            SpatialDDSValidator.validate_coverage(
-                announce["coverage"], announce["coverage_frame_ref"]
-            )
+            self._register_announce(entry)
 
             now_time = SpatialDDSValidator.now_time()
-            announce.setdefault("stamp", now_time)
-            announce.setdefault("ttl_sec", 300)
-
-            self._register_announce(announce)
-
+            service_id = _entry_service_id(entry)
             self._send_json(
                 {
                     "status": "registered",
-                    "service_id": announce["service_id"],
+                    "service_id": service_id,
                     "count": len(self.announce_registry),
                     "stamp": now_time,
                 },
@@ -176,13 +170,15 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
             self._send_error_json(f"Internal error: {exc}", 500)
 
     # -- Helpers -----------------------------------------------------------
-    def _register_announce(self, announce: Dict[str, Any]):
+    def _register_announce(self, entry: Dict[str, Any]):
         global _announce_registry
+        service_id = _entry_service_id(entry)
         _announce_registry = [
-            a for a in _announce_registry if a.get("service_id") != announce["service_id"]
+            a for a in _announce_registry if _entry_service_id(a) != service_id
         ]
-        _announce_registry.append(announce)
-        print(f"Registered service: {announce['service_id']} ({announce.get('name', 'unnamed')})")
+        _announce_registry.append(entry)
+        label = "manifest" if entry.get("kind") == "manifest" else "announce"
+        print(f"Registered service: {service_id} ({label})")
 
     def _search_announces(self, query: Dict[str, Any]) -> List[Dict[str, Any]]:
         results: List[Dict[str, Any]] = []
@@ -200,13 +196,13 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
                 if has_filter and not self._matches_filter(filter_obj, ann):
                     continue
 
-                if expr and not self._matches_expr(expr, ann):
+                if expr and not self._matches_expr(expr, ann.get("payload", {})):
                     continue
 
-                results.append(ann)
+                results.append(ann.get("payload", {}))
             except Exception:
                 # Best-effort: include on validation failure to avoid accidental drops
-                results.append(ann)
+                results.append(ann.get("payload", {}))
         return results
 
     @staticmethod
@@ -226,7 +222,10 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
         qos_in = filter_obj.get("qos_profile_in") or []
         module_id_in = filter_obj.get("module_id_in") or []
 
-        topics = announce.get("topics", []) if isinstance(announce, dict) else []
+        payload = announce.get("payload", {}) if isinstance(announce, dict) else {}
+        topics = payload.get("topics", [])
+        if not topics and isinstance(payload.get("service", {}), dict):
+            topics = payload.get("service", {}).get("topics", [])
         topic_match = True
         if type_in or qos_in:
             topic_match = False
@@ -241,7 +240,7 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
         module_match = True
         if module_id_in:
             module_match = False
-            caps = announce.get("caps", {}) if isinstance(announce, dict) else {}
+            caps = payload.get("caps", {}) if isinstance(payload, dict) else {}
             supported = caps.get("supported_profiles", []) if isinstance(caps, dict) else []
             for profile in supported:
                 name = profile.get("name")
@@ -270,6 +269,82 @@ def run_server(port: int = 8080):
     httpd = HTTPServer(server_address, SpatialDDSHTTPHandler)
     print(f"Serving SpatialDDS v1.5 HTTP binding on port {port}")
     httpd.serve_forever()
+
+
+def _is_service_manifest(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    profile = payload.get("profile", "")
+    rtype = payload.get("rtype")
+    return isinstance(profile, str) and profile.startswith("spatial.manifest@1.") and rtype == "service"
+
+
+def _normalize_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:
+    service = manifest.get("service", {})
+    if not isinstance(service, dict) or not service.get("service_id"):
+        raise ValueError("Service manifest missing service.service_id")
+
+    coverage = manifest.get("coverage")
+    if not isinstance(coverage, dict):
+        raise ValueError("Service manifest missing coverage object")
+
+    coverage_frame_ref = coverage.get("frame_ref")
+    if not coverage_frame_ref:
+        raise ValueError("Service manifest coverage.frame_ref is required")
+
+    element = dict(coverage)
+    element.pop("frame_ref", None)
+    element["has_frame_ref"] = False
+
+    SpatialDDSValidator.validate_frame_ref(coverage_frame_ref)
+    SpatialDDSValidator.validate_coverage([element], coverage_frame_ref)
+
+    manifest.setdefault("stamp", SpatialDDSValidator.now_time())
+    manifest.setdefault("ttl_sec", 300)
+
+    return {
+        "kind": "manifest",
+        "payload": manifest,
+        "coverage": [element],
+        "coverage_frame_ref": coverage_frame_ref,
+    }
+
+
+def _normalize_announce(announce: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(announce, dict):
+        raise ValueError("Announce must be an object")
+
+    required = ["service_id", "coverage", "coverage_frame_ref", "manifest_uri"]
+    for field in required:
+        if field not in announce:
+            raise ValueError(f"Announce missing required '{field}' field")
+
+    SpatialDDSValidator.validate_frame_ref(announce["coverage_frame_ref"])
+    SpatialDDSValidator.validate_coverage(
+        announce["coverage"], announce["coverage_frame_ref"]
+    )
+
+    now_time = SpatialDDSValidator.now_time()
+    announce.setdefault("stamp", now_time)
+    announce.setdefault("ttl_sec", 300)
+
+    return {
+        "kind": "announce",
+        "payload": announce,
+        "coverage": announce.get("coverage", []),
+        "coverage_frame_ref": announce.get("coverage_frame_ref"),
+    }
+
+
+def _entry_service_id(entry: Dict[str, Any]) -> str:
+    if not isinstance(entry, dict):
+        return ""
+    payload = entry.get("payload", {})
+    if entry.get("kind") == "manifest":
+        service = payload.get("service", {})
+        if isinstance(service, dict):
+            return service.get("service_id", "")
+    return payload.get("service_id", "")
 
 
 if __name__ == "__main__":
