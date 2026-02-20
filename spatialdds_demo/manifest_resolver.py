@@ -25,10 +25,10 @@ def _cache_put(manifest_uri: str, data: Optional[Dict], status: Dict[str, str], 
 
 def _resolve_local(manifest_uri: str) -> Tuple[Optional[Dict], Dict[str, str]]:
     # Mapping: spatialdds://vps.example.com/zone:sf-downtown/manifest:vps
-    # -> manifests/v1.4/vps_sf_downtown.json
+    # -> manifests/v1.5/vps_sf_downtown.json
     mapping = {
         "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps": (
-            "manifests/v1.4/vps_sf_downtown.json"
+            "manifests/v1.5/vps_sf_downtown.json"
         )
     }
     local_path = mapping.get(manifest_uri)

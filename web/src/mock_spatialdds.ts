@@ -2,7 +2,7 @@ import type { CatalogItem, DiscoverResponse, FrameRef, GeoPose, LocalizeResponse
 
 const FRAME_REF: FrameRef = {
   uuid: 'f30b4e64-6b58-4d45-8da8-2a0f5b3b6a01',
-  fqn: 'earth.enu'
+  fqn: 'earth-fixed'
 };
 
 const FIXED_STAMP: TimeStamp = {
@@ -14,7 +14,7 @@ const BASE_GEOPOSE: GeoPose = {
   lat_deg: 30.284996,
   lon_deg: -97.739494,
   alt_m: 18,
-  q_xyzw: [0.4967, -0.0336, -0.0585, 0.8653],
+  q: [0.4967, -0.0336, -0.0585, 0.8653],
   frame_kind: 'ENU',
   frame_ref: FRAME_REF,
   stamp: FIXED_STAMP,

@@ -16,7 +16,7 @@ from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
 from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
     TOPIC_CATALOG_REPLIES,
-    TOPIC_VPS_LOCALIZE_REQUEST_V1,
+    TOPIC_VPS_QUERY_V1,
 )
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 from spatialdds_test import MockSensorData
@@ -81,7 +81,7 @@ class SpatialDDSBridge:
             stamp_time = float(stamp.get("sec", 0)) + float(stamp.get("nanosec", 0)) / 1_000_000_000.0
         except (TypeError, ValueError):
             return True
-        return (time.time() - stamp_time) <= float(ttl_sec)
+        return (time.time() - stamp_time) <= float(ttl_sec) * 2.0
 
     def latest_announce(self, timeout: float = 2.0) -> Optional[Dict[str, Any]]:
         if self._last_announce and self._announce_fresh(self._last_announce):
@@ -120,7 +120,7 @@ class SpatialDDSBridge:
 
             request = self._create_localize_request(service_id, prior_geopose)
             self._transport.publish(
-                TOPIC_VPS_LOCALIZE_REQUEST_V1,
+                TOPIC_VPS_QUERY_V1,
                 "LOCALIZE_REQUEST",
                 json.dumps(request),
                 request.get("request_id", ""),
@@ -131,7 +131,7 @@ class SpatialDDSBridge:
                     "dir": "tx",
                     "domain": self._domain_id,
                     "msg_type": "LOCALIZE_REQUEST",
-                    "logical_topic": TOPIC_VPS_LOCALIZE_REQUEST_V1,
+                    "logical_topic": TOPIC_VPS_QUERY_V1,
                     "request_id": request.get("request_id", ""),
                     "payload": request,
                 }
@@ -211,7 +211,7 @@ class SpatialDDSBridge:
             "t_start": stamp,
             "t_end": stamp,
             "has_sensor_pose": True,
-            "sensor_pose": {"t": [0.0, 0.0, 0.0], "q_xyzw": [0.0, 0.0, 0.0, 1.0]},
+            "sensor_pose": {"t": [0.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]},
             "blobs": [blob],
         }
         return {
@@ -268,9 +268,9 @@ def _default_prior_geopose() -> Dict[str, Any]:
         "lat_deg": DEFAULT_LAT,
         "lon_deg": DEFAULT_LON,
         "alt_m": DEFAULT_ALT,
-        "q_xyzw": [0.4967, -0.0336, -0.0585, 0.8653],
+        "q": [0.4967, -0.0336, -0.0585, 0.8653],
         "frame_kind": "ENU",
-        "frame_ref": SpatialDDSValidator.create_frame_ref("earth.enu"),
+        "frame_ref": SpatialDDSValidator.create_frame_ref("earth-fixed"),
         "stamp": stamp,
         "cov": "COV_NONE",
     }

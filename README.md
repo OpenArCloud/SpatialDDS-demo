@@ -1,6 +1,6 @@
-# SpatialDDS v1.4 Demo
+# SpatialDDS v1.5 Demo
 
-This repo tracks the SpatialDDS 1.4 draft spec (https://spatialdds.org) and runs on CycloneDDS. It bundles the upstream IDL under `idl/v1.4`, mirrors the manifest examples in `manifests/v1.4`, and provides a runnable mock flow that follows the new Discovery model and sensing/anchor shapes.
+This repo tracks the SpatialDDS 1.5 draft spec (https://spatialdds.org) and runs on CycloneDDS. It bundles the upstream IDL under `idl/v1.5`, mirrors the manifest examples in `manifests/v1.5`, and provides a runnable mock flow that follows the Discovery model and sensing/anchor shapes.
 
 ![Web demo screenshot](web/screenshot.png)
 
@@ -38,7 +38,7 @@ Stop the bridge when done:
 ./stop_bridge_server_docker.sh
 ```
 
-## Protocol Flow (v1.4)
+## Protocol Flow (v1.5)
 
 ```mermaid
 sequenceDiagram
@@ -57,14 +57,14 @@ sequenceDiagram
     VPS->>DDS: COVERAGE_HINT<br/>optional periodic refresh of coverage/transform TTL
 
     Note over Client,DDS: Phase 2 — CoverageQuery/Response
-    Client->>DDS: COVERAGE_QUERY<br/>query_id<br/>coverage[] (bbox/aabb) + coverage_frame_ref<br/>expr filter<br/>reply_topic
+    Client->>DDS: COVERAGE_QUERY<br/>query_id<br/>coverage[] (bbox/aabb) + coverage_frame_ref<br/>has_filter + filter<br/>reply_topic
     DDS-->>VPS: Routed query by bbox intersection
     VPS-->>DDS: COVERAGE_RESPONSE page<br/>query_id, results[Announce], next_page_token
     DDS-->>Client: COVERAGE_RESPONSE page
 
     Note over Client,VPS: Phase 3 — Localization exchange (demo)
     Client->>VPS: LOCALIZE_REQUEST<br/>VisionFrame + KeyframeFeatures + prior GeoPose
-    VPS-->>Client: LOCALIZE_RESPONSE<br/>argeo.NodeGeo (GeoPose + covariance), quality
+    VPS-->>Client: LOCALIZE_RESPONSE<br/>argeo.NodeGeo (poses[] + GeoPose), quality
 
     Note over Client,DDS: Phase 4 — Content discovery (catalog)
     Client->>DDS: CATALOG_QUERY<br/>query_id + coverage[] + reply_topic
@@ -156,7 +156,7 @@ python3 http_binding.py
 # Register an announce
 curl -X POST http://localhost:8080/.well-known/spatialdds/register \
   -H "Content-Type: application/json" \
-  -d @manifests/v1.4/vps_manifest.json
+  -d @manifests/v1.5/vps_manifest.json
 
 # Search by coverage
 curl -X POST http://localhost:8080/.well-known/spatialdds/search \
@@ -164,7 +164,9 @@ curl -X POST http://localhost:8080/.well-known/spatialdds/search \
   -d '{
     "coverage": [{"type":"bbox","has_crs":true,"crs":"EPSG:4979","has_bbox":true,"bbox":[-122.45,37.75,-122.35,37.85],"has_aabb":false,"global":false,"has_frame_ref":false}],
     "coverage_frame_ref": {"uuid":"00000000-0000-0000-0000-000000000000","fqn":"earth-fixed"},
-    "expr": "kind==\"VPS\""
+    "has_filter": true,
+    "filter": { "type_in": [], "qos_profile_in": [], "module_id_in": [] },
+    "expr": ""
   }'
 ```
 
@@ -172,9 +174,9 @@ curl -X POST http://localhost:8080/.well-known/spatialdds/search \
 
 ```
 .
-├── idl/v1.4/                 # Canonical IDL pulled from SpatialDDS-spec
-├── manifests/v1.4/           # Manifest examples from SpatialDDS-spec
-├── spatialdds_test.py        # v1.4 discovery + localization demo
+├── idl/v1.5/                 # Canonical IDL pulled from SpatialDDS-spec
+├── manifests/v1.5/           # Manifest examples from SpatialDDS-spec
+├── spatialdds_test.py        # v1.5 discovery + localization demo
 ├── spatialdds_validation.py  # FrameRef/Time/Coverage/GeoPose helpers
 ├── http_binding.py           # REST wrapper for discovery payloads
 └── spatialdds.idl            # Convenience include aggregator for idlc

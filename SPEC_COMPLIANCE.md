@@ -1,7 +1,7 @@
-# SpatialDDS v1.4 Compliance Notes
+# SpatialDDS v1.5 Compliance Notes
 
-**Status:** ✅ Aligned with v1.4 draft profiles  
-**Date:** 2025-10-05  
+**Status:** ✅ Aligned with v1.5 draft profiles  
+**Date:** 2026-02-20  
 
 ## Coverage & Frames
 - Uses `disco.CoverageElement` with explicit presence flags (`has_bbox` / `has_aabb`) and CRS on earth-fixed bboxes.
@@ -10,18 +10,18 @@
 
 ## Time & Quaternions
 - All timestamps use `builtin::Time { sec, nanosec }`.
-- GeoPose and PoseSE3 quaternions follow the 1.4 GeoPose order `[x,y,z,w]` and are normalized before use.
+- GeoPose and PoseSE3 quaternions follow the 1.5 GeoPose order `[x,y,z,w]` and are normalized before use.
 
 ## Discovery Flow
 - Service discovery now uses `Announce` + `CoverageQuery`/`CoverageResponse` with capabilities (`ProfileSupport` ranges) and typed topics (`TopicMeta` with `type/version/qos_profile`).
 - HTTP binding mirrors the same shapes for registration and search.
 
 ## Sensing & Localization Demo
-- Mock localization response uses `core.GeoPose` wrapped in `argeo.NodeGeo` to stay within defined 1.4 types.
-- Sensor payloads reference 1.4 vision and SLAM frontend structures (FrameRefs, BlobRefs, KeyframeFeatures).
+- Mock localization response uses `argeo.NodeGeo` with `poses[]` + optional `geopose` per 1.5 IDL.
+- Sensor payloads reference 1.5 vision and SLAM frontend structures (FrameRefs, BlobRefs, KeyframeFeatures).
 
 ## Manifests
-- Bundled manifests under `manifests/v1.4/` match the upstream spec (VPS, anchors, mapping, content experience) and are used in tests/HTTP examples.
+- Bundled manifests under `manifests/v1.5/` match the upstream spec and are used in tests/HTTP examples.
 
 ## Validation
 - `spatialdds_validation.py` enforces FrameRef, Time, coverage presence flags, CRS rules, and unit quaternions.

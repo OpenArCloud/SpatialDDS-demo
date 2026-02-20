@@ -50,8 +50,8 @@ const START_HEADING_DEG = 160.0;
 const START_PITCH_DEG = -10.0;
 const START_VIEW_HEADING_DEG = 0.0;
 const START_VIEW_PITCH_DEG = -90.0;
-const START_Q_XYZW: [number, number, number, number] = [0.4967, -0.0336, -0.0585, 0.8653];
-// START_Q_XYZW is a body->ENU quaternion (ROS REP-103: x-forward, y-left, z-up).
+const START_Q: [number, number, number, number] = [0.4967, -0.0336, -0.0585, 0.8653];
+// START_Q is a body->ENU quaternion (ROS REP-103: x-forward, y-left, z-up).
 
 const ENV = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env;
 const PHOTOREAL_ASSET_ID = ENV.VITE_CESIUM_ION_ASSET_ID
@@ -71,9 +71,9 @@ function seedPriorGeopose(): GeoPose {
     lat_deg: START_LAT,
     lon_deg: START_LON,
     alt_m: 18,
-    q_xyzw: START_Q_XYZW,
+    q: START_Q,
     frame_kind: 'ENU',
-    frame_ref: { uuid: 'web-seed', fqn: 'earth.enu' },
+    frame_ref: { uuid: 'web-seed', fqn: 'earth-fixed' },
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
     cov: 'COV_NONE'
   };
@@ -81,10 +81,10 @@ function seedPriorGeopose(): GeoPose {
 
 function orientationFromGeoPose(geopose: GeoPose) {
   const qRaw = new Cesium.Quaternion(
-    geopose.q_xyzw[0],
-    geopose.q_xyzw[1],
-    geopose.q_xyzw[2],
-    geopose.q_xyzw[3]
+    geopose.q[0],
+    geopose.q[1],
+    geopose.q[2],
+    geopose.q[3]
   );
   const qBodyToEnu = GEOPOSE_QUAT_IS_ENU_TO_BODY
     ? Cesium.Quaternion.inverse(qRaw, new Cesium.Quaternion())
@@ -135,8 +135,8 @@ function formatGeoPose(geopose: GeoPose | null): string {
   if (!geopose) {
     return 'pose: none';
   }
-  const q = geopose.q_xyzw.map((value) => value.toFixed(4)).join(', ');
-  return `GeoPose: lat=${geopose.lat_deg.toFixed(6)} lon=${geopose.lon_deg.toFixed(6)} alt=${geopose.alt_m.toFixed(2)}m\nq_xyzw: [${q}]`;
+  const q = geopose.q.map((value) => value.toFixed(4)).join(', ');
+  return `GeoPose: lat=${geopose.lat_deg.toFixed(6)} lon=${geopose.lon_deg.toFixed(6)} alt=${geopose.alt_m.toFixed(2)}m\nq: [${q}]`;
 }
 
 function setModeBadge(mode: 'bridge' | 'mock', detail: string) {
@@ -171,7 +171,7 @@ function cameraGeoPose(activeViewer: Cesium.Viewer): GeoPose {
     lat_deg: Cesium.Math.toDegrees(cartographic.latitude),
     lon_deg: Cesium.Math.toDegrees(cartographic.longitude),
     alt_m: cartographic.height,
-    q_xyzw: [orientation.x, orientation.y, orientation.z, orientation.w],
+    q: [orientation.x, orientation.y, orientation.z, orientation.w],
     frame_kind: 'ENU',
     frame_ref: { uuid: 'camera-frame', fqn: 'camera.enu' },
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SpatialDDS v1.4 HTTP Binding
+SpatialDDS v1.5 HTTP Binding
 Provides REST API endpoints for discovery-style registration and search using
 discovery.Announce and discovery.CoverageQuery/Response shapes.
 """
@@ -26,7 +26,7 @@ def _now_ms() -> int:
 
 
 class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
-    """HTTP handler for SpatialDDS v1.4 endpoints"""
+    """HTTP handler for SpatialDDS v1.5 endpoints"""
 
     @property
     def announce_registry(self):
@@ -59,7 +59,7 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
             self._send_json(
                 {
                     "name": "SpatialDDS HTTP Binding",
-                    "version": "1.4.0",
+                    "version": "1.5.0",
                     "endpoints": {
                         "search": "/.well-known/spatialdds/search",
                         "register": "/.well-known/spatialdds/register",
@@ -186,13 +186,18 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
 
     def _search_announces(self, query: Dict[str, Any]) -> List[Dict[str, Any]]:
         results: List[Dict[str, Any]] = []
-        expr = query.get("expr", "")
+        has_filter = bool(query.get("has_filter"))
+        filter_obj = query.get("filter", {}) if has_filter else {}
+        expr = "" if has_filter else query.get("expr", "")
         coverage_q = query["coverage"]
         for ann in _announce_registry:
             try:
                 if not SpatialDDSValidator.check_coverage_intersection(
                     coverage_q, ann.get("coverage", [])
                 ):
+                    continue
+
+                if has_filter and not self._matches_filter(filter_obj, ann):
                     continue
 
                 if expr and not self._matches_expr(expr, ann):
@@ -212,6 +217,44 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
         """
         if "==" not in expr:
             return True
+
+    @staticmethod
+    def _matches_filter(filter_obj: Dict[str, Any], announce: Dict[str, Any]) -> bool:
+        if not isinstance(filter_obj, dict):
+            return True
+        type_in = filter_obj.get("type_in") or []
+        qos_in = filter_obj.get("qos_profile_in") or []
+        module_id_in = filter_obj.get("module_id_in") or []
+
+        topics = announce.get("topics", []) if isinstance(announce, dict) else []
+        topic_match = True
+        if type_in or qos_in:
+            topic_match = False
+            for topic in topics:
+                if type_in and topic.get("type") not in type_in:
+                    continue
+                if qos_in and topic.get("qos_profile") not in qos_in:
+                    continue
+                topic_match = True
+                break
+
+        module_match = True
+        if module_id_in:
+            module_match = False
+            caps = announce.get("caps", {}) if isinstance(announce, dict) else {}
+            supported = caps.get("supported_profiles", []) if isinstance(caps, dict) else []
+            for profile in supported:
+                name = profile.get("name")
+                major = profile.get("major")
+                max_minor = profile.get("max_minor")
+                if not name or major is None or max_minor is None:
+                    continue
+                candidate = f"spatial.{name}/{int(major)}.{int(max_minor)}"
+                if candidate in module_id_in:
+                    module_match = True
+                    break
+
+        return topic_match and module_match
         try:
             left, right = expr.split("==")
             left = left.strip()
@@ -225,7 +268,7 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
 def run_server(port: int = 8080):
     server_address = ("", port)
     httpd = HTTPServer(server_address, SpatialDDSHTTPHandler)
-    print(f"Serving SpatialDDS v1.4 HTTP binding on port {port}")
+    print(f"Serving SpatialDDS v1.5 HTTP binding on port {port}")
     httpd.serve_forever()
 
 

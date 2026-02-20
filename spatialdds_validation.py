@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-SpatialDDS v1.4 Validation Utilities
+SpatialDDS v1.5 Validation Utilities
 Lightweight helpers for Time/FrameRef/Coverage/Quaternion validation aligned
-with the 1.4 IDL shapes under idl/v1.4.
+with the 1.5 IDL shapes under idl/v1.5.
 """
 
 import math
@@ -17,7 +17,7 @@ class ValidationError(Exception):
 
 
 class SpatialDDSValidator:
-    """Validator for SpatialDDS v1.4 structures"""
+    """Validator for SpatialDDS v1.5 structures"""
 
     # spatialdds://<authority>/zone:<zone_id>/<rtype>:<rid>
     SPATIAL_URI_PATTERN = (
@@ -117,7 +117,7 @@ class SpatialDDSValidator:
     @classmethod
     def validate_spatial_uri(cls, uri: str) -> Dict[str, str]:
         """
-        Validate SpatialDDS URI format (still used for manifests in 1.4)
+        Validate SpatialDDS URI format (used for manifests in 1.5)
         """
         import re
 
@@ -284,7 +284,7 @@ def demo_geo_pose(lat: float, lon: float, alt: float) -> Dict[str, Any]:
         "lat_deg": lat,
         "lon_deg": lon,
         "alt_m": alt,
-        "q_xyzw": q,
+        "q": q,
         "frame_kind": "ENU",
         "frame_ref": SpatialDDSValidator.create_frame_ref("earth-fixed"),
         "stamp": SpatialDDSValidator.now_time(),
@@ -293,7 +293,7 @@ def demo_geo_pose(lat: float, lon: float, alt: float) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    print("Testing SpatialDDS v1.4 Validation...")
+    print("Testing SpatialDDS v1.5 Validation...")
 
     # FrameRef + Time
     fr = SpatialDDSValidator.create_frame_ref("earth-fixed")

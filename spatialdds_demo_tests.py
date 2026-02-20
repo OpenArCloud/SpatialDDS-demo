@@ -6,26 +6,27 @@ import sys
 
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
-    TOPIC_VPS_LOCALIZE_REQUEST_V1,
-    TOPIC_VPS_LOCALIZE_RESPONSE_V1,
+    TOPIC_VPS_QUERY_V1,
+    TOPIC_VPS_RESULT_V1,
     validate_topics_are_canonical,
 )
-from spatialdds_test import SpatialDDSLogger, VPSServiceV14
+from spatialdds_test import SpatialDDSLogger, VPSServiceV15
 from spatialdds_validation import SpatialDDSValidator
 
 
 def test_manifest_resolver() -> bool:
     manifest, status = resolve_manifest("spatialdds://vps.example.com/zone:sf-downtown/manifest:vps")
+    service = manifest.get("service", {}) if isinstance(manifest, dict) else {}
     return (
         manifest is not None
-        and manifest.get("service_id") == "svc:vps:demo/sf-downtown"
+        and service.get("service_id") == "svc:vps:demo/sf-downtown"
         and status.get("mode") == "LOCAL"
     )
 
 
 def test_topic_validator() -> bool:
     ok, _ = validate_topics_are_canonical(
-        [TOPIC_VPS_LOCALIZE_REQUEST_V1, TOPIC_VPS_LOCALIZE_RESPONSE_V1],
+        [TOPIC_VPS_QUERY_V1, TOPIC_VPS_RESULT_V1],
         service_kind="VPS",
     )
     bad, errors = validate_topics_are_canonical(
@@ -49,9 +50,9 @@ def test_demo_output() -> bool:
     required = [
         "manifest_resolver: LOCAL",
         "manifest_loaded: yes",
-        "topic=spatialdds/vps/localize/request/v1",
-        "topic=spatialdds/vps/localize/response/v1",
-        "topic=spatialdds/vps/coverage/replies/v1",
+        "topic=spatialdds/vps/query/v1",
+        "topic=spatialdds/vps/result/v1",
+        "topic=spatialdds/discovery/response/",
         "topic=spatialdds/anchors/",
         "topic=spatialdds/catalog/query/v1",
         "topic=spatialdds/catalog/replies/",
@@ -75,15 +76,15 @@ def test_manifest_fallback() -> bool:
     required = [
         "manifest_resolver: HTTPS_DISABLED",
         "manifest_loaded: no",
-        "topic=spatialdds/vps/localize/request/v1",
-        "topic=spatialdds/vps/localize/response/v1",
+        "topic=spatialdds/vps/query/v1",
+        "topic=spatialdds/vps/result/v1",
         "topic_source=fallback",
     ]
     return result.returncode == 0 and all(item in output for item in required)
 
 
 def test_volume_aabb_frame_ref() -> bool:
-    service = VPSServiceV14(SpatialDDSLogger())
+    service = VPSServiceV15(SpatialDDSLogger())
     volume = next((elem for elem in service.coverage if elem.get("type") == "volume"), None)
     if not volume:
         return False
@@ -92,7 +93,7 @@ def test_volume_aabb_frame_ref() -> bool:
 
 
 def test_no_identity_transforms() -> bool:
-    service = VPSServiceV14(SpatialDDSLogger())
+    service = VPSServiceV15(SpatialDDSLogger())
     announce = service.create_announce()
     return not announce.get("transforms")
 

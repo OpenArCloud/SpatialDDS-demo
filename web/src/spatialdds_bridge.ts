@@ -97,7 +97,7 @@ function catalogEntryToItem(entry: Record<string, any>): CatalogItem {
     lat_deg: lat,
     lon_deg: lon,
     alt_m: 5,
-    q_xyzw: [0, 0, 0, 1],
+    q: [0, 0, 0, 1],
     frame_kind: 'ENU',
     frame_ref: entry.frame_ref || { uuid: 'unknown', fqn: 'map/unknown' },
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },

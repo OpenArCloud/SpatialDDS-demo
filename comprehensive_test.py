@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive Cyclone DDS + SpatialDDS Test Suite (v1.4)
+Comprehensive Cyclone DDS + SpatialDDS Test Suite (v1.5)
 Tests both basic DDS functionality and SpatialDDS protocol implementation
 """
 
@@ -44,7 +44,7 @@ def run_spatialdds_tests():
 def test_idl_compilation():
     """Test IDL compilation with idlc"""
     print("\n" + "=" * 80)
-    print("📝 IDL COMPILATION TEST (v1.4)")
+    print("📝 IDL COMPILATION TEST (v1.5)")
     print("=" * 80)
 
     try:
@@ -62,7 +62,7 @@ def test_idl_compilation():
         # Use discovery.idl directly to avoid duplicate-inclusion conflicts in the
         # aggregator while still verifying idlc is functional.
         result = subprocess.run(
-            [idlc_path, '-l', 'c', 'idl/v1.4/discovery.idl'],
+            [idlc_path, '-l', 'c', 'idl/v1.5/discovery.idl'],
             capture_output=True,
             text=True,
             timeout=30,
@@ -174,7 +174,7 @@ def main():
         print("\n🎯 Next Steps:")
         print("   1. Integrate with real camera/sensor data")
         print("   2. Deploy in multi-node DDS environment")
-        print("   3. Feed real manifests from manifests/v1.4 into discovery")
+        print("   3. Feed real manifests from manifests/v1.5 into discovery")
         print("   4. Implement persistent anchor storage")
         print("   5. Add security/authentication layers")
         print("   6. Performance optimization and scalability testing")

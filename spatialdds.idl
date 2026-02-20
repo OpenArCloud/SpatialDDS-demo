@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: MIT
-// SpatialDDS Convenience Aggregator (v1.4)
+// SpatialDDS Convenience Aggregator (v1.5)
 //
-// The official v1.4 IDL lives under idl/v1.4/*.idl in this repository.
+// The official v1.5 IDL lives under idl/v1.5/*.idl in this repository.
 // This wrapper simply includes the individual profile files so existing
 // build scripts that expect a single IDL can continue to function.
 
-#include "idl/v1.4/types.idl"
-#include "idl/v1.4/geometry.idl"
-#include "idl/v1.4/common.idl"
-#include "idl/v1.4/core.idl"
-#include "idl/v1.4/discovery.idl"
-#include "idl/v1.4/anchors.idl"
-#include "idl/v1.4/vision.idl"
-#include "idl/v1.4/vio.idl"
-#include "idl/v1.4/slam_frontend.idl"
-#include "idl/v1.4/argeo.idl"
-#include "idl/v1.4/lidar.idl"
-#include "idl/v1.4/rad.idl"
-#include "idl/v1.4/semantics.idl"
+#include "idl/v1.5/types.idl"
+#include "idl/v1.5/common.idl"
+#include "idl/v1.5/core.idl"
+#include "idl/v1.5/discovery.idl"
+#include "idl/v1.5/anchors.idl"
+#include "idl/v1.5/vision.idl"
+#include "idl/v1.5/vio.idl"
+#include "idl/v1.5/slam_frontend.idl"
+#include "idl/v1.5/argeo.idl"
+#include "idl/v1.5/lidar.idl"
+#include "idl/v1.5/rad.idl"
+#include "idl/v1.5/semantics.idl"

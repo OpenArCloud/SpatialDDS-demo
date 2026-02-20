@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-SpatialDDS Test Implementation v1.4
+SpatialDDS Test Implementation v1.5
 Demonstrates discovery (Announce/CoverageQuery), a mock localization exchange
-using 1.4 primitives, and an anchor delta publication.
+using 1.5 primitives, and an anchor delta publication.
 """
 
 import json
@@ -29,15 +29,15 @@ from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
     TOPIC_CATALOG_REPLIES,
     TOPIC_DISCOVERY_ANNOUNCE_V1,
+    TOPIC_DISCOVERY_QUERY_V1,
+    TOPIC_DISCOVERY_RESPONSE,
     TOPIC_SOURCE_ANNOUNCE_PREVIEW,
     TOPIC_SOURCE_FALLBACK,
     TOPIC_SOURCE_MANIFEST,
     TOPIC_SOURCE_REQUEST,
     TOPIC_SOURCE_SPEC,
-    TOPIC_VPS_COVERAGE_QUERY_V1,
-    TOPIC_VPS_COVERAGE_REPLIES_V1,
-    TOPIC_VPS_LOCALIZE_REQUEST_V1,
-    TOPIC_VPS_LOCALIZE_RESPONSE_V1,
+    TOPIC_VPS_QUERY_V1,
+    TOPIC_VPS_RESULT_V1,
     validate_topics_are_canonical,
 )
 
@@ -232,13 +232,13 @@ class MockSensorData:
         return features
 
 
-class VPSServiceV14:
-    """Mock VPS service implementing v1.4 shapes"""
+class VPSServiceV15:
+    """Mock VPS service implementing v1.5 shapes"""
 
     def __init__(self, logger: SpatialDDSLogger):
         self.logger = logger
         self.service_id = os.getenv("SPATIALDDS_VPS_SERVICE_ID", "svc:vps:demo/sf-downtown")
-        self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.4")
+        self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.5")
         self.manifest_uri = os.getenv(
             "SPATIALDDS_DEMO_MANIFEST_URI",
             "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
@@ -275,26 +275,14 @@ class VPSServiceV14:
     def _capabilities(self) -> Dict[str, Any]:
         return {
             "supported_profiles": [
-                {"name": "core", "major": 1, "min_minor": 4, "max_minor": 4, "preferred": True},
-                {"name": "discovery", "major": 1, "min_minor": 4, "max_minor": 4, "preferred": True},
-                {"name": "sensing.vision", "major": 1, "min_minor": 4, "max_minor": 4, "preferred": False},
-                {"name": "anchors", "major": 1, "min_minor": 4, "max_minor": 4, "preferred": False},
+                {"name": "core", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": True},
+                {"name": "discovery", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": True},
+                {"name": "sensing.vision", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": False},
+                {"name": "anchors", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": False},
             ],
-            "preferred_profiles": ["discovery@1.4", "core@1.4"],
+            "preferred_profiles": ["discovery@1.5", "core@1.5"],
             "features": [{"name": "blob.crc32"}, {"name": "vision.codec.jpeg"}],
         }
-
-    def _topic_preview(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "name": TOPIC_VPS_LOCALIZE_REQUEST_V1,
-                "type": "vision.localize.request",
-                "version": "v1",
-                "qos_profile": "VIDEO_LIVE",
-                "target_rate_hz": 10.0,
-                "preview_only": True,
-            }
-        ]
 
     def create_announce(self) -> Dict[str, Any]:
         stamp = SpatialDDSValidator.now_time()
@@ -302,12 +290,11 @@ class VPSServiceV14:
             "service_id": self.service_id,
             "name": self.service_name,
             "kind": "VPS",
-            "version": "1.4",
+            "version": "1.5",
             "org": "ExampleOrg",
             "hints": [{"key": "priority", "value": "edge"}],
             "caps": self._capabilities(),
-            "topics": self._topic_preview(),
-            "topics_preview_only": True,
+            "topics": [],
             "coverage": self.coverage,
             "coverage_frame_ref": self.coverage_frame_ref,
             "has_coverage_eval_time": False,
@@ -343,8 +330,13 @@ class VPSServiceV14:
         # Mock pose in local map frame
         pose_local = {
             "t": [random.uniform(-2, 2), random.uniform(-2, 2), random.uniform(0, 2)],
-            "q_xyzw": SpatialDDSValidator.normalize_quaternion_xyzw(
-                [random.uniform(-0.05, 0.05), random.uniform(-0.05, 0.05), random.uniform(-0.05, 0.05), 1.0]
+            "q": SpatialDDSValidator.normalize_quaternion_xyzw(
+                [
+                    random.uniform(-0.05, 0.05),
+                    random.uniform(-0.05, 0.05),
+                    random.uniform(-0.05, 0.05),
+                    1.0,
+                ]
             ),
         }
 
@@ -357,11 +349,16 @@ class VPSServiceV14:
         node_geo = {
             "map_id": self.map_id,
             "node_id": f"node-{self.seq:04d}",
-            "pose": pose_local,
+            "poses": [
+                {
+                    "pose": pose_local,
+                    "frame_ref": self.map_frame_ref,
+                    "cov": "COV_NONE",
+                    "stamp": SpatialDDSValidator.now_time(),
+                }
+            ],
+            "has_geopose": True,
             "geopose": geopose,
-            "cov": "COV_NONE",
-            "stamp": SpatialDDSValidator.now_time(),
-            "frame_ref": self.map_frame_ref,
             "source_id": self.service_id,
             "seq": self.seq,
             "graph_epoch": 1,
@@ -383,7 +380,7 @@ class VPSServiceV14:
         return response
 
 
-class SpatialDDSClientV14:
+class SpatialDDSClientV15:
     """Mock SpatialDDS client"""
 
     def __init__(self, logger: SpatialDDSLogger):
@@ -403,8 +400,10 @@ class SpatialDDSClientV14:
             "coverage": [coverage_elem],
             "coverage_frame_ref": coverage_frame_ref,
             "has_coverage_eval_time": False,
-            "expr": 'kind=="VPS"',
-            "reply_topic": TOPIC_VPS_COVERAGE_REPLIES_V1,
+            "has_filter": True,
+            "filter": {"type_in": [], "qos_profile_in": [], "module_id_in": []},
+            "expr": "",
+            "reply_topic": TOPIC_DISCOVERY_RESPONSE(query_id),
             "stamp": SpatialDDSValidator.now_time(),
             "ttl_sec": 60,
         }
@@ -420,7 +419,7 @@ class SpatialDDSClientV14:
             "t_start": stamp,
             "t_end": stamp,
             "has_sensor_pose": True,
-            "sensor_pose": {"t": [0.0, 0.0, 0.0], "q_xyzw": [0.0, 0.0, 0.0, 1.0]},
+            "sensor_pose": {"t": [0.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]},
             "blobs": [blob],
         }
         frame = {
@@ -533,18 +532,20 @@ class SpatialDDSClientV14:
 def simulate_dds_communication(logger: SpatialDDSLogger):
     """Simulate the DDS communication layer"""
     print("🔧 Initializing SpatialDDS communication layer...")
-    print("   - v1.4 typed topics + QoS metadata")
+    print("   - v1.5 typed topics + QoS metadata")
     print("   - Coverage-aware discovery")
     print("   - Blob references for heavy payloads\n")
 
 
 def _index_manifest_topics(manifest: Dict[str, Any]) -> Dict[str, str]:
     indexed = {}
-    for entry in manifest.get("topics", []):
-        role = entry.get("role")
+    service = manifest.get("service", {}) if isinstance(manifest, dict) else {}
+    for entry in service.get("topics", []):
         name = entry.get("name")
-        if role and name:
-            indexed[role] = name
+        topic_type = entry.get("type")
+        key = topic_type or name
+        if key and name:
+            indexed[key] = name
     return indexed
 
 
@@ -581,7 +582,8 @@ def _load_manifest(announce: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], 
     if not manifest:
         return None, status
 
-    manifest_service_id = manifest.get("service_id")
+    service = manifest.get("service", {}) if isinstance(manifest, dict) else {}
+    manifest_service_id = service.get("service_id")
     if manifest_service_id != announce.get("service_id"):
         print(
             "Manifest service_id mismatch; using spec defaults for topics "
@@ -589,7 +591,7 @@ def _load_manifest(announce: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], 
         )
         return None, status
 
-    topic_names = [entry.get("name") for entry in manifest.get("topics", []) if entry.get("name")]
+    topic_names = [entry.get("name") for entry in service.get("topics", []) if entry.get("name")]
     valid, errors = validate_topics_are_canonical(topic_names, service_kind=announce.get("kind"))
     if not valid:
         print("Manifest topics failed canonical validation:")
@@ -687,9 +689,9 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     anchor_zone = "sf-downtown"
 
     print("=" * 80)
-    print("🚀 SPATIALDDS PROTOCOL TEST v1.4")
+    print("🚀 SPATIALDDS PROTOCOL TEST v1.5")
     print("=" * 80)
-    print("📋 Testing SpatialDDS v1.4 features:")
+    print("📋 Testing SpatialDDS v1.5 features:")
     print("   • FrameRef + Time payloads")
     print("   • CoverageElement presence flags")
     print("   • discovery.Announce/CoverageQuery/Response")
@@ -713,10 +715,9 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         TOPIC_BOOTSTRAP_QUERY_V1,
         TOPIC_BOOTSTRAP_RESPONSE_V1,
         TOPIC_DISCOVERY_ANNOUNCE_V1,
-        TOPIC_VPS_COVERAGE_QUERY_V1,
-        TOPIC_VPS_COVERAGE_REPLIES_V1,
-        TOPIC_VPS_LOCALIZE_REQUEST_V1,
-        TOPIC_VPS_LOCALIZE_RESPONSE_V1,
+        TOPIC_DISCOVERY_QUERY_V1,
+        TOPIC_VPS_QUERY_V1,
+        TOPIC_VPS_RESULT_V1,
         TOPIC_ANCHORS_DELTA(anchor_zone),
     ]
     valid, errors = validate_topics_are_canonical(canonical_topics, service_kind="VPS")
@@ -727,8 +728,8 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         if _env_flag("STRICT"):
             raise ValueError("Canonical topic validation failed")
 
-    service = VPSServiceV14(logger)
-    client = SpatialDDSClientV14(logger)
+    service = VPSServiceV15(logger)
+    client = SpatialDDSClientV15(logger)
 
     print("🧭 Phase 0: DDS Bootstrap (bootstrap.Query → bootstrap.Response)")
     print("-" * 40)
@@ -804,7 +805,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         "Client",
         "DDS_NETWORK",
         coverage_query,
-        TOPIC_VPS_COVERAGE_QUERY_V1,
+        TOPIC_DISCOVERY_QUERY_V1,
         TOPIC_SOURCE_SPEC,
         show_message_content,
     )
@@ -833,7 +834,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     print("-" * 40)
     loc_request = client.create_localize_request(service.service_id)
     loc_request_topic, loc_request_source = _select_topic(
-        manifest_topics, "localize_request", TOPIC_VPS_LOCALIZE_REQUEST_V1
+        manifest_topics, "vps_query", TOPIC_VPS_QUERY_V1
     )
     logger.log_message(
         "LOCALIZE_REQUEST",
@@ -852,7 +853,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     print("-" * 40)
     loc_response = service.process_localize_request(loc_request)
     loc_response_topic, loc_response_source = _select_topic(
-        manifest_topics, "localize_response", TOPIC_VPS_LOCALIZE_RESPONSE_V1
+        manifest_topics, "node_geo", TOPIC_VPS_RESULT_V1
     )
     logger.log_message(
         "LOCALIZE_RESPONSE",
@@ -872,7 +873,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
             f"   GeoPose: lat={geopose['lat_deg']:.7f}°, "
             f"lon={geopose['lon_deg']:.7f}°, h={geopose['alt_m']:.2f}m"
         )
-        print(f"   Quaternion (x,y,z,w): {geopose['q_xyzw']}")
+        print(f"   Quaternion (x,y,z,w): {geopose['q']}")
         print(f"   Confidence: {loc_response['quality']['confidence']:.3f}")
         print(f"   RMSE: {loc_response['quality']['rmse_m']:.3f} m")
     else:
@@ -982,7 +983,7 @@ def main():
     """Main test function"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="SpatialDDS Protocol Test v1.4")
+    parser = argparse.ArgumentParser(description="SpatialDDS Protocol Test v1.5")
     parser.add_argument(
         "--show-content",
         action="store_true",
@@ -1032,7 +1033,7 @@ def main():
     print("   1. Exercise multiple services to validate paging in CoverageResponse")
     print("   2. Swap mock frames with live camera blobs")
     print("   3. Emit AnchorDelta streams into a registry for persistence")
-    print("   4. Validate manifests against manifests/v1.4/* examples")
+    print("   4. Validate manifests against manifests/v1.5/* examples")
 
     return success
 

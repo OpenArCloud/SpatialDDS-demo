@@ -1,10 +1,10 @@
 from typing import List, Optional, Tuple
 
 TOPIC_DISCOVERY_ANNOUNCE_V1 = "spatialdds/discovery/announce/v1"
-TOPIC_VPS_COVERAGE_QUERY_V1 = "spatialdds/vps/coverage/query/v1"
-TOPIC_VPS_COVERAGE_REPLIES_V1 = "spatialdds/vps/coverage/replies/v1"
-TOPIC_VPS_LOCALIZE_REQUEST_V1 = "spatialdds/vps/localize/request/v1"
-TOPIC_VPS_LOCALIZE_RESPONSE_V1 = "spatialdds/vps/localize/response/v1"
+TOPIC_DISCOVERY_DEPART_V1 = "spatialdds/discovery/depart/v1"
+TOPIC_DISCOVERY_QUERY_V1 = "spatialdds/discovery/query/v1"
+TOPIC_VPS_QUERY_V1 = "spatialdds/vps/query/v1"
+TOPIC_VPS_RESULT_V1 = "spatialdds/vps/result/v1"
 TOPIC_CATALOG_QUERY_V1 = "spatialdds/catalog/query/v1"
 TOPIC_BOOTSTRAP_QUERY_V1 = "spatialdds/bootstrap/query/v1"
 TOPIC_BOOTSTRAP_RESPONSE_V1 = "spatialdds/bootstrap/response/v1"
@@ -17,6 +17,10 @@ def TOPIC_ANCHORS_DELTA(zone: str) -> str:
 
 def TOPIC_CATALOG_REPLIES(client_id: str) -> str:
     return f"spatialdds/catalog/replies/{client_id}/v1"
+
+
+def TOPIC_DISCOVERY_RESPONSE(query_id: str) -> str:
+    return f"spatialdds/discovery/response/{query_id}"
 
 
 TOPIC_SOURCE_SPEC = "spec"
@@ -42,9 +46,9 @@ def validate_topics_are_canonical(
             errors.append(f"Topic missing /v1 suffix: {topic}")
 
     if service_kind == "VPS":
-        if TOPIC_VPS_LOCALIZE_REQUEST_V1 not in topics:
-            errors.append("Missing localize request topic for VPS service")
-        if TOPIC_VPS_LOCALIZE_RESPONSE_V1 not in topics:
-            errors.append("Missing localize response topic for VPS service")
+        if TOPIC_VPS_QUERY_V1 not in topics:
+            errors.append("Missing VPS query topic for VPS service")
+        if TOPIC_VPS_RESULT_V1 not in topics:
+            errors.append("Missing VPS result topic for VPS service")
 
     return len(errors) == 0, errors

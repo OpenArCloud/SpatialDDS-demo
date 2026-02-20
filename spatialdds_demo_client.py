@@ -16,17 +16,17 @@ from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
     TOPIC_CATALOG_REPLIES,
     TOPIC_DISCOVERY_ANNOUNCE_V1,
+    TOPIC_DISCOVERY_QUERY_V1,
     TOPIC_SOURCE_ANNOUNCE_PREVIEW,
     TOPIC_SOURCE_FALLBACK,
     TOPIC_SOURCE_MANIFEST,
     TOPIC_SOURCE_REQUEST,
     TOPIC_SOURCE_SPEC,
-    TOPIC_VPS_COVERAGE_QUERY_V1,
-    TOPIC_VPS_LOCALIZE_REQUEST_V1,
-    TOPIC_VPS_LOCALIZE_RESPONSE_V1,
+    TOPIC_VPS_QUERY_V1,
+    TOPIC_VPS_RESULT_V1,
 )
 from spatialdds_test import (
-    SpatialDDSClientV14,
+    SpatialDDSClientV15,
     SpatialDDSLogger,
     _index_manifest_topics,
     _load_manifest,
@@ -38,7 +38,7 @@ from spatialdds_validation import SpatialDDSValidator
 def _topic_source_for(manifest_topics: Dict[str, str], role: str, logical_topic: str) -> str:
     if manifest_topics.get(role) == logical_topic:
         return TOPIC_SOURCE_MANIFEST
-    if logical_topic in (TOPIC_VPS_LOCALIZE_REQUEST_V1, TOPIC_VPS_LOCALIZE_RESPONSE_V1):
+    if logical_topic in (TOPIC_VPS_QUERY_V1, TOPIC_VPS_RESULT_V1):
         return TOPIC_SOURCE_FALLBACK
     return TOPIC_SOURCE_SPEC
 
@@ -138,7 +138,7 @@ def _announce_fresh(announce: Dict[str, Any]) -> bool:
         stamp_time = float(stamp.get("sec", 0)) + float(stamp.get("nanosec", 0)) / 1_000_000_000.0
     except (TypeError, ValueError):
         return True
-    return (time.time() - stamp_time) <= float(ttl_sec)
+    return (time.time() - stamp_time) <= float(ttl_sec) * 2.0
 
 
 def run_client(show_message_content: bool, detailed_content: bool) -> int:
@@ -151,7 +151,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     if domain_id is None:
         return 1
 
-    client = SpatialDDSClientV14(logger)
+    client = SpatialDDSClientV15(logger)
     inbox: queue.Queue = queue.Queue()
 
     def on_message(envelope: object) -> None:
@@ -205,7 +205,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
 
     coverage_query = client.create_coverage_query()
     transport.publish(
-        TOPIC_VPS_COVERAGE_QUERY_V1,
+        TOPIC_DISCOVERY_QUERY_V1,
         "COVERAGE_QUERY",
         json.dumps(coverage_query),
         coverage_query.get("query_id", ""),
@@ -216,7 +216,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         "Client",
         "DDS_NETWORK",
         coverage_query,
-        TOPIC_VPS_COVERAGE_QUERY_V1,
+        TOPIC_DISCOVERY_QUERY_V1,
         TOPIC_SOURCE_SPEC,
         show_message_content,
     )
@@ -241,7 +241,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
 
     loc_request = client.create_localize_request(announce.get("service_id", ""))
     loc_request_topic, loc_request_source = _select_topic(
-        manifest_topics, "localize_request", TOPIC_VPS_LOCALIZE_REQUEST_V1
+        manifest_topics, "vps_query", TOPIC_VPS_QUERY_V1
     )
     transport.publish(
         loc_request_topic,

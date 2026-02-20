@@ -12,7 +12,7 @@ export type GeoPose = {
   lat_deg: number;
   lon_deg: number;
   alt_m: number;
-  q_xyzw: [number, number, number, number];
+  q: [number, number, number, number];
   frame_kind: 'ENU';
   frame_ref: FrameRef;
   stamp: TimeStamp;

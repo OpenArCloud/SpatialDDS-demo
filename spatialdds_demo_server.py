@@ -13,12 +13,12 @@ from spatialdds_demo.topics import (
     TOPIC_SOURCE_MANIFEST,
     TOPIC_SOURCE_REQUEST,
     TOPIC_SOURCE_SPEC,
-    TOPIC_VPS_LOCALIZE_REQUEST_V1,
-    TOPIC_VPS_LOCALIZE_RESPONSE_V1,
+    TOPIC_VPS_QUERY_V1,
+    TOPIC_VPS_RESULT_V1,
 )
 from spatialdds_test import (
     SpatialDDSLogger,
-    VPSServiceV14,
+    VPSServiceV15,
     _index_manifest_topics,
     _load_manifest,
     _select_topic,
@@ -28,7 +28,7 @@ from spatialdds_test import (
 def _topic_source_for(manifest_topics: Dict[str, str], role: str, logical_topic: str) -> str:
     if manifest_topics.get(role) == logical_topic:
         return TOPIC_SOURCE_MANIFEST
-    if logical_topic in (TOPIC_VPS_LOCALIZE_REQUEST_V1, TOPIC_VPS_LOCALIZE_RESPONSE_V1):
+    if logical_topic in (TOPIC_VPS_QUERY_V1, TOPIC_VPS_RESULT_V1):
         return TOPIC_SOURCE_FALLBACK
     return TOPIC_SOURCE_SPEC
 
@@ -38,7 +38,7 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     logger = SpatialDDSLogger()
     logger.detailed_content = detailed_content
 
-    service = VPSServiceV14(logger)
+    service = VPSServiceV15(logger)
     announce = service.create_announce()
     manifest, _ = _load_manifest(announce)
     manifest_topics = _index_manifest_topics(manifest) if manifest else {}
@@ -92,7 +92,7 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
             )
             response = service.process_localize_request(data)
             response_topic, response_source = _select_topic(
-                manifest_topics, "localize_response", TOPIC_VPS_LOCALIZE_RESPONSE_V1
+                manifest_topics, "node_geo", TOPIC_VPS_RESULT_V1
             )
             transport.publish(
                 response_topic,

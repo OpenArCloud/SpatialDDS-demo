@@ -19,7 +19,7 @@ import urllib.request
 from typing import Dict, Optional, List
 
 from spatialdds_demo.dds_transport import DDSTransport
-from spatialdds_demo.topics import TOPIC_VPS_COVERAGE_QUERY_V1, TOPIC_VPS_COVERAGE_REPLIES_V1
+from spatialdds_demo.topics import TOPIC_DISCOVERY_QUERY_V1, TOPIC_DISCOVERY_RESPONSE
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -99,13 +99,15 @@ def _coverage_query(domain_id: int = 1) -> Dict[str, object]:
         "coverage": [coverage_elem],
         "coverage_frame_ref": coverage_frame_ref,
         "has_coverage_eval_time": False,
-        "expr": 'kind=="VPS"',
-        "reply_topic": TOPIC_VPS_COVERAGE_REPLIES_V1,
+        "has_filter": True,
+        "filter": {"type_in": [], "qos_profile_in": [], "module_id_in": []},
+        "expr": "",
+        "reply_topic": TOPIC_DISCOVERY_RESPONSE("bridge-test-coverage"),
         "stamp": SpatialDDSValidator.now_time(),
         "ttl_sec": 60,
     }
     transport.publish(
-        TOPIC_VPS_COVERAGE_QUERY_V1,
+        TOPIC_DISCOVERY_QUERY_V1,
         "COVERAGE_QUERY",
         json.dumps(query),
         query["query_id"],
@@ -172,9 +174,9 @@ def main() -> int:
             "lat_deg": AUSTIN_LAT,
             "lon_deg": AUSTIN_LON,
             "alt_m": AUSTIN_ALT,
-            "q_xyzw": [0.0, 0.0, 0.0, 1.0],
+            "q": [0.0, 0.0, 0.0, 1.0],
             "frame_kind": "ENU",
-            "frame_ref": {"uuid": "austin-seed", "fqn": "earth.enu"},
+            "frame_ref": {"uuid": "austin-seed", "fqn": "earth-fixed"},
             "stamp": SpatialDDSValidator.now_time(),
             "cov": "COV_NONE",
         }

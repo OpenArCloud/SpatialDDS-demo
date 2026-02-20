@@ -1,11 +1,11 @@
 #!/bin/bash
-# SpatialDDS v1.4 - Run All Tests
-# This script runs the complete test suite for v1.4 implementation
+# SpatialDDS v1.5 - Run All Tests
+# This script runs the complete test suite for v1.5 implementation
 
 set -e  # Exit on error
 
 echo "╔══════════════════════════════════════════════════════════════════════════════╗"
-echo "║              SPATIALDDS v1.4 - COMPREHENSIVE TEST SUITE                      ║"
+echo "║              SPATIALDDS v1.5 - COMPREHENSIVE TEST SUITE                      ║"
 echo "╚══════════════════════════════════════════════════════════════════════════════╝"
 echo ""
 

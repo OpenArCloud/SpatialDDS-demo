@@ -3,7 +3,7 @@ FROM ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 
 WORKDIR /app
 
-# Copy SpatialDDS v1.4 files
+# Copy SpatialDDS v1.5 files
 COPY spatialdds.idl .
 COPY spatialdds_demo ./spatialdds_demo
 COPY spatialdds_demo_client.py .
