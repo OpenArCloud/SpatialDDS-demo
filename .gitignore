@@ -61,3 +61,4 @@ web/.stylelintcache
 web/.nyc_output/
 benchmarks/results/
 benchmarks/figures/
+nuscenes/data/

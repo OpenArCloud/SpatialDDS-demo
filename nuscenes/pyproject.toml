@@ -1,0 +1,21 @@
+[project]
+name = "spatialdds-nuscenes-demo"
+version = "0.1.0"
+description = "nuScenes to SpatialDDS to Rerun demo"
+requires-python = ">=3.10"
+dependencies = [
+  "nuscenes-devkit>=1.1.11",
+  "rerun-sdk>=0.22.0",
+  "cyclonedds>=0.10.5",
+  "numpy>=1.24",
+]
+
+[tool.setuptools]
+py-modules = [
+  "spatialdds_types",
+  "dds_envelope_transport",
+  "nuscenes_to_spatialdds",
+  "publisher",
+  "subscriber_rerun",
+  "run_demo",
+]
