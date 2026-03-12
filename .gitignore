@@ -62,3 +62,5 @@ web/.nyc_output/
 benchmarks/results/
 benchmarks/figures/
 nuscenes/data/
+nuscenes/scenario9_dev/
+deepsense/data/
