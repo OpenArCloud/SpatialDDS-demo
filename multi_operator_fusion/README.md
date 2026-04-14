@@ -102,8 +102,12 @@ multi_operator_fusion/
   works out of the box; on Linux Docker CE pass
   `--add-host=host.docker.internal:host-gateway` or set
   `RERUN_CONNECT_HOST` to your host's LAN IP.
-- The Rerun CLI on the host (only if `SPAWN_VIEWER=1`):
-  `pip install rerun-sdk` (or `cargo install rerun-cli`).
+- The Rerun CLI on the host, **version-matched to the container's
+  rerun-sdk** (currently pinned to `0.23.1` in `requirements.txt`).
+  Rerun's gRPC protocol is not stable across minor versions, so a
+  mismatched host viewer will connect but receive no data:
+  `pip install rerun-sdk==0.23.1` or
+  `cargo install rerun-cli --version 0.23.1`.
 - Ports **9876** (Rerun gRPC) and **9090** (Rerun web viewer) free.
 
 ## Quick Start
@@ -179,12 +183,17 @@ python multi_operator_fusion/run_demo.py \
 
 ## Troubleshooting
 
-- **Viewer loads but is blank** — the subscriber couldn't reach the
-  host-side Rerun. On Linux Docker CE, `host.docker.internal` isn't
-  defined by default; export `RERUN_CONNECT_HOST=<your-LAN-ip>` or
-  add `--add-host=host.docker.internal:host-gateway` to the docker
-  invocation. Verify with
-  `docker run --rm --network host cyclonedds-python getent hosts host.docker.internal`.
+- **Viewer loads but is blank** — two common causes:
+  1. **Rerun version mismatch.** The container installs `rerun-sdk`
+     from `requirements.txt` (pinned); the host viewer must match
+     exactly. Check with `rerun --version` vs. the pinned SDK in
+     `requirements.txt`. Fix: `pip install rerun-sdk==<pinned>` on host.
+  2. **Subscriber can't reach host rerun.** On Linux Docker CE,
+     `host.docker.internal` isn't defined by default; export
+     `RERUN_CONNECT_HOST=<your-LAN-ip>` or add
+     `--add-host=host.docker.internal:host-gateway` to the docker
+     invocation. Verify with
+     `docker run --rm --network host cyclonedds-python getent hosts host.docker.internal`.
 - **`rerun gRPC port 9876 already in use`** — run
   `bash multi_operator_fusion/stop_docker_demo.sh`, or set
   `RERUN_GRPC_PORT=<other port>`.

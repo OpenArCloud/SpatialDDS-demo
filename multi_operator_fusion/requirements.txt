@@ -1,5 +1,10 @@
 nuscenes-devkit>=1.1.11
-rerun-sdk>=0.22.0
+# Rerun's gRPC protocol is not stable across minor versions — the host
+# viewer and the container-side sender MUST match. 0.23.1 is the newest
+# release compatible with NumPy <2.0 (required by nuscenes-devkit). If
+# you change this pin, install the same version host-side:
+#   pip install rerun-sdk==0.23.1    or    cargo install rerun-cli --version 0.23.1
+rerun-sdk==0.23.1
 cyclonedds>=0.10.5
 # NumPy stays pinned <2.0 because nuscenes-devkit depends on it. Rerun
 # >=0.22 throws a cosmetic ``RerunWarning: asarray() got an unexpected
