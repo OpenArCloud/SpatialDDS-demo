@@ -9,8 +9,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RERUN_PID_FILE="${SCRIPT_DIR}/.rerun_demo.pid"
 
-NUSCENES_DATAROOT="${NUSCENES_DATAROOT:-${REPO_ROOT}/nuscenes/data/v1.0-mini}"
-DEEPSENSE_DATAROOT="${DEEPSENSE_DATAROOT:-${REPO_ROOT}/nuscenes/scenario9_dev}"
+# If the pruned subset from scripts/make_demo_subset.py (or download_demo_data.sh)
+# is present under data/, default to it. Otherwise fall back to the full
+# datasets used by nuscenes/ and deepsense/ demos.
+_MOF_DATA="${SCRIPT_DIR}/data"
+if [[ -d "${_MOF_DATA}/nuscenes_scene" ]]; then
+  NUSCENES_DATAROOT="${NUSCENES_DATAROOT:-${_MOF_DATA}/nuscenes_scene}"
+else
+  NUSCENES_DATAROOT="${NUSCENES_DATAROOT:-${REPO_ROOT}/nuscenes/data/v1.0-mini}"
+fi
+if [[ -d "${_MOF_DATA}/deepsense_seq" ]]; then
+  DEEPSENSE_DATAROOT="${DEEPSENSE_DATAROOT:-${_MOF_DATA}/deepsense_seq}"
+else
+  DEEPSENSE_DATAROOT="${DEEPSENSE_DATAROOT:-${REPO_ROOT}/nuscenes/scenario9_dev}"
+fi
 SCENE="${SCENE:-scene-0061}"
 VERSION="${VERSION:-v1.0-mini}"
 SEQUENCE="${SEQUENCE:-1}"
