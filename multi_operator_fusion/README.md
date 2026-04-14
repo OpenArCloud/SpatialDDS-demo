@@ -94,26 +94,88 @@ multi_operator_fusion/
 └── README.md
 ```
 
-## Run
+## Prerequisites
 
-Launch the full demo:
+- Docker (the launcher uses the repo's `cyclonedds-python` image, built on
+  first run from the repo `Dockerfile`). Runs with `--network host` and
+  expects `host.docker.internal` to resolve — Docker Desktop (macOS/Windows)
+  works out of the box; on Linux Docker CE pass
+  `--add-host=host.docker.internal:host-gateway` or set
+  `RERUN_CONNECT_HOST` to your host's LAN IP.
+- The Rerun CLI on the host (only if `SPAWN_VIEWER=1`):
+  `pip install rerun-sdk` (or `cargo install rerun-cli`).
+- Ports **9876** (Rerun gRPC) and **9090** (Rerun web viewer) free.
+
+## Quick Start
+
+```bash
+# 1. Get the ~100 MB demo subset
+bash multi_operator_fusion/scripts/download_demo_data.sh
+# (Maintainers: to regenerate from full datasets, see make_demo_subset.py)
+
+# 2. Run the demo (spawns viewer on http://127.0.0.1:9090)
+bash multi_operator_fusion/run_docker_demo.sh
+
+# 3. When done, clean up ports
+bash multi_operator_fusion/stop_docker_demo.sh
+```
+
+On first run the `cyclonedds-python` Docker image builds (~2 minutes).
+
+## Run variants
+
+`run_docker_demo.sh` auto-detects the pruned subset under
+`multi_operator_fusion/data/`. Override with env vars (both paths must be
+inside the repo tree so Docker can bind-mount them):
+
+```bash
+NUSCENES_DATAROOT=/abs/path/to/nuscenes/v1.0-mini \
+DEEPSENSE_DATAROOT=/abs/path/to/scenario9_dev \
+MAX_SAMPLES=40 \
+bash multi_operator_fusion/run_docker_demo.sh
+```
+
+Common tweaks (env vars):
+
+| Var | Default | Effect |
+|---|---|---|
+| `MAX_SAMPLES` | 20 | AV publisher frame cap (2 Hz) |
+| `INFRA_MAX_SAMPLES` | 5×`MAX_SAMPLES` | Infra frame cap (10 Hz); matched to AV runtime |
+| `SPAWN_VIEWER` | 1 | 0 = headless, no browser |
+| `USE_EXTERNAL_VIEWER` | 0 | 1 = connect to a pre-running Rerun viewer instead of spawning one (keep viewer alive across runs) |
+| `SKIP_INFRA` | 0 | 1 = AV-only fusion (no DeepSense publisher) |
+| `INFRA_OFFSET` | `-30 30 0` | BS placement in conceptual intersection (m) |
+
+Run without Docker (needs cyclonedds + nuscenes-devkit + rerun-sdk in
+`$PYTHONPATH`):
 
 ```bash
 python multi_operator_fusion/run_demo.py \
-  --nuscenes-dataroot nuscenes/data/v1.0-mini \
-  --deepsense-dataroot /path/to/deepsense/scenario9 \
-  --max-samples 20 \
-  --spawn-viewer
+  --nuscenes-dataroot multi_operator_fusion/data/nuscenes_scene \
+  --deepsense-dataroot multi_operator_fusion/data/deepsense_seq \
+  --max-samples 20 --spawn-viewer
 ```
 
-Skip the infrastructure side (AV-only fusion):
+## Troubleshooting
 
-```bash
-python multi_operator_fusion/run_demo.py \
-  --nuscenes-dataroot nuscenes/data/v1.0-mini \
-  --deepsense-dataroot /path/to/deepsense/scenario9 \
-  --skip-infra --spawn-viewer
-```
+- **Viewer loads but is blank** — the subscriber couldn't reach the
+  host-side Rerun. On Linux Docker CE, `host.docker.internal` isn't
+  defined by default; export `RERUN_CONNECT_HOST=<your-LAN-ip>` or
+  add `--add-host=host.docker.internal:host-gateway` to the docker
+  invocation. Verify with
+  `docker run --rm --network host cyclonedds-python getent hosts host.docker.internal`.
+- **`rerun gRPC port 9876 already in use`** — run
+  `bash multi_operator_fusion/stop_docker_demo.sh`, or set
+  `RERUN_GRPC_PORT=<other port>`.
+- **`infrastructure exited early rc=1`** — check `/tmp/multi_op_pip.log`
+  (pip install inside the container) and the demo log. Common causes:
+  DeepSense dataroot doesn't contain `scenario9.csv`, or the wrong sequence.
+- **`dataroot must be inside repo`** — Docker bind-mounts the repo at
+  `/app`; any paths you pass must be inside `REPO_ROOT`. Symlinks are fine.
+- **Infra publishes but no radar/beam streams appear in Rerun** — expected
+  if you're running the pruned subset, which omits radar cubes by default.
+  Rerun will show `rad_tensor unavailable — skipping this stream for the
+  rest of the run` once in stderr; Detection3D still flows normally.
 
 ## Tests
 
