@@ -125,15 +125,26 @@ On first run the `cyclonedds-python` Docker image builds (~2 minutes).
 ## Run variants
 
 `run_docker_demo.sh` auto-detects the pruned subset under
-`multi_operator_fusion/data/`. Override with env vars (both paths must be
-inside the repo tree so Docker can bind-mount them):
+`multi_operator_fusion/data/`. If it's absent, the launcher falls back to
+the repo's existing full-fidelity datasets (`nuscenes/data/v1.0-mini` and
+`nuscenes/scenario9_dev`) — so if you already have those in place you
+don't need the subset at all.
+
+Explicit override (both paths must be inside the repo tree so Docker can
+bind-mount them):
 
 ```bash
-NUSCENES_DATAROOT=/abs/path/to/nuscenes/v1.0-mini \
-DEEPSENSE_DATAROOT=/abs/path/to/scenario9_dev \
+NUSCENES_DATAROOT=/abs/path/inside/repo/to/nuscenes/v1.0-mini \
+DEEPSENSE_DATAROOT=/abs/path/inside/repo/to/scenario9_dev \
 MAX_SAMPLES=40 \
 bash multi_operator_fusion/run_docker_demo.sh
 ```
+
+**Subset vs. full fidelity** — the fusion story (tracks, multi-source
+count, coverage improvement) is identical either way, because it depends
+only on the Detection3D streams which are small. What the full datasets
+unlock is the sensor eye-candy: six nuScenes camera feeds per operator,
+the DeepSense camera, and the FMCW radar tensor.
 
 Common tweaks (env vars):
 
