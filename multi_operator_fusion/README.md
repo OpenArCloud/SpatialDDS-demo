@@ -109,18 +109,28 @@ multi_operator_fusion/
 ## Quick Start
 
 ```bash
-# 1. Get the ~100 MB demo subset
+# 1. Check dataset status (prints download links + paths if anything's missing)
 bash multi_operator_fusion/scripts/download_demo_data.sh
-# (Maintainers: to regenerate from full datasets, see make_demo_subset.py)
 
-# 2. Run the demo (spawns viewer on http://127.0.0.1:9090)
+# 2. (One-time, after downloading) carve a ~100 MB subset — optional but
+#    keeps future runs fast and avoids pulling 12 GB into each docker
+#    container:
+python multi_operator_fusion/scripts/make_demo_subset.py \
+    --nuscenes-src nuscenes/data/v1.0-mini \
+    --deepsense-src nuscenes/scenario9_dev \
+    --out multi_operator_fusion/data --skip-nuscenes-cameras
+
+# 3. Run the demo (spawns viewer on http://127.0.0.1:9090)
 bash multi_operator_fusion/run_docker_demo.sh
 
-# 3. When done, clean up ports
+# 4. When done, clean up ports
 bash multi_operator_fusion/stop_docker_demo.sh
 ```
 
 On first run the `cyclonedds-python` Docker image builds (~2 minutes).
+The datasets are **not** redistributed with this repo — nuScenes and
+DeepSense 6G each require you to accept their own terms of use on
+download. Step 1 prints the exact URLs.
 
 ## Run variants
 

@@ -1,69 +1,101 @@
 #!/usr/bin/env bash
-# Download the pruned demo dataset into multi_operator_fusion/data/.
+# Print download instructions for the datasets the demo uses.
 #
-# The subset (~80 MB) is hosted externally so the repo stays lightweight.
-# Set MOF_DATA_URL in your environment if the hosted location changes.
+# We DO NOT redistribute nuScenes or DeepSense 6G data. Both require the
+# user to accept their own license/terms on download:
 #
-#   bash multi_operator_fusion/scripts/download_demo_data.sh
+#   nuScenes v1.0-mini (CC BY-NC-SA 4.0):
+#       https://www.nuscenes.org/nuscenes#download
+#   DeepSense 6G Scenario 9 (research use, per dataset agreement):
+#       https://www.deepsense6g.net/scenario-9/
 #
-# To regenerate the subset from full-fidelity sources, see make_demo_subset.py.
+# After you've downloaded and extracted each dataset, put (or symlink) it
+# at the paths below and the demo launcher will pick it up automatically.
+#
+# Optional: run scripts/make_demo_subset.py afterwards to carve a ~100 MB
+# reproducible subset into multi_operator_fusion/data/.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEMO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-DATA_DIR="${DEMO_DIR}/data"
+REPO_ROOT="$(cd "${DEMO_DIR}/.." && pwd)"
 
-# EDIT: Replace with the published URL once the subset is uploaded.
-#   - HuggingFace datasets: https://huggingface.co/datasets/<user>/<name>/resolve/main/demo_subset.tar.gz
-#   - Zenodo:              https://zenodo.org/record/<id>/files/demo_subset.tar.gz
-#   - GitHub release:      https://github.com/<user>/<repo>/releases/download/v1/demo_subset.tar.gz
-MOF_DATA_URL="${MOF_DATA_URL:-REPLACE_ME_WITH_PUBLISHED_URL}"
-ARCHIVE="${ARCHIVE:-${DATA_DIR}/demo_subset.tar.gz}"
-EXPECTED_SHA256="${EXPECTED_SHA256:-}"  # optional integrity check
+NUSCENES_PATH_FULL="${REPO_ROOT}/nuscenes/data/v1.0-mini"
+DEEPSENSE_PATH_FULL="${REPO_ROOT}/nuscenes/scenario9_dev"
+SUBSET_NUSC="${DEMO_DIR}/data/nuscenes_scene"
+SUBSET_DEEP="${DEMO_DIR}/data/deepsense_seq"
 
-if [[ "${MOF_DATA_URL}" == "REPLACE_ME_WITH_PUBLISHED_URL" ]]; then
-  cat >&2 <<EOF
-[download] ERROR: MOF_DATA_URL is unset and no default is baked in.
+status() { printf "  [%s] %s\n" "$1" "$2"; }
 
-To fix, either:
-  1) Edit multi_operator_fusion/scripts/download_demo_data.sh and set MOF_DATA_URL
-     to the published archive URL, or
-  2) Export MOF_DATA_URL before running:
-       export MOF_DATA_URL="https://example.com/demo_subset.tar.gz"
-       bash multi_operator_fusion/scripts/download_demo_data.sh
+echo ""
+echo "=== Demo data status ==="
+echo ""
 
-Or regenerate the subset locally from full datasets:
-  python multi_operator_fusion/scripts/make_demo_subset.py \\
-    --nuscenes-src /path/to/nuscenes/v1.0-mini \\
-    --deepsense-src /path/to/scenario9_dev \\
-    --out ${DATA_DIR}
-EOF
-  exit 1
+need_instructions=0
+
+if [[ -d "${SUBSET_NUSC}" ]]; then
+  status OK "nuScenes subset present: ${SUBSET_NUSC}"
+elif [[ -d "${NUSCENES_PATH_FULL}" ]]; then
+  status OK "nuScenes full dataset present: ${NUSCENES_PATH_FULL}"
+else
+  status "!!" "nuScenes missing"
+  need_instructions=1
 fi
 
-if [[ -d "${DATA_DIR}/nuscenes_scene" && -d "${DATA_DIR}/deepsense_seq" ]]; then
-  echo "[download] ${DATA_DIR} already populated; delete to re-fetch" >&2
+if [[ -d "${SUBSET_DEEP}" ]]; then
+  status OK "DeepSense subset present: ${SUBSET_DEEP}"
+elif [[ -d "${DEEPSENSE_PATH_FULL}" ]]; then
+  status OK "DeepSense full dataset present: ${DEEPSENSE_PATH_FULL}"
+else
+  status "!!" "DeepSense missing"
+  need_instructions=1
+fi
+
+if [[ "${need_instructions}" == 0 ]]; then
+  echo ""
+  echo "You're ready. Run the demo with:"
+  echo "  bash multi_operator_fusion/run_docker_demo.sh"
   exit 0
 fi
 
-mkdir -p "${DATA_DIR}"
-echo "[download] fetching ${MOF_DATA_URL}" >&2
-curl -fL --progress-bar -o "${ARCHIVE}" "${MOF_DATA_URL}"
+cat <<EOF
 
-if [[ -n "${EXPECTED_SHA256}" ]]; then
-  actual="$(shasum -a 256 "${ARCHIVE}" | awk '{print $1}')"
-  if [[ "${actual}" != "${EXPECTED_SHA256}" ]]; then
-    echo "[download] checksum mismatch: want ${EXPECTED_SHA256}, got ${actual}" >&2
-    exit 1
-  fi
-fi
+=== Download instructions ===
 
-echo "[download] extracting into ${DATA_DIR}" >&2
-tar -xzf "${ARCHIVE}" -C "${DATA_DIR}"
-rm -f "${ARCHIVE}"
+We don't redistribute the raw datasets — both require you to accept their
+own terms of use. Grab each from the upstream source:
 
-echo "[download] done. Run the demo with:" >&2
-echo "  NUSCENES_DATAROOT=${DATA_DIR}/nuscenes_scene \\" >&2
-echo "  DEEPSENSE_DATAROOT=${DATA_DIR}/deepsense_seq \\" >&2
-echo "  bash multi_operator_fusion/run_docker_demo.sh" >&2
+1. nuScenes v1.0-mini (~5 GB; the demo only reads ~700 MB of it)
+   - Register (free) and accept the license at:
+       https://www.nuscenes.org/nuscenes#download
+   - Download the "Mini" archive (v1.0-mini.tgz).
+   - Extract to: ${NUSCENES_PATH_FULL}
+     (so that v1.0-mini/*.json, samples/, maps/ live directly under it)
+
+2. DeepSense 6G Scenario 9 (~7 GB; the demo only reads ~150 MB of it)
+   - Register (free) and accept the agreement at:
+       https://www.deepsense6g.net/scenario-9/
+   - Download the "Development dataset" archive.
+   - Extract to: ${DEEPSENSE_PATH_FULL}
+     (so that scenario9.csv, unit1/, unit2/ live directly under it)
+
+Once both are in place, re-run this script to confirm.
+
+=== Optional: build a lighter subset (~100 MB) ===
+
+After the downloads complete, you can carve the files actually used by the
+demo into multi_operator_fusion/data/ so future runs skip the 12 GB of
+unused blobs:
+
+  python multi_operator_fusion/scripts/make_demo_subset.py \\
+    --nuscenes-src ${NUSCENES_PATH_FULL} \\
+    --deepsense-src ${DEEPSENSE_PATH_FULL} \\
+    --out ${DEMO_DIR}/data \\
+    --skip-nuscenes-cameras       # optional, saves another ~50 MB
+
+The launcher auto-detects the subset when present and otherwise falls
+back to the full datasets — either works.
+EOF
+
+exit 1
