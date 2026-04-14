@@ -1,6 +1,11 @@
 nuscenes-devkit>=1.1.11
 rerun-sdk>=0.22.0
 cyclonedds>=0.10.5
-numpy>=1.24
+# NumPy stays pinned <2.0 because nuscenes-devkit depends on it. Rerun
+# >=0.22 throws a cosmetic ``RerunWarning: asarray() got an unexpected
+# keyword argument 'copy'`` during Boxes3D rotation batching — the
+# detection boxes still render correctly. See subscriber_rerun.py for
+# the warnings filter that quiets it.
+numpy>=1.24,<2.0
 scipy>=1.10
 matplotlib>=3.7

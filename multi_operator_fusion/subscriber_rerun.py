@@ -21,11 +21,23 @@ import argparse
 import json
 import queue
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
 import rerun as rr
+
+# Rerun 0.22+ internally calls np.asarray(quat_batch, copy=False) when it
+# receives per-box quaternion arrays. copy= was only added to asarray in
+# NumPy 2.0; with NumPy 1.x (required by nuscenes-devkit) Rerun logs a
+# non-fatal RerunWarning on every Boxes3D log. Rotations still render
+# correctly — the warning just spams stderr — so we silence it rather than
+# let it drown out real diagnostic output.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*asarray\(\) got an unexpected keyword argument 'copy'.*",
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NUSCENES_DIR = REPO_ROOT / "nuscenes"
