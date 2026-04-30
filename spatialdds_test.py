@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-SpatialDDS Test Implementation v1.5
+SpatialDDS Test Implementation v1.6
 Demonstrates discovery (Announce/CoverageQuery), a mock localization exchange
-using 1.5 primitives, and an anchor delta publication.
+using 1.6 primitives, and an anchor delta publication.
 """
 
 import json
@@ -233,12 +233,12 @@ class MockSensorData:
 
 
 class VPSServiceV15:
-    """Mock VPS service implementing v1.5 shapes"""
+    """Mock VPS service implementing v1.6 shapes"""
 
     def __init__(self, logger: SpatialDDSLogger):
         self.logger = logger
         self.service_id = os.getenv("SPATIALDDS_VPS_SERVICE_ID", "svc:vps:demo/sf-downtown")
-        self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.5")
+        self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.6")
         self.manifest_uri = os.getenv(
             "SPATIALDDS_DEMO_MANIFEST_URI",
             "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
@@ -274,13 +274,15 @@ class VPSServiceV15:
 
     def _capabilities(self) -> Dict[str, Any]:
         return {
+            # Per v1.6 CHANGELOG: only core/discovery (and sensing.common, types) bumped to 1.6.
+            # sensing.vision and anchors remain at 1.5 — selective per-profile minor bumps.
             "supported_profiles": [
-                {"name": "core", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": True},
-                {"name": "discovery", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": True},
+                {"name": "core", "major": 1, "min_minor": 6, "max_minor": 6, "preferred": True},
+                {"name": "discovery", "major": 1, "min_minor": 6, "max_minor": 6, "preferred": True},
                 {"name": "sensing.vision", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": False},
                 {"name": "anchors", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": False},
             ],
-            "preferred_profiles": ["discovery@1.5", "core@1.5"],
+            "preferred_profiles": ["discovery@1.6", "core@1.6"],
             "features": [{"name": "blob.crc32"}, {"name": "vision.codec.jpeg"}],
         }
 
@@ -290,7 +292,7 @@ class VPSServiceV15:
             "service_id": self.service_id,
             "name": self.service_name,
             "kind": "VPS",
-            "version": "1.5",
+            "version": "1.6",
             "org": "ExampleOrg",
             "hints": [{"key": "priority", "value": "edge"}],
             "caps": self._capabilities(),
@@ -532,7 +534,7 @@ class SpatialDDSClientV15:
 def simulate_dds_communication(logger: SpatialDDSLogger):
     """Simulate the DDS communication layer"""
     print("🔧 Initializing SpatialDDS communication layer...")
-    print("   - v1.5 typed topics + QoS metadata")
+    print("   - v1.6 typed topics + QoS metadata")
     print("   - Coverage-aware discovery")
     print("   - Blob references for heavy payloads\n")
 
@@ -689,9 +691,9 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     anchor_zone = "sf-downtown"
 
     print("=" * 80)
-    print("🚀 SPATIALDDS PROTOCOL TEST v1.5")
+    print("🚀 SPATIALDDS PROTOCOL TEST v1.6")
     print("=" * 80)
-    print("📋 Testing SpatialDDS v1.5 features:")
+    print("📋 Testing SpatialDDS v1.6 features:")
     print("   • FrameRef + Time payloads")
     print("   • CoverageElement presence flags")
     print("   • discovery.Announce/CoverageQuery/Response")
@@ -983,7 +985,7 @@ def main():
     """Main test function"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="SpatialDDS Protocol Test v1.5")
+    parser = argparse.ArgumentParser(description="SpatialDDS Protocol Test v1.6")
     parser.add_argument(
         "--show-content",
         action="store_true",
@@ -1033,7 +1035,7 @@ def main():
     print("   1. Exercise multiple services to validate paging in CoverageResponse")
     print("   2. Swap mock frames with live camera blobs")
     print("   3. Emit AnchorDelta streams into a registry for persistence")
-    print("   4. Validate manifests against manifests/v1.5/* examples")
+    print("   4. Validate manifests against manifests/v1.6/* examples")
 
     return success
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SpatialDDS v1.5 HTTP Binding
+SpatialDDS v1.6 HTTP Binding
 Provides REST API endpoints for discovery-style registration and search using
 discovery.Announce and discovery.CoverageQuery/Response shapes.
 """
@@ -28,7 +28,7 @@ def _now_ms() -> int:
 
 
 class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
-    """HTTP handler for SpatialDDS v1.5 endpoints"""
+    """HTTP handler for SpatialDDS v1.6 endpoints"""
 
     @property
     def announce_registry(self):
@@ -273,7 +273,7 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
 def run_server(port: int = 8080):
     server_address = ("", port)
     httpd = HTTPServer(server_address, SpatialDDSHTTPHandler)
-    print(f"Serving SpatialDDS v1.5 HTTP binding on port {port}")
+    print(f"Serving SpatialDDS v1.6 HTTP binding on port {port}")
     httpd.serve_forever()
 
 

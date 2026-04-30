@@ -1,8 +1,8 @@
 # SpatialDDS Demo
 
-Reference demos for the SpatialDDS 1.5 draft spec (https://spatialdds.org), running on
-CycloneDDS. The repo bundles the upstream IDL under `idl/v1.5`, mirrors the manifest
-examples in `manifests/v1.5`, and ships four runnable demos that build on top of a shared
+Reference demos for the SpatialDDS 1.6 draft spec (https://spatialdds.org), running on
+CycloneDDS. The repo bundles the upstream IDL under `idl/v1.6`, mirrors the manifest
+examples in `manifests/v1.6`, and ships four runnable demos that build on top of a shared
 `spatialdds/envelope/v1` transport.
 
 ![Web demo screenshot](web/screenshot.png)
@@ -14,7 +14,7 @@ examples in `manifests/v1.5`, and ships four runnable demos that build on top of
 | **Multi-operator fusion** *(flagship)* | [`multi_operator_fusion/`](multi_operator_fusion/README.md) | Three AV fleet operators + one 6G base station share `Detection3D` observations. A platform fuser does NN-gated track fusion and publishes unified `FusedTrack`s. Rerun renders per-operator split-screen + fused view. |
 | **nuScenes → SpatialDDS → Rerun** | [`nuscenes/`](nuscenes/README.md) | Publishes nuScenes v1.0-mini AV data (ego pose, 6 cameras, LiDAR, 5 radars, 3D annotations) over DDS envelopes; visualizes in Rerun. |
 | **DeepSense 6G → SpatialDDS → Rerun** | [`deepsense/`](deepsense/README.md) | Publishes DeepSense 6G Scenario 9 V2I data (60 GHz phased-array beam, FMCW radar, camera, GPS, 2D lidar) over DDS envelopes. |
-| **Core v1.5 protocol demo** | scripts at repo root + [`web/`](web/) | Bootstrap → discovery → coverage query → localization → catalog → anchor flow. Includes a Cesium web UI backed by an HTTP-to-DDS bridge. |
+| **Core v1.6 protocol demo** | scripts at repo root + [`web/`](web/) | Bootstrap → discovery → coverage query → localization → catalog → anchor flow. Includes a Cesium web UI backed by an HTTP-to-DDS bridge. |
 | **Benchmarks** | [`benchmarks/`](benchmarks/README.md) | Latency, discovery, multi-operator, and coverage-query benchmark scripts + plotting. |
 
 If you're new here, start with **multi-operator fusion** — it exercises the full envelope
@@ -29,7 +29,7 @@ imports from it.
 
 ```
 .
-├── core_demo/                 # Bootstrap → discovery → coverage → localize → catalog → anchor (v1.5 protocol)
+├── core_demo/                 # Bootstrap → discovery → coverage → localize → catalog → anchor (v1.6 protocol)
 ├── multi_operator_fusion/     # Flagship: 3 AV operators + infra → fuser → Rerun
 ├── nuscenes/                  # nuScenes publisher/subscriber demo
 ├── deepsense/                 # DeepSense 6G publisher/subscriber demo
@@ -37,10 +37,10 @@ imports from it.
 ├── web/                       # Cesium web UI (talks to bridge/server.py)
 ├── bridge/                    # HTTP-to-DDS bridge powering the web UI
 ├── spatialdds_demo/           # Shared DDS transport + manifest helpers (Python package)
-├── spatialdds_test.py         # Shared: v1.5 protocol harness + MockSensorData
+├── spatialdds_test.py         # Shared: v1.6 protocol harness + MockSensorData
 ├── spatialdds_validation.py   # Shared: FrameRef/Time/Coverage/GeoPose helpers
-├── idl/v1.5/                  # Canonical IDL pulled from SpatialDDS-spec
-├── manifests/v1.5/            # Manifest examples from SpatialDDS-spec
+├── idl/v1.6/                  # Canonical IDL pulled from SpatialDDS-spec
+├── manifests/v1.6/            # Manifest examples from SpatialDDS-spec
 ├── docs/                      # Vendored spec documents
 ├── Dockerfile                 # Builds the `cyclonedds-python` base image used by every demo
 ├── Dockerfile.base            # Rebuilds the upstream Cyclone DDS + Python image
@@ -57,8 +57,8 @@ Inside `core_demo/`:
 ```
 core_demo/
 ├── README.md                  → see DOCKER_GUIDE.md / SPEC_COMPLIANCE.md
-├── DOCKER_GUIDE.md            # Docker reference for the core v1.5 demo
-├── SPEC_COMPLIANCE.md         # v1.5 compliance notes
+├── DOCKER_GUIDE.md            # Docker reference for the core v1.6 demo
+├── SPEC_COMPLIANCE.md         # v1.6 compliance notes
 ├── spatialdds_demo_server.py  # VPS service
 ├── spatialdds_demo_client.py  # Demo client
 ├── spatialdds_bootstrap_server.py
@@ -118,7 +118,7 @@ Stop the bridge when done:
 ./stop_bridge_server_docker.sh
 ```
 
-## Core v1.5 protocol flow
+## Core v1.6 protocol flow
 
 ```mermaid
 sequenceDiagram
@@ -240,10 +240,10 @@ docker run --rm --network host \
 # Start the REST API
 python3 core_demo/http_binding.py
 
-# Register a service manifest (spatial.manifest@1.5)
+# Register a service manifest (spatial.manifest@1.6)
 curl -X POST http://localhost:8080/.well-known/spatialdds/register \
   -H "Content-Type: application/json" \
-  -d @manifests/v1.5/vps_manifest.json
+  -d @manifests/v1.6/vps_manifest.json
 
 # Search by coverage
 curl -X POST http://localhost:8080/.well-known/spatialdds/search \

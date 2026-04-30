@@ -1,13 +1,13 @@
 {
-  "id": "spatialdds://vps.example.com/zone:demo/service:vps",
-  "profile": "spatial.manifest@1.5",
+  "id": "spatialdds://vps.example.com/zone:sf-downtown/service:vps",
+  "profile": "spatial.manifest@1.6",
   "rtype": "service",
   "service": {
-    "service_id": "svc:vps:demo/default",
+    "service_id": "svc:vps:demo/sf-downtown",
     "kind": "VPS",
-    "name": "MockVPS-v1.5",
+    "name": "MockVPS-v1.6",
     "org": "ExampleOrg",
-    "version": "1.5",
+    "version": "1.6",
     "connection": {
       "domain_id": 1
     },
@@ -23,15 +23,22 @@
         "type": "node_geo",
         "version": "v1",
         "qos_profile": "VPS_RESP"
+      },
+      {
+        "name": "spatialdds/anchors/sf-downtown/delta/v1",
+        "type": "anchor_delta",
+        "version": "v1",
+        "qos_profile": "RELIABLE_STREAM"
       }
     ]
   },
   "caps": {
     "supported_profiles": [
-      { "name": "core", "major": 1, "min_minor": 5, "max_minor": 5 },
-      { "name": "discovery", "major": 1, "min_minor": 5, "max_minor": 5 }
+      { "name": "core", "major": 1, "min_minor": 6, "max_minor": 6 },
+      { "name": "discovery", "major": 1, "min_minor": 6, "max_minor": 6 },
+      { "name": "anchors", "major": 1, "min_minor": 5, "max_minor": 5 }
     ],
-    "preferred_profiles": ["discovery@1.5", "core@1.5"],
+    "preferred_profiles": ["discovery@1.6", "core@1.6"],
     "features": [{ "name": "blob.crc32" }]
   },
   "coverage": {
@@ -48,7 +55,14 @@
       "fqn": "earth-fixed"
     }
   },
-  "assets": [],
+  "assets": [
+    {
+      "uri": "https://registry.example/anchors/sf-downtown/scene.glb",
+      "media_type": "model/gltf-binary",
+      "hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "meta": [{ "key": "name", "value": "anchor_preview" }]
+    }
+  ],
   "stamp": { "sec": 1700000000, "nanosec": 0 },
   "ttl_sec": 3600
 }

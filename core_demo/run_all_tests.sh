@@ -1,6 +1,6 @@
 #!/bin/bash
-# SpatialDDS v1.5 - Run All Tests
-# This script runs the complete test suite for v1.5 implementation
+# SpatialDDS v1.6 - Run All Tests
+# This script runs the complete test suite for v1.6 implementation
 
 set -e  # Exit on error
 
@@ -14,7 +14,7 @@ cd "${SCRIPT_DIR}"
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
 echo "╔══════════════════════════════════════════════════════════════════════════════╗"
-echo "║              SPATIALDDS v1.5 - COMPREHENSIVE TEST SUITE                      ║"
+echo "║              SPATIALDDS v1.6 - COMPREHENSIVE TEST SUITE                      ║"
 echo "╚══════════════════════════════════════════════════════════════════════════════╝"
 echo ""
 
