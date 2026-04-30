@@ -4,6 +4,15 @@
 
 set -e  # Exit on error
 
+# Run from the directory containing this script so relative paths work
+# regardless of where the user invokes it from. Shared modules
+# (spatialdds_test.py, spatialdds_validation.py, spatialdds_demo/) live at
+# the repo root one level up; add it to PYTHONPATH so imports resolve.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${SCRIPT_DIR}"
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+
 echo "╔══════════════════════════════════════════════════════════════════════════════╗"
 echo "║              SPATIALDDS v1.5 - COMPREHENSIVE TEST SUITE                      ║"
 echo "╚══════════════════════════════════════════════════════════════════════════════╝"
@@ -13,7 +22,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo " TEST 1: Validation Utilities"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-python3 spatialdds_validation.py
+python3 -m spatialdds_validation
 if [ $? -eq 0 ]; then
     echo "✅ Validation utilities: PASSED"
 else
@@ -26,7 +35,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo " TEST 2: SpatialDDS Protocol (Summary Mode)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-python3 spatialdds_test.py --summary-only
+python3 -m spatialdds_test --summary-only
 if [ $? -eq 0 ]; then
     echo "✅ Protocol test (summary): PASSED"
 else
@@ -53,7 +62,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo " TEST 4: HTTP Binding (Logic Test)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 python3 -c "
-from http_binding import SpatialDDSHTTPHandler
+from http_binding import SpatialDDSHTTPHandler, _normalize_announce
 from spatialdds_validation import create_coverage_bbox_earth_fixed, SpatialDDSValidator
 import uuid
 
@@ -74,7 +83,8 @@ announce = {
     'ttl_sec': 60
 }
 
-handler._register_announce(handler, announce)
+# Match how POST /register normalizes the body before registering
+handler._register_announce(handler, _normalize_announce(announce))
 
 frame_ref_q, cov_elem_q = create_coverage_bbox_earth_fixed(-122.45, 37.75, -122.4, 37.8)
 query = {

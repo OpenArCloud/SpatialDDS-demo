@@ -22,33 +22,59 @@ transport with real datasets.
 
 ## Repository layout
 
+Each demo lives in its own folder. Shared infrastructure (the
+`spatialdds_demo/` Python package, `spatialdds_test.py`, and
+`spatialdds_validation.py`) stays at the repo root because every demo
+imports from it.
+
 ```
 .
+├── core_demo/                 # Bootstrap → discovery → coverage → localize → catalog → anchor (v1.5 protocol)
 ├── multi_operator_fusion/     # Flagship: 3 AV operators + infra → fuser → Rerun
 ├── nuscenes/                  # nuScenes publisher/subscriber demo
 ├── deepsense/                 # DeepSense 6G publisher/subscriber demo
 ├── benchmarks/                # Protocol overhead + scalability benchmarks
 ├── web/                       # Cesium web UI (talks to bridge/server.py)
 ├── bridge/                    # HTTP-to-DDS bridge powering the web UI
-├── spatialdds_demo/           # Shared DDS transport + manifest helpers
+├── spatialdds_demo/           # Shared DDS transport + manifest helpers (Python package)
+├── spatialdds_test.py         # Shared: v1.5 protocol harness + MockSensorData
+├── spatialdds_validation.py   # Shared: FrameRef/Time/Coverage/GeoPose helpers
 ├── idl/v1.5/                  # Canonical IDL pulled from SpatialDDS-spec
 ├── manifests/v1.5/            # Manifest examples from SpatialDDS-spec
 ├── docs/                      # Vendored spec documents
-├── spatialdds_test.py         # v1.5 discovery + localization protocol demo
-├── spatialdds_validation.py   # FrameRef/Time/Coverage/GeoPose helpers
-├── spatialdds_demo_server.py  # VPS service (core demo)
-├── spatialdds_demo_client.py  # Demo client (core demo)
+├── Dockerfile                 # Builds the `cyclonedds-python` base image used by every demo
+├── Dockerfile.base            # Rebuilds the upstream Cyclone DDS + Python image
+├── cyclonedds.xml             # Cyclone DDS config baked into the image
+├── requirements.txt           # Shared Python deps (typing-extensions, pytest)
+├── run_bridge_server_docker.sh  # Web demo: starts VPS + catalog + bridge in Docker
+├── stop_bridge_server_docker.sh
+├── run_bridge_http_tests_docker.sh
+└── run_bridge_http_tests_with_logs.sh
+```
+
+Inside `core_demo/`:
+
+```
+core_demo/
+├── README.md                  → see DOCKER_GUIDE.md / SPEC_COMPLIANCE.md
+├── DOCKER_GUIDE.md            # Docker reference for the core v1.5 demo
+├── SPEC_COMPLIANCE.md         # v1.5 compliance notes
+├── spatialdds_demo_server.py  # VPS service
+├── spatialdds_demo_client.py  # Demo client
 ├── spatialdds_bootstrap_server.py
 ├── spatialdds_catalog_server.py
+├── spatialdds_demo_tests.py
 ├── http_binding.py            # Spec-compliance REST wrapper for discovery payloads
+├── comprehensive_test.py      # Default Docker entry point
 ├── spatialdds.idl             # Convenience include aggregator for idlc
-├── DOCKER_GUIDE.md            # Docker reference for the core v1.5 demo
-└── SPEC_COMPLIANCE.md         # v1.5 compliance notes
+├── catalog_seed.json          # Sample catalog data
+├── run_all_tests.sh           # Validation + protocol + demo + HTTP-binding tests
+└── run_local_tests_with_logs.sh  # Mock + DDS bootstrap run with logs
 ```
 
 ## Two HTTP servers — which one do I want?
 
-| | `http_binding.py` (root) | `bridge/server.py` |
+| | `core_demo/http_binding.py` | `bridge/server.py` |
 |---|---|---|
 | Purpose | Spec-compliance REST wrapper that mirrors the discovery payload shapes | HTTP-to-DDS bridge that the Cesium web UI talks to |
 | Port (default) | 8080 | 8088 |
@@ -134,7 +160,7 @@ sequenceDiagram
 
 ```bash
 # Full mock + DDS bootstrap run with logs
-./run_local_tests_with_logs.sh
+./core_demo/run_local_tests_with_logs.sh
 ```
 
 The Dockerfile pulls a prebuilt base image with Cyclone DDS + idlc + Python bindings:
@@ -146,8 +172,12 @@ docker build -f Dockerfile.base -t ghcr.io/openarcloud/cyclonedds-python-base:0.
 docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 ```
 
-See [`DOCKER_GUIDE.md`](DOCKER_GUIDE.md) for the full Docker reference for the core demo.
+See [`core_demo/DOCKER_GUIDE.md`](core_demo/DOCKER_GUIDE.md) for the full Docker reference for the core demo.
 The other demos have their own `run_docker_demo.sh` launchers — see each demo's README.
+
+> The Docker image bakes the core-demo files at a flat `/app/` layout so the
+> example commands below (and inside the container) reference them by basename
+> regardless of where they live in the host repo.
 
 ## Core DDS demo (controlling services separately)
 
@@ -208,7 +238,7 @@ docker run --rm --network host \
 
 ```bash
 # Start the REST API
-python3 http_binding.py
+python3 core_demo/http_binding.py
 
 # Register a service manifest (spatial.manifest@1.5)
 curl -X POST http://localhost:8080/.well-known/spatialdds/register \

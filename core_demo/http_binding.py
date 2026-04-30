@@ -213,6 +213,12 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
         """
         if "==" not in expr:
             return True
+        key, _, value = expr.partition("==")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if not key:
+            return True
+        return announce.get(key) == value
 
     @staticmethod
     def _matches_filter(filter_obj: Dict[str, Any], announce: Dict[str, Any]) -> bool:

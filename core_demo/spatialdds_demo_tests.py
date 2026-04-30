@@ -40,7 +40,7 @@ def test_demo_output() -> bool:
     env = os.environ.copy()
     env["SLIDE_MODE"] = "1"
     result = subprocess.run(
-        [sys.executable, "spatialdds_test.py", "--summary-only"],
+        [sys.executable, "-m", "spatialdds_test", "--summary-only"],
         capture_output=True,
         text=True,
         env=env,
@@ -66,7 +66,7 @@ def test_manifest_fallback() -> bool:
     env["SLIDE_MODE"] = "1"
     env["SPATIALDDS_DEMO_MANIFEST_URI"] = "https://example.com/demo.json"
     result = subprocess.run(
-        [sys.executable, "spatialdds_test.py", "--summary-only"],
+        [sys.executable, "-m", "spatialdds_test", "--summary-only"],
         capture_output=True,
         text=True,
         env=env,

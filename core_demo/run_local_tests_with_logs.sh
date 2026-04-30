@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -u
 
+# Run from the directory containing this script so relative log filenames
+# land in core_demo/ regardless of where the user invokes it from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${SCRIPT_DIR}"
+
 server_name=""
 catalog_name=""
 server_pid=""
@@ -64,7 +70,7 @@ cleanup_stale
 
 if ! docker image inspect cyclonedds-python:latest >/dev/null 2>&1; then
   echo "Docker image cyclonedds-python:latest not found. Building from Dockerfile..."
-  docker build -t cyclonedds-python .
+  (cd "${REPO_ROOT}" && docker build -t cyclonedds-python .)
 fi
 
 bts="$(date +%Y%m%d_%H%M%S)"
@@ -75,7 +81,8 @@ dds_bootstrap_catalog_log="dds_catalog_${bts}.log"
 dds_bootstrap_client_log="dds_client_${bts}.log"
 
 echo "Running mock test with bootstrap -> ${mock_bootstrap_log}"
-SPATIALDDS_TRANSPORT=mock python3 spatialdds_test.py --detailed >"${mock_bootstrap_log}" 2>&1
+SPATIALDDS_TRANSPORT=mock PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" \
+  python3 -m spatialdds_test --detailed >"${mock_bootstrap_log}" 2>&1
 mock_bootstrap_status=$?
 
 echo "Running DDS demo with bootstrap -> ${bootstrap_log}, ${dds_bootstrap_server_log}, ${dds_bootstrap_catalog_log}, ${dds_bootstrap_client_log}"
@@ -94,7 +101,7 @@ docker run --rm --network host --name "${server_name}" \
   -e SPATIALDDS_TRANSPORT=dds \
   -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  cyclonedds-python python3 spatialdds_vps_server.py --detailed >"${dds_bootstrap_server_log}" 2>&1 &
+  cyclonedds-python python3 spatialdds_demo_server.py --detailed >"${dds_bootstrap_server_log}" 2>&1 &
 server_pid=$!
 
 catalog_name="dds_catalog_${bts}"
