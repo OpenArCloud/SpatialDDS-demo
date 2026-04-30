@@ -1,10 +1,64 @@
-# SpatialDDS v1.5 Demo
+# SpatialDDS Demo
 
-This repo tracks the SpatialDDS 1.5 draft spec (https://spatialdds.org) and runs on CycloneDDS. It bundles the upstream IDL under `idl/v1.5`, mirrors the manifest examples in `manifests/v1.5`, and provides a runnable mock flow that follows the Discovery model and sensing/anchor shapes.
+Reference demos for the SpatialDDS 1.5 draft spec (https://spatialdds.org), running on
+CycloneDDS. The repo bundles the upstream IDL under `idl/v1.5`, mirrors the manifest
+examples in `manifests/v1.5`, and ships four runnable demos that build on top of a shared
+`spatialdds/envelope/v1` transport.
 
 ![Web demo screenshot](web/screenshot.png)
 
-## Web Demo (DDS Bridge)
+## Demos in this repo
+
+| Demo | Path | What it shows |
+|---|---|---|
+| **Multi-operator fusion** *(flagship)* | [`multi_operator_fusion/`](multi_operator_fusion/README.md) | Three AV fleet operators + one 6G base station share `Detection3D` observations. A platform fuser does NN-gated track fusion and publishes unified `FusedTrack`s. Rerun renders per-operator split-screen + fused view. |
+| **nuScenes → SpatialDDS → Rerun** | [`nuscenes/`](nuscenes/README.md) | Publishes nuScenes v1.0-mini AV data (ego pose, 6 cameras, LiDAR, 5 radars, 3D annotations) over DDS envelopes; visualizes in Rerun. |
+| **DeepSense 6G → SpatialDDS → Rerun** | [`deepsense/`](deepsense/README.md) | Publishes DeepSense 6G Scenario 9 V2I data (60 GHz phased-array beam, FMCW radar, camera, GPS, 2D lidar) over DDS envelopes. |
+| **Core v1.5 protocol demo** | scripts at repo root + [`web/`](web/) | Bootstrap → discovery → coverage query → localization → catalog → anchor flow. Includes a Cesium web UI backed by an HTTP-to-DDS bridge. |
+| **Benchmarks** | [`benchmarks/`](benchmarks/README.md) | Latency, discovery, multi-operator, and coverage-query benchmark scripts + plotting. |
+
+If you're new here, start with **multi-operator fusion** — it exercises the full envelope
+transport with real datasets.
+
+## Repository layout
+
+```
+.
+├── multi_operator_fusion/     # Flagship: 3 AV operators + infra → fuser → Rerun
+├── nuscenes/                  # nuScenes publisher/subscriber demo
+├── deepsense/                 # DeepSense 6G publisher/subscriber demo
+├── benchmarks/                # Protocol overhead + scalability benchmarks
+├── web/                       # Cesium web UI (talks to bridge/server.py)
+├── bridge/                    # HTTP-to-DDS bridge powering the web UI
+├── spatialdds_demo/           # Shared DDS transport + manifest helpers
+├── idl/v1.5/                  # Canonical IDL pulled from SpatialDDS-spec
+├── manifests/v1.5/            # Manifest examples from SpatialDDS-spec
+├── docs/                      # Vendored spec documents
+├── spatialdds_test.py         # v1.5 discovery + localization protocol demo
+├── spatialdds_validation.py   # FrameRef/Time/Coverage/GeoPose helpers
+├── spatialdds_demo_server.py  # VPS service (core demo)
+├── spatialdds_demo_client.py  # Demo client (core demo)
+├── spatialdds_bootstrap_server.py
+├── spatialdds_catalog_server.py
+├── http_binding.py            # Spec-compliance REST wrapper for discovery payloads
+├── spatialdds.idl             # Convenience include aggregator for idlc
+├── DOCKER_GUIDE.md            # Docker reference for the core v1.5 demo
+└── SPEC_COMPLIANCE.md         # v1.5 compliance notes
+```
+
+## Two HTTP servers — which one do I want?
+
+| | `http_binding.py` (root) | `bridge/server.py` |
+|---|---|---|
+| Purpose | Spec-compliance REST wrapper that mirrors the discovery payload shapes | HTTP-to-DDS bridge that the Cesium web UI talks to |
+| Port (default) | 8080 | 8088 |
+| Used by | `run_all_tests.sh`, README HTTP example below | `run_bridge_server_docker.sh`, `web/` |
+| Run with DDS? | No (in-process registration) | Yes (publishes/subscribes envelopes) |
+
+They are not interchangeable. Use the bridge for the web demo; use the HTTP binding when
+you just want to exercise the registration/search payload shapes.
+
+## Web demo (DDS bridge + Cesium)
 
 Create `web/.env.local` with required values:
 ```bash
@@ -38,7 +92,7 @@ Stop the bridge when done:
 ./stop_bridge_server_docker.sh
 ```
 
-## Protocol Flow (v1.5)
+## Core v1.5 protocol flow
 
 ```mermaid
 sequenceDiagram
@@ -76,7 +130,7 @@ sequenceDiagram
     Client->>DDS: ANCHOR_DELTA<br/>op:ADD, anchor entry with GeoPose + checksum
 ```
 
-## Quick Start (non-web)
+## Quick start (core demo, non-web)
 
 ```bash
 # Full mock + DDS bootstrap run with logs
@@ -92,7 +146,10 @@ docker build -f Dockerfile.base -t ghcr.io/openarcloud/cyclonedds-python-base:0.
 docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 ```
 
-## DDS Demo (controlling services separately)
+See [`DOCKER_GUIDE.md`](DOCKER_GUIDE.md) for the full Docker reference for the core demo.
+The other demos have their own `run_docker_demo.sh` launchers — see each demo's README.
+
+## Core DDS demo (controlling services separately)
 
 The DDS transport uses a single envelope topic (`spatialdds/envelope/v1`) and requires
 Cyclone DDS to be enabled explicitly. The client always starts with bootstrap
@@ -103,14 +160,14 @@ Use `--summary-only` for headers only, or omit it for full message details.
 If running directly on the host instead of Docker, you must install the
 Cyclone DDS Python bindings (`cyclonedds==0.10.5`) and ensure `idlc` is on PATH.
 
-### Self-Echo Filtering
+### Self-echo filtering
 
 The demo drops DDS envelopes that appear to be sent by the same process to avoid
 self-echo on the shared envelope topic. Sender identity is inferred from payload
 fields (for example, `from`, `source_id`, `sender_id`, or
 `client_frame_ref.fqn`).
 
-### Bootstrap Flow
+### Bootstrap flow
 
 The bootstrap service runs on DDS domain 0 and returns the domain to use for the
 actual SpatialDDS demo. Start it first, then run the VPS and catalog servers on
@@ -130,7 +187,7 @@ docker run --rm --network host \
   -e SPATIALDDS_TRANSPORT=dds \
   -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  cyclonedds-python python3 spatialdds_vps_server.py
+  cyclonedds-python python3 spatialdds_demo_server.py
 
 # Catalog server (domain 1, Docker)
 docker run --rm --network host \
@@ -147,7 +204,7 @@ docker run --rm --network host \
   cyclonedds-python python3 spatialdds_demo_client.py
 ```
 
-## HTTP Binding
+## HTTP binding (spec-compliance wrapper)
 
 ```bash
 # Start the REST API
@@ -168,16 +225,4 @@ curl -X POST http://localhost:8080/.well-known/spatialdds/search \
     "filter": { "type_in": [], "qos_profile_in": [], "module_id_in": [] },
     "expr": ""
   }'
-```
-
-## Repository Layout
-
-```
-.
-├── idl/v1.5/                 # Canonical IDL pulled from SpatialDDS-spec
-├── manifests/v1.5/           # Manifest examples from SpatialDDS-spec
-├── spatialdds_test.py        # v1.5 discovery + localization demo
-├── spatialdds_validation.py  # FrameRef/Time/Coverage/GeoPose helpers
-├── http_binding.py           # REST wrapper for discovery payloads
-└── spatialdds.idl            # Convenience include aggregator for idlc
 ```
