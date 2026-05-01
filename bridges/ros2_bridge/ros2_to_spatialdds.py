@@ -151,8 +151,9 @@ def nav_sat_fix_to_geo_pose(msg: Any, operator: str,
         "alt_m": float(msg.altitude),
         "fix_status": int(getattr(getattr(msg, "status", None), "status", 0) or 0),
     }
-    if cov_type > 0 and getattr(msg, "position_covariance", None):
-        payload["position_covariance"] = list(msg.position_covariance)
+    raw_cov = getattr(msg, "position_covariance", None)
+    if cov_type > 0 and raw_cov is not None and len(raw_cov) > 0:
+        payload["position_covariance"] = list(raw_cov)
         payload["position_covariance_type"] = cov_type
     return payload
 
@@ -166,7 +167,10 @@ def imu_to_imu_sample(msg: Any, operator: str, sensor_id: str,
     don't accidentally trust an identity quaternion as a real estimate.
     """
     h = msg.header
-    ori_cov = list(getattr(msg, "orientation_covariance", []) or [])
+    # ROS 2 ships covariance arrays as numpy arrays; ``arr or []`` raises
+    # "truth value of an array is ambiguous". Use an explicit None check.
+    raw_ori_cov = getattr(msg, "orientation_covariance", None)
+    ori_cov = list(raw_ori_cov) if raw_ori_cov is not None else []
     has_orientation = not (ori_cov and ori_cov[0] == -1.0)
     return {
         "schema_version": SCHEMA_CORE,
@@ -238,7 +242,10 @@ def detection3d_array_to_set(msg: Any, operator: str,
     h = msg.header
     detections: List[Dict[str, Any]] = []
     for i, det in enumerate(msg.detections):
-        hypotheses = list(getattr(det, "results", []) or [])
+        # ``results`` is a Python list on real rclpy classes, but use an
+        # explicit None check for parity with the covariance fix above.
+        raw_results = getattr(det, "results", None)
+        hypotheses = list(raw_results) if raw_results is not None else []
         if hypotheses:
             top = max(hypotheses,
                       key=lambda r: float(getattr(getattr(r, "hypothesis", None),

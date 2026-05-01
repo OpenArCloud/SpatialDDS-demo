@@ -339,6 +339,46 @@ class TestDispatch(unittest.TestCase):
         self.assertIsNone(msg_type_to_decoder(""))
 
 
+class TestNumpyArrayCovariance(unittest.TestCase):
+    """Real ROS 2 messages ship covariance fields as numpy arrays. The
+    encoders must not use ``arr or []`` patterns that trip numpy's
+    "truth value is ambiguous" error.
+    """
+
+    def test_imu_with_numpy_orientation_covariance(self):
+        try:
+            import numpy as np  # noqa: F401
+        except ImportError:
+            self.skipTest("numpy not installed")
+        imu = make_test_imu()
+        imu.orientation_covariance = __import__("numpy").zeros(9)
+        # Should not raise; should treat zero-array as "has orientation".
+        _t, _mt, payload = encode_imu(imu, "op", "imu_0", FrameMapper("op"))
+        self.assertTrue(payload["has_orientation"])
+
+    def test_imu_with_numpy_no_orientation_sentinel(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed")
+        imu = make_test_imu()
+        imu.orientation_covariance = np.array([-1.0] + [0.0] * 8)
+        _t, _mt, payload = encode_imu(imu, "op", "imu_0", FrameMapper("op"))
+        self.assertFalse(payload["has_orientation"])
+
+    def test_navsatfix_with_numpy_position_covariance(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed")
+        fix = make_test_nav_sat_fix()
+        fix.position_covariance = np.array([1.0, 0, 0, 0, 1.0, 0, 0, 0, 4.0])
+        fix.position_covariance_type = 2
+        _t, _mt, payload = encode_nav_sat_fix(fix, "op")
+        self.assertEqual(len(payload["position_covariance"]), 9)
+        self.assertEqual(payload["position_covariance_type"], 2)
+
+
 class TestPayloadIsJsonSerializable(unittest.TestCase):
     """Every encoder must return a JSON-serializable dict."""
 

@@ -1,0 +1,51 @@
+FROM ros:humble-ros-base
+
+# Message packages the bridge uses
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-sensor-msgs \
+    ros-humble-geometry-msgs \
+    ros-humble-vision-msgs \
+    ros-humble-nav-msgs \
+    ros-humble-tf2-ros \
+    ros-humble-rmw-cyclonedds-cpp \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Use CycloneDDS as the ROS 2 middleware (matches our SpatialDDS transport)
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# Python dependencies — installed before the source COPY so dep churn is cached.
+WORKDIR /ws
+COPY requirements.txt /ws/
+COPY bridges/ros2_bridge/requirements.txt /ws/bridges/ros2_bridge/
+RUN pip3 install --no-cache-dir \
+    -r /ws/requirements.txt \
+    -r /ws/bridges/ros2_bridge/requirements.txt \
+    pytest
+
+# Copy the full repo
+COPY . /ws/
+
+# Make ``import bridges.…`` work (the directory has __init__.py but the test
+# runner's cwd may differ).
+ENV PYTHONPATH=/ws
+
+# Default: run all testable tiers
+CMD ["bash", "-c", "\
+    source /opt/ros/humble/setup.bash && \
+    echo '=============================' && \
+    echo '  Tier 1: Conversion Tests   ' && \
+    echo '=============================' && \
+    python3 -m pytest bridges/ros2_bridge/test_conversions.py -v && \
+    echo '' && \
+    echo '=============================' && \
+    echo '  Tier 2: Envelope Round-Trip' && \
+    echo '=============================' && \
+    python3 -m pytest bridges/ros2_bridge/test_envelope_roundtrip.py -v && \
+    echo '' && \
+    echo '=============================' && \
+    echo '  Tier 3b: Mock Fidelity     ' && \
+    echo '=============================' && \
+    python3 bridges/ros2_bridge/verify_mocks.py && \
+    echo '' && \
+    echo 'All tiers passed.'"]

@@ -1,0 +1,52 @@
+# Tier-3 integration test for the ROS 2 bridge.
+#
+# Three containers:
+#   ros2-publisher   — publishes PoseStamped/NavSatFix/Imu on standard ROS 2 topics
+#   bridge           — runs the SpatialDDS ↔ ROS 2 bridge node
+#   verifier         — subscribes on the SpatialDDS envelope topic and asserts
+#                      every expected ROS2_* msg_type arrives
+#
+# Each container's command lives in a sibling script (`_test_*.sh` / `.py`)
+# so YAML scalar-style quirks don't mangle multi-line bash or Python.
+#
+# All three share the host network (CycloneDDS uses UDP multicast for
+# discovery) and a separate SpatialDDS domain (43) from the ROS 2 domain (42).
+
+services:
+
+  ros2-publisher:
+    image: spatialdds-ros2-test
+    platform: linux/amd64
+    pull_policy: never
+    network_mode: host
+    volumes:
+      - ../..:/ws:ro
+    environment:
+      - ROS_DOMAIN_ID=42
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    command: ["bash", "/ws/bridges/ros2_bridge/_test_publisher.sh"]
+
+  bridge:
+    image: spatialdds-ros2-test
+    platform: linux/amd64
+    pull_policy: never
+    network_mode: host
+    volumes:
+      - ../..:/ws:ro
+    environment:
+      - ROS_DOMAIN_ID=42
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    depends_on:
+      - ros2-publisher
+    command: ["bash", "/ws/bridges/ros2_bridge/_test_bridge.sh"]
+
+  verifier:
+    image: spatialdds-ros2-test
+    platform: linux/amd64
+    pull_policy: never
+    network_mode: host
+    volumes:
+      - ../..:/ws:ro
+    depends_on:
+      - bridge
+    command: ["python3", "/ws/bridges/ros2_bridge/_test_verifier.py"]

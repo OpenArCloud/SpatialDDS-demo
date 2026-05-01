@@ -252,9 +252,82 @@ _OUTBOUND_FACTORIES: Dict[str, Callable[[dict, FrameMapper], Any]] = {
 }
 
 
+# ---- CLI-flag config builder -----------------------------------------------
+# Convenience: build a config dict from CLI flags so quick tests don't need a
+# YAML file. Topic→type mapping is auto-inferred from the topic name pattern
+# (pose / fix / imu / image / det) — sufficient for the v0 type set; YAML
+# remains the precise interface for production deployments.
+
+_TOPIC_PATTERN_TO_TYPE = (
+    ("pose",       "geometry_msgs/msg/PoseStamped"),
+    ("fix",        "sensor_msgs/msg/NavSatFix"),
+    ("imu",        "sensor_msgs/msg/Imu"),
+    ("image",      "sensor_msgs/msg/CompressedImage"),
+    ("det",        "vision_msgs/msg/Detection3DArray"),
+    ("detection",  "vision_msgs/msg/Detection3DArray"),
+)
+
+
+def _infer_type_for_topic(topic: str) -> str:
+    lowered = topic.lower()
+    for pat, type_str in _TOPIC_PATTERN_TO_TYPE:
+        if pat in lowered:
+            return type_str
+    raise ValueError(
+        f"Cannot infer ROS 2 type for {topic!r}. Use a YAML config "
+        f"(`-p config:=...`) to specify the type explicitly."
+    )
+
+
+def _config_from_cli_args(operator: str, dds_domain: int, topics: list) -> dict:
+    return {
+        "operator": operator,
+        "domain_id": int(dds_domain),
+        "ros2_to_spatialdds": [
+            {"ros2_topic": t, "ros2_type": _infer_type_for_topic(t)}
+            for t in topics
+        ],
+        # No reverse-direction mappings via CLI — use YAML if you need them.
+        "spatialdds_to_ros2": [],
+    }
+
+
 # ---- The node ---------------------------------------------------------------
 
 def main():  # pragma: no cover - Tier-3 only
+    import argparse
+    import sys as _sys
+
+    # Split off "--ros-args ..." so argparse only sees our own flags.
+    own_argv: list = []
+    saw_ros_args = False
+    for a in _sys.argv[1:]:
+        if a == "--ros-args":
+            saw_ros_args = True
+        if saw_ros_args:
+            continue
+        own_argv.append(a)
+
+    parser = argparse.ArgumentParser(
+        description="SpatialDDS ↔ ROS 2 bridge node",
+        add_help=True,
+    )
+    parser.add_argument("--operator",
+                         help="Operator namespace for the SpatialDDS side")
+    parser.add_argument("--ros-domain", type=int,
+                         help="ROS 2 domain id (sets ROS_DOMAIN_ID for this process)")
+    parser.add_argument("--dds-domain", type=int,
+                         help="SpatialDDS CycloneDDS domain id")
+    parser.add_argument("--topics", nargs="+", default=[],
+                         help="ROS 2 topics to bridge (type auto-inferred from name)")
+    parser.add_argument("--config", default="",
+                         help="Path to YAML config (overrides individual flags)")
+    args = parser.parse_args(own_argv)
+
+    if args.ros_domain is not None:
+        import os as _os
+        _os.environ["ROS_DOMAIN_ID"] = str(args.ros_domain)
+
     _import_ros2()
     import rclpy
     from rclpy.node import Node
@@ -263,13 +336,26 @@ def main():  # pragma: no cover - Tier-3 only
     rclpy.init()
     node = Node("spatialdds_ros2_bridge")
 
-    config_path = node.declare_parameter("config", "").value
-    if not config_path:
-        node.get_logger().error("Missing -p config:=/path/to/config.yaml")
+    config_path = args.config or node.declare_parameter("config", "").value
+    if config_path:
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+    elif args.operator and args.topics:
+        if args.dds_domain is None:
+            node.get_logger().error("--dds-domain is required when not using --config")
+            rclpy.shutdown()
+            return 1
+        try:
+            config = _config_from_cli_args(args.operator, args.dds_domain, args.topics)
+        except ValueError as exc:
+            node.get_logger().error(str(exc))
+            rclpy.shutdown()
+            return 1
+    else:
+        node.get_logger().error(
+            "Need either --config <yaml> or --operator + --dds-domain + --topics")
         rclpy.shutdown()
         return 1
-    with open(config_path) as f:
-        config = yaml.safe_load(f) or {}
 
     operator = str(config["operator"])
     domain_id = int(config.get("domain_id", 1))
