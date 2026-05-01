@@ -1,16 +1,17 @@
-"""Thin envelope publish/subscribe helpers for the ROS 2 bridge.
+"""Shared envelope publish/subscribe helpers for every SpatialDDS bridge.
 
-The bridge node sits on top of CycloneDDS but doesn't itself touch
-``DataReader``/``DataWriter`` — it goes through these helpers so that
-``ros2_to_spatialdds`` and ``spatialdds_to_ros2`` stay free of DDS imports
-and remain unit-testable without cyclonedds.
-
-The publisher/subscriber underneath are the same RELIABLE+KEEP_ALL
-endpoints the MCAP recorder uses (``bridges/mcap_bridge/recorder.py``).
-A bridge needs lossless replay just like a recorder does.
+The MCAP, ROS 2, and web bridges all need a CycloneDDS endpoint on
+``spatialdds/envelope/v1`` with QoS that doesn't drop bursts on the floor.
+The repo's default ``EnvelopeTransport`` uses BEST_EFFORT + KEEP_LAST(1),
+which is fine for live consumers at sensor rates but loses messages when a
+publisher emits multiple writes per microsecond (DeepSense does this — see
+the MCAP bridge's commit history). For *recording*/*replaying*/*relaying*
+we want RELIABLE + KEEP_ALL.
 
 DDS imports are deferred until first use so importing this module on a
-host without cyclonedds (Tier-1 test env) doesn't fail.
+host without ``cyclonedds`` installed (Tier-1 unit-test env) doesn't fail.
+``EnvelopePublisher`` / ``EnvelopeSubscriber`` are self-contained — no
+dependencies on the MCAP bridge's internals.
 """
 
 from __future__ import annotations
@@ -22,22 +23,68 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
-# Reuse the lossless reader/writer factories from the MCAP bridge so the two
-# bridges don't drift on QoS choices.
-_HERE = Path(__file__).resolve().parent
-_MCAP = _HERE.parent / "mcap_bridge"
-if str(_MCAP) not in sys.path:
-    sys.path.insert(0, str(_MCAP))
+
+def _import_envelope_idl():
+    """Import the envelope IDL struct + topic name from the existing demo
+    transport. Deferred so this module imports cleanly without DDS."""
+    # Walk up to the repo root so ``nuscenes.dds_envelope_transport`` is reachable.
+    repo_root = Path(__file__).resolve().parent.parent
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from nuscenes.dds_envelope_transport import (  # type: ignore
+        SpatialDDSEnvelope,
+        TOPIC_DDS_ENVELOPE_V1,
+    )
+    return SpatialDDSEnvelope, TOPIC_DDS_ENVELOPE_V1
 
 
 def _make_reader(domain_id: int):
-    from recorder import _make_lossless_reader  # type: ignore
-    return _make_lossless_reader(domain_id)
+    """Build a CycloneDDS reader on the envelope topic with RELIABLE +
+    KEEP_ALL QoS so a burst of writes within one poll interval isn't
+    collapsed to just the most recent sample."""
+    from cyclonedds.core import Policy, Qos
+    from cyclonedds.domain import DomainParticipant
+    from cyclonedds.sub import DataReader, Subscriber
+    from cyclonedds.topic import Topic
+
+    SpatialDDSEnvelope, TOPIC = _import_envelope_idl()
+    qos = Qos(
+        Policy.Reliability.Reliable(0),
+        Policy.History.KeepAll,
+        Policy.Durability.Volatile,
+    )
+    participant = DomainParticipant(domain_id)
+    topic = Topic(participant, TOPIC, SpatialDDSEnvelope)
+    subscriber = Subscriber(participant)
+    reader = DataReader(subscriber, topic, qos=qos)
+    # Hold strong refs so the participant/topic don't GC out from under us.
+    reader._participant = participant
+    reader._topic = topic
+    reader._subscriber = subscriber
+    return reader
 
 
 def _make_writer(domain_id: int):
-    from replayer import _make_lossless_writer  # type: ignore
-    return _make_lossless_writer(domain_id)
+    """Mirror of ``_make_reader`` for the publish path."""
+    from cyclonedds.core import Policy, Qos
+    from cyclonedds.domain import DomainParticipant
+    from cyclonedds.pub import DataWriter, Publisher
+    from cyclonedds.topic import Topic
+
+    SpatialDDSEnvelope, TOPIC = _import_envelope_idl()
+    qos = Qos(
+        Policy.Reliability.Reliable(0),
+        Policy.History.KeepAll,
+        Policy.Durability.Volatile,
+    )
+    participant = DomainParticipant(domain_id)
+    topic = Topic(participant, TOPIC, SpatialDDSEnvelope)
+    publisher = Publisher(participant)
+    writer = DataWriter(publisher, topic, qos=qos)
+    writer._participant = participant
+    writer._topic = topic
+    writer._publisher = publisher
+    return writer, SpatialDDSEnvelope
 
 
 # ---------- Publisher --------------------------------------------------------
@@ -50,7 +97,8 @@ class EnvelopePublisher:
     """
 
     def __init__(self, domain_id: int):
-        self._writer, self._EnvelopeCls = _make_writer(domain_id)
+        writer_pair = _make_writer(domain_id)
+        self._writer, self._EnvelopeCls = writer_pair
 
     def publish(self, logical_topic: str, msg_type: str,
                 payload: Dict[str, Any], request_id: str = "",

@@ -1,16 +1,41 @@
 #!/usr/bin/env python3
-"""SpatialDDS HTTP-to-DDS bridge for the web demo."""
+"""SpatialDDS HTTP/WebSocket bridge.
+
+Two generations of endpoints live in this server:
+
+  Legacy (kept for the Cesium web demo)
+  ─────────────────────────────────────
+    GET  /health                   — service announcement + DDS domain
+    POST /v1/localize              — Phase 3 localize one-shot
+    POST /v1/catalog/query         — Phase 4 catalog one-shot
+    WS   /v1/stream                — every received envelope, no filtering
+
+  Generic protocol (new, for arbitrary browser consumers)
+  ────────────────────────────────────────────────────────
+    WS   /ws                       — subscribe/publish/list_topics/ping
+    GET  /api/topics               — REST topic discovery
+    GET  /api/stats                — bridge-level counters
+
+The generic side reuses the existing DDS transport: each envelope received
+on the bus is fanned out to BOTH the legacy broadcaster (raw, all clients)
+and the new ClientManager (per-client topic-pattern + msg_type filtering,
+optional rate limiting). Browser-to-DDS publishing goes through the shared
+``bridges/envelope_io.EnvelopePublisher`` (RELIABLE+KEEP_ALL).
+"""
 
 import json
 import os
 import queue
+import sys
 import time
 import uuid
 import asyncio
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
 from spatialdds_demo.topics import (
@@ -20,6 +45,15 @@ from spatialdds_demo.topics import (
 )
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 from spatialdds_test import MockSensorData
+
+# Sibling modules (router + client manager) and the shared envelope_io
+_HERE = Path(__file__).resolve().parent
+_BRIDGES = _HERE.parent
+for p in (str(_HERE), str(_BRIDGES)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+from topic_router import TopicRouter  # noqa: E402
+from client_manager import ClientManager  # noqa: E402
 
 DEFAULT_LAT = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LAT", "30.284996"))
 DEFAULT_LON = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LON", "-97.739494"))
@@ -361,10 +395,86 @@ app.add_middleware(
 
 bridge = SpatialDDSBridge()
 broadcaster = DDSEventBroadcaster()
+client_mgr = ClientManager(TopicRouter())
+_event_loop: Optional[asyncio.AbstractEventLoop] = None
+_publisher = None  # bridges/envelope_io.EnvelopePublisher (lazy)
+_total_dispatched = 0
+_start_time_ns = time.time_ns()
+ALLOW_PUBLISH = os.getenv("SPATIALDDS_BRIDGE_ALLOW_PUBLISH", "1") not in ("0", "false", "no")
+STATIC_DIR = os.getenv("SPATIALDDS_BRIDGE_STATIC_DIR", str(_HERE / "static"))
+
+
+def _dispatch_to_clients(envelope) -> None:
+    """Schedule ClientManager.dispatch on the event loop. Called from the
+    sync DDS poll thread (DDSTransport's on_message), so we hop threads via
+    ``call_soon_threadsafe``."""
+    global _event_loop, _total_dispatched
+    if _event_loop is None:
+        return
+    try:
+        payload = json.loads(envelope.payload_json or "{}")
+    except (json.JSONDecodeError, AttributeError):
+        return
+    msg_type = getattr(envelope, "msg_type", "") or ""
+    topic = getattr(envelope, "logical_topic", "") or ""
+    stamp_ns = int(getattr(envelope, "stamp_ns", time.time_ns()) or 0)
+
+    async def _go():
+        global _total_dispatched
+        sent = await client_mgr.dispatch(topic, msg_type, payload, stamp_ns)
+        _total_dispatched += sent
+
+    _event_loop.call_soon_threadsafe(asyncio.ensure_future, _go())
+
+
+# Hook the new dispatcher into the existing inbound path. The original
+# `on_message` callback inside `_start_transport` already calls
+# `_emit_dds_event` for the legacy broadcaster — we extend it by wrapping
+# the global `_emit_dds_event` so any DDS event also fans out to the new
+# generic clients.
+_legacy_emit = _emit_dds_event
+
+
+def _emit_dds_event(event: Dict[str, Any]) -> None:  # noqa: F811 — intentional override
+    _legacy_emit(event)
+    # Also dispatch a synthesized envelope-shaped object for the generic side.
+    msg_type = event.get("msg_type") or ""
+    topic = event.get("logical_topic") or ""
+    payload = event.get("payload")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            payload = {"_raw": payload}
+    payload = payload if isinstance(payload, dict) else {}
+    if _event_loop is None or not topic:
+        return
+    stamp_ns = int(event.get("ts", time.time()) * 1_000_000_000)
+
+    async def _go():
+        global _total_dispatched
+        sent = await client_mgr.dispatch(topic, msg_type, payload, stamp_ns)
+        _total_dispatched += sent
+
+    _event_loop.call_soon_threadsafe(asyncio.ensure_future, _go())
+
+
+def _ensure_publisher():
+    """Lazily build the RELIABLE+KEEP_ALL writer for browser→DDS publishing."""
+    global _publisher
+    if _publisher is not None:
+        return _publisher
+    if _event_loop is None:
+        return None
+    domain_id = bridge.ensure_transport()
+    from envelope_io import EnvelopePublisher  # type: ignore
+    _publisher = EnvelopePublisher(domain_id)
+    return _publisher
 
 
 @app.on_event("startup")
 def on_startup() -> None:
+    global _event_loop
     require_dds_env()
     domain_id = _env_domain_id()
     if domain_id is None:
@@ -372,6 +482,7 @@ def on_startup() -> None:
     bridge._domain_id = domain_id
     bridge._start_transport(domain_id)
     loop = asyncio.get_event_loop()
+    _event_loop = loop
     broadcaster.attach_loop(loop)
     loop.create_task(broadcaster.run())
 
@@ -420,6 +531,146 @@ async def stream(websocket: WebSocket) -> None:
         pass
     finally:
         broadcaster.disconnect(websocket)
+
+
+# ─── Generic protocol (new) ──────────────────────────────────────────────────
+
+
+@app.get("/api/topics")
+def api_topics(stale_threshold_s: float = 30.0) -> Dict[str, Any]:
+    """Topics seen on the bus within ``stale_threshold_s`` seconds."""
+    topics = client_mgr.router.get_topics(stale_threshold_s=stale_threshold_s)
+    return {
+        "topics": [
+            {
+                "logical_topic": t.logical_topic,
+                "msg_type": t.msg_type,
+                "last_seen_ns": t.last_seen_ns,
+                "rate_hz": round(t.rate_hz, 2),
+                "message_count": t.message_count,
+            }
+            for t in topics
+        ],
+    }
+
+
+@app.get("/api/stats")
+def api_stats() -> Dict[str, Any]:
+    return {
+        "uptime_s": round((time.time_ns() - _start_time_ns) / 1e9, 1),
+        "clients_connected": client_mgr.client_count,
+        "total_dispatched": _total_dispatched,
+        "topics_active": len(client_mgr.router.get_topics()),
+        "dds_domain": bridge._domain_id,
+        "publish_enabled": ALLOW_PUBLISH,
+    }
+
+
+@app.websocket("/ws")
+async def ws_generic(websocket: WebSocket) -> None:
+    """Subscribe-based WebSocket protocol. See README for the message schema."""
+    await websocket.accept()
+
+    async def send_json(payload: dict) -> None:
+        await websocket.send_json(payload)
+
+    session = client_mgr.add_client(send_json)
+    try:
+        while True:
+            try:
+                raw = await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+            try:
+                msg = json.loads(raw)
+                if not isinstance(msg, dict):
+                    raise ValueError("expected JSON object")
+            except (json.JSONDecodeError, ValueError) as exc:
+                await send_json({"type": "error", "message": f"Invalid JSON: {exc}"})
+                continue
+
+            mtype = str(msg.get("type") or "").lower()
+            if mtype == "subscribe":
+                resp = client_mgr.handle_subscribe(session, msg)
+                await send_json(resp)
+            elif mtype == "unsubscribe":
+                resp = client_mgr.handle_unsubscribe(session, msg)
+                await send_json(resp)
+            elif mtype == "ping":
+                await send_json({
+                    "type": "pong",
+                    "server_time_ns": time.time_ns(),
+                    "clients_connected": client_mgr.client_count,
+                    "messages_dispatched": _total_dispatched,
+                })
+            elif mtype == "list_topics":
+                topics = client_mgr.router.get_topics()
+                await send_json({
+                    "type": "topics",
+                    "topics": [
+                        {
+                            "logical_topic": t.logical_topic,
+                            "msg_type": t.msg_type,
+                            "last_seen_ns": t.last_seen_ns,
+                            "rate_hz": round(t.rate_hz, 2),
+                            "message_count": t.message_count,
+                        }
+                        for t in topics
+                    ],
+                })
+            elif mtype == "publish":
+                if not ALLOW_PUBLISH:
+                    await send_json({
+                        "type": "error",
+                        "ref_id": msg.get("id", ""),
+                        "message": "Publishing disabled (SPATIALDDS_BRIDGE_ALLOW_PUBLISH=0)",
+                    })
+                    continue
+                logical_topic = str(msg.get("logical_topic") or "")
+                msg_type_str = str(msg.get("msg_type") or "")
+                payload = msg.get("payload") or {}
+                if not logical_topic or not msg_type_str:
+                    await send_json({
+                        "type": "error",
+                        "ref_id": msg.get("id", ""),
+                        "message": "publish requires logical_topic and msg_type",
+                    })
+                    continue
+                pub = _ensure_publisher()
+                if pub is None:
+                    await send_json({
+                        "type": "error",
+                        "ref_id": msg.get("id", ""),
+                        "message": "Publisher not initialized",
+                    })
+                    continue
+                try:
+                    pub.publish(logical_topic, msg_type_str, payload)
+                    session.messages_received += 1
+                    await send_json({
+                        "type": "published",
+                        "msg_type": msg_type_str,
+                        "logical_topic": logical_topic,
+                        "status": "ok",
+                    })
+                except Exception as exc:
+                    await send_json({
+                        "type": "error",
+                        "ref_id": msg.get("id", ""),
+                        "message": f"publish failed: {exc}",
+                    })
+            else:
+                await send_json({
+                    "type": "error",
+                    "message": f"Unknown message type: {mtype!r}",
+                })
+    finally:
+        client_mgr.remove_client(session.client_id)
+
+
+# Mount static dashboard if a directory exists.
+if Path(STATIC_DIR).is_dir():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 if __name__ == "__main__":

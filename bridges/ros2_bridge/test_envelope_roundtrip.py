@@ -28,8 +28,10 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 _HERE = Path(__file__).resolve().parent
-_REPO_ROOT = _HERE.parent.parent
+_BRIDGES = _HERE.parent
+_REPO_ROOT = _BRIDGES.parent
 sys.path.insert(0, str(_HERE))
+sys.path.insert(0, str(_BRIDGES))   # for the shared envelope_io
 sys.path.insert(0, str(_REPO_ROOT))
 
 from envelope_io import EnvelopePublisher, EnvelopeSubscriber  # noqa: E402

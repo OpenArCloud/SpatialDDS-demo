@@ -62,8 +62,12 @@ from typing import Any, Callable, Dict, Optional
 
 # Sibling modules
 _HERE = Path(__file__).resolve().parent
+_BRIDGES = _HERE.parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
+if str(_BRIDGES) not in sys.path:
+    # for the shared envelope_io
+    sys.path.insert(0, str(_BRIDGES))
 
 from envelope_io import EnvelopePublisher, EnvelopeSubscriber  # noqa: E402
 from frame_mapping import FrameMapper  # noqa: E402
