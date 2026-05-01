@@ -1,0 +1,2 @@
+mcap>=1.1.0
+cyclonedds>=0.10.5

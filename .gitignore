@@ -43,6 +43,9 @@ core_demo/*.log
 CONTEXT.md
 CONTEXT-WEB.md
 
+# Local planning / scratch (not for upstream)
+directions/
+
 # Web (Vite/Node/Playwright)
 web/.env.local
 web/node_modules/
