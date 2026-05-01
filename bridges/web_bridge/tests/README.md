@@ -11,7 +11,7 @@ export SPATIALDDS_TRANSPORT=dds
 export CYCLONEDDS_URI=file:///etc/cyclonedds.xml
 export SPATIALDDS_DDS_DOMAIN=1
 
-python bridge/tests/run_bridge_http_tests.py
+python bridges/web_bridge/tests/run_bridge_http_tests.py
 ```
 
 ## Run in Docker (Recommended)
@@ -20,5 +20,5 @@ python bridge/tests/run_bridge_http_tests.py
 ```
 
 ## Notes
-- Starts `spatialdds_demo_server.py`, `spatialdds_catalog_server.py`, and `bridge/server.py`.
-- Uses `bridge/tests/catalog_seed_austin.json` to return Austin-specific mock content.
+- Starts `spatialdds_demo_server.py`, `spatialdds_catalog_server.py`, and `bridges/web_bridge/server.py`.
+- Uses `bridges/web_bridge/tests/catalog_seed_austin.json` to return Austin-specific mock content.

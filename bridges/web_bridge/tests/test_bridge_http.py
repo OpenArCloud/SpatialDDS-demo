@@ -161,7 +161,7 @@ def bridge_stack():
     except Exception as exc:
         pytest.skip(f"cyclonedds bindings not available: {exc}")
     env = _env_for_dds()
-    log_root = Path(os.getenv("SPATIALDDS_BRIDGE_TEST_LOG_DIR", "/app/bridge/tests/logs"))
+    log_root = Path(os.getenv("SPATIALDDS_BRIDGE_TEST_LOG_DIR", "/app/bridges/web_bridge/tests/logs"))
     log_root.mkdir(parents=True, exist_ok=True)
     log_dir = log_root / f"run-{int(time.time())}"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -171,7 +171,7 @@ def bridge_stack():
 
     vps = _start_process([sys.executable, "spatialdds_demo_server.py", "--detailed"], env, vps_log)
     catalog = _start_process([sys.executable, "spatialdds_catalog_server.py", "--detailed"], env, catalog_log)
-    bridge = _start_process([sys.executable, "bridge/server.py"], env, bridge_log)
+    bridge = _start_process([sys.executable, "bridges/web_bridge/server.py"], env, bridge_log)
 
     try:
         _wait_for_health(timeout=20.0)

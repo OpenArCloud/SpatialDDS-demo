@@ -159,7 +159,7 @@ def main() -> int:
     try:
         vps = _start_process([sys.executable, "spatialdds_demo_server.py"], env)
         catalog = _start_process([sys.executable, "spatialdds_catalog_server.py"], env)
-        bridge = _start_process([sys.executable, "bridge/server.py"], env)
+        bridge = _start_process([sys.executable, "bridges/web_bridge/server.py"], env)
 
         health = _wait_for_health()
         print(f"bridge health ok: domain={health.get('dds_domain')}")

@@ -16,7 +16,7 @@ Each demo's `README.md` documents its own Docker workflow.
 
 > **Note on `http_binding.py`** — this is the spec-compliance REST wrapper, **not** the
 > HTTP-to-DDS bridge that powers the web UI. For the web bridge see
-> `run_bridge_server_docker.sh` and `bridge/server.py`.
+> `run_bridge_server_docker.sh` and `bridges/web_bridge/server.py`.
 
 ## Building the Image
 

@@ -132,7 +132,9 @@ bridges/
     └── README.md            # this file
 ```
 
-## Note on the `bridges/` vs `bridge/` distinction
+## Sibling: `bridges/web_bridge/`
 
-- `bridge/` (singular) — existing FastAPI HTTP-to-DDS bridge for the Cesium web demo.
-- `bridges/` (plural) — generic protocol bridges (this MCAP bridge; potentially others later).
+The HTTP-to-DDS bridge that powers the Cesium web UI lives at
+[`bridges/web_bridge/`](../web_bridge/README.md). Both bridges live under
+`bridges/` and translate SpatialDDS envelopes to and from another protocol
+(HTTP/WebSocket for the web bridge; MCAP files for this one).

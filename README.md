@@ -14,11 +14,21 @@ examples in `manifests/v1.6`, and ships four runnable demos that build on top of
 | **Multi-operator fusion** *(flagship)* | [`multi_operator_fusion/`](multi_operator_fusion/README.md) | Three AV fleet operators + one 6G base station share `Detection3D` observations. A platform fuser does NN-gated track fusion and publishes unified `FusedTrack`s. Rerun renders per-operator split-screen + fused view. |
 | **nuScenes → SpatialDDS → Rerun** | [`nuscenes/`](nuscenes/README.md) | Publishes nuScenes v1.0-mini AV data (ego pose, 6 cameras, LiDAR, 5 radars, 3D annotations) over DDS envelopes; visualizes in Rerun. |
 | **DeepSense 6G → SpatialDDS → Rerun** | [`deepsense/`](deepsense/README.md) | Publishes DeepSense 6G Scenario 9 V2I data (60 GHz phased-array beam, FMCW radar, camera, GPS, 2D lidar) over DDS envelopes. |
-| **Core v1.6 protocol demo** | scripts at repo root + [`web/`](web/) | Bootstrap → discovery → coverage query → localization → catalog → anchor flow. Includes a Cesium web UI backed by an HTTP-to-DDS bridge. |
+| **Core v1.6 protocol demo** | [`core_demo/`](core_demo/) + [`web/`](web/) | Bootstrap → discovery → coverage query → localization → catalog → anchor flow. Includes a Cesium web UI backed by an HTTP-to-DDS bridge ([`bridges/web_bridge/`](bridges/web_bridge/README.md)). |
 | **Benchmarks** | [`benchmarks/`](benchmarks/README.md) | Latency, discovery, multi-operator, and coverage-query benchmark scripts + plotting. |
 
 If you're new here, start with **multi-operator fusion** — it exercises the full envelope
 transport with real datasets.
+
+## Bridges
+
+Protocol bridges live under [`bridges/`](bridges/) and work with every demo above
+without per-demo wiring:
+
+| Bridge | Path | What it does |
+|---|---|---|
+| **Web (HTTP-to-DDS)** | [`bridges/web_bridge/`](bridges/web_bridge/README.md) | FastAPI server backing the Cesium web UI. Translates REST + WebSocket calls into envelope publishes/subscribes on the DDS bus. |
+| **MCAP record / replay** | [`bridges/mcap_bridge/`](bridges/mcap_bridge/README.md) | Records `spatialdds/envelope/v1` traffic to an [MCAP](https://mcap.dev) file and replays it back onto a CycloneDDS domain. Lossless (RELIABLE+KEEP_ALL), Foxglove-compatible, no per-demo wiring. |
 
 ## Repository layout
 
@@ -34,8 +44,10 @@ imports from it.
 ├── nuscenes/                  # nuScenes publisher/subscriber demo
 ├── deepsense/                 # DeepSense 6G publisher/subscriber demo
 ├── benchmarks/                # Protocol overhead + scalability benchmarks
-├── web/                       # Cesium web UI (talks to bridge/server.py)
-├── bridge/                    # HTTP-to-DDS bridge powering the web UI
+├── web/                       # Cesium web UI (talks to bridges/web_bridge/server.py)
+├── bridges/
+│   ├── web_bridge/            # HTTP-to-DDS bridge powering the web UI
+│   └── mcap_bridge/           # MCAP record/replay tool (works with every demo)
 ├── spatialdds_demo/           # Shared DDS transport + manifest helpers (Python package)
 ├── spatialdds_test.py         # Shared: v1.6 protocol harness + MockSensorData
 ├── spatialdds_validation.py   # Shared: FrameRef/Time/Coverage/GeoPose helpers
@@ -74,7 +86,7 @@ core_demo/
 
 ## Two HTTP servers — which one do I want?
 
-| | `core_demo/http_binding.py` | `bridge/server.py` |
+| | `core_demo/http_binding.py` | `bridges/web_bridge/server.py` |
 |---|---|---|
 | Purpose | Spec-compliance REST wrapper that mirrors the discovery payload shapes | HTTP-to-DDS bridge that the Cesium web UI talks to |
 | Port (default) | 8080 | 8088 |
@@ -108,10 +120,10 @@ npm install
 npm run dev
 ```
 
-Logs are written to `bridge/logs/`:
-- `bridge/logs/vps_server_<timestamp>.log`
-- `bridge/logs/catalog_server_<timestamp>.log`
-- `bridge/logs/bridge_server_<timestamp>.log`
+Logs are written to `bridges/web_bridge/logs/`:
+- `bridges/web_bridge/logs/vps_server_<timestamp>.log`
+- `bridges/web_bridge/logs/catalog_server_<timestamp>.log`
+- `bridges/web_bridge/logs/bridge_server_<timestamp>.log`
 
 Stop the bridge when done:
 ```bash

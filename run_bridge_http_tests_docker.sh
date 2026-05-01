@@ -24,5 +24,5 @@ docker run --rm --network host \
   -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python bash -lc "\
-    python3 -m pip install -r /app/requirements.txt -r /app/bridge/requirements.txt && \
-    python3 bridge/tests/run_bridge_http_tests.py"
+    python3 -m pip install -r /app/requirements.txt -r /app/bridges/web_bridge/requirements.txt && \
+    python3 bridges/web_bridge/tests/run_bridge_http_tests.py"
