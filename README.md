@@ -29,6 +29,7 @@ without per-demo wiring:
 |---|---|---|
 | **Web (HTTP-to-DDS)** | [`bridges/web_bridge/`](bridges/web_bridge/README.md) | FastAPI server backing the Cesium web UI. Translates REST + WebSocket calls into envelope publishes/subscribes on the DDS bus. |
 | **MCAP record / replay** | [`bridges/mcap_bridge/`](bridges/mcap_bridge/README.md) | Records `spatialdds/envelope/v1` traffic to an [MCAP](https://mcap.dev) file and replays it back onto a CycloneDDS domain. Lossless (RELIABLE+KEEP_ALL), Foxglove-compatible, no per-demo wiring. |
+| **ROS 2** | [`bridges/ros2_bridge/`](bridges/ros2_bridge/README.md) | Bidirectional bridge between SpatialDDS topics and ROS 2 topics. v0 covers `PoseStamped`, `NavSatFix`, `Imu`, `CompressedImage`, `Detection3DArray`, plus `FusedTrackSet` reverse. Conversion layer is duck-typed so 80% is testable without ROS 2 installed. |
 
 ## Repository layout
 
@@ -47,7 +48,8 @@ imports from it.
 ├── web/                       # Cesium web UI (talks to bridges/web_bridge/server.py)
 ├── bridges/
 │   ├── web_bridge/            # HTTP-to-DDS bridge powering the web UI
-│   └── mcap_bridge/           # MCAP record/replay tool (works with every demo)
+│   ├── mcap_bridge/           # MCAP record/replay tool (works with every demo)
+│   └── ros2_bridge/           # ROS 2 ↔ SpatialDDS bridge (5 message types in v0)
 ├── spatialdds_demo/           # Shared DDS transport + manifest helpers (Python package)
 ├── spatialdds_test.py         # Shared: v1.6 protocol harness + MockSensorData
 ├── spatialdds_validation.py   # Shared: FrameRef/Time/Coverage/GeoPose helpers
