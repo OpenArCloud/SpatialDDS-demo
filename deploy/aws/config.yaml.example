@@ -1,0 +1,36 @@
+# Configuration for the AWS Fargate deployment.
+#
+# Copy this file to config.yaml and edit; deploy.sh and destroy.sh both
+# load deploy/aws/config.yaml unless you pass a different path.
+
+# ── Required ───────────────────────────────────────────────────────────
+aws_region: us-east-1
+stack_name: spatialdds-demo
+
+# ── Task sizing (Fargate vCPU / memory pairs are constrained — see
+#    https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+#    for valid combinations) ──────────────────────────────────────────
+cpu: 1024            # 1 vCPU total, split across containers by ECS
+memory: 2048         # 2 GB total
+
+# ── Features (all optional) ────────────────────────────────────────────
+features:
+  # Synthetic Detection3D publisher. On by default so the dashboard has
+  # something to show on first deploy without any data prerequisites.
+  synthetic_publisher: true
+  synthetic_operators: 3
+  synthetic_objects_per_operator: 5
+  synthetic_rate_hz: 10
+
+  # MCAP recording. v0 writes inside the task only — S3 rotation/upload
+  # is a follow-on. Leave off unless you specifically want to test the
+  # recorder runs alongside the other containers.
+  recording: false
+  s3_bucket_name: ""             # empty → CDK auto-generates a unique name
+  recording_duration_s: 600
+
+  # Custom domain / HTTPS — not yet wired by deploy.sh. Set these and
+  # extend spatialdds_stack.py to issue an ACM cert + Route53 record
+  # when you're ready for production.
+  custom_domain: ""              # e.g., demo.spatialdds.org
+  hosted_zone_id: ""             # the Route53 zone ID
