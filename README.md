@@ -30,6 +30,7 @@ without per-demo wiring:
 | **Web (HTTP/WebSocket)** | [`bridges/web_bridge/`](bridges/web_bridge/README.md) | FastAPI server with two surfaces: legacy REST endpoints (`/v1/localize`, `/v1/catalog/query`, `/v1/stream`) for the Cesium demo, plus a generic subscribe-based protocol (`/ws`, `/api/topics`, `/api/stats`) so any browser app can listen to or publish envelopes by topic pattern with optional rate limits. Ships a zero-dep JS client + a minimal debug dashboard. |
 | **MCAP record / replay** | [`bridges/mcap_bridge/`](bridges/mcap_bridge/README.md) | Records `spatialdds/envelope/v1` traffic to an [MCAP](https://mcap.dev) file and replays it back onto a CycloneDDS domain. Lossless (RELIABLE+KEEP_ALL), Foxglove-compatible, no per-demo wiring. |
 | **ROS 2** | [`bridges/ros2_bridge/`](bridges/ros2_bridge/README.md) | Bidirectional bridge between SpatialDDS topics and ROS 2 topics. v0 covers `PoseStamped`, `NavSatFix`, `Imu`, `CompressedImage`, `Detection3DArray`, plus `FusedTrackSet` reverse. Conversion layer is duck-typed so 80% is testable without ROS 2 installed. |
+| **MQTT** | [`bridges/mqtt_bridge/`](bridges/mqtt_bridge/README.md) | Bidirectional bridge between SpatialDDS and MQTT (local Mosquitto or AWS IoT Core). MQTT topic = SpatialDDS `logical_topic`, payload = same JSON. QoS/retain inferred from topic suffix (meta = retained, frames = best-effort, decisions = at-least-once). Loop prevention via `_bridge_id` + non-overlapping inbound/outbound filters. |
 
 ## Repository layout
 
@@ -49,7 +50,8 @@ imports from it.
 ├── bridges/
 │   ├── web_bridge/            # HTTP-to-DDS bridge powering the web UI
 │   ├── mcap_bridge/           # MCAP record/replay tool (works with every demo)
-│   └── ros2_bridge/           # ROS 2 ↔ SpatialDDS bridge (5 message types in v0)
+│   ├── ros2_bridge/           # ROS 2 ↔ SpatialDDS bridge (5 message types in v0)
+│   └── mqtt_bridge/           # MQTT ↔ SpatialDDS bridge (Mosquitto / AWS IoT Core)
 ├── spatialdds_demo/           # Shared DDS transport + manifest helpers (Python package)
 ├── spatialdds_test.py         # Shared: v1.6 protocol harness + MockSensorData
 ├── spatialdds_validation.py   # Shared: FrameRef/Time/Coverage/GeoPose helpers

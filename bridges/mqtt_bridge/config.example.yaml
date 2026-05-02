@@ -1,0 +1,45 @@
+# Example MQTT bridge config.
+#
+# Local Mosquitto (development / Docker Compose). For AWS IoT Core, see
+# the README — uncomment the TLS block and replace broker/client_id.
+
+mqtt:
+  broker: "localhost"
+  port: 1883
+  client_id: "spatialdds-mqtt-bridge-01"
+  keepalive: 60
+
+  # Production: AWS IoT Core
+  # broker: "<your-endpoint>.iot.<region>.amazonaws.com"
+  # port: 8883
+  # tls:
+  #   ca_cert:     "certs/AmazonRootCA1.pem"
+  #   client_cert: "certs/bridge.pem.crt"
+  #   client_key:  "certs/bridge.private.key"
+
+dds:
+  domain_id: 0
+
+bridge:
+  direction: "bidirectional"        # bidirectional | inbound_only | outbound_only
+  bridge_id: "mqtt-bridge-01"
+
+  # Edge → cloud (MQTT publishers → DDS subscribers)
+  inbound_topics:
+    - "spatialdds/operator_+/sensing/#"
+    - "spatialdds/operator_+/ego/#"
+    - "spatialdds/operator_+/geo/#"
+    - "spatialdds/operator_+/imu/#"
+    - "spatialdds/operator_+/vision/#"
+    - "spatialdds/operator_+/lidar/#"
+    - "spatialdds/operator_+/rad/#"
+    - "spatialdds/operator_+/radio/#"
+    - "spatialdds/operator_+/plan/#"
+
+  # Cloud → edge (DDS publishers → MQTT subscribers)
+  outbound_topics:
+    - "spatialdds/platform/fusion/#"
+    - "spatialdds/platform/coverage/#"
+    - "spatialdds/infrastructure/#"
+
+  log_interval_s: 10.0

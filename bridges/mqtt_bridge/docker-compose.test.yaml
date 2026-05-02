@@ -1,0 +1,44 @@
+# Tier-2 integration test for the MQTT bridge.
+#
+# Brings up Mosquitto and runs ``pytest`` inside the cyclonedds-python
+# image (so we have CycloneDDS, paho-mqtt, and pyyaml available). The
+# bridge module is imported in-process by the test — no separate bridge
+# container needed.
+#
+# Run from this directory:
+#
+#   docker compose -f docker-compose.test.yaml up --abort-on-container-exit \
+#     --exit-code-from tests
+#
+# Tear down with `docker compose -f docker-compose.test.yaml down`.
+
+services:
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    network_mode: host
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    command: ["mosquitto", "-c", "/mosquitto/config/mosquitto.conf"]
+
+  tests:
+    image: cyclonedds-python
+    pull_policy: never
+    network_mode: host
+    depends_on:
+      - mosquitto
+    environment:
+      - PYTHONPATH=/app
+      - CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+      - MQTT_BROKER=localhost
+      - MQTT_PORT=1883
+      - MQTT_BRIDGE_TEST_DOMAIN=82
+    volumes:
+      - ../..:/app
+      - /tmp:/tmp
+    working_dir: /app
+    command: >
+      bash -lc "
+      python3 -m pip install --quiet -r bridges/mqtt_bridge/requirements.txt pytest >/dev/null &&
+      sleep 2 &&
+      python3 -m pytest -v bridges/mqtt_bridge/test_bridge.py"
