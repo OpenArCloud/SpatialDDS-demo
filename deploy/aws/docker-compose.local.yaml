@@ -1,0 +1,113 @@
+# Local validation of the Fargate task topology BEFORE we pay for any
+# AWS resources. Four containers — one image — sharing a single network
+# namespace, exactly like a Fargate task with awsvpc networking.
+#
+# The "primary" container is web-bridge (it owns the network namespace
+# and exposes port 8088). Every other container joins via
+# ``network_mode: service:web-bridge`` so they share localhost + lo.
+# That mirrors how Fargate's awsvpc networking puts all containers in
+# a task on the same ENI.
+#
+# Run from this directory:
+#
+#   # Build once
+#   docker compose -f docker-compose.local.yaml build
+#
+#   # Bring up the stack
+#   docker compose -f docker-compose.local.yaml up
+#
+#   # In another terminal:
+#   curl http://localhost:8088/health
+#   curl 'http://localhost:8088/api/topics?stale_threshold_s=120'
+#
+#   # Tear down
+#   docker compose -f docker-compose.local.yaml down
+
+services:
+
+  # ── Primary container: owns the network namespace ─────────────────────
+  web-bridge:
+    image: spatialdds-deploy
+    build:
+      context: ../..                         # repo root
+      dockerfile: deploy/aws/Dockerfile.deploy
+    ports:
+      - "8088:8088"
+    volumes:
+      - ../..:/app:ro
+    environment:
+      - SPATIALDDS_DDS_DOMAIN=0
+      - SPATIALDDS_TRANSPORT=dds
+      - SPATIALDDS_BRIDGE_ALLOW_PUBLISH=1
+      - CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+      - PYTHONPATH=/app
+      # Hardcoded VPS-style announce so /health returns something the
+      # Cesium UI can render even when nothing is publishing yet.
+      - SPATIALDDS_VPS_SERVICE_ID=svc:vps:demo/synthetic
+      - SPATIALDDS_VPS_SERVICE_NAME=SyntheticVPS
+      - SPATIALDDS_VPS_COVERAGE_BBOX=-12,-12,12,12
+      - SPATIALDDS_VPS_MAP_FQN=map/synthetic
+      - SPATIALDDS_VPS_MAP_ID=synthetic-map
+      - SPATIALDDS_DEMO_MANIFEST_URI=spatialdds://vps.example.com/zone:sf-downtown/manifest:vps
+    command: ["python3", "-m", "bridges.web_bridge", "--port", "8088", "--domain", "0"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8088/api/stats >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 8s
+
+  # ── Synthetic detection publisher ────────────────────────────────────
+  publisher:
+    image: spatialdds-deploy
+    network_mode: "service:web-bridge"
+    depends_on:
+      web-bridge:
+        condition: service_started
+    volumes:
+      - ../..:/app:ro
+    environment:
+      - SPATIALDDS_TRANSPORT=dds
+      - CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+      - PYTHONPATH=/app
+    command: ["python3", "-m", "multi_operator_fusion.synthetic_publisher",
+              "--domain", "0",
+              "--operators", "3",
+              "--objects-per-operator", "5",
+              "--rate", "10"]
+
+  # ── Fusion service: subscribes to all detections, publishes tracks ──
+  fusion:
+    image: spatialdds-deploy
+    network_mode: "service:web-bridge"
+    depends_on:
+      web-bridge:
+        condition: service_started
+    volumes:
+      - ../..:/app:ro
+    environment:
+      - SPATIALDDS_TRANSPORT=dds
+      - CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+      - PYTHONPATH=/app
+    command: ["python3", "-m", "multi_operator_fusion.fusion_service",
+              "--domain", "0", "--quiet"]
+
+  # ── MCAP recorder (optional). Disabled by default; enable with
+  #    `docker compose --profile recording up` to record a few minutes
+  #    of envelope traffic to ./recording.mcap on the host.
+  recorder:
+    image: spatialdds-deploy
+    network_mode: "service:web-bridge"
+    profiles: ["recording"]
+    depends_on:
+      web-bridge:
+        condition: service_started
+    environment:
+      - SPATIALDDS_TRANSPORT=dds
+      - CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+    volumes:
+      - ./recordings:/recordings
+    command: ["python3", "-m", "bridges.mcap_bridge.recorder",
+              "/recordings/local.mcap",
+              "--domain", "0",
+              "--duration", "300"]

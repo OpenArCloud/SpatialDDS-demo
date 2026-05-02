@@ -46,6 +46,9 @@ CONTEXT-WEB.md
 # Local planning / scratch (not for upstream)
 directions/
 
+# Claude Code session state
+.claude/
+
 # Web (Vite/Node/Playwright)
 web/.env.local
 web/node_modules/

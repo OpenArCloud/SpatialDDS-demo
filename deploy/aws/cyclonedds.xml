@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CycloneDDS config tuned for a Fargate-style "all containers in one
+  task share a network namespace" topology. Every demo container
+  joins this DDS domain on the loopback interface — no inter-task
+  multicast, no cross-network discovery. Mirror this file into any
+  docker-compose stack that uses ``network_mode: service:web-bridge``
+  (or equivalent) so all containers share lo.
+
+  Why ``lo`` only:
+    * Fargate awsvpc networking gives each task its own ENI but
+      containers within the task share the loopback. We only ever
+      want this domain to discover peers within the same task.
+    * Pinning to lo prevents the DDS participant from advertising
+      its host's external address (the ENI's RFC-1918 IP) on the
+      bus, which can cause discovery to silently break on the
+      first packet that crosses an Envoy proxy or NAT.
+-->
+<CycloneDDS>
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface name="lo" multicast="true"/>
+      </Interfaces>
+      <AllowMulticast>spdp</AllowMulticast>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

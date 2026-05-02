@@ -25,9 +25,13 @@ import time
 from pathlib import Path
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+_HERE = Path(__file__).resolve().parent             # multi_operator_fusion/
+REPO_ROOT = _HERE.parent
 NUSCENES_DIR = REPO_ROOT / "nuscenes"
-for p in (REPO_ROOT, NUSCENES_DIR):
+# _HERE first so ``from fusion import ...`` resolves to the local module
+# even when this file is loaded as ``multi_operator_fusion.fusion_service``
+# (which doesn't put _HERE on sys.path automatically).
+for p in (_HERE, REPO_ROOT, NUSCENES_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 

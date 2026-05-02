@@ -1,0 +1,44 @@
+# Single-image, multiple-entrypoint container for the SpatialDDS demo
+# stack. One image runs every role we need — web bridge, fusion service,
+# synthetic publisher, MCAP recorder, MQTT bridge — selected by command.
+#
+# Base: the same prebuilt CycloneDDS+Python image the rest of the repo
+# uses, so we don't have to rebuild the C library and idlc on every
+# deploy. (python:3.11-slim does not ship the cyclonedds runtime.)
+FROM ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
+
+# ----------------------------------------------------------------------
+# Bridge + demo Python deps. Installed BEFORE the source COPY so dep
+# churn doesn't bust the image cache on every code change.
+# ----------------------------------------------------------------------
+WORKDIR /app
+COPY requirements.txt /app/
+COPY bridges/requirements.txt /app/bridges/
+COPY bridges/mqtt_bridge/requirements.txt /app/bridges/mqtt_bridge/
+COPY bridges/web_bridge/requirements.txt /app/bridges/web_bridge/
+RUN python3 -m pip install --no-cache-dir \
+    -r /app/requirements.txt \
+    -r /app/bridges/requirements.txt \
+    -r /app/bridges/mqtt_bridge/requirements.txt \
+    -r /app/bridges/web_bridge/requirements.txt \
+    boto3                                  # for future S3 MCAP upload
+
+# Loopback-only CycloneDDS config (Fargate-style: all containers share
+# the same network namespace, so we never want inter-task multicast).
+COPY deploy/aws/cyclonedds.xml /etc/cyclonedds.xml
+ENV CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+
+# Application source. Copy as the last layer so iterating on Python code
+# keeps reusing the deps layer above.
+COPY . /app/
+ENV PYTHONPATH=/app
+
+# Sensible defaults; per-container overrides (command, port mapping)
+# come from docker-compose / the CDK stack.
+ENV SPATIALDDS_DDS_DOMAIN=0
+ENV WEB_BRIDGE_PORT=8088
+
+# Default command runs the web bridge (the only container that listens
+# on a port). Other containers in the task override this.
+EXPOSE 8088
+CMD ["python3", "-m", "bridges.web_bridge", "--port", "8088", "--domain", "0"]
