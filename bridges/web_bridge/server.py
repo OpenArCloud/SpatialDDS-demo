@@ -84,18 +84,21 @@ class SpatialDDSBridge:
         return domain_id
 
     def _start_transport(self, domain_id: int) -> None:
+        # The legacy DDSTransport's on_message has two jobs:
+        #   1. feed the request-response correlator (self._inbox) used by
+        #      /v1/localize and /v1/catalog/query
+        #   2. broadcast envelope events to /v1/stream and /ws
+        #
+        # Job (1) only cares about specific reply messages; QoS doesn't
+        # matter much because each request/response pair is a single
+        # message. Job (2) cares deeply about QoS — the default
+        # BEST_EFFORT + KEEP_LAST(1) reader silently drops samples when
+        # the publisher emits multiple writes within one ~10ms poll
+        # interval, which collapses the per-operator rates the dashboard
+        # shows. We split the two: DDSTransport handles job (1); a
+        # separate RELIABLE+KEEP_ALL EnvelopeSubscriber (the same one
+        # the MCAP / ROS 2 / MQTT bridges use) handles job (2).
         def on_message(envelope: object) -> None:
-            _emit_dds_event(
-                {
-                    "ts": time.time(),
-                    "dir": "rx",
-                    "domain": domain_id,
-                    "msg_type": envelope.msg_type,
-                    "logical_topic": envelope.logical_topic,
-                    "request_id": envelope.request_id,
-                    "payload": _safe_json(envelope.payload_json),
-                }
-            )
             self._inbox.put(envelope)
 
         self._transport = DDSTransport(
@@ -398,6 +401,7 @@ broadcaster = DDSEventBroadcaster()
 client_mgr = ClientManager(TopicRouter())
 _event_loop: Optional[asyncio.AbstractEventLoop] = None
 _publisher = None  # bridges/envelope_io.EnvelopePublisher (lazy)
+_envelope_sub = None  # bridges/envelope_io.EnvelopeSubscriber (lossless reader)
 _total_dispatched = 0
 _start_time_ns = time.time_ns()
 ALLOW_PUBLISH = os.getenv("SPATIALDDS_BRIDGE_ALLOW_PUBLISH", "1") not in ("0", "false", "no")
@@ -427,17 +431,16 @@ def _dispatch_to_clients(envelope) -> None:
     _event_loop.call_soon_threadsafe(asyncio.ensure_future, _go())
 
 
-# Hook the new dispatcher into the existing inbound path. The original
-# `on_message` callback inside `_start_transport` already calls
-# `_emit_dds_event` for the legacy broadcaster — we extend it by wrapping
-# the global `_emit_dds_event` so any DDS event also fans out to the new
-# generic clients.
+# Hook the new dispatcher into the same global ``_emit_dds_event`` the
+# legacy broadcaster already uses. The lossless envelope subscriber set
+# up in ``on_startup`` calls this for every received envelope; we fan
+# out to BOTH the legacy /v1/stream broadcaster AND the per-client
+# ``ClientManager.dispatch`` for /ws subscribers.
 _legacy_emit = _emit_dds_event
 
 
 def _emit_dds_event(event: Dict[str, Any]) -> None:  # noqa: F811 — intentional override
     _legacy_emit(event)
-    # Also dispatch a synthesized envelope-shaped object for the generic side.
     msg_type = event.get("msg_type") or ""
     topic = event.get("logical_topic") or ""
     payload = event.get("payload")
@@ -459,6 +462,23 @@ def _emit_dds_event(event: Dict[str, Any]) -> None:  # noqa: F811 — intentiona
     _event_loop.call_soon_threadsafe(asyncio.ensure_future, _go())
 
 
+def _envelope_callback(msg_type: str, logical_topic: str,
+                        payload: Dict[str, Any], stamp_ns: int) -> None:
+    """RELIABLE+KEEP_ALL ``EnvelopeSubscriber`` callback. Synthesizes the
+    same dict-shaped event the legacy ``DDSTransport.on_message`` used to
+    emit so /v1/stream and /ws downstream keep working unchanged.
+    """
+    _emit_dds_event({
+        "ts": stamp_ns / 1_000_000_000.0 if stamp_ns else time.time(),
+        "dir": "rx",
+        "domain": bridge._domain_id,
+        "msg_type": msg_type,
+        "logical_topic": logical_topic,
+        "request_id": "",
+        "payload": payload,
+    })
+
+
 def _ensure_publisher():
     """Lazily build the RELIABLE+KEEP_ALL writer for browser→DDS publishing."""
     global _publisher
@@ -474,7 +494,7 @@ def _ensure_publisher():
 
 @app.on_event("startup")
 def on_startup() -> None:
-    global _event_loop
+    global _event_loop, _envelope_sub
     require_dds_env()
     domain_id = _env_domain_id()
     if domain_id is None:
@@ -485,6 +505,25 @@ def on_startup() -> None:
     _event_loop = loop
     broadcaster.attach_loop(loop)
     loop.create_task(broadcaster.run())
+
+    # Lossless envelope reader — feeds /v1/stream + /ws via _emit_dds_event.
+    # DDSTransport already handles legacy localize/catalog request-response;
+    # this is purely the streaming-side fanout, sized to never drop a
+    # burst when a publisher emits multiple operators back-to-back.
+    from envelope_io import EnvelopeSubscriber  # type: ignore
+    _envelope_sub = EnvelopeSubscriber(domain_id, _envelope_callback)
+    _envelope_sub.start()
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    global _envelope_sub
+    if _envelope_sub is not None:
+        try:
+            _envelope_sub.stop()
+        except Exception:
+            pass
+        _envelope_sub = None
 
 
 @app.get("/health")
