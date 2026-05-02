@@ -72,3 +72,9 @@ deepsense/data/
 # Multi-operator fusion demo: downloaded/generated data
 multi_operator_fusion/data/
 multi_operator_fusion/scripts/.rerun_demo.pid
+
+# AWS deploy artifacts
+deploy/aws/config.yaml
+deploy/aws/outputs.json
+deploy/aws/cdk/cdk.out/
+deploy/aws/cdk/cdk.context.json

@@ -56,14 +56,18 @@ python3 -m pip install --quiet -r cdk/requirements.txt
 echo "[deploy] bootstrapping CDK (idempotent)..."
 ( cd cdk && cdk bootstrap "aws://${ACCOUNT_ID}/${REGION}" --quiet ) || true
 
-# Pre-flight: verify the upstream cyclonedds-python-base tag is reachable,
-# else fall back to building it locally (the public mirror has been
-# unreliable). The deploy Dockerfile FROMs this exact tag.
+# Pre-flight: ensure the cyclonedds-python-base image used by
+# Dockerfile.deploy is available locally for linux/amd64 (the platform
+# Fargate runs). The public GHCR mirror has been unreliable, and on an
+# arm64 host the default ``docker build`` produces an arm64-only image
+# which the CDK asset (which forces --platform linux/amd64) can't use.
+# Always build the base for linux/amd64 here so deploy works on either
+# host arch. (Idempotent — Docker reuses the cache when the Dockerfile
+# and the apt/pip layers haven't changed.)
 BASE_TAG="ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04"
-if ! docker manifest inspect "$BASE_TAG" >/dev/null 2>&1; then
-  echo "[deploy] base image ${BASE_TAG} not reachable from registry — building locally"
-  ( cd ../.. && docker build -f Dockerfile.base -t "$BASE_TAG" . )
-fi
+echo "[deploy] ensuring base image ${BASE_TAG} is available for linux/amd64..."
+( cd ../.. && docker build --platform=linux/amd64 \
+    -f Dockerfile.base -t "$BASE_TAG" . )
 
 OUTPUTS_FILE="$(pwd)/outputs.json"
 echo "[deploy] cdk deploy (this typically takes 5–10 minutes)..."
@@ -93,13 +97,14 @@ for label, key in [("Dashboard ", "DashboardURL"),
                     ("Topics API", "TopicsAPI"),
                     ("Health    ", "HealthURL"),
                     ("Base URL  ", "BaseURL"),
-                    ("Recording ", "RecordingBucket")]:
+                    ("Recording ", "RecordingBucketName")]:
     val = stack.get(key)
     if val:
         print(f"  {label}: {val}")
+base = stack.get("BaseURL", "<base>")
 print()
 print("  Smoke-test the deployment:")
-print(f"    BASE='{stack.get('BaseURL', '<base>')}'\\")
+print(f"    BASE='{base}' \\")
 print( "      python3 deploy/aws/smoke_test.py")
 print()
 print("  Tear down: deploy/aws/destroy.sh")

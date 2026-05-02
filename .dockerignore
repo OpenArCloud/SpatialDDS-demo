@@ -1,0 +1,49 @@
+# Build context excludes — applied to every `docker build` (and CDK
+# DockerImageAssets, which use the repo root as context).
+#
+# Without this, ``cdk synth`` produces a recursive copy explosion
+# because cdk.out/ ends up containing a copy of itself: each new asset
+# folder sweeps in the previous one. Symptom is an ENAMETOOLONG error
+# from copyfile inside aws-cdk-lib's fs/copy.js.
+
+# Build / cache / artifact dirs
+**/cdk.out/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/*.pyc
+**/*.pyo
+
+# Version control + tooling
+.git/
+.github/
+.idea/
+.vscode/
+.claude/
+directions/
+
+# Local data dirs (gitignored too, but worth blocking explicitly)
+nuscenes/data/
+nuscenes/scenario9_dev/
+deepsense/data/
+multi_operator_fusion/data/
+benchmarks/results/
+benchmarks/figures/
+
+# Web build artifacts (huge node_modules)
+web/node_modules/
+web/dist/
+web/.vite/
+web/.cache/
+
+# Bridge runtime artifacts (logs only — keep static/ in the image so
+# the debug dashboard at /static/index.html is reachable).
+bridges/web_bridge/logs/
+
+# Logs
+**/*.log
+**/logs/
+
+# OS junk
+.DS_Store
+Thumbs.db
