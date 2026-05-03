@@ -34,10 +34,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import random
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 # Reach the shared bridges/envelope_io.py (RELIABLE + KEEP_ALL writer).
 # This matters because we publish 3 operators back-to-back from ONE process
@@ -46,14 +47,19 @@ from typing import Dict, List
 # writer holds everything until it's acked.
 _HERE = Path(__file__).resolve().parent
 _REPO_ROOT = _HERE.parent
-# ``sys.path.insert(0, p)`` inserts at the FRONT, so the last value
-# iterated lands at sys.path[0]. We want _HERE first so the local
-# multi_operator_fusion/spatialdds_types module shadows the unrelated
-# nuscenes/spatialdds_types — iterate it last.
 for p in (str(_REPO_ROOT), str(_REPO_ROOT / "nuscenes"),
-          str(_REPO_ROOT / "bridges"), str(_HERE)):
+          str(_REPO_ROOT / "bridges")):
     if p not in sys.path:
         sys.path.insert(0, p)
+# _HERE must land at sys.path[0] unconditionally so the local
+# multi_operator_fusion/spatialdds_types module shadows the unrelated
+# nuscenes/spatialdds_types. ``insert(0, …)`` alone isn't enough — when
+# a test runner (pytest) has already added multi_operator_fusion/ via
+# its own auto-discovery, the ``not in`` guard above would skip our
+# insert and nuscenes would win.
+if str(_HERE) in sys.path:
+    sys.path.remove(str(_HERE))
+sys.path.insert(0, str(_HERE))
 
 from envelope_io import EnvelopePublisher  # noqa: E402
 from spatialdds_types import (  # noqa: E402
@@ -70,6 +76,20 @@ EGO_POSE_TOPIC_FMT = "spatialdds/{operator}/ego/pose/v1"
 
 PLAN_MSG_TYPE = "PlannedTrajectory"
 PLAN_TOPIC_FMT = "spatialdds/{operator}/plan/{operator}_ego/trajectory/v1"
+
+# ── Infrastructure (radar-plausible) detection stream ──────────────────
+# A fixed roadside base station that observes the SAME shared objects
+# the operators see, but through a radar noise model. Adds:
+#   * range-dependent detection probability (sigmoid on SNR)
+#   * range/angle noise that grows with distance
+#   * 0–2 false alarms per frame at random bearings inside the FOV
+# Fusion's job is to merge these noisy observations with the operators'
+# clean Detection3D streams — the false alarms (low confidence, no
+# track persistence) get filtered out by the multi-frame logic.
+INFRA_OPERATOR = "infrastructure"
+INFRA_TOPIC = f"spatialdds/{INFRA_OPERATOR}/sensing/detection3d/v1"
+INFRA_MSG_TYPE = "INFRA_DET3D_SET"
+INFRA_BS_POSITION = {"x": -25.0, "y": -25.0, "z": 2.0}  # roadside-pole-ish
 
 # Visible classes — keep small so the dashboard is readable.
 CLASSES = ["vehicle.car", "vehicle.truck", "human.pedestrian", "vehicle.bicycle"]
@@ -245,6 +265,100 @@ def _build_detection(op_idx: int, obj_idx: int, t: float) -> Dict:
     }
 
 
+def _radar_observe(target_xyz: Tuple[float, float, float],
+                    bs: Dict[str, float],
+                    rng: random.Random) -> Optional[Dict]:
+    """Apply a radar noise model to one ground-truth target.
+
+    Returns ``None`` when the target is missed (sigmoid-weighted on SNR
+    vs. range). Otherwise returns the noisy ``(x, y, z, range_m, snr_db)``
+    measurement so the caller can attach detection metadata. The model
+    is intentionally simple — what matters for the demo is that fusion
+    has to deal with range-dependent miss probability and noise.
+    """
+    tx, ty, tz = target_xyz
+    dx = tx - bs["x"]
+    dy = ty - bs["y"]
+    range_m = max(0.5, math.hypot(dx, dy))
+    angle_rad = math.atan2(dx, dy)               # bearing from north, +east
+
+    # Simplified SNR ∝ −20·log10(R / R0). At R=100 m → SNR=20 dB; falls
+    # below 0 dB past ~316 m. The sigmoid puts P_d ≈ 0.5 around 10 dB.
+    snr_db = 20.0 - 20.0 * math.log10(range_m / 100.0)
+    p_detect = 1.0 / (1.0 + math.exp(-0.5 * (snr_db - 10.0)))
+    if rng.random() > p_detect:
+        return None
+
+    range_sigma = 0.5 + range_m * 0.01           # 1 % of range, floor 0.5 m
+    angle_sigma_deg = 1.0
+    noisy_range = range_m + rng.gauss(0.0, range_sigma)
+    noisy_angle = angle_rad + math.radians(rng.gauss(0.0, angle_sigma_deg))
+
+    return {
+        "x": bs["x"] + noisy_range * math.sin(noisy_angle),
+        "y": bs["y"] + noisy_range * math.cos(noisy_angle),
+        "z": tz,
+        "range_m": range_m,
+        "snr_db": snr_db,
+        "p_detect": p_detect,
+    }
+
+
+def _build_infra_set(t: float, frame_seq: int, n_operators: int,
+                      n_objects_per_operator: int,
+                      bs: Dict[str, float],
+                      rng: random.Random) -> Dict:
+    """One radar-plausible Detection3DSet from the BS perspective.
+
+    Observes every shared object with the radar model above, then sprinkles
+    0–2 low-confidence false alarms inside a forward arc so the fusion
+    service has track-persistence work to do."""
+    detections: List[Dict] = []
+    for op_idx in range(n_operators):
+        for obj_idx in range(n_objects_per_operator):
+            true = _object_path(t, op_idx, obj_idx)
+            obs = _radar_observe((true["cx"], true["cy"], true["cz"]),
+                                  bs, rng)
+            if obs is None:
+                continue
+            score = max(0.3, min(0.95, 0.5 + obs["snr_db"] / 40.0))
+            cls = CLASSES[obj_idx % len(CLASSES)]
+            detections.append({
+                "det_id": f"infra_{op_idx}_{obj_idx}_{frame_seq}",
+                "center": {"x": obs["x"], "y": obs["y"], "z": obs["z"]},
+                "size": {"x": 4.5, "y": 1.8, "z": 1.6},
+                "q": _quat_yaw(true["yaw"]),
+                "class_id": cls,
+                "score": score,
+                "has_velocity": False,
+            })
+
+    # False alarms: 0–2 per frame, scored low so fusion can drop them.
+    for fa_idx in range(rng.randint(0, 2)):
+        fa_range = rng.uniform(20.0, 150.0)
+        fa_bearing = math.radians(rng.uniform(-45.0, 45.0))
+        detections.append({
+            "det_id": f"infra_fa_{fa_idx}_{frame_seq}",
+            "center": {
+                "x": bs["x"] + fa_range * math.sin(fa_bearing),
+                "y": bs["y"] + fa_range * math.cos(fa_bearing),
+                "z": 1.0,
+            },
+            "size": {"x": 2.0, "y": 2.0, "z": 1.5},
+            "q": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+            "class_id": "unknown",
+            "score": rng.uniform(0.15, 0.35),
+            "has_velocity": False,
+        })
+
+    return {
+        "frame_seq": int(frame_seq),
+        "stamp": {"sec": int(t), "nanosec": int((t % 1) * 1e9)},
+        "source_operator": INFRA_OPERATOR,
+        "detections": detections,
+    }
+
+
 def _build_set(op_idx: int, n_objects: int, t: float, frame_seq: int,
                 jitter_seed: int = 0) -> Dict:
     """Build one Detection3DSet payload. Each operator drops a different
@@ -277,6 +391,10 @@ def main() -> int:
                         help="Per-operator publish rate (Hz)")
     parser.add_argument("--max-frames", type=int, default=0,
                         help="Stop after N frames per operator (0 = forever)")
+    parser.add_argument("--no-infrastructure", action="store_true",
+                        help="Suppress the radar-plausible infrastructure stream")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="RNG seed for the radar noise + false-alarm model")
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
@@ -288,6 +406,7 @@ def main() -> int:
         return 1
 
     transport = EnvelopePublisher(args.domain)
+    infra_rng = random.Random(args.seed)
 
     period = 1.0 / args.rate
     frame_seq = 0
@@ -333,6 +452,19 @@ def main() -> int:
                         msg_type=PLAN_MSG_TYPE,
                         payload=plan,
                     )
+            # Radar-plausible infrastructure stream (10 Hz, one consolidated
+            # set covering every operator's objects). Off when --no-infrastructure.
+            if not args.no_infrastructure:
+                transport.publish(
+                    logical_topic=INFRA_TOPIC,
+                    msg_type=INFRA_MSG_TYPE,
+                    payload=_build_infra_set(
+                        t=t, frame_seq=frame_seq,
+                        n_operators=args.operators,
+                        n_objects_per_operator=args.objects_per_operator,
+                        bs=INFRA_BS_POSITION, rng=infra_rng,
+                    ),
+                )
             if not args.quiet and frame_seq % 50 == 0:
                 print(f"[synthetic] frame_seq={frame_seq} "
                       f"t_demo={t_demo:.1f}", file=sys.stderr)
