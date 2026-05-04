@@ -209,6 +209,24 @@ class TestSubscriberRerun(unittest.TestCase):
                      _coverage_payload(),
                      operator="platform")
 
+    def test_standard_msg_type_aliases_route(self):
+        """The SpatialDDS standard names route to the same handlers as
+        the in-tree NUSC_* / INFRA_* names."""
+        self._drive("FramedPose",
+                     "spatialdds/operator_a/ego/pose/v1",
+                     _ego_payload("operator_a"))
+        self._drive("Detection3DSet",
+                     "spatialdds/operator_a/sensing/detection3d/v1",
+                     _det_payload("operator_a"))
+        self._drive("FusedTrackSet",
+                     "spatialdds/platform/fusion/track/v1",
+                     _fused_tracks_payload(),
+                     operator="platform")
+        self._drive("CoverageMetrics",
+                     "spatialdds/platform/fusion/coverage/v1",
+                     _coverage_payload(),
+                     operator="platform")
+
     def test_unknown_msg_type_is_silent(self):
         # Mid-stream we may see a topic the subscriber has never been
         # taught about (forward-compat). Should not raise.

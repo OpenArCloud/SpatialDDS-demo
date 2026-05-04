@@ -79,6 +79,14 @@ CONFLICT_COLOR = [255, 40, 40]
 BINDING_COLOR = [180, 180, 180]
 DEFAULT_COLOR = [200, 200, 200]
 
+# Cap how big a coverage ring we render. Rerun's Spatial3DView auto-fit
+# uses the bounding box of every logged vertex, so a 200 m
+# ``infrastructure`` circle would zoom the camera out far enough to make
+# the actual ±30 m crossing action visually negligible. Geometric
+# truth still travels on the wire (the Announce payload is unmodified);
+# we just shrink what we draw.
+COVERAGE_RENDER_MAX_M = 35.0
+
 
 def _operator_color(operator: str, alpha: Optional[int] = None) -> List[int]:
     base = list(OPERATOR_COLORS.get(operator, DEFAULT_COLOR))
@@ -155,6 +163,7 @@ class RerunMultiOpSubscriber:
         # whether the envelope is even reaching the subscriber.
         self._msg_counts: Dict[str, int] = {}
         self._next_debug_print = 0.0
+        self._sample_payloads: Dict[str, bool] = {}
 
     def _on_message(self, msg_type: str, topic: str,
                     payload: Dict[str, Any], stamp_ns: int) -> None:
@@ -175,6 +184,17 @@ class RerunMultiOpSubscriber:
             msg_type, topic, payload = self.inbox.get()
             self._msg_counts[msg_type] = self._msg_counts.get(msg_type, 0) + 1
             if self.debug:
+                # First payload per msg_type — raw JSON, truncated. Lets
+                # us spot publisher-vs-handler key mismatches at a
+                # glance ("handler reads payload['pose']['t'] but the
+                # publisher emits payload['position']").
+                if msg_type not in self._sample_payloads:
+                    self._sample_payloads[msg_type] = True
+                    blob = json.dumps(payload, default=str)
+                    if len(blob) > 800:
+                        blob = blob[:800] + "…"
+                    print(f"FIRST {msg_type} from {topic} payload={blob}",
+                          file=sys.stderr)
                 if msg_type in ("PlannedTrajectory", "SpatialEvent",
                                   "EntityBinding", "Announce"):
                     suffix = ""
@@ -513,7 +533,12 @@ class RerunMultiOpSubscriber:
     def _handle_announce(self, operator: str, payload: Dict[str, Any]) -> None:
         """Coverage geometry as a flat circle on z=0. Logged ``static``
         the first time we see it per operator so a 5 s republish doesn't
-        keep stamping the same circle into every frame."""
+        keep stamping the same circle into every frame.
+
+        The rendered radius is clamped to ``COVERAGE_RENDER_MAX_M`` so
+        Rerun's Spatial3DView auto-fit doesn't zoom out to the 200 m
+        infrastructure radius and shrink the actual ±30 m crossing
+        action to a dot. The label still carries the true radius."""
         cov = payload.get("coverage") or {}
         if cov.get("type") != "circle":
             return
@@ -524,18 +549,21 @@ class RerunMultiOpSubscriber:
         cx = float(c.get("x", 0.0))
         cy = float(c.get("y", 0.0))
         cz = float(c.get("z", 0.0))
-        radius = float(cov.get("radius_m", 1.0))
+        true_radius = float(cov.get("radius_m", 1.0))
+        render_radius = min(true_radius, COVERAGE_RENDER_MAX_M)
         n = 64
-        ring = [[cx + radius * math.cos(2.0 * math.pi * i / n),
-                  cy + radius * math.sin(2.0 * math.pi * i / n),
+        ring = [[cx + render_radius * math.cos(2.0 * math.pi * i / n),
+                  cy + render_radius * math.sin(2.0 * math.pi * i / n),
                   cz] for i in range(n + 1)]
+        rendered_str = (f" — rendered at {render_radius:.0f}m"
+                        if render_radius < true_radius else "")
         rr.log(
             f"world/{operator}/coverage",
             rr.LineStrips3D(
                 [np.array(ring)],
                 colors=[_operator_color(operator, alpha=60)],
                 radii=0.6,
-                labels=[f"{operator} coverage ({radius:.0f}m)"],
+                labels=[f"{operator} coverage ({true_radius:.0f}m{rendered_str})"],
             ),
             static=True,
         )
@@ -545,8 +573,14 @@ def handle_envelope(sub: "RerunMultiOpSubscriber", msg_type: str,
                      topic: str, operator: str,
                      payload: Dict[str, Any]) -> None:
     """Module-level dispatcher — kept separate so the smoke test can
-    drive each handler without instantiating DDS."""
-    if msg_type == "NUSC_EGO_POSE":
+    drive each handler without instantiating DDS.
+
+    Accepts both the legacy ``NUSC_*`` / ``INFRA_*`` msg_types the
+    in-tree synthetic publisher emits AND the SpatialDDS standard names
+    (``Detection3DSet``, ``FramedPose``, ``FusedTrackSet``,
+    ``CoverageMetrics``) so a subscriber written against the standard
+    schema also routes correctly."""
+    if msg_type in ("FramedPose", "NUSC_EGO_POSE"):
         sub._handle_ego(operator, payload)
     elif msg_type == "NUSC_VISION_META":
         sub._handle_vision_meta(operator, payload)
@@ -556,11 +590,11 @@ def handle_envelope(sub: "RerunMultiOpSubscriber", msg_type: str,
         sub._handle_lidar(operator, payload)
     elif msg_type == "NUSC_RAD_DET_SET":
         sub._handle_radar(operator, payload)
-    elif msg_type in ("NUSC_DET3D_SET", "INFRA_DET3D_SET"):
+    elif msg_type in ("Detection3DSet", "NUSC_DET3D_SET", "INFRA_DET3D_SET"):
         sub._handle_det3d(operator, payload)
-    elif msg_type == "NUSC_FUSED_TRACK_SET":
+    elif msg_type in ("FusedTrackSet", "NUSC_FUSED_TRACK_SET"):
         sub._handle_fused_tracks(payload)
-    elif msg_type == "NUSC_FUSION_COVERAGE":
+    elif msg_type in ("CoverageMetrics", "NUSC_FUSION_COVERAGE"):
         sub._handle_coverage(payload)
     elif msg_type == "PlannedTrajectory":
         sub._handle_planned_trajectory(operator, payload)
