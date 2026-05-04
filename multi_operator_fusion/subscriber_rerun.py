@@ -131,8 +131,10 @@ def _create_blueprint() -> rrb.Blueprint:
 
 
 class RerunMultiOpSubscriber:
-    def __init__(self, dataroot: Path, domain: int) -> None:
+    def __init__(self, dataroot: Path, domain: int,
+                  debug: bool = False) -> None:
         self.dataroot = dataroot
+        self.debug = debug
         # The lossless EnvelopeSubscriber decodes JSON and hands us
         # ``(msg_type, topic, payload, stamp_ns)`` directly; we route
         # those through an inbox queue so the rendering thread can
@@ -148,6 +150,11 @@ class RerunMultiOpSubscriber:
         # Once-per-operator flag so Announce updates don't spam the log
         # with identical static circles every 5 s.
         self._coverage_logged: set = set()
+        # Per-msg-type arrival counter for --debug mode. Helps diagnose
+        # "I don't see PlannedTrajectory in the viewer" by confirming
+        # whether the envelope is even reaching the subscriber.
+        self._msg_counts: Dict[str, int] = {}
+        self._next_debug_print = 0.0
 
     def _on_message(self, msg_type: str, topic: str,
                     payload: Dict[str, Any], stamp_ns: int) -> None:
@@ -162,9 +169,26 @@ class RerunMultiOpSubscriber:
         self.subscriber.stop()
 
     def spin(self, max_frames: int = 0) -> None:
+        import time as _time
         seen = 0
         while True:
             msg_type, topic, payload = self.inbox.get()
+            self._msg_counts[msg_type] = self._msg_counts.get(msg_type, 0) + 1
+            if self.debug:
+                if msg_type in ("PlannedTrajectory", "SpatialEvent",
+                                  "EntityBinding", "Announce"):
+                    suffix = ""
+                    if msg_type == "SpatialEvent":
+                        suffix = f" event_type={payload.get('event_type', '?')}"
+                    print(f"GOT {msg_type} from {topic}{suffix}",
+                          file=sys.stderr)
+                now = _time.monotonic()
+                if now >= self._next_debug_print:
+                    self._next_debug_print = now + 5.0
+                    print("[rerun] msg_counts: " +
+                          ", ".join(f"{k}={v}" for k, v
+                                    in sorted(self._msg_counts.items())),
+                          file=sys.stderr)
             operator = operator_from_topic(topic) or "unknown"
             handle_envelope(self, msg_type, topic, operator, payload)
             if msg_type in {"NUSC_EGO_POSE", "NUSC_DET3D_SET",
@@ -199,7 +223,7 @@ class RerunMultiOpSubscriber:
         rr.log(
             f"world/{operator}/ego",
             rr.Points3D([[x, y, z]],
-                          radii=[1.5],
+                          radii=[4.0],
                           colors=[_operator_color(operator)],
                           labels=[operator]),
         )
@@ -216,7 +240,7 @@ class RerunMultiOpSubscriber:
                 rr.LineStrips3D(
                     [np.array(trail)],
                     colors=[_operator_color(operator, alpha=120)],
-                    radii=0.25,
+                    radii=0.8,
                 ),
             )
         geo = payload.get("geopose")
@@ -327,6 +351,8 @@ class RerunMultiOpSubscriber:
             centers.append([float(p.get("x", 0.0)),
                               float(p.get("y", 0.0)),
                               float(p.get("z", 0.0))])
+            # At least [5, 2.5, 2] so fused tracks remain visible at the
+            # 120 m bird's-eye altitude.
             sizes.append([5.0, 2.5, 2.0])
             ops = t.get("source_operators", [])
             cls = t.get("object_class", "?")
@@ -392,21 +418,21 @@ class RerunMultiOpSubscriber:
             rr.LineStrips3D(
                 [np.array(positions)],
                 colors=[path_color],
-                radii=0.4,
+                radii=1.0,
                 labels=[f"{agent} plan"],
             ),
         )
         rr.log(
             f"world/{operator}/plan/{agent}/uncertainty",
             rr.Points3D(np.array(positions),
-                          radii=np.array(radii, dtype=np.float32),
+                          radii=np.array(radii, dtype=np.float32) * 2.0,
                           colors=[uncertainty_color]),
         )
         # Goal marker at the last waypoint.
         rr.log(
             f"world/{operator}/plan/{agent}/goal",
             rr.Points3D(np.array([positions[-1]]),
-                          radii=[1.5],
+                          radii=[3.0],
                           colors=[goal_color],
                           labels=["goal"]),
         )
@@ -435,7 +461,7 @@ class RerunMultiOpSubscriber:
         rr.log(
             "world/fused/conflicts",
             rr.Points3D(np.array([center]),
-                         radii=4.0,
+                         radii=8.0,
                          colors=[CONFLICT_COLOR + [200]],
                          labels=[marker_label]),
         )
@@ -508,7 +534,7 @@ class RerunMultiOpSubscriber:
             rr.LineStrips3D(
                 [np.array(ring)],
                 colors=[_operator_color(operator, alpha=60)],
-                radii=0.30,
+                radii=0.6,
                 labels=[f"{operator} coverage ({radius:.0f}m)"],
             ),
             static=True,
@@ -564,6 +590,9 @@ def parse_args() -> argparse.Namespace:
                         "Browse to http://localhost:9090.")
     p.add_argument("--web-viewer-port", type=int, default=9090)
     p.add_argument("--grpc-port", type=int, default=9876)
+    p.add_argument("--debug", action="store_true",
+                   help="Print per-msg-type arrival counts every 5 s plus a "
+                        "GOT line for each v1.6 envelope.")
     return p.parse_args()
 
 
@@ -589,6 +618,17 @@ def main() -> int:
     # orientation when the user picks the ``Top-down`` camera preset.
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
 
+    # Camera framing — pin a viewpoint above the centroid of the three
+    # operator start positions (must match synthetic_publisher.EGO_PATHS:
+    # A=(0,-30), B=(30,0), C=(30,-10)). 120 m altitude is high enough to
+    # see all three converging on the (0,0) crossing without losing the
+    # detail at meter scale.
+    centroid_x = (0.0 + 30.0 + 30.0) / 3.0     # = 20.0
+    centroid_y = (-30.0 + 0.0 + -10.0) / 3.0   # ≈ -13.33
+    rr.log("world/viewpoint", rr.Transform3D(
+        translation=[centroid_x, centroid_y, 120.0],
+    ), static=True)
+
     rr.log("description", rr.TextDocument(
         "# SpatialDDS 1.6 — Multi-Operator Fusion\n\n"
         "Three vehicle operators (a/b/c) plus a roadside radar "
@@ -601,7 +641,8 @@ def main() -> int:
         media_type=rr.MediaType.MARKDOWN,
     ), static=True)
 
-    sub = RerunMultiOpSubscriber(Path(args.dataroot), args.domain)
+    sub = RerunMultiOpSubscriber(Path(args.dataroot), args.domain,
+                                    debug=args.debug)
     sub.start()
     try:
         sub.spin(max_frames=args.max_frames)
