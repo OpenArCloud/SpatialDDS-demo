@@ -72,8 +72,16 @@ def _make_writer(domain_id: int):
     from cyclonedds.topic import Topic
 
     SpatialDDSEnvelope, TOPIC = _import_envelope_idl()
+    # max_blocking_time = 5 s. ``Reliable(0)`` (the prior value) failed
+    # the very first ``write()`` if a matched RELIABLE reader hadn't yet
+    # ack'd, which surfaced as ``DDS_RETCODE_TIMEOUT`` on warm-restart of
+    # a downstream consumer (e.g. fusion bouncing while the publisher
+    # kept writing). 1 s wasn't enough — a container restart with python
+    # startup + DDS discovery takes 3-5 s in the docker-compose stack.
+    # Five seconds covers that without making the writer hang
+    # indefinitely if a reader genuinely vanishes.
     qos = Qos(
-        Policy.Reliability.Reliable(0),
+        Policy.Reliability.Reliable(5_000_000_000),
         Policy.History.KeepAll,
         Policy.Durability.Volatile,
     )
@@ -99,6 +107,7 @@ class EnvelopePublisher:
     def __init__(self, domain_id: int):
         writer_pair = _make_writer(domain_id)
         self._writer, self._EnvelopeCls = writer_pair
+        self._timeout_count = 0
 
     def publish(self, logical_topic: str, msg_type: str,
                 payload: Dict[str, Any], request_id: str = "",
@@ -110,7 +119,21 @@ class EnvelopePublisher:
             stamp_ns=int(stamp_ns) if stamp_ns is not None else int(time.time_ns()),
             request_id=request_id or "",
         )
-        self._writer.write(envelope)
+        try:
+            self._writer.write(envelope)
+        except Exception as exc:  # cyclonedds.core.DDSException, etc.
+            # RELIABLE + KEEP_ALL means the writer will block new writes
+            # if a matched reader stops ack'ing — once max_blocking_time
+            # elapses CycloneDDS raises DDS_RETCODE_TIMEOUT. Don't crash
+            # the publisher: drop the sample, count it, and keep going.
+            # A vanished consumer (fusion / web bridge / recorder
+            # restart) shouldn't take the whole demo down. We rate-limit
+            # the warning so a long outage doesn't spam stderr.
+            self._timeout_count += 1
+            if self._timeout_count <= 3 or self._timeout_count % 100 == 0:
+                print(f"[envelope] write dropped on {logical_topic} "
+                      f"({type(exc).__name__}); count={self._timeout_count}",
+                      file=sys.stderr)
 
     def close(self) -> None:
         # Allow RELIABLE peers a moment to ack outstanding samples.
