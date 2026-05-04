@@ -35,7 +35,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import rerun as rr
-import rerun.blueprint as rrb
 
 # Rerun 0.22+ internally calls np.asarray(quat_batch, copy=False) when it
 # receives per-box quaternion arrays. copy= was only added to asarray in
@@ -99,26 +98,18 @@ def _stamp_ns(stamp: Dict[str, Any]) -> int:
     return int(stamp.get("sec", 0)) * 1_000_000_000 + int(stamp.get("nanosec", 0))
 
 
-# Module-level frame counter shared by every handler. The publisher's
-# stamps are wall-clock epoch seconds (≈ 1.78e9), and a duration
-# timeline reading 1.78 billion seconds parks the cursor well off the
-# auto-ranged window. Driving a monotonic ``frame`` sequence timeline
-# alongside the wall-clock ``timestamp`` guarantees the viewer always
-# has a sensible cursor — and it's what the bottom timeline defaults to.
-_frame_counter = 0
-
-
-def _set_time(stamp: Dict[str, Any]) -> None:
-    """Set both timelines for this Rerun event:
+def _set_time(stamp: Dict[str, Any], frame_num: int) -> None:
+    """Set both timelines for this Rerun event. ``frame_num`` is passed
+    explicitly so every handler logs its rr.log calls under the same
+    counter value — no shared mutable state, no surprises from
+    out-of-order increments across handlers.
       * ``frame``: monotonic int counter — the viewer auto-ranges to
         [0, current] so streamed data is always inside the window.
       * ``timestamp``: absolute wall-clock seconds via ``timestamp=``
         (NOT ``duration=`` — duration is seconds-since-stream-start
         and a 1.78e9 s value would look absurd in that mode).
     """
-    global _frame_counter
-    _frame_counter += 1
-    rr.set_time("frame", sequence=_frame_counter)
+    rr.set_time("frame", sequence=frame_num)
     sec = float(stamp.get("sec", 0))
     nsec = float(stamp.get("nanosec", 0))
     if sec > 0:
@@ -128,32 +119,6 @@ def _set_time(stamp: Dict[str, Any]) -> None:
 def _q_xyzw(q: Dict[str, float]) -> List[float]:
     return [float(q.get("x", 0.0)), float(q.get("y", 0.0)),
             float(q.get("z", 0.0)), float(q.get("w", 1.0))]
-
-
-def _create_blueprint() -> rrb.Blueprint:
-    """Programmatic blueprint so the viewer opens with the demo layout
-    every time. A wide 3D view (the intersection) plus a narrow column
-    of fusion metrics; events log along the bottom.
-
-    Camera/eye positioning isn't directly settable on Spatial3DView
-    across all Rerun versions, so we lean on ``ViewCoordinates`` +
-    Z-up to give the viewer a sensible default frame and let the user
-    rotate / zoom from there.
-    """
-    return rrb.Blueprint(
-        rrb.Vertical(
-            rrb.Horizontal(
-                rrb.Spatial3DView(
-                    name="Intersection",
-                    origin="/world",
-                ),
-                rrb.TextLogView(name="Fusion Metrics", origin="/fusion"),
-                column_shares=[3, 1],
-            ),
-            rrb.TextLogView(name="Events", origin="/events"),
-            row_shares=[3, 1],
-        ),
-    )
 
 
 class RerunMultiOpSubscriber:
@@ -198,8 +163,10 @@ class RerunMultiOpSubscriber:
     def spin(self, max_frames: int = 0) -> None:
         import time as _time
         seen = 0
+        frame_num = 0
         while True:
             msg_type, topic, payload = self.inbox.get()
+            frame_num += 1
             self._msg_counts[msg_type] = self._msg_counts.get(msg_type, 0) + 1
             if self.debug:
                 # First payload per msg_type — raw JSON, truncated. Lets
@@ -228,7 +195,7 @@ class RerunMultiOpSubscriber:
                                     in sorted(self._msg_counts.items())),
                           file=sys.stderr)
             operator = operator_from_topic(topic) or "unknown"
-            handle_envelope(self, msg_type, topic, operator, payload)
+            handle_envelope(self, msg_type, topic, operator, payload, frame_num)
             if msg_type in {"NUSC_EGO_POSE", "NUSC_DET3D_SET",
                               "NUSC_FUSED_TRACK_SET"}:
                 seen += 1
@@ -237,10 +204,11 @@ class RerunMultiOpSubscriber:
 
     # ── Existing handlers ────────────────────────────────────────────
 
-    def _handle_ego(self, operator: str, payload: Dict[str, Any]) -> None:
+    def _handle_ego(self, operator: str, payload: Dict[str, Any],
+                     frame_num: int) -> None:
         if self.debug:
-            print(f"RENDER ego_pose: {operator}", file=sys.stderr)
-        _set_time(payload.get("stamp", {}))
+            print(f"RENDER ego_pose: {operator} frame={frame_num}", file=sys.stderr)
+        _set_time(payload.get("stamp", {}), frame_num)
         # nuScenes publisher uses ``pose_se3``; the synthetic multi-op
         # publisher uses ``pose``. Accept either so the same Rerun
         # subscriber works against both.
@@ -250,6 +218,9 @@ class RerunMultiOpSubscriber:
         x = float(t.get("x", 0.0))
         y = float(t.get("y", 0.0))
         z = float(t.get("z", 0.0))
+        if self.debug:
+            print(f"EGO COORDS: op={operator} x={x:.1f} y={y:.1f} z={z:.1f} radius=4.0",
+                  file=sys.stderr)
         rr.log(
             f"world/{operator}/ego_vehicle",
             rr.Transform3D(
@@ -257,6 +228,7 @@ class RerunMultiOpSubscriber:
                 rotation=rr.Quaternion(xyzw=_q_xyzw(q)),
                 relation=rr.TransformRelation.ParentFromChild,
             ),
+            static=True,
         )
         # Labelled ego marker so each operator is identifiable from the
         # top-down view.
@@ -266,6 +238,7 @@ class RerunMultiOpSubscriber:
                           radii=[4.0],
                           colors=[_operator_color(operator)],
                           labels=[operator]),
+            static=True,
         )
         # Accumulate trail and re-log the bounded slice. Without a
         # cumulative trail you can't tell which way an operator came
@@ -282,15 +255,18 @@ class RerunMultiOpSubscriber:
                     colors=[_operator_color(operator, alpha=120)],
                     radii=0.8,
                 ),
+                static=True,
             )
         geo = payload.get("geopose")
         if geo:
             rr.log(
                 f"world/{operator}/ego_vehicle",
                 rr.GeoPoints(lat_lon=[(float(geo["lat_deg"]), float(geo["lon_deg"]))]),
+                static=True,
             )
 
-    def _handle_vision_meta(self, operator: str, payload: Dict[str, Any]) -> None:
+    def _handle_vision_meta(self, operator: str, payload: Dict[str, Any],
+                              frame_num: int) -> None:
         cam = payload.get("cam", {})
         stream = payload.get("stream_id", "camera")
         rr.log(
@@ -300,22 +276,26 @@ class RerunMultiOpSubscriber:
                 focal_length=[float(cam.get("fx", 1.0)), float(cam.get("fy", 1.0))],
                 principal_point=[float(cam.get("cx", 0.0)), float(cam.get("cy", 0.0))],
             ),
+            static=True,
         )
 
-    def _handle_vision_frame(self, operator: str, payload: Dict[str, Any]) -> None:
+    def _handle_vision_frame(self, operator: str, payload: Dict[str, Any],
+                                frame_num: int) -> None:
         hdr = payload.get("hdr", {})
-        _set_time(hdr.get("t_start", {}))
+        _set_time(hdr.get("t_start", {}), frame_num)
         stream = payload.get("stream_id", "camera")
         blobs = hdr.get("blobs", [])
         if not blobs:
             return
         path = self.dataroot / blobs[0].get("blob_id", "")
         if path.exists():
-            rr.log(f"world/{operator}/ego_vehicle/{stream}", rr.EncodedImage(path=str(path)))
+            rr.log(f"world/{operator}/ego_vehicle/{stream}",
+                   rr.EncodedImage(path=str(path)), static=True)
 
-    def _handle_lidar(self, operator: str, payload: Dict[str, Any]) -> None:
+    def _handle_lidar(self, operator: str, payload: Dict[str, Any],
+                        frame_num: int) -> None:
         hdr = payload.get("hdr", {})
-        _set_time(hdr.get("t_start", {}))
+        _set_time(hdr.get("t_start", {}), frame_num)
         blobs = hdr.get("blobs", [])
         if not blobs:
             return
@@ -327,10 +307,12 @@ class RerunMultiOpSubscriber:
             return
         points = arr.reshape((-1, 5))[:, :3]
         rr.log(f"world/{operator}/ego_vehicle/LIDAR_TOP",
-               rr.Points3D(points, colors=_operator_color(operator)))
+               rr.Points3D(points, colors=_operator_color(operator)),
+               static=True)
 
-    def _handle_radar(self, operator: str, payload: Dict[str, Any]) -> None:
-        _set_time(payload.get("stamp", {}))
+    def _handle_radar(self, operator: str, payload: Dict[str, Any],
+                        frame_num: int) -> None:
+        _set_time(payload.get("stamp", {}), frame_num)
         dets = payload.get("detections", [])
         pts = [[float(d.get("xyz_m", {}).get("x", 0.0)),
                 float(d.get("xyz_m", {}).get("y", 0.0)),
@@ -338,13 +320,15 @@ class RerunMultiOpSubscriber:
         if pts:
             stream = payload.get("stream_id", "RADAR")
             rr.log(f"world/{operator}/ego_vehicle/{stream}",
-                   rr.Points3D(np.array(pts), colors=_operator_color(operator)))
+                   rr.Points3D(np.array(pts), colors=_operator_color(operator)),
+                   static=True)
 
-    def _handle_det3d(self, operator: str, payload: Dict[str, Any]) -> None:
-        _set_time(payload.get("stamp", {}))
+    def _handle_det3d(self, operator: str, payload: Dict[str, Any],
+                        frame_num: int) -> None:
+        _set_time(payload.get("stamp", {}), frame_num)
         dets = payload.get("detections", [])
         if self.debug:
-            print(f"RENDER detections: {operator}, {len(dets)} dets",
+            print(f"RENDER detections: {operator}, {len(dets)} dets frame={frame_num}",
                   file=sys.stderr)
         if not dets:
             return
@@ -370,6 +354,10 @@ class RerunMultiOpSubscriber:
             labels.append(f"{cls} {score:.0%}")
             alpha = int(60 + 180 * max(0.0, min(1.0, score)))
             colors.append(base + [alpha])
+        if self.debug and centers:
+            print(f"DET COORDS: op={operator} "
+                  f"x={centers[0][0]:.1f} y={centers[0][1]:.1f} z={centers[0][2]:.1f} "
+                  f"size={sizes[0]}", file=sys.stderr)
         rr.log(
             f"world/{operator}/detections",
             rr.Boxes3D(
@@ -380,16 +368,18 @@ class RerunMultiOpSubscriber:
                 colors=colors,
                 fill_mode=rr.components.FillMode.MajorWireframe,
             ),
+            static=True,
         )
 
-    def _handle_fused_tracks(self, payload: Dict[str, Any]) -> None:
-        _set_time(payload.get("stamp", {}))
+    def _handle_fused_tracks(self, payload: Dict[str, Any],
+                                frame_num: int) -> None:
+        _set_time(payload.get("stamp", {}), frame_num)
         tracks = payload.get("tracks", [])
         if self.debug:
-            print(f"RENDER fused_tracks: {len(tracks)} tracks",
+            print(f"RENDER fused_tracks: {len(tracks)} tracks frame={frame_num}",
                   file=sys.stderr)
         if not tracks:
-            rr.log("world/fused/tracks", rr.Clear(recursive=False))
+            rr.log("world/fused/tracks", rr.Clear(recursive=False), static=True)
             return
         centers, sizes, labels, colors = [], [], [], []
         for t in tracks:
@@ -408,6 +398,10 @@ class RerunMultiOpSubscriber:
             labels.append(f"{cls} [{op_str}] n={n}")
             alpha = int(120 + 135 * max(0.0, min(1.0, confidence)))
             colors.append(FUSED_COLOR + [alpha])
+        if self.debug and centers:
+            print(f"FUSED COORDS: x={centers[0][0]:.1f} "
+                  f"y={centers[0][1]:.1f} z={centers[0][2]:.1f}",
+                  file=sys.stderr)
         rr.log(
             "world/fused/tracks",
             rr.Boxes3D(
@@ -417,13 +411,15 @@ class RerunMultiOpSubscriber:
                 colors=colors,
                 fill_mode=rr.components.FillMode.MajorWireframe,
             ),
+            static=True,
         )
 
-    def _handle_coverage(self, payload: Dict[str, Any]) -> None:
+    def _handle_coverage(self, payload: Dict[str, Any],
+                            frame_num: int) -> None:
         if self.debug:
-            print(f"RENDER coverage: {len(payload.get('metrics') or {})} keys",
-                  file=sys.stderr)
-        _set_time(payload.get("stamp", {}))
+            print(f"RENDER coverage: {len(payload.get('metrics') or {})} keys "
+                  f"frame={frame_num}", file=sys.stderr)
+        _set_time(payload.get("stamp", {}), frame_num)
         m = payload.get("metrics", {})
         per_op = m.get("per_operator_track_count", {})
         per_op_str = ", ".join(f"{op}:{n}" for op, n in sorted(per_op.items())) or "—"
@@ -438,11 +434,12 @@ class RerunMultiOpSubscriber:
     # ── v1.6 handlers ────────────────────────────────────────────────
 
     def _handle_planned_trajectory(self, operator: str,
-                                     payload: Dict[str, Any]) -> None:
+                                     payload: Dict[str, Any],
+                                     frame_num: int) -> None:
         """Render the upcoming waypoints as a semi-transparent line strip
         ahead of the ego, plus uncertainty circles (radius from
         ``position_uncertainty_m``) and a brighter goal marker."""
-        _set_time(payload.get("stamp", {}))
+        _set_time(payload.get("stamp", {}), frame_num)
         waypoints = payload.get("waypoints") or []
         if self.debug:
             print(f"RENDER plan: {operator}, {len(waypoints)} waypoints",
@@ -465,6 +462,10 @@ class RerunMultiOpSubscriber:
         path_color = _operator_color(operator, alpha=140)
         uncertainty_color = _operator_color(operator, alpha=50)
         goal_color = _operator_color(operator, alpha=220)
+        if self.debug and positions:
+            print(f"PLAN COORDS: op={operator} "
+                  f"x={positions[0][0]:.1f} y={positions[0][1]:.1f} "
+                  f"z={positions[0][2]:.1f}", file=sys.stderr)
         rr.log(
             f"world/{operator}/plan/{agent}",
             rr.LineStrips3D(
@@ -473,12 +474,14 @@ class RerunMultiOpSubscriber:
                 radii=1.0,
                 labels=[f"{agent} plan"],
             ),
+            static=True,
         )
         rr.log(
             f"world/{operator}/plan/{agent}/uncertainty",
             rr.Points3D(np.array(positions),
                           radii=np.array(radii, dtype=np.float32) * 2.0,
                           colors=[uncertainty_color]),
+            static=True,
         )
         # Goal marker at the last waypoint.
         rr.log(
@@ -487,16 +490,18 @@ class RerunMultiOpSubscriber:
                           radii=[3.0],
                           colors=[goal_color],
                           labels=["goal"]),
+            static=True,
         )
 
-    def _handle_spatial_event(self, payload: Dict[str, Any]) -> None:
+    def _handle_spatial_event(self, payload: Dict[str, Any],
+                                 frame_num: int) -> None:
         """trajectory_conflict events get a bright red marker plus a
         WARN-level entry in the events log so the timeline highlights
         them."""
         if self.debug:
-            print(f"RENDER spatial_event: {payload.get('event_type', '?')}",
-                  file=sys.stderr)
-        _set_time(payload.get("stamp", {}))
+            print(f"RENDER spatial_event: {payload.get('event_type', '?')} "
+                  f"frame={frame_num}", file=sys.stderr)
+        _set_time(payload.get("stamp", {}), frame_num)
         if payload.get("event_type") != "trajectory_conflict":
             rr.log("events/log", rr.TextLog(
                 f"{payload.get('event_type', 'event')}: "
@@ -519,6 +524,7 @@ class RerunMultiOpSubscriber:
                          radii=8.0,
                          colors=[CONFLICT_COLOR + [200]],
                          labels=[marker_label]),
+            static=True,
         )
         rr.log("events/log", rr.TextLog(
             f"CONFLICT: {agents_str} | dist={dist:.1f}m | ETA={ttc_str} | "
@@ -527,17 +533,18 @@ class RerunMultiOpSubscriber:
             level=rr.TextLogLevel.WARN,
         ))
 
-    def _handle_entity_binding(self, payload: Dict[str, Any]) -> None:
+    def _handle_entity_binding(self, payload: Dict[str, Any],
+                                  frame_num: int) -> None:
         if self.debug:
             print(f"RENDER binding: {payload.get('entity_id', '?')} "
-                  f"comps={len(payload.get('components') or [])}",
-                  file=sys.stderr)
+                  f"comps={len(payload.get('components') or [])} "
+                  f"frame={frame_num}", file=sys.stderr)
         """Each EntityBinding pins together one fused track and its
         contributing detections. We don't have a position cache for the
         component refs, so we just place a small grey marker at the
         binding's pose and label it with the source operators it pulled
         from. Click → see (topic, key) provenance in the inspector."""
-        _set_time(payload.get("stamp", {}))
+        _set_time(payload.get("stamp", {}), frame_num)
         if not payload.get("has_pose", False):
             return
         pose_t = (payload.get("pose") or {}).get("t") or {}
@@ -560,6 +567,7 @@ class RerunMultiOpSubscriber:
                          colors=[BINDING_COLOR + [120]],
                          radii=0.5,
                          labels=[label]),
+            static=True,
         )
         # Verbose attribution in the events log (TRACE so it doesn't
         # drown the conflict warnings out).
@@ -569,9 +577,11 @@ class RerunMultiOpSubscriber:
             level=rr.TextLogLevel.TRACE,
         ))
 
-    def _handle_announce(self, operator: str, payload: Dict[str, Any]) -> None:
+    def _handle_announce(self, operator: str, payload: Dict[str, Any],
+                            frame_num: int) -> None:
         if self.debug:
-            print(f"RENDER announce: {operator}", file=sys.stderr)
+            print(f"RENDER announce: {operator} frame={frame_num}",
+                  file=sys.stderr)
         """Coverage geometry as a flat circle on z=0. Logged ``static``
         the first time we see it per operator so a 5 s republish doesn't
         keep stamping the same circle into every frame.
@@ -612,9 +622,12 @@ class RerunMultiOpSubscriber:
 
 def handle_envelope(sub: "RerunMultiOpSubscriber", msg_type: str,
                      topic: str, operator: str,
-                     payload: Dict[str, Any]) -> None:
+                     payload: Dict[str, Any],
+                     frame_num: int) -> None:
     """Module-level dispatcher — kept separate so the smoke test can
-    drive each handler without instantiating DDS.
+    drive each handler without instantiating DDS. ``frame_num`` is
+    threaded into every handler so each handler sets its own timeline
+    at the top before any rr.log call (no shared mutable counter).
 
     Accepts both the legacy ``NUSC_*`` / ``INFRA_*`` msg_types the
     in-tree synthetic publisher emits AND the SpatialDDS standard names
@@ -622,29 +635,29 @@ def handle_envelope(sub: "RerunMultiOpSubscriber", msg_type: str,
     ``CoverageMetrics``) so a subscriber written against the standard
     schema also routes correctly."""
     if msg_type in ("FramedPose", "NUSC_EGO_POSE"):
-        sub._handle_ego(operator, payload)
+        sub._handle_ego(operator, payload, frame_num)
     elif msg_type == "NUSC_VISION_META":
-        sub._handle_vision_meta(operator, payload)
+        sub._handle_vision_meta(operator, payload, frame_num)
     elif msg_type == "NUSC_VISION_FRAME":
-        sub._handle_vision_frame(operator, payload)
+        sub._handle_vision_frame(operator, payload, frame_num)
     elif msg_type == "NUSC_LIDAR_FRAME":
-        sub._handle_lidar(operator, payload)
+        sub._handle_lidar(operator, payload, frame_num)
     elif msg_type == "NUSC_RAD_DET_SET":
-        sub._handle_radar(operator, payload)
+        sub._handle_radar(operator, payload, frame_num)
     elif msg_type in ("Detection3DSet", "NUSC_DET3D_SET", "INFRA_DET3D_SET"):
-        sub._handle_det3d(operator, payload)
+        sub._handle_det3d(operator, payload, frame_num)
     elif msg_type in ("FusedTrackSet", "NUSC_FUSED_TRACK_SET"):
-        sub._handle_fused_tracks(payload)
+        sub._handle_fused_tracks(payload, frame_num)
     elif msg_type in ("CoverageMetrics", "NUSC_FUSION_COVERAGE"):
-        sub._handle_coverage(payload)
+        sub._handle_coverage(payload, frame_num)
     elif msg_type == "PlannedTrajectory":
-        sub._handle_planned_trajectory(operator, payload)
+        sub._handle_planned_trajectory(operator, payload, frame_num)
     elif msg_type == "SpatialEvent":
-        sub._handle_spatial_event(payload)
+        sub._handle_spatial_event(payload, frame_num)
     elif msg_type == "EntityBinding":
-        sub._handle_entity_binding(payload)
+        sub._handle_entity_binding(payload, frame_num)
     elif msg_type == "Announce":
-        sub._handle_announce(operator, payload)
+        sub._handle_announce(operator, payload, frame_num)
 
 
 def parse_args() -> argparse.Namespace:
@@ -685,24 +698,14 @@ def main() -> int:
         print(f"[rerun] web viewer at http://localhost:{args.web_viewer_port}",
               file=sys.stderr)
 
-    # Push the layout to the viewer so the operator doesn't have to
-    # build it manually each session.
-    rr.send_blueprint(_create_blueprint())
-
     # Z-up coordinate hint puts the bird's-eye view in the natural
     # orientation when the user picks the ``Top-down`` camera preset.
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
 
-    # Camera framing — pin a viewpoint above the centroid of the three
-    # operator start positions (must match synthetic_publisher.EGO_PATHS:
-    # A=(0,-30), B=(30,0), C=(30,-10)). 120 m altitude is high enough to
-    # see all three converging on the (0,0) crossing without losing the
-    # detail at meter scale.
-    centroid_x = (0.0 + 30.0 + 30.0) / 3.0     # = 20.0
-    centroid_y = (-30.0 + 0.0 + -10.0) / 3.0   # ≈ -13.33
-    rr.log("world/viewpoint", rr.Transform3D(
-        translation=[centroid_x, centroid_y, 120.0],
-    ), static=True)
+    # No blueprint — let Rerun auto-discover view layout based on the
+    # archetypes that arrive. With a manually-set blueprint, a single
+    # misconfigured panel can hide every entity behind it; auto-layout
+    # always produces a Spatial3DView for /world contents.
 
     rr.log("description", rr.TextDocument(
         "# SpatialDDS 1.6 — Multi-Operator Fusion\n\n"

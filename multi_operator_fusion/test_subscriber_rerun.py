@@ -148,7 +148,8 @@ class TestSubscriberRerun(unittest.TestCase):
 
     def _drive(self, msg_type: str, topic: str, payload: dict,
                 operator: str = "operator_a"):
-        handle_envelope(self.sub, msg_type, topic, operator, payload)
+        handle_envelope(self.sub, msg_type, topic, operator, payload,
+                          frame_num=1)
 
     def test_module_imports(self):
         import subscriber_rerun  # noqa: F401
