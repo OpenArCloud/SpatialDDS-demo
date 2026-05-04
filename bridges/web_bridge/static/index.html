@@ -2,105 +2,592 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>SpatialDDS Web Bridge — Debug</title>
+<title>SpatialDDS 1.6 — Multi-Operator Intersection</title>
 <style>
-  body { font-family: -apple-system, ui-sans-serif, sans-serif; margin: 1.5rem; max-width: 980px; }
-  h1 { margin: 0 0 0.5rem 0; }
-  .status { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.85rem; }
-  .status.ok { background: #2a8a3a; color: white; }
-  .status.bad { background: #c0392b; color: white; }
-  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-  th, td { border-bottom: 1px solid #ddd; padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
-  th { background: #f5f5f5; }
-  .topic { font-family: ui-monospace, monospace; cursor: pointer; }
-  .topic:hover { background: #f0f0f0; }
-  pre { background: #f7f7f7; padding: 0.6rem; border-radius: 4px; overflow: auto; max-height: 320px; font-size: 0.8rem; }
-  .row { display: flex; gap: 1rem; margin: 0.5rem 0; flex-wrap: wrap; }
-  input[type=text] { padding: 0.3rem; font-family: ui-monospace, monospace; min-width: 320px; }
-  button { padding: 0.3rem 0.8rem; cursor: pointer; }
-  .small { color: #666; font-size: 0.85rem; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0e1a;
+                font-family: -apple-system, ui-sans-serif, sans-serif;
+                color: #e2e6f0; overflow: hidden; }
+  canvas { display: block; cursor: crosshair; }
+  a.debug-link { position: fixed; bottom: 6px; right: 12px;
+                  font-size: 11px; color: #4a5680;
+                  text-decoration: none; font-family: ui-monospace, monospace; }
+  a.debug-link:hover { color: #8a9bd0; }
 </style>
 </head>
 <body>
-<h1>SpatialDDS Web Bridge</h1>
-<div class="row">
-  <span>Status: <span id="status" class="status bad">disconnected</span></span>
-  <span class="small" id="stats"></span>
-</div>
-
-<h2>Topics</h2>
-<div class="small">Click a topic to start streaming its messages below.</div>
-<table id="topics-tbl"><thead>
-  <tr><th>Logical topic</th><th>msg_type</th><th>rate (Hz)</th><th>count</th></tr>
-</thead><tbody></tbody></table>
-
-<h2>Custom subscription</h2>
-<div class="row">
-  <input type="text" id="pattern" placeholder="spatialdds/*/sensing/detection3d/v1" value="*">
-  <button id="sub-btn">Subscribe</button>
-  <button id="unsub-btn">Unsubscribe all</button>
-</div>
-
-<h2>Latest message</h2>
-<div class="small" id="msg-meta"></div>
-<pre id="msg-body">(none yet)</pre>
-
+<canvas id="cv"></canvas>
+<a class="debug-link" href="/debug">debug topic list →</a>
 <script src="/static/spatialdds-ws-client.js"></script>
 <script>
-  const sdds = new SpatialDDSClient();
-  const statusEl = document.getElementById("status");
-  const statsEl = document.getElementById("stats");
-  const tbody = document.querySelector("#topics-tbl tbody");
-  const patternEl = document.getElementById("pattern");
-  const msgMeta = document.getElementById("msg-meta");
-  const msgBody = document.getElementById("msg-body");
-  let activeSubs = [];
+"use strict";
 
-  sdds.onConnect = () => { statusEl.textContent = "connected"; statusEl.className = "status ok"; };
-  sdds.onDisconnect = () => { statusEl.textContent = "disconnected"; statusEl.className = "status bad"; };
+// ── Palette ────────────────────────────────────────────────────────────
+const COLORS = {
+  operator_a:     { fill: "#50c878", stroke: "#3a9a5a", label: "Operator A" },
+  operator_b:     { fill: "#508cff", stroke: "#3a6acc", label: "Operator B" },
+  operator_c:     { fill: "#ffa53c", stroke: "#cc8430", label: "Operator C" },
+  infrastructure: { fill: "#dc64dc", stroke: "#aa4caa", label: "Infrastructure" },
+  fused:          { fill: "#f0f0f0", stroke: "#cccccc", label: "Fused" },
+  conflict:       { fill: "#ff2828", stroke: "#cc2020", label: "Conflict" },
+  grid:           "#1a2038",
+  background:     "#0a0e1a",
+  text:           "#a0adc4",
+  metrics_bg:     "#0f1424",
+};
 
-  function renderMessage(m) {
-    msgMeta.textContent = `msg_type=${m.msg_type}  topic=${m.logical_topic}  ts=${m.timestamp_ns}`;
-    msgBody.textContent = JSON.stringify(m.payload, null, 2);
+// Coverage circles can be hundreds of meters wide on the wire — clamp
+// the rendered radius so the canvas auto-fit stays focused on the
+// actual ±30 m crossing action. Wire payload is unmodified.
+const COVERAGE_RENDER_MAX_M = 40;
+
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let scale = 6;  // px/m — recomputed on resize
+
+function resizeCanvas() {
+  cv.width = window.innerWidth;
+  cv.height = window.innerHeight;
+  // Want ±80 m to fit between the title bar (40 px) and metrics bar (48 px).
+  const usableH = Math.max(120, cv.height - 88);
+  scale = Math.min(cv.width, usableH) / 160;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+function metersToCanvas(x_m, y_m) {
+  return [
+    cv.width / 2 + x_m * scale,
+    cv.height / 2 - y_m * scale,  // Y inverted (north = canvas up)
+  ];
+}
+
+// ── State ──────────────────────────────────────────────────────────────
+const state = {
+  operators: {},               // name → { ego, trail, detections, trajectory, coverage, color, lastSeen, messageCount }
+  fused: { tracks: [], bindings: {} },
+  conflicts: [],               // [{x, y, agents, time_to, min_dist, timestamp}]
+  metrics: { track_count: 0, multi_src: 0, improvement: 0 },
+  connected: false,
+  hoveredTrack: null,
+};
+
+function getOperator(logicalTopic) {
+  const parts = (logicalTopic || "").split("/");
+  return parts[1] || "unknown";
+}
+
+function ensureOperator(name) {
+  if (!state.operators[name]) {
+    state.operators[name] = {
+      ego: null,
+      trail: [],
+      detections: [],
+      trajectory: [],
+      coverage: null,
+      color: COLORS[name] || { fill: "#8aa", stroke: "#668", label: name },
+      lastSeen: 0,
+      messageCount: 0,
+    };
   }
+  return state.operators[name];
+}
 
-  async function refreshTopics() {
-    try {
-      const topics = await sdds.listTopics();
-      tbody.innerHTML = "";
-      for (const t of topics) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td class="topic">${t.logical_topic}</td><td>${t.msg_type}</td>` +
-                        `<td>${t.rate_hz}</td><td>${t.message_count}</td>`;
-        tr.querySelector(".topic").onclick = () => {
-          patternEl.value = t.logical_topic;
-          subscribe();
-        };
-        tbody.appendChild(tr);
-      }
-      const pong = await sdds.ping();
-      statsEl.textContent = `clients=${pong.clients_connected}  dispatched=${pong.messages_dispatched}`;
-    } catch (e) { /* ignore — bridge may be (re)connecting */ }
-  }
+// ── Message handlers ───────────────────────────────────────────────────
+function onEgoPose(msg) {
+  const op = ensureOperator(getOperator(msg.logical_topic));
+  // Synthetic publisher uses ``pose.t``; nuScenes uses ``pose_se3.t``.
+  const pose = (msg.payload && (msg.payload.pose_se3 || msg.payload.pose)) || {};
+  const t = pose.t || pose.position || {};
+  op.ego = { x: +t.x || 0, y: +t.y || 0, z: +t.z || 0 };
+  op.trail.push([op.ego.x, op.ego.y]);
+  if (op.trail.length > 200) op.trail.shift();
+  op.lastSeen = Date.now();
+  op.messageCount++;
+}
 
-  function unsubscribeAll() {
-    for (const id of activeSubs) sdds.unsubscribe(id);
-    activeSubs = [];
-  }
+function onDetections(msg) {
+  const op = ensureOperator(getOperator(msg.logical_topic));
+  const dets = (msg.payload && msg.payload.detections) || [];
+  op.detections = dets.map(d => ({
+    x: ((d.center || {}).x) || 0,
+    y: ((d.center || {}).y) || 0,
+    class_id: d.class_id || "unknown",
+    score: +d.score || 0,
+    w: ((d.size || {}).x) || 2,
+    h: ((d.size || {}).y) || 2,
+    det_id: d.det_id || "",
+  }));
+  op.lastSeen = Date.now();
+  op.messageCount++;
+}
 
-  function subscribe() {
-    unsubscribeAll();
-    const id = sdds.subscribe(patternEl.value, renderMessage);
-    activeSubs.push(id);
-  }
-
-  document.getElementById("sub-btn").onclick = subscribe;
-  document.getElementById("unsub-btn").onclick = unsubscribeAll;
-
-  sdds.connect().then(() => {
-    refreshTopics();
-    setInterval(refreshTopics, 2500);
+function onTrajectory(msg) {
+  const op = ensureOperator(getOperator(msg.logical_topic));
+  const waypoints = (msg.payload && msg.payload.waypoints) || [];
+  op.trajectory = waypoints.map(wp => {
+    const t = ((wp.pose || {}).t) || {};
+    return {
+      x: +t.x || 0,
+      y: +t.y || 0,
+      uncertainty: +wp.position_uncertainty_m || 1,
+      confidence: +wp.confidence || 0.5,
+    };
   });
+  op.messageCount++;
+}
+
+function onFusedTracks(msg) {
+  const tracks = (msg.payload && msg.payload.tracks) || [];
+  state.fused.tracks = tracks.map(t => ({
+    x: ((t.position || {}).x) || 0,
+    y: ((t.position || {}).y) || 0,
+    class_id: t.object_class || "?",
+    sources: t.source_operators || [],
+    source_count: +t.source_count || 0,
+    confidence: +t.confidence || 0,
+    track_id: t.track_id || "",
+  }));
+}
+
+function onConflict(msg) {
+  const p = msg.payload || {};
+  if (p.event_type && p.event_type !== "trajectory_conflict") return;
+  state.conflicts.push({
+    x: ((p.conflict_position || {}).x) || 0,
+    y: ((p.conflict_position || {}).y) || 0,
+    agents: p.agents || [],
+    time_to: +p.time_to_conflict || 0,
+    min_dist: +p.min_distance_m || 0,
+    timestamp: Date.now(),
+  });
+  // Keep last 5 conflicts, age out after 10 s.
+  state.conflicts = state.conflicts
+    .filter(c => Date.now() - c.timestamp < 10000)
+    .slice(-5);
+}
+
+function onCoverage(msg) {
+  const m = (msg.payload && (msg.payload.metrics || msg.payload)) || {};
+  state.metrics.track_count = +m.track_count || +m.tracks || 0;
+  state.metrics.multi_src   = +m.multi_source_count || +m.multi_src || 0;
+  // Synthetic publisher uses ``coverage_improvement``; some doc snippets
+  // use the shorter ``improvement`` key — accept either.
+  state.metrics.improvement = +m.coverage_improvement || +m.improvement || 0;
+}
+
+function onBinding(msg) {
+  const p = msg.payload || {};
+  if (!p.entity_id) return;
+  state.fused.bindings[p.entity_id] = {
+    entity_class: p.entity_class || "?",
+    components: p.components || [],
+  };
+}
+
+function onAnnounce(msg) {
+  const op = ensureOperator(getOperator(msg.logical_topic));
+  const cov = (msg.payload && msg.payload.coverage) || {};
+  if (cov.type !== "circle") return;
+  const c = cov.center || {};
+  op.coverage = {
+    cx: +c.x || 0,
+    cy: +c.y || 0,
+    radius: Math.min(+cov.radius_m || 50, COVERAGE_RENDER_MAX_M),
+  };
+}
+
+// ── Draw layer ─────────────────────────────────────────────────────────
+function drawGrid() {
+  ctx.strokeStyle = COLORS.grid;
+  ctx.lineWidth = 0.5;
+  for (let m = -120; m <= 120; m += 10) {
+    const [x] = metersToCanvas(m, 0);
+    const [, y] = metersToCanvas(0, m);
+    if (x >= 0 && x <= cv.width) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cv.height); ctx.stroke();
+    }
+    if (y >= 0 && y <= cv.height) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cv.width, y); ctx.stroke();
+    }
+  }
+  // Origin axis lines slightly brighter.
+  ctx.strokeStyle = "#26305a";
+  ctx.lineWidth = 1;
+  const [ox] = metersToCanvas(0, 0);
+  const [, oy] = metersToCanvas(0, 0);
+  ctx.beginPath(); ctx.moveTo(ox, 0); ctx.lineTo(ox, cv.height); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(cv.width, oy); ctx.stroke();
+  ctx.fillStyle = "#3a4470";
+  ctx.font = "10px ui-monospace, monospace";
+  ctx.fillText("N", ox + 4, 56);
+  ctx.fillText("E", cv.width - 14, oy - 4);
+}
+
+function drawCoverage() {
+  for (const [name, op] of Object.entries(state.operators)) {
+    if (!op.coverage) continue;
+    const [cx, cy] = metersToCanvas(op.coverage.cx, op.coverage.cy);
+    const r = op.coverage.radius * scale;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = op.color.fill + "40";  // very faint
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
+function drawTrails() {
+  for (const op of Object.values(state.operators)) {
+    if (op.trail.length < 2) continue;
+    ctx.beginPath();
+    const [sx, sy] = metersToCanvas(op.trail[0][0], op.trail[0][1]);
+    ctx.moveTo(sx, sy);
+    for (let i = 1; i < op.trail.length; i++) {
+      const [px, py] = metersToCanvas(op.trail[i][0], op.trail[i][1]);
+      ctx.lineTo(px, py);
+    }
+    ctx.strokeStyle = op.color.fill + "60";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function drawDetections() {
+  for (const op of Object.values(state.operators)) {
+    for (const det of op.detections) {
+      const [cx, cy] = metersToCanvas(det.x, det.y);
+      const w = Math.max(4, det.w * scale);
+      const h = Math.max(4, det.h * scale);
+      const a = Math.max(0, Math.min(255, Math.floor(40 + 180 * det.score)));
+      const alpha = a.toString(16).padStart(2, "0");
+      ctx.fillStyle = op.color.fill + alpha;
+      ctx.strokeStyle = op.color.stroke;
+      ctx.lineWidth = 1;
+      ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+      ctx.strokeRect(cx - w / 2, cy - h / 2, w, h);
+      if (det.score > 0.5 && det.class_id) {
+        ctx.fillStyle = op.color.fill;
+        ctx.font = "9px ui-monospace, monospace";
+        ctx.fillText(det.class_id.split(".").pop(), cx + w / 2 + 3, cy + 3);
+      }
+    }
+  }
+}
+
+function drawArrowhead(x, y, angleRad, size, color) {
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x - size * Math.cos(angleRad - 0.4),
+              y - size * Math.sin(angleRad - 0.4));
+  ctx.lineTo(x - size * Math.cos(angleRad + 0.4),
+              y - size * Math.sin(angleRad + 0.4));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawTrajectories() {
+  for (const op of Object.values(state.operators)) {
+    if (!op.trajectory.length || !op.ego) continue;
+    const [sx, sy] = metersToCanvas(op.ego.x, op.ego.y);
+
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.setLineDash([8, 6]);
+    for (const wp of op.trajectory) {
+      const [wx, wy] = metersToCanvas(wp.x, wp.y);
+      ctx.lineTo(wx, wy);
+    }
+    ctx.strokeStyle = op.color.fill + "90";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    for (const wp of op.trajectory) {
+      const [wx, wy] = metersToCanvas(wp.x, wp.y);
+      const r = Math.max(2, wp.uncertainty * scale);
+      ctx.beginPath();
+      ctx.arc(wx, wy, r, 0, Math.PI * 2);
+      ctx.fillStyle = op.color.fill + "15";
+      ctx.fill();
+    }
+
+    if (op.trajectory.length >= 2) {
+      const last = op.trajectory[op.trajectory.length - 1];
+      const prev = op.trajectory[op.trajectory.length - 2];
+      const [lx, ly] = metersToCanvas(last.x, last.y);
+      const angle = Math.atan2(
+        -(last.y - prev.y),  // canvas Y inverted
+        last.x - prev.x,
+      );
+      drawArrowhead(lx, ly, angle, 10, op.color.fill + "c0");
+    }
+  }
+}
+
+function drawFusedTracks() {
+  for (const t of state.fused.tracks) {
+    const [cx, cy] = metersToCanvas(t.x, t.y);
+    const r = 7;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy);
+    ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy);
+    ctx.closePath();
+    const a = Math.max(0, Math.min(255, Math.floor(120 + 135 * t.confidence)));
+    const alpha = a.toString(16).padStart(2, "0");
+    ctx.fillStyle = COLORS.fused.fill + alpha;
+    ctx.fill();
+    ctx.strokeStyle = (t.track_id === state.hoveredTrack) ? "#ffd060" : COLORS.fused.stroke;
+    ctx.lineWidth = (t.track_id === state.hoveredTrack) ? 2 : 1.5;
+    ctx.stroke();
+    ctx.fillStyle = "#ccc";
+    ctx.font = "9px ui-monospace, monospace";
+    const cls = (t.class_id || "?").split(".").pop();
+    ctx.fillText(`${cls} [${t.source_count}]`, cx + r + 4, cy + 3);
+  }
+}
+
+function drawHoverAttribution() {
+  if (!state.hoveredTrack) return;
+  const track = state.fused.tracks.find(t => t.track_id === state.hoveredTrack);
+  if (!track) return;
+  const binding = state.fused.bindings[`entity_${state.hoveredTrack}`];
+  if (!binding) return;
+  const [tx, ty] = metersToCanvas(track.x, track.y);
+  const labels = [];
+  for (const c of binding.components || []) {
+    const topic = c.topic || "";
+    if (!topic.includes("/sensing/detection3d/")) continue;
+    const op = topic.split("/")[1];
+    const opState = state.operators[op];
+    if (!opState) continue;
+    // Find the detection by det_id; if missing, fall back to the operator ego.
+    const matchDet = (opState.detections || []).find(d => d.det_id === c.key);
+    let lx = null, ly = null;
+    if (matchDet) {
+      [lx, ly] = metersToCanvas(matchDet.x, matchDet.y);
+    } else if (opState.ego) {
+      [lx, ly] = metersToCanvas(opState.ego.x, opState.ego.y);
+    }
+    if (lx === null) continue;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty); ctx.lineTo(lx, ly);
+    ctx.strokeStyle = "rgba(180,180,200,0.6)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    labels.push(`${op}:${c.key}`);
+  }
+  // Tooltip
+  if (labels.length) {
+    const text = `${track.class_id} ← ${labels.join(", ")}`;
+    ctx.font = "11px ui-monospace, monospace";
+    const wpx = ctx.measureText(text).width + 12;
+    ctx.fillStyle = "rgba(20,28,52,0.92)";
+    ctx.fillRect(tx + 12, ty - 28, wpx, 20);
+    ctx.fillStyle = "#e2e6f0";
+    ctx.fillText(text, tx + 18, ty - 14);
+  }
+}
+
+function drawConflicts() {
+  const now = Date.now();
+  for (const c of state.conflicts) {
+    const age = (now - c.timestamp) / 1000;
+    if (age > 10) continue;
+    const [cx, cy] = metersToCanvas(c.x, c.y);
+    const pulse = 1 + 0.3 * Math.sin(now / 150);
+    const r = 16 * pulse;
+    const fade = Math.max(0, 1 - age / 10);
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,40,40,${0.30 * fade})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,40,40,${0.85 * fade})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, cy - 7); ctx.lineTo(cx + 7, cy + 7);
+    ctx.moveTo(cx + 7, cy - 7); ctx.lineTo(cx - 7, cy + 7);
+    ctx.strokeStyle = `rgba(255,40,40,${fade})`;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(255,90,90,${fade})`;
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(`CONFLICT ${(c.agents || []).join("×")}`, cx + r + 4, cy - 4);
+    ctx.font = "10px ui-monospace, monospace";
+    ctx.fillText(`${c.min_dist.toFixed(1)} m | ETA ${c.time_to.toFixed(1)} s`,
+                  cx + r + 4, cy + 10);
+  }
+}
+
+function drawEgos() {
+  for (const [name, op] of Object.entries(state.operators)) {
+    if (!op.ego) continue;
+    const [cx, cy] = metersToCanvas(op.ego.x, op.ego.y);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+    ctx.fillStyle = op.color.fill;
+    ctx.fill();
+    ctx.strokeStyle = op.color.stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = op.color.fill;
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(op.color.label || name, cx + 12, cy + 4);
+  }
+}
+
+function drawTitleBar() {
+  const h = 40;
+  ctx.fillStyle = COLORS.metrics_bg;
+  ctx.fillRect(0, 0, cv.width, h);
+  ctx.strokeStyle = "#1a2038";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(cv.width, h); ctx.stroke();
+
+  ctx.fillStyle = "#e2e6f0";
+  ctx.font = "bold 14px sans-serif";
+  ctx.fillText("SpatialDDS 1.6 — Multi-Operator Intersection", 16, 26);
+
+  ctx.beginPath();
+  ctx.arc(cv.width - 18, 20, 5, 0, Math.PI * 2);
+  ctx.fillStyle = state.connected ? "#50c878" : "#ff4444";
+  ctx.fill();
+
+  const nOps = Object.keys(state.operators).length;
+  ctx.fillStyle = COLORS.text;
+  ctx.font = "11px ui-monospace, monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(`${nOps} operators`, cv.width - 32, 24);
+  ctx.textAlign = "start";
+}
+
+function drawMetricsBar() {
+  const barH = 48;
+  const y = cv.height - barH;
+  ctx.fillStyle = COLORS.metrics_bg;
+  ctx.fillRect(0, y, cv.width, barH);
+  ctx.strokeStyle = "#1a2038";
+  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cv.width, y); ctx.stroke();
+
+  const m = state.metrics;
+  const nConflicts = state.conflicts.filter(c => Date.now() - c.timestamp < 10000).length;
+  const headline = [
+    `tracks: ${m.track_count}`,
+    `multi-src: ${m.multi_src}`,
+    `improvement: ${(m.improvement || 0).toFixed(1)}×`,
+    nConflicts > 0
+      ? `⚠ ${nConflicts} conflict${nConflicts > 1 ? "s" : ""}`
+      : "✓ no conflicts",
+  ];
+  let tx = 16;
+  ctx.font = "12px ui-monospace, monospace";
+  for (const text of headline) {
+    ctx.fillStyle = text.startsWith("⚠") ? "#ff6464" : COLORS.text;
+    ctx.fillText(text, tx, y + 20);
+    tx += ctx.measureText(text).width + 24;
+  }
+
+  // Per-operator rates (computed from messageCount over a 1 s window).
+  ctx.fillStyle = "#666c80";
+  ctx.font = "10px ui-monospace, monospace";
+  tx = 16;
+  for (const [name, op] of Object.entries(state.operators)) {
+    const rate = op._lastRateHz || 0;
+    const c = (COLORS[name] || op.color).fill;
+    ctx.fillStyle = c;
+    ctx.fillText(`${name}`, tx, y + 38);
+    tx += ctx.measureText(`${name}`).width + 4;
+    ctx.fillStyle = "#666c80";
+    const t = `: ${rate.toFixed(1)} Hz`;
+    ctx.fillText(t, tx, y + 38);
+    tx += ctx.measureText(t).width + 18;
+  }
+}
+
+// Recompute per-operator Hz once a second.
+setInterval(() => {
+  const now = Date.now();
+  for (const op of Object.values(state.operators)) {
+    if (op._lastRateAt) {
+      const dt = (now - op._lastRateAt) / 1000;
+      op._lastRateHz = (op.messageCount - (op._lastRateCount || 0)) / Math.max(0.001, dt);
+    }
+    op._lastRateAt = now;
+    op._lastRateCount = op.messageCount;
+  }
+}, 1000);
+
+// ── Hover ──────────────────────────────────────────────────────────────
+cv.addEventListener("mousemove", (e) => {
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  state.hoveredTrack = null;
+  for (const t of state.fused.tracks) {
+    const [cx, cy] = metersToCanvas(t.x, t.y);
+    if (Math.abs(mx - cx) < 12 && Math.abs(my - cy) < 12) {
+      state.hoveredTrack = t.track_id;
+      break;
+    }
+  }
+});
+
+// ── Main render loop ───────────────────────────────────────────────────
+function render() {
+  ctx.fillStyle = COLORS.background;
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  drawGrid();
+  drawCoverage();
+  drawTrails();
+  drawDetections();
+  drawTrajectories();
+  drawFusedTracks();
+  drawHoverAttribution();
+  drawConflicts();
+  drawEgos();
+  drawTitleBar();
+  drawMetricsBar();
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+
+// ── WebSocket subscriptions ────────────────────────────────────────────
+const sdds = new SpatialDDSClient();
+sdds.onConnect = () => { state.connected = true; };
+sdds.onDisconnect = () => { state.connected = false; };
+
+function resubscribeAll() {
+  // Per-operator detection sets — cover both NUSC_DET3D_SET (ops) and
+  // INFRA_DET3D_SET (the 4th radar source).
+  sdds.subscribe("spatialdds/*/sensing/detection3d/v1", onDetections,
+                  { id: "dets", maxRateHz: 10 });
+  sdds.subscribe("spatialdds/*/ego/pose/v1", onEgoPose,
+                  { id: "ego", maxRateHz: 10 });
+  sdds.subscribe("spatialdds/platform/fusion/track/v1", onFusedTracks,
+                  { id: "fused", maxRateHz: 10 });
+  sdds.subscribe("spatialdds/*/plan/*/trajectory/v1", onTrajectory,
+                  { id: "plan", maxRateHz: 5 });
+  sdds.subscribe("spatialdds/platform/events/trajectory_conflict/v1",
+                  onConflict, { id: "conflict" });
+  sdds.subscribe("spatialdds/platform/fusion/coverage/v1", onCoverage,
+                  { id: "coverage", maxRateHz: 2 });
+  sdds.subscribe("spatialdds/platform/entity/binding/v1", onBinding,
+                  { id: "binding", maxRateHz: 5 });
+  sdds.subscribe("spatialdds/*/discovery/announce/v1", onAnnounce,
+                  { id: "announce" });
+}
+
+sdds.onConnect = () => {
+  state.connected = true;
+  resubscribeAll();
+};
+sdds.onDisconnect = () => { state.connected = false; };
+
+sdds.connect().catch(err => console.error("SpatialDDS WS connect failed", err));
 </script>
 </body>
 </html>

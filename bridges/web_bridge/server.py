@@ -35,6 +35,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
@@ -710,6 +711,18 @@ async def ws_generic(websocket: WebSocket) -> None:
 # Mount static dashboard if a directory exists.
 if Path(STATIC_DIR).is_dir():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    _static_dir = Path(STATIC_DIR)
+
+    # Landing page: 2D canvas top-down intersection viz. The old
+    # topic-list debug page lives at /debug.
+    @app.get("/")
+    def _root_index():
+        return FileResponse(_static_dir / "index.html")
+
+    @app.get("/debug")
+    def _debug_index():
+        return FileResponse(_static_dir / "debug.html")
 
 
 if __name__ == "__main__":
