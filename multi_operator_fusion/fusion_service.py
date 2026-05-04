@@ -28,12 +28,16 @@ from typing import Optional
 _HERE = Path(__file__).resolve().parent             # multi_operator_fusion/
 REPO_ROOT = _HERE.parent
 NUSCENES_DIR = REPO_ROOT / "nuscenes"
-# _HERE first so ``from fusion import ...`` resolves to the local module
-# even when this file is loaded as ``multi_operator_fusion.fusion_service``
-# (which doesn't put _HERE on sys.path automatically).
-for p in (_HERE, REPO_ROOT, NUSCENES_DIR):
+for p in (REPO_ROOT, NUSCENES_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+# Force _HERE to sys.path[0]. The earlier ``if not in sys.path`` guard
+# silently skipped this insert when a test runner had already added
+# multi_operator_fusion/, in which case nuscenes/spatialdds_types
+# shadowed the local v1.6 helper module.
+if str(_HERE) in sys.path:
+    sys.path.remove(str(_HERE))
+sys.path.insert(0, str(_HERE))
 
 from fusion import (  # noqa: E402
     Detection3D,
@@ -42,15 +46,22 @@ from fusion import (  # noqa: E402
     Velocity,
     coverage_metrics,
 )
+from spatialdds_types import (  # noqa: E402
+    make_component_ref,
+    make_entity_binding,
+)
 
 DET3D_TOPIC_SUFFIX = "sensing/detection3d/v1"
+DET3D_TOPIC_FMT = "spatialdds/{operator}/sensing/detection3d/v1"
 PLAN_TOPIC_SUFFIX = "trajectory/v1"
 TRACK_TOPIC = "spatialdds/platform/fusion/track/v1"
 COVERAGE_TOPIC = "spatialdds/platform/fusion/coverage/v1"
 TRAJ_CONFLICT_TOPIC = "spatialdds/platform/events/trajectory_conflict/v1"
+ENTITY_BINDING_TOPIC = "spatialdds/platform/entity/binding/v1"
 TRACK_MSG_TYPE = "NUSC_FUSED_TRACK_SET"
 TRAJ_CONFLICT_MSG_TYPE = "SpatialEvent"
 COVERAGE_MSG_TYPE = "NUSC_FUSION_COVERAGE"
+ENTITY_BINDING_MSG_TYPE = "EntityBinding"
 
 
 def _infer_modality_from_topic(logical_topic: str) -> str:
@@ -80,6 +91,7 @@ def _parse_detection(raw: dict, source_operator: str, modality: str,
         object_class=str(raw.get("class_id", "unknown")),
         confidence=float(raw.get("score", 1.0)),
         position_uncertainty=default_sigma,
+        det_id=str(raw.get("det_id", "")),
     )
 
 
@@ -240,6 +252,7 @@ class FusionService:
             self._publish_tracks(tracks, t)
             self._publish_coverage(tracks, t)
             self._publish_trajectory_conflicts(t)
+            self._publish_entity_bindings(tracks, t)
             if not self._quiet:
                 m = coverage_metrics(tracks)
                 print(f"[fusion] t={t:.1f} tracks={m['track_count']} "
@@ -282,6 +295,41 @@ class FusionService:
         if conflicts:
             still_active = {tuple(sorted(c["agents"])) for c in conflicts}
             self._reported_conflicts &= still_active
+
+    def _publish_entity_bindings(self, tracks, t: float) -> None:
+        """One EntityBinding per confirmed track. Components are:
+          1. The fused track itself (so subscribers can deref the track
+             after receiving the binding alone),
+          2. one ComponentRef per contributing operator pointing at the
+             most-recent detection that fed this track.
+        """
+        for trk in tracks:
+            components = [make_component_ref(topic=TRACK_TOPIC,
+                                                key=trk.track_id)]
+            for op, det_id in trk.last_det_per_operator.items():
+                if not det_id:
+                    continue
+                components.append(make_component_ref(
+                    topic=DET3D_TOPIC_FMT.format(operator=op),
+                    key=det_id,
+                ))
+            payload = make_entity_binding(
+                entity_id=f"entity_{trk.track_id}",
+                entity_class=trk.object_class,
+                components=components,
+                pose={
+                    "t": dataclasses.asdict(trk.position),
+                    "q": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                },
+                source_id="platform-fusion",
+                timestamp_s=t,
+            )
+            self._transport.publish(
+                logical_topic=ENTITY_BINDING_TOPIC,
+                msg_type=ENTITY_BINDING_MSG_TYPE,
+                payload=payload,
+                request_id=trk.track_id,
+            )
 
     def _publish_tracks(self, tracks, t: float) -> None:
         payload = {

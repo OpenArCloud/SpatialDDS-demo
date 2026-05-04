@@ -1,0 +1,199 @@
+"""Unit tests for Phase 3a (EntityBinding) + Phase 4a (Announce).
+
+The fusion service's ``_publish_entity_bindings`` and the synthetic
+publisher's announce builders are pure functions over a transport
+recorder, so we test them with a captured-publish stub instead of DDS.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import types as _types
+import unittest
+from pathlib import Path
+
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+
+# Tier-1 unit tests don't have cyclonedds — stub envelope_io so importing
+# synthetic_publisher works even on a host without DDS.
+if "envelope_io" not in sys.modules:
+    stub = _types.ModuleType("envelope_io")
+    class _StubPublisher:
+        def __init__(self, *_a, **_kw): ...
+        def publish(self, *_a, **_kw): ...
+        def close(self): ...
+    stub.EnvelopePublisher = _StubPublisher  # type: ignore[attr-defined]
+    sys.modules["envelope_io"] = stub
+
+from fusion import FusedTrack, Position, Velocity  # noqa: E402
+from fusion_service import (  # noqa: E402
+    DET3D_TOPIC_FMT,
+    ENTITY_BINDING_MSG_TYPE,
+    ENTITY_BINDING_TOPIC,
+    FusionService,
+    TRACK_TOPIC,
+)
+from spatialdds_types import SCHEMA_DISCOVERY  # noqa: E402
+from synthetic_publisher import (  # noqa: E402
+    _build_infra_announce,
+    _build_operator_announce,
+    _operator_coverage,
+    INFRA_BS_POSITION,
+    INFRA_COVERAGE_RADIUS_M,
+    COVERAGE_RADIUS_M,
+)
+
+
+class _RecordingTransport:
+    """Captures publish() calls so the test can assert on payloads."""
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    def publish(self, **kwargs) -> None:
+        self.calls.append(kwargs)
+
+
+def _make_fused_track(track_id="fused-7", op_dets=None, cls="vehicle.car"):
+    return FusedTrack(
+        track_id=track_id,
+        position=Position(1.0, 2.0, 0.0),
+        velocity=Velocity(0.5, 0.5, 0.0),
+        position_uncertainty=0.4,
+        object_class=cls,
+        confidence=0.92,
+        source_operators=sorted(op_dets or {}),
+        source_modalities=["det3d"],
+        source_count=len(op_dets or {}),
+        timestamp=10.0,
+        track_age=2.5,
+        last_det_per_operator=dict(op_dets or {}),
+    )
+
+
+class TestEntityBindingPublish(unittest.TestCase):
+
+    def setUp(self):
+        self.tx = _RecordingTransport()
+
+        # Build a FusionService without running its tick loop. The
+        # constructor only requires (transport, fuser, tick_hz, sigma,
+        # quiet) — fuser can be a stub since we won't call it.
+        class _StubFuser:
+            def tick(self, *_a, **_kw): return []
+            def on_detection(self, *_a, **_kw): pass
+        self.svc = FusionService(transport=self.tx, fuser=_StubFuser(),
+                                  tick_hz=2.0, default_sigma=0.5, quiet=True)
+
+    def test_emits_one_binding_per_track(self):
+        tracks = [
+            _make_fused_track("fused-1", {"operator_a": "det_42"}),
+            _make_fused_track("fused-2", {"operator_a": "det_77",
+                                           "operator_b": "det_99"}),
+        ]
+        self.svc._publish_entity_bindings(tracks, t=10.0)
+        self.assertEqual(len(self.tx.calls), 2)
+        for call in self.tx.calls:
+            self.assertEqual(call["logical_topic"], ENTITY_BINDING_TOPIC)
+            self.assertEqual(call["msg_type"], ENTITY_BINDING_MSG_TYPE)
+
+    def test_components_include_track_and_each_operator_det(self):
+        track = _make_fused_track("fused-7", {
+            "operator_a": "det_42",
+            "operator_c": "det_18",
+            "infrastructure": "infra_0_2_55",
+        })
+        self.svc._publish_entity_bindings([track], t=10.0)
+        binding = self.tx.calls[0]["payload"]
+        topics = [c["topic"] for c in binding["components"]]
+        keys = [c["key"] for c in binding["components"]]
+
+        self.assertIn(TRACK_TOPIC, topics)
+        self.assertIn(DET3D_TOPIC_FMT.format(operator="operator_a"), topics)
+        self.assertIn(DET3D_TOPIC_FMT.format(operator="operator_c"), topics)
+        self.assertIn(DET3D_TOPIC_FMT.format(operator="infrastructure"), topics)
+        self.assertIn("fused-7", keys)
+        self.assertIn("det_42", keys)
+        self.assertIn("infra_0_2_55", keys)
+
+    def test_skips_operators_without_det_id(self):
+        """If a contributing detection lacked a det_id (legacy data, edge
+        case in tests), no component_ref is emitted for that operator —
+        but the fused-track ref is always present."""
+        track = _make_fused_track("fused-3", {"operator_a": "",
+                                                "operator_b": "det_5"})
+        self.svc._publish_entity_bindings([track], t=10.0)
+        binding = self.tx.calls[0]["payload"]
+        ops_in_components = [c["topic"].split("/")[1]
+                              for c in binding["components"]
+                              if "sensing/detection3d" in c["topic"]]
+        self.assertNotIn("operator_a", ops_in_components)
+        self.assertIn("operator_b", ops_in_components)
+
+    def test_pose_attached(self):
+        track = _make_fused_track("fused-1", {"operator_a": "det_1"})
+        self.svc._publish_entity_bindings([track], t=10.0)
+        binding = self.tx.calls[0]["payload"]
+        self.assertTrue(binding["has_pose"])
+        self.assertEqual(binding["pose"]["t"]["x"], 1.0)
+        self.assertEqual(binding["pose"]["t"]["y"], 2.0)
+        self.assertEqual(binding["entity_class"], "vehicle.car")
+
+    def test_payload_is_json_serialisable(self):
+        track = _make_fused_track("fused-1", {"operator_a": "det_1"})
+        self.svc._publish_entity_bindings([track], t=10.0)
+        # Round-trips cleanly — the IDL's wire format is JSON-on-envelope.
+        round_tripped = json.loads(json.dumps(self.tx.calls[0]["payload"]))
+        self.assertEqual(round_tripped["entity_id"], "entity_fused-1")
+
+
+class TestAnnounceBuilder(unittest.TestCase):
+
+    def test_operator_announce_shape(self):
+        a = _build_operator_announce(op_idx=0, t_wall=42.0)
+        self.assertEqual(a["schema_version"], SCHEMA_DISCOVERY)
+        self.assertEqual(a["operator"], "operator_a")
+        self.assertEqual(a["service_kind"], "SENSING")
+        self.assertEqual(a["stamp"]["sec"], 42)
+        self.assertTrue(a["has_coverage"])
+        self.assertEqual(a["coverage"]["type"], "circle")
+        self.assertEqual(a["coverage"]["radius_m"], COVERAGE_RADIUS_M)
+
+    def test_operator_announce_lists_owned_topics(self):
+        a = _build_operator_announce(op_idx=1, t_wall=0.0)
+        topic_names = {t["topic"] for t in a["topics"]}
+        # All three streams the per-operator publisher emits.
+        self.assertEqual(topic_names, {
+            "spatialdds/operator_b/sensing/detection3d/v1",
+            "spatialdds/operator_b/ego/pose/v1",
+            "spatialdds/operator_b/plan/operator_b_ego/trajectory/v1",
+        })
+
+    def test_coverage_centred_on_ego_start(self):
+        cov = _operator_coverage(op_idx=0)  # operator_a starts at (0, -30)
+        self.assertEqual(cov["center"]["x"], 0.0)
+        self.assertEqual(cov["center"]["y"], -30.0)
+
+    def test_infra_announce_uses_bs_position(self):
+        a = _build_infra_announce(t_wall=1.0)
+        self.assertEqual(a["operator"], "infrastructure")
+        self.assertEqual(a["service_kind"], "INFRASTRUCTURE")
+        self.assertEqual(a["coverage"]["center"], INFRA_BS_POSITION)
+        self.assertEqual(a["coverage"]["radius_m"], INFRA_COVERAGE_RADIUS_M)
+        self.assertEqual(len(a["topics"]), 1)
+        self.assertEqual(
+            a["topics"][0]["topic"],
+            "spatialdds/infrastructure/sensing/detection3d/v1",
+        )
+
+    def test_announce_is_json_serialisable(self):
+        a = _build_operator_announce(op_idx=2, t_wall=99.5)
+        round_tripped = json.loads(json.dumps(a))
+        self.assertEqual(round_tripped["operator"], "operator_c")
+
+
+if __name__ == "__main__":
+    unittest.main()

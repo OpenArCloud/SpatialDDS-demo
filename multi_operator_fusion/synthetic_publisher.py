@@ -63,6 +63,7 @@ sys.path.insert(0, str(_HERE))
 
 from envelope_io import EnvelopePublisher  # noqa: E402
 from spatialdds_types import (  # noqa: E402
+    make_announce,
     make_planned_trajectory,
     make_planned_waypoint,
 )
@@ -90,6 +91,11 @@ INFRA_OPERATOR = "infrastructure"
 INFRA_TOPIC = f"spatialdds/{INFRA_OPERATOR}/sensing/detection3d/v1"
 INFRA_MSG_TYPE = "INFRA_DET3D_SET"
 INFRA_BS_POSITION = {"x": -25.0, "y": -25.0, "z": 2.0}  # roadside-pole-ish
+
+ANNOUNCE_TOPIC_FMT = "spatialdds/{operator}/discovery/announce/v1"
+ANNOUNCE_MSG_TYPE = "Announce"
+COVERAGE_RADIUS_M = 80.0
+INFRA_COVERAGE_RADIUS_M = 200.0
 
 # Visible classes — keep small so the dashboard is readable.
 CLASSES = ["vehicle.car", "vehicle.truck", "human.pedestrian", "vehicle.bicycle"]
@@ -359,6 +365,52 @@ def _build_infra_set(t: float, frame_seq: int, n_operators: int,
     }
 
 
+def _operator_coverage(op_idx: int) -> Dict:
+    """A circle around the operator's start position. The dashboard's
+    coverage overlay (Phase 4b, deferred) will render these as
+    translucent regions that brighten where they overlap."""
+    if op_idx in EGO_PATHS:
+        p = EGO_PATHS[op_idx]
+        cx, cy = p["x0"], p["y0"]
+    else:
+        cx, cy = _operator_offset(op_idx)
+    return {
+        "type": "circle",
+        "center": {"x": cx, "y": cy, "z": 0.0},
+        "radius_m": COVERAGE_RADIUS_M,
+    }
+
+
+def _build_operator_announce(op_idx: int, t_wall: float) -> Dict:
+    operator = _operator_id(op_idx)
+    topics = [
+        {"topic": TOPIC_FMT.format(operator=operator),
+         "msg_type": MSG_TYPE},
+        {"topic": EGO_POSE_TOPIC_FMT.format(operator=operator),
+         "msg_type": EGO_POSE_MSG_TYPE},
+        {"topic": PLAN_TOPIC_FMT.format(operator=operator),
+         "msg_type": PLAN_MSG_TYPE},
+    ]
+    return make_announce(
+        operator=operator, service_kind="SENSING",
+        topics=topics, coverage=_operator_coverage(op_idx),
+        timestamp_s=t_wall,
+    )
+
+
+def _build_infra_announce(t_wall: float) -> Dict:
+    coverage = {
+        "type": "circle",
+        "center": INFRA_BS_POSITION,
+        "radius_m": INFRA_COVERAGE_RADIUS_M,
+    }
+    topics = [{"topic": INFRA_TOPIC, "msg_type": INFRA_MSG_TYPE}]
+    return make_announce(
+        operator=INFRA_OPERATOR, service_kind="INFRASTRUCTURE",
+        topics=topics, coverage=coverage, timestamp_s=t_wall,
+    )
+
+
 def _build_set(op_idx: int, n_objects: int, t: float, frame_seq: int,
                 jitter_seed: int = 0) -> Dict:
     """Build one Detection3DSet payload. Each operator drops a different
@@ -422,10 +474,39 @@ def main() -> int:
           f"{args.rate / plan_every_n:.1f} Hz)",
           file=sys.stderr)
 
+    # Phase 4a — Announce: each operator (+ infrastructure) publishes one
+    # discovery payload at startup with its coverage geometry and the
+    # topics it owns. Re-emitted every announce_period_s so late
+    # subscribers (web bridge restarts, MCAP recorder mid-run, etc.) can
+    # still discover what is on the wire.
+    announce_period_s = 5.0
+
+    def _emit_announces() -> None:
+        wall = time.time()
+        for op_idx in range(args.operators):
+            transport.publish(
+                logical_topic=ANNOUNCE_TOPIC_FMT.format(
+                    operator=_operator_id(op_idx)),
+                msg_type=ANNOUNCE_MSG_TYPE,
+                payload=_build_operator_announce(op_idx, wall),
+            )
+        if not args.no_infrastructure:
+            transport.publish(
+                logical_topic=ANNOUNCE_TOPIC_FMT.format(operator=INFRA_OPERATOR),
+                msg_type=ANNOUNCE_MSG_TYPE,
+                payload=_build_infra_announce(wall),
+            )
+
+    _emit_announces()
+    last_announce_t = time.time()
+
     try:
         while True:
             t = time.time()
             t_demo = t - start_wall
+            if t - last_announce_t >= announce_period_s:
+                _emit_announces()
+                last_announce_t = t
             for op_idx in range(args.operators):
                 operator = _operator_id(op_idx)
                 # Detection3DSet (10 Hz)

@@ -143,3 +143,32 @@ def make_entity_binding(
     if pose is not None:
         binding["pose"] = pose
     return binding
+
+
+SCHEMA_DISCOVERY = "spatial.discovery/1.6"
+
+
+def make_announce(
+    operator: str,
+    *,
+    service_kind: str,
+    topics: Sequence[Dict],
+    coverage: Optional[Dict] = None,
+    timestamp_s: float = 0.0,
+) -> Dict:
+    """Build an ``Announce`` dict for the discovery topic.
+
+    ``coverage`` is a free-form dict (typically ``{"type": "circle",
+    "center": {"x", "y"}, "radius_m": …}`` or a polygon) — the dashboard
+    just renders whatever shape it gets. ``topics`` is a list of
+    ``{"topic": …, "msg_type": …}`` dicts the operator owns.
+    """
+    return {
+        "schema_version": SCHEMA_DISCOVERY,
+        "operator": str(operator),
+        "service_kind": str(service_kind),
+        "topics": list(topics),
+        "has_coverage": coverage is not None,
+        **({"coverage": coverage} if coverage is not None else {}),
+        "stamp": _stamp(timestamp_s),
+    }

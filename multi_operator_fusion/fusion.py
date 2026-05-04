@@ -43,6 +43,7 @@ class Detection3D:
     object_class: str
     confidence: float
     position_uncertainty: float
+    det_id: str = ""
 
 
 @dataclass
@@ -59,6 +60,10 @@ class FusedTrack:
     source_count: int
     timestamp: float
     track_age: float
+    # Most-recent contributing det_id per operator. The fusion service
+    # uses this to build EntityBinding component_refs without having to
+    # remember every detection that ever fed the track.
+    last_det_per_operator: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -76,6 +81,7 @@ class _FusionTrack:
     consecutive_hits: int = 0
     consecutive_misses: int = 0
     status: str = "tentative"
+    last_det_per_operator: Dict[str, str] = field(default_factory=dict)
     _hit_this_tick: bool = False
 
 
@@ -160,6 +166,9 @@ class TrackFusion:
                     consecutive_hits=1,
                     consecutive_misses=0,
                     status="tentative",
+                    last_det_per_operator=(
+                        {det.source_operator: det.det_id} if det.det_id else {}
+                    ),
                     _hit_this_tick=True,
                 )
                 new_ids.append(tid)
@@ -191,6 +200,7 @@ class TrackFusion:
                 source_count=len(trk.source_operators),
                 timestamp=trk.last_seen_t,
                 track_age=trk.last_seen_t - trk.first_seen_t,
+                last_det_per_operator=dict(trk.last_det_per_operator),
             )
             for trk in self._tracks.values()
             if trk.status == "confirmed"
@@ -215,6 +225,8 @@ class TrackFusion:
 
         trk.source_operators.add(det.source_operator)
         trk.source_modalities.add(det.source_modality)
+        if det.det_id:
+            trk.last_det_per_operator[det.source_operator] = det.det_id
 
         if det.object_class != "unknown":
             trk.object_class = det.object_class
