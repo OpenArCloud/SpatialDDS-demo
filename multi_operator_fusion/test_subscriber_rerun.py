@@ -144,6 +144,7 @@ class TestSubscriberRerun(unittest.TestCase):
         self.sub._trails = {}
         self.sub._trail_max = 200
         self.sub._coverage_logged = set()
+        self.sub.debug = False
 
     def _drive(self, msg_type: str, topic: str, payload: dict,
                 operator: str = "operator_a"):

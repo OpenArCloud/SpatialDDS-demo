@@ -99,12 +99,30 @@ def _stamp_ns(stamp: Dict[str, Any]) -> int:
     return int(stamp.get("sec", 0)) * 1_000_000_000 + int(stamp.get("nanosec", 0))
 
 
+# Module-level frame counter shared by every handler. The publisher's
+# stamps are wall-clock epoch seconds (≈ 1.78e9), and a duration
+# timeline reading 1.78 billion seconds parks the cursor well off the
+# auto-ranged window. Driving a monotonic ``frame`` sequence timeline
+# alongside the wall-clock ``timestamp`` guarantees the viewer always
+# has a sensible cursor — and it's what the bottom timeline defaults to.
+_frame_counter = 0
+
+
 def _set_time(stamp: Dict[str, Any]) -> None:
-    """Set the Rerun timeline. ``rr.set_time_nanos`` was deprecated in
-    0.23; use the new ``rr.set_time(timestamp=…)`` form so the warning
-    doesn't spam every frame."""
-    ns = _stamp_ns(stamp)
-    rr.set_time("timestamp", duration=ns / 1e9)
+    """Set both timelines for this Rerun event:
+      * ``frame``: monotonic int counter — the viewer auto-ranges to
+        [0, current] so streamed data is always inside the window.
+      * ``timestamp``: absolute wall-clock seconds via ``timestamp=``
+        (NOT ``duration=`` — duration is seconds-since-stream-start
+        and a 1.78e9 s value would look absurd in that mode).
+    """
+    global _frame_counter
+    _frame_counter += 1
+    rr.set_time("frame", sequence=_frame_counter)
+    sec = float(stamp.get("sec", 0))
+    nsec = float(stamp.get("nanosec", 0))
+    if sec > 0:
+        rr.set_time("timestamp", timestamp=sec + nsec / 1e9)
 
 
 def _q_xyzw(q: Dict[str, float]) -> List[float]:
@@ -220,6 +238,8 @@ class RerunMultiOpSubscriber:
     # ── Existing handlers ────────────────────────────────────────────
 
     def _handle_ego(self, operator: str, payload: Dict[str, Any]) -> None:
+        if self.debug:
+            print(f"RENDER ego_pose: {operator}", file=sys.stderr)
         _set_time(payload.get("stamp", {}))
         # nuScenes publisher uses ``pose_se3``; the synthetic multi-op
         # publisher uses ``pose``. Accept either so the same Rerun
@@ -323,6 +343,9 @@ class RerunMultiOpSubscriber:
     def _handle_det3d(self, operator: str, payload: Dict[str, Any]) -> None:
         _set_time(payload.get("stamp", {}))
         dets = payload.get("detections", [])
+        if self.debug:
+            print(f"RENDER detections: {operator}, {len(dets)} dets",
+                  file=sys.stderr)
         if not dets:
             return
         centers, sizes, quats, labels, colors = [], [], [], [], []
@@ -362,6 +385,9 @@ class RerunMultiOpSubscriber:
     def _handle_fused_tracks(self, payload: Dict[str, Any]) -> None:
         _set_time(payload.get("stamp", {}))
         tracks = payload.get("tracks", [])
+        if self.debug:
+            print(f"RENDER fused_tracks: {len(tracks)} tracks",
+                  file=sys.stderr)
         if not tracks:
             rr.log("world/fused/tracks", rr.Clear(recursive=False))
             return
@@ -394,6 +420,9 @@ class RerunMultiOpSubscriber:
         )
 
     def _handle_coverage(self, payload: Dict[str, Any]) -> None:
+        if self.debug:
+            print(f"RENDER coverage: {len(payload.get('metrics') or {})} keys",
+                  file=sys.stderr)
         _set_time(payload.get("stamp", {}))
         m = payload.get("metrics", {})
         per_op = m.get("per_operator_track_count", {})
@@ -415,6 +444,9 @@ class RerunMultiOpSubscriber:
         ``position_uncertainty_m``) and a brighter goal marker."""
         _set_time(payload.get("stamp", {}))
         waypoints = payload.get("waypoints") or []
+        if self.debug:
+            print(f"RENDER plan: {operator}, {len(waypoints)} waypoints",
+                  file=sys.stderr)
         if not waypoints:
             return
         positions: List[List[float]] = []
@@ -461,6 +493,9 @@ class RerunMultiOpSubscriber:
         """trajectory_conflict events get a bright red marker plus a
         WARN-level entry in the events log so the timeline highlights
         them."""
+        if self.debug:
+            print(f"RENDER spatial_event: {payload.get('event_type', '?')}",
+                  file=sys.stderr)
         _set_time(payload.get("stamp", {}))
         if payload.get("event_type") != "trajectory_conflict":
             rr.log("events/log", rr.TextLog(
@@ -493,6 +528,10 @@ class RerunMultiOpSubscriber:
         ))
 
     def _handle_entity_binding(self, payload: Dict[str, Any]) -> None:
+        if self.debug:
+            print(f"RENDER binding: {payload.get('entity_id', '?')} "
+                  f"comps={len(payload.get('components') or [])}",
+                  file=sys.stderr)
         """Each EntityBinding pins together one fused track and its
         contributing detections. We don't have a position cache for the
         component refs, so we just place a small grey marker at the
@@ -531,6 +570,8 @@ class RerunMultiOpSubscriber:
         ))
 
     def _handle_announce(self, operator: str, payload: Dict[str, Any]) -> None:
+        if self.debug:
+            print(f"RENDER announce: {operator}", file=sys.stderr)
         """Coverage geometry as a flat circle on z=0. Logged ``static``
         the first time we see it per operator so a 5 s republish doesn't
         keep stamping the same circle into every frame.
