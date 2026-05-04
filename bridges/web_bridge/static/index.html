@@ -42,22 +42,36 @@ const COVERAGE_RENDER_MAX_M = 40;
 
 const cv = document.getElementById("cv");
 const ctx = cv.getContext("2d");
-let scale = 6;  // px/m — recomputed on resize
+let scale = 6;       // px/m — recomputed on resize
+let cssW = 0, cssH = 0;  // logical CSS pixels (after DPR scaling)
 
 function resizeCanvas() {
-  cv.width = window.innerWidth;
-  cv.height = window.innerHeight;
-  // Want ±80 m to fit between the title bar (40 px) and metrics bar (48 px).
-  const usableH = Math.max(120, cv.height - 88);
-  scale = Math.min(cv.width, usableH) / 160;
+  // Hi-DPI: render at devicePixelRatio so text doesn't look fuzzy on
+  // Retina / 4K displays. Canvas backing store is dpr× the CSS size,
+  // and we ``ctx.scale(dpr, dpr)`` so all subsequent draw calls use
+  // CSS-pixel coordinates.
+  const dpr = window.devicePixelRatio || 1;
+  cssW = window.innerWidth;
+  cssH = window.innerHeight;
+  cv.style.width = cssW + "px";
+  cv.style.height = cssH + "px";
+  cv.width = Math.round(cssW * dpr);
+  cv.height = Math.round(cssH * dpr);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  // View window: ±50 m fits in the smaller dimension. Tighter than the
+  // previous ±80 m default so the (0, 0) crossing action fills more
+  // of the canvas and detection boxes are legibly large.
+  const usableH = Math.max(120, cssH - 88);
+  scale = Math.min(cssW, usableH) / 100;
 }
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
 function metersToCanvas(x_m, y_m) {
   return [
-    cv.width / 2 + x_m * scale,
-    cv.height / 2 - y_m * scale,  // Y inverted (north = canvas up)
+    cssW / 2 + x_m * scale,
+    cssH / 2 - y_m * scale,  // Y inverted (north = canvas up)
   ];
 }
 
@@ -215,11 +229,11 @@ function drawGrid() {
   for (let m = -120; m <= 120; m += 10) {
     const [x] = metersToCanvas(m, 0);
     const [, y] = metersToCanvas(0, m);
-    if (x >= 0 && x <= cv.width) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cv.height); ctx.stroke();
+    if (x >= 0 && x <= cssW) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cssH); ctx.stroke();
     }
-    if (y >= 0 && y <= cv.height) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cv.width, y); ctx.stroke();
+    if (y >= 0 && y <= cssH) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cssW, y); ctx.stroke();
     }
   }
   // Origin axis lines slightly brighter.
@@ -227,12 +241,12 @@ function drawGrid() {
   ctx.lineWidth = 1;
   const [ox] = metersToCanvas(0, 0);
   const [, oy] = metersToCanvas(0, 0);
-  ctx.beginPath(); ctx.moveTo(ox, 0); ctx.lineTo(ox, cv.height); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(cv.width, oy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ox, 0); ctx.lineTo(ox, cssH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(cssW, oy); ctx.stroke();
   ctx.fillStyle = "#3a4470";
   ctx.font = "10px ui-monospace, monospace";
   ctx.fillText("N", ox + 4, 56);
-  ctx.fillText("E", cv.width - 14, oy - 4);
+  ctx.fillText("E", cssW - 14, oy - 4);
 }
 
 function drawCoverage() {
@@ -477,17 +491,17 @@ function drawEgos() {
 function drawTitleBar() {
   const h = 40;
   ctx.fillStyle = COLORS.metrics_bg;
-  ctx.fillRect(0, 0, cv.width, h);
+  ctx.fillRect(0, 0, cssW, h);
   ctx.strokeStyle = "#1a2038";
   ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(cv.width, h); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(cssW, h); ctx.stroke();
 
   ctx.fillStyle = "#e2e6f0";
   ctx.font = "bold 14px sans-serif";
   ctx.fillText("SpatialDDS 1.6 — Multi-Operator Intersection", 16, 26);
 
   ctx.beginPath();
-  ctx.arc(cv.width - 18, 20, 5, 0, Math.PI * 2);
+  ctx.arc(cssW - 18, 20, 5, 0, Math.PI * 2);
   ctx.fillStyle = state.connected ? "#50c878" : "#ff4444";
   ctx.fill();
 
@@ -495,17 +509,17 @@ function drawTitleBar() {
   ctx.fillStyle = COLORS.text;
   ctx.font = "11px ui-monospace, monospace";
   ctx.textAlign = "right";
-  ctx.fillText(`${nOps} operators`, cv.width - 32, 24);
+  ctx.fillText(`${nOps} operators`, cssW - 32, 24);
   ctx.textAlign = "start";
 }
 
 function drawMetricsBar() {
   const barH = 48;
-  const y = cv.height - barH;
+  const y = cssH - barH;
   ctx.fillStyle = COLORS.metrics_bg;
-  ctx.fillRect(0, y, cv.width, barH);
+  ctx.fillRect(0, y, cssW, barH);
   ctx.strokeStyle = "#1a2038";
-  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cv.width, y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cssW, y); ctx.stroke();
 
   const m = state.metrics;
   const nConflicts = state.conflicts.filter(c => Date.now() - c.timestamp < 10000).length;
@@ -576,7 +590,7 @@ cv.addEventListener("mousemove", (e) => {
 // ── Main render loop ───────────────────────────────────────────────────
 function render() {
   ctx.fillStyle = COLORS.background;
-  ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.fillRect(0, 0, cssW, cssH);
   drawGrid();
   drawCoverage();
   drawTrails();
