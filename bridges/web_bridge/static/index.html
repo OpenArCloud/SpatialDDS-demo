@@ -87,6 +87,12 @@ function ensureOperator(name) {
       color: COLORS[name] || { fill: "#8aa", stroke: "#668", label: name },
       lastSeen: 0,
       messageCount: 0,
+      // Initialise rate-window so the first interval tick computes
+      // a real Hz value instead of waiting for two ticks (which
+      // briefly displayed 0.0 Hz for late-arriving operators).
+      _lastRateAt: Date.now(),
+      _lastRateCount: 0,
+      _lastRateHz: 0,
     };
   }
   return state.operators[name];
@@ -265,11 +271,9 @@ function drawDetections() {
       ctx.lineWidth = 1;
       ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
       ctx.strokeRect(cx - w / 2, cy - h / 2, w, h);
-      if (det.score > 0.5 && det.class_id) {
-        ctx.fillStyle = op.color.fill;
-        ctx.font = "9px ui-monospace, monospace";
-        ctx.fillText(det.class_id.split(".").pop(), cx + w / 2 + 3, cy + 3);
-      }
+      // No per-detection class label — they overlap heavily at the
+      // crossing centre. Class shows on the fused track diamond, which
+      // is the one entity per object the operator actually cares about.
     }
   }
 }
@@ -561,22 +565,26 @@ sdds.onConnect = () => { state.connected = true; };
 sdds.onDisconnect = () => { state.connected = false; };
 
 function resubscribeAll() {
-  // Per-operator detection sets — cover both NUSC_DET3D_SET (ops) and
-  // INFRA_DET3D_SET (the 4th radar source).
+  // No maxRateHz: the bridge's rate cap is per-subscription, NOT per
+  // (subscription, logical_topic) — with 3+ operators sharing one
+  // pattern, a 10 Hz cap means the first operator each cycle wins and
+  // the others get silently dropped. That manifested as operator_b/c
+  // showing 0 Hz in the metrics bar and PlannedTrajectory dashed lines
+  // never appearing for two of the three operators. Browser can handle
+  // 30+ Hz comfortably; let it all through.
   sdds.subscribe("spatialdds/*/sensing/detection3d/v1", onDetections,
-                  { id: "dets", maxRateHz: 10 });
-  sdds.subscribe("spatialdds/*/ego/pose/v1", onEgoPose,
-                  { id: "ego", maxRateHz: 10 });
+                  { id: "dets" });
+  sdds.subscribe("spatialdds/*/ego/pose/v1", onEgoPose, { id: "ego" });
   sdds.subscribe("spatialdds/platform/fusion/track/v1", onFusedTracks,
-                  { id: "fused", maxRateHz: 10 });
+                  { id: "fused" });
   sdds.subscribe("spatialdds/*/plan/*/trajectory/v1", onTrajectory,
-                  { id: "plan", maxRateHz: 5 });
+                  { id: "plan" });
   sdds.subscribe("spatialdds/platform/events/trajectory_conflict/v1",
                   onConflict, { id: "conflict" });
   sdds.subscribe("spatialdds/platform/fusion/coverage/v1", onCoverage,
-                  { id: "coverage", maxRateHz: 2 });
+                  { id: "coverage" });
   sdds.subscribe("spatialdds/platform/entity/binding/v1", onBinding,
-                  { id: "binding", maxRateHz: 5 });
+                  { id: "binding" });
   sdds.subscribe("spatialdds/*/discovery/announce/v1", onAnnounce,
                   { id: "announce" });
 }

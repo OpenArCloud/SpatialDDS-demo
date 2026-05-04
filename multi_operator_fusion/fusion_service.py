@@ -290,11 +290,14 @@ class FusionService:
                       f"({c['conflict_position']['x']:.1f}, "
                       f"{c['conflict_position']['y']:.1f})",
                       file=sys.stderr)
-        # Re-report previously-seen conflicts that have aged out so the
-        # dashboard sees fresh events if they recur after resolution.
-        if conflicts:
-            still_active = {tuple(sorted(c["agents"])) for c in conflicts}
-            self._reported_conflicts &= still_active
+        # Re-arm the dedupe set every tick — not only when this tick
+        # had conflicts. Otherwise during the no-conflict half of the
+        # ego cycle the set is never cleared, and when the (A, B)
+        # crossing recurs in the next cycle the event is suppressed.
+        # The dashboard only sees one conflict ever, instead of one
+        # per cycle.
+        still_active = {tuple(sorted(c["agents"])) for c in conflicts}
+        self._reported_conflicts &= still_active
 
     def _publish_entity_bindings(self, tracks, t: float) -> None:
         """One EntityBinding per confirmed track. Components are:
