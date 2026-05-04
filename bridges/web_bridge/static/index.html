@@ -176,9 +176,15 @@ function onCoverage(msg) {
   const m = (msg.payload && (msg.payload.metrics || msg.payload)) || {};
   state.metrics.track_count = +m.track_count || +m.tracks || 0;
   state.metrics.multi_src   = +m.multi_source_count || +m.multi_src || 0;
-  // Synthetic publisher uses ``coverage_improvement``; some doc snippets
-  // use the shorter ``improvement`` key — accept either.
-  state.metrics.improvement = +m.coverage_improvement || +m.improvement || 0;
+  // Prefer ``coverage_improvement_excl_infra`` — n / max(per_op count,
+  // excluding the infrastructure radar). The legacy
+  // ``coverage_improvement`` (n / best_single) collapses to 1.0× when
+  // one sensor sees every shared object, which is the demo's reality.
+  state.metrics.improvement =
+       +m.coverage_improvement_excl_infra
+    || +m.coverage_improvement
+    || +m.improvement
+    || 0;
 }
 
 function onBinding(msg) {
@@ -330,6 +336,12 @@ function drawTrajectories() {
 }
 
 function drawFusedTracks() {
+  // Greedy label de-clutter: a track only gets a label if the closest
+  // already-labeled track is at least ``minLabelGapM`` metres away.
+  // The hovered track always wins regardless of distance — that's the
+  // user's escape hatch when many tracks pile up at the crossing.
+  const minLabelGapM = 2.0;
+  const labeled = [];   // [{x, y}, ...]
   for (const t of state.fused.tracks) {
     const [cx, cy] = metersToCanvas(t.x, t.y);
     const r = 7;
@@ -341,13 +353,31 @@ function drawFusedTracks() {
     const alpha = a.toString(16).padStart(2, "0");
     ctx.fillStyle = COLORS.fused.fill + alpha;
     ctx.fill();
-    ctx.strokeStyle = (t.track_id === state.hoveredTrack) ? "#ffd060" : COLORS.fused.stroke;
-    ctx.lineWidth = (t.track_id === state.hoveredTrack) ? 2 : 1.5;
+    const isHovered = (t.track_id === state.hoveredTrack);
+    ctx.strokeStyle = isHovered ? "#ffd060" : COLORS.fused.stroke;
+    ctx.lineWidth = isHovered ? 2 : 1.5;
     ctx.stroke();
-    ctx.fillStyle = "#ccc";
-    ctx.font = "9px ui-monospace, monospace";
-    const cls = (t.class_id || "?").split(".").pop();
-    ctx.fillText(`${cls} [${t.source_count}]`, cx + r + 4, cy + 3);
+
+    let showLabel = isHovered;
+    if (!showLabel) {
+      let closeNeighbour = false;
+      for (const p of labeled) {
+        const dx = t.x - p.x, dy = t.y - p.y;
+        if (dx * dx + dy * dy < minLabelGapM * minLabelGapM) {
+          closeNeighbour = true;
+          break;
+        }
+      }
+      showLabel = !closeNeighbour;
+    }
+    if (showLabel) {
+      ctx.fillStyle = isHovered ? "#fff5d0" : "#ccc";
+      ctx.font = isHovered ? "bold 10px ui-monospace, monospace"
+                            : "9px ui-monospace, monospace";
+      const cls = (t.class_id || "?").split(".").pop();
+      ctx.fillText(`${cls} [${t.source_count}]`, cx + r + 4, cy + 3);
+      labeled.push({ x: t.x, y: t.y });
+    }
   }
 }
 
@@ -479,10 +509,13 @@ function drawMetricsBar() {
 
   const m = state.metrics;
   const nConflicts = state.conflicts.filter(c => Date.now() - c.timestamp < 10000).length;
+  const pct = m.track_count
+    ? Math.round(100 * m.multi_src / m.track_count)
+    : 0;
   const headline = [
     `tracks: ${m.track_count}`,
-    `multi-src: ${m.multi_src}`,
-    `improvement: ${(m.improvement || 0).toFixed(1)}×`,
+    `multi-src: ${m.multi_src}/${m.track_count} (${pct}%)`,
+    `vs best AV: ${(m.improvement || 0).toFixed(1)}×`,
     nConflicts > 0
       ? `⚠ ${nConflicts} conflict${nConflicts > 1 ? "s" : ""}`
       : "✓ no conflicts",

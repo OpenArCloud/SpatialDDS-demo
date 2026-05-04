@@ -256,11 +256,21 @@ def coverage_metrics(tracks: List[FusedTrack]) -> Dict[str, float]:
         for op in t.source_operators:
             per_op[op] = per_op.get(op, 0) + 1
     best_single = max(per_op.values(), default=0)
+    # ``coverage_improvement`` (n / best_single) collapses to 1.0× whenever
+    # one sensor sees every shared object — which is exactly what happens
+    # in the demo, where the infrastructure radar BS observes everything.
+    # ``coverage_improvement_excl_infra`` ignores the BS so the headline
+    # captures the demo's actual value-prop: "fusion + infra together vs.
+    # the best single AV operator". Old key kept for back-compat.
+    av_per_op = {op: c for op, c in per_op.items() if op != "infrastructure"}
+    best_av = max(av_per_op.values(), default=0)
     return {
         "track_count": n,
         "multi_source_count": multi,
         "multi_source_pct": (multi / n) if n else 0.0,
         "best_single_operator_count": best_single,
         "coverage_improvement": (n / best_single) if best_single else 0.0,
+        "best_av_operator_count": best_av,
+        "coverage_improvement_excl_infra": (n / best_av) if best_av else 0.0,
         "per_operator_track_count": per_op,
     }
