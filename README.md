@@ -46,44 +46,16 @@ without per-demo wiring:
 They are not interchangeable. Use the bridge for the web/canvas demos; use the HTTP
 binding when you just want to exercise the registration/search payload shapes.
 
-## Running the AR demo's Cesium web UI
+## Browser UIs
 
-The AR demo's Cesium UI lives under [`web/`](web/) and talks to the
-[web bridge](bridges/web_bridge/README.md), which in turn fronts the AR demo's
-VPS + catalog services.
+Each demo brings its own browser visualisation — both served by the
+[web bridge](bridges/web_bridge/README.md):
 
-Create `web/.env.local` with required values:
-```bash
-VITE_CESIUM_ION_TOKEN=your_token
-VITE_CESIUM_ION_ASSET_ID=your_asset_id
-VITE_SPATIALDDS_BRIDGE_URL=http://localhost:8088
-```
-
-Run the DDS-backed bridge in Docker, then start the web UI on the host:
-
-```bash
-# Start VPS + catalog + bridge (Docker)
-./run_bridge_server_docker.sh
-
-# Verify bridge is reachable
-curl http://localhost:8088/health
-
-# Start web UI (host)
-cd web
-npm install
-npm run dev
-```
-
-Logs are written to `bridges/web_bridge/logs/` — `vps_server_<ts>.log`,
-`catalog_server_<ts>.log`, `bridge_server_<ts>.log`.
-
-Stop the bridge when done:
-```bash
-./stop_bridge_server_docker.sh
-```
-
-The same bridge also serves the 2D canvas intersection dashboard at
-`http://localhost:8088/` once any of the streaming demos (e.g.
-[multi-operator fusion](multi_operator_fusion/README.md) or its
-local docker-compose stack at [`deploy/aws/docker-compose.local.yaml`](deploy/aws/docker-compose.local.yaml))
-are running. The legacy topic-list debug page is at `/debug`.
+- **AR demo** → 3D Cesium-Ion view of VPS coverage + catalog +
+  localisation + anchor publication. Run via
+  [`ar_demo/README.md`](ar_demo/README.md#cesium-web-ui).
+- **Multi-operator fusion** → 2D top-down canvas at
+  `http://localhost:8088/` (debug topic-list at `/debug`) — operator
+  egos + trails, detection wireframes, planned trajectories, fused
+  tracks, conflict markers, live metrics. Run via
+  [`multi_operator_fusion/README.md`](multi_operator_fusion/README.md#browser-canvas-dashboard).
