@@ -7,6 +7,8 @@ Exercised against the canonical IDL bundled at
 [`../idl/v1.6`](../idl/v1.6) and the manifests at
 [`../manifests/v1.6`](../manifests/v1.6).
 
+![Cesium web UI](../web/screenshot.png)
+
 ## Protocol flow
 
 ```mermaid
