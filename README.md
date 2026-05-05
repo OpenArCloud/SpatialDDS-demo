@@ -16,7 +16,7 @@ top of a shared `spatialdds/envelope/v1` transport.
 | **Multi-operator fusion** *(flagship)* | [`multi_operator_fusion/`](multi_operator_fusion/README.md) | Three AV fleet operators + one 6G base station share `Detection3D` observations. A platform fuser does NN-gated track fusion and publishes unified `FusedTrack`s. Rerun renders per-operator split-screen + fused view. |
 | **nuScenes → SpatialDDS → Rerun** | [`nuscenes/`](nuscenes/README.md) | Publishes nuScenes v1.0-mini AV data (ego pose, 6 cameras, LiDAR, 5 radars, 3D annotations) over DDS envelopes; visualizes in Rerun. |
 | **DeepSense 6G → SpatialDDS → Rerun** | [`deepsense/`](deepsense/README.md) | Publishes DeepSense 6G Scenario 9 V2I data (60 GHz phased-array beam, FMCW radar, camera, GPS, 2D lidar) over DDS envelopes. |
-| **Core v1.6 protocol demo** | [`core_demo/`](core_demo/README.md) | Bootstrap → discovery → coverage query → localization → catalog → anchor flow. Includes a Cesium web UI backed by an HTTP-to-DDS bridge ([`bridges/web_bridge/`](bridges/web_bridge/README.md)). |
+| **AR demo** | [`ar_demo/`](ar_demo/README.md) | Bootstrap → discovery → coverage query → localization → catalog → anchor flow for AR clients. Includes a Cesium web UI backed by an HTTP-to-DDS bridge ([`bridges/web_bridge/`](bridges/web_bridge/README.md)). |
 | **Benchmarks** | [`benchmarks/`](benchmarks/README.md) | Latency, discovery, multi-operator, and coverage-query benchmark scripts + plotting. |
 
 If you're new here, start with **multi-operator fusion** — it exercises the full
@@ -36,17 +36,21 @@ without per-demo wiring:
 
 ## Two HTTP servers — which one do I want?
 
-| | `core_demo/http_binding.py` | `bridges/web_bridge/server.py` |
+| | `ar_demo/http_binding.py` | `bridges/web_bridge/server.py` |
 |---|---|---|
 | Purpose | Spec-compliance REST wrapper that mirrors the discovery payload shapes | HTTP-to-DDS bridge that the Cesium / canvas dashboard talks to |
 | Port (default) | 8080 | 8088 |
-| Used by | `core_demo/run_all_tests.sh`, the [core demo README](core_demo/README.md) | `run_bridge_server_docker.sh`, `web/`, `bridges/web_bridge/static/` |
+| Used by | `ar_demo/run_all_tests.sh`, the [AR demo README](ar_demo/README.md) | `run_bridge_server_docker.sh`, `web/`, `bridges/web_bridge/static/` |
 | Run with DDS? | No (in-process registration) | Yes (publishes/subscribes envelopes) |
 
 They are not interchangeable. Use the bridge for the web/canvas demos; use the HTTP
 binding when you just want to exercise the registration/search payload shapes.
 
-## Web demo (DDS bridge + Cesium)
+## Running the AR demo's Cesium web UI
+
+The AR demo's Cesium UI lives under [`web/`](web/) and talks to the
+[web bridge](bridges/web_bridge/README.md), which in turn fronts the AR demo's
+VPS + catalog services.
 
 Create `web/.env.local` with required values:
 ```bash
@@ -82,4 +86,4 @@ The same bridge also serves the 2D canvas intersection dashboard at
 `http://localhost:8088/` once any of the streaming demos (e.g.
 [multi-operator fusion](multi_operator_fusion/README.md) or its
 local docker-compose stack at [`deploy/aws/docker-compose.local.yaml`](deploy/aws/docker-compose.local.yaml))
-are running.
+are running. The legacy topic-list debug page is at `/debug`.

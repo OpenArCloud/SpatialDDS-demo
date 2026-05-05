@@ -56,8 +56,8 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
     catalog_log=\"\$BRIDGE_LOG_DIR/catalog_server_\$BRIDGE_LOG_BTS.log\"; \
     bridge_log=\"\$BRIDGE_LOG_DIR/bridge_server_\$BRIDGE_LOG_BTS.log\"; \
     python3 -m pip install -r /app/requirements.txt -r /app/bridges/web_bridge/requirements.txt; \
-    python3 core_demo/spatialdds_demo_server.py --detailed >\"\$vps_log\" 2>&1 &\
-    python3 core_demo/spatialdds_catalog_server.py --detailed >\"\$catalog_log\" 2>&1 &\
+    python3 ar_demo/spatialdds_demo_server.py --detailed >\"\$vps_log\" 2>&1 &\
+    python3 ar_demo/spatialdds_catalog_server.py --detailed >\"\$catalog_log\" 2>&1 &\
     python3 bridges/web_bridge/server.py >\"\$bridge_log\" 2>&1\
   " >/dev/null 2>&1 &
 

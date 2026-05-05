@@ -2,7 +2,7 @@
 set -u
 
 # Run from the directory containing this script so relative log filenames
-# land in core_demo/ regardless of where the user invokes it from.
+# land in ar_demo/ regardless of where the user invokes it from.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${SCRIPT_DIR}"

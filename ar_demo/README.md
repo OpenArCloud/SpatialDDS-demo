@@ -1,9 +1,16 @@
-# Core v1.6 Protocol Demo
+# AR Demo
 
 Bootstrap → discovery → coverage query → localization → catalog → anchor.
-Exercises the full SpatialDDS 1.6 protocol shape against the canonical
-IDL bundled at [`../idl/v1.6`](../idl/v1.6) and the manifests at
-[`../manifests/v1.6`](../manifests/v1.6).
+The end-to-end SpatialDDS 1.6 protocol flow that an AR client would
+follow on cold-start: find a VPS that covers your area, get a 6DoF
+localisation back, discover content, publish anchors. Exercised
+against the canonical IDL bundled at [`../idl/v1.6`](../idl/v1.6) and
+the manifests at [`../manifests/v1.6`](../manifests/v1.6).
+
+A Cesium web UI for this demo lives under [`../web/`](../web/) — see
+the root README's "Running the AR demo's Cesium web UI" section for
+how to run it together with the
+[web bridge](../bridges/web_bridge/README.md).
 
 ## Protocol flow
 
@@ -60,7 +67,7 @@ docker push ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 
 See [`DOCKER_GUIDE.md`](DOCKER_GUIDE.md) for the full Docker reference.
 
-> The Docker image bakes the core-demo files at a flat `/app/` layout so
+> The Docker image bakes the AR-demo files at a flat `/app/` layout so
 > the example commands below (and inside the container) reference them
 > by basename regardless of where they live in the host repo.
 
