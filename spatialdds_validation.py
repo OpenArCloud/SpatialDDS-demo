@@ -56,14 +56,20 @@ class SpatialDDSValidator:
         return {"sec": sec, "nanosec": nanosec}
 
     @staticmethod
-    def create_frame_ref(fqn: str) -> Dict[str, str]:
+    def create_frame_ref(fqn: str, coord_convention: str = "ENU") -> Dict[str, Any]:
         """
         Deterministically create a FrameRef using UUIDv5 so the same fqn
         always yields the same uuid (useful for tests/demos).
+
+        v1.6 §2.12 adds an axis convention. Every demo here is
+        ENU-anchored; callers can override for body-frame or camera-frame
+        references.
         """
         return {
             "uuid": str(uuid.uuid5(uuid.NAMESPACE_URL, fqn)),
             "fqn": fqn,
+            "has_coord_convention": True,
+            "coord_convention": coord_convention,
         }
 
     @classmethod

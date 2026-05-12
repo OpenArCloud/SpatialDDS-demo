@@ -156,7 +156,13 @@ def _build_ego_pose(op_idx: int, ego: Dict[str, float], t_wall: float,
         "frame_seq": int(frame_seq),
         "stamp": {"sec": int(t_wall), "nanosec": int((t_wall % 1) * 1e9)},
         "source_operator": _operator_id(op_idx),
-        "frame_ref": {"uuid": "", "fqn": f"{_operator_id(op_idx)}/map"},
+        "frame_ref": {
+            "uuid": "",
+            "fqn": f"{_operator_id(op_idx)}/map",
+            # v1.6 §2.12 — ENU axis convention.
+            "has_coord_convention": True,
+            "coord_convention": "ENU",
+        },
         "pose": {
             "t": {"x": ego["x"], "y": ego["y"], "z": ego["z"]},
             "q": _quat_yaw(yaw),

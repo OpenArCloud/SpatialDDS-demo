@@ -76,7 +76,10 @@ class TestPlannedTrajectory(unittest.TestCase):
         self.assertEqual(traj["schema_version"], SCHEMA_CORE)
         self.assertEqual(traj["agent_id"], "op_a_ego")
         self.assertEqual(traj["plan_revision"], 7)
-        self.assertEqual(traj["frame_ref"], {"uuid": "", "fqn": "op_a/map"})
+        self.assertEqual(traj["frame_ref"], {
+            "uuid": "", "fqn": "op_a/map",
+            "has_coord_convention": True, "coord_convention": "ENU",
+        })
         self.assertEqual(len(traj["waypoints"]), 3)
         self.assertTrue(traj["has_horizon_sec"])
         self.assertTrue(traj["has_replan_rate_hz"])

@@ -99,7 +99,14 @@ def make_planned_trajectory(
         "agent_id": str(agent_id),
         "plan_id": str(plan_id),
         "plan_revision": int(plan_revision),
-        "frame_ref": {"uuid": frame_ref_uuid, "fqn": frame_ref_fqn},
+        # v1.6 §2.12 — FrameRef carries an axis convention; all demo
+        # code is ENU-anchored.
+        "frame_ref": {
+            "uuid": frame_ref_uuid,
+            "fqn": frame_ref_fqn,
+            "has_coord_convention": True,
+            "coord_convention": "ENU",
+        },
         "waypoints": list(waypoints),
         "has_goal_pose": goal_pose is not None,
         "has_horizon_sec": horizon_sec is not None,

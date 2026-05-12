@@ -32,6 +32,10 @@ class QuaternionXYZW:
 class FrameRef:
     uuid: str
     fqn: str
+    # v1.6 §2.12 — axis convention for the local basis. All demo code is
+    # ENU; explicit so downstream tools (Rerun, MCAP) don't have to guess.
+    has_coord_convention: bool = True
+    coord_convention: str = "ENU"
 
 
 @dataclass
