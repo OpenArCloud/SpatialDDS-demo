@@ -1,0 +1,53 @@
+{
+  "id": "spatialdds://vps.example.com/zone:demo/service:vps",
+  "profile": "spatial.manifest/1.7",
+  "rtype": "service",
+  "service": {
+    "service_id": "svc:vps:demo/default",
+    "kind": "VPS",
+    "name": "MockVPS-v1.7",
+    "org": "ExampleOrg",
+    "version": "1.7",
+    "connection": {
+      "domain_id": 1
+    },
+    "topics": [
+      {
+        "name": "spatialdds/vps/query/v1",
+        "type": "vps_query",
+        "version": "v1",
+        "qos_profile": "VPS_REQ"
+      },
+      {
+        "name": "spatialdds/vps/result/v1",
+        "type": "geopose",
+        "version": "v1",
+        "qos_profile": "VPS_RESP"
+      }
+    ]
+  },
+  "caps": {
+    "supported_profiles": [
+      { "name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7 },
+      { "name": "spatial.discovery", "major": 1, "min_minor": 7, "max_minor": 7 }
+    ],
+    "preferred_profiles": ["spatial.discovery/1.7", "spatial.core/1.7"],
+    "features": ["blob.crc32"]
+  },
+  "coverage": {
+    "has_crs": true,
+    "crs": "EPSG:4979",
+    "has_bbox": true,
+    "bbox": [-122.52, 37.7, -122.35, 37.85],
+    "has_aabb": false,
+    "global": false,
+    "has_frame_ref": true,
+    "frame_ref": {
+      "uuid": "ae6f0a3e-7a3e-4b1e-9b1f-0e9f1b7c1a10",
+      "fqn": "earth-fixed"
+    }
+  },
+  "assets": [],
+  "stamp": { "sec": 1700000000, "nanosec": 0 },
+  "ttl_sec": 3600
+}

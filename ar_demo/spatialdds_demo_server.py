@@ -92,7 +92,7 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
             )
             response = service.process_localize_request(data)
             response_topic, response_source = _select_topic(
-                manifest_topics, "node_geo", TOPIC_VPS_RESULT_V1
+                manifest_topics, "geopose", TOPIC_VPS_RESULT_V1
             )
             transport.publish(
                 response_topic,
