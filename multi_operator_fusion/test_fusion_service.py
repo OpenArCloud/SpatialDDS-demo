@@ -34,13 +34,20 @@ def _envelope(msg_type: str, logical_topic: str, payload: dict) -> types.SimpleN
 
 
 class _FakeTransport:
-    """Stand-in for EnvelopeTransport that records publishes in memory."""
+    """Stand-in for EnvelopePublisher that records publishes in memory.
+
+    Mirrors ``bridges/envelope_io.EnvelopePublisher.publish``, which takes the
+    payload as a dict (it serialises internally) and an optional stamp_ns.
+    The older EnvelopeTransport took a pre-serialised ``payload_json``; this
+    fake tracked that signature and stopped matching when fusion_service moved
+    to the lossless publisher.
+    """
 
     def __init__(self):
         self.sent = []
 
-    def publish(self, logical_topic, msg_type, payload_json, request_id=""):
-        self.sent.append((logical_topic, msg_type, json.loads(payload_json)))
+    def publish(self, logical_topic, msg_type, payload, request_id="", stamp_ns=None):
+        self.sent.append((logical_topic, msg_type, payload))
 
 
 class ParseDetection(unittest.TestCase):

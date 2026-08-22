@@ -40,11 +40,13 @@ def _envelope(msg_type: str, topic: str, payload: dict):
 
 
 class _FakeTransport:
+    """Mirrors bridges/envelope_io.EnvelopePublisher.publish (payload is a dict)."""
+
     def __init__(self):
         self.sent = []
 
-    def publish(self, logical_topic, msg_type, payload_json, request_id=""):
-        self.sent.append((logical_topic, msg_type, json.loads(payload_json)))
+    def publish(self, logical_topic, msg_type, payload, request_id="", stamp_ns=None):
+        self.sent.append((logical_topic, msg_type, payload))
 
 
 def _operator_det3d_envelope(operator: str, x: float, y: float, z: float = 0.0,
