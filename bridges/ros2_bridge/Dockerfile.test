@@ -30,6 +30,15 @@ COPY . /ws/
 # runner's cwd may differ).
 ENV PYTHONPATH=/ws
 
+# ROS Humble ships launch_testing pytest plugins written against pytest 6/7;
+# the `pip install pytest` above pulls pytest 9, whose hookspecs dropped the
+# `path` argument they declare. Autoloading them aborts collection before any
+# of our tests run. These suites need no pytest plugins, so switch autoload
+# off rather than pinning pytest back and fighting ROS's own versions.
+# (`-p no:launch_testing` is not enough — launch_testing_ros_pytest_entrypoint
+# registers separately and fails the same way.)
+ENV PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+
 # Default: run all testable tiers
 CMD ["bash", "-c", "\
     source /opt/ros/humble/setup.bash && \
