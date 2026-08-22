@@ -39,6 +39,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
+from spatialdds_demo.discovery_http import (
+    DiscoveryError,
+    bootstrap_manifest,
+    query_from_geohash,
+    search as discovery_search,
+)
+from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
     TOPIC_CATALOG_REPLIES,
@@ -55,6 +62,7 @@ for p in (str(_HERE), str(_BRIDGES)):
         sys.path.insert(0, p)
 from topic_router import TopicRouter  # noqa: E402
 from client_manager import ClientManager  # noqa: E402
+from announce_cache import AnnounceCache  # noqa: E402
 
 DEFAULT_LAT = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LAT", "30.284996"))
 DEFAULT_LON = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LON", "-97.739494"))
@@ -72,6 +80,7 @@ class SpatialDDSBridge:
         self._announce_reader: Optional[object] = None
         self._inbox: queue.Queue = queue.Queue()
         self._last_announce: Optional[Dict[str, Any]] = None
+        self._announces = AnnounceCache()
         self._client_frame_ref = SpatialDDSValidator.create_frame_ref("client/handset")
         self._stream_ref = SpatialDDSValidator.create_frame_ref("rig/front_cam")
         self._frame_seq = 1
@@ -103,6 +112,11 @@ class SpatialDDSBridge:
         # separate RELIABLE+KEEP_ALL EnvelopeSubscriber (the same one
         # the MCAP / ROS 2 / MQTT bridges use) handles job (2).
         def on_message(envelope: object) -> None:
+            # A departing service must leave the search cache immediately;
+            # waiting for its TTL to lapse would keep serving a dead entry.
+            if getattr(envelope, "msg_type", "") == "DEPART":
+                self._on_depart(envelope)
+                return
             self._inbox.put(envelope)
 
         self._transport = DDSTransport(
@@ -124,6 +138,48 @@ class SpatialDDSBridge:
             return True
         return (time.time() - stamp_time) <= float(ttl_sec) * 2.0
 
+    def _on_depart(self, envelope: object) -> None:
+        try:
+            payload = json.loads(getattr(envelope, "payload_json", "") or "{}")
+        except json.JSONDecodeError:
+            return
+        service_id = payload.get("service_id", "") if isinstance(payload, dict) else ""
+        if self._announces.depart(service_id):
+            print(f"DDS_DEPART service_id={service_id} evicted from announce cache")
+
+    def drain_announces(self) -> int:
+        """
+        Pull whatever the announce reader has and fold it into the cache.
+
+        Called before every read so the cache reflects the bus at answer time.
+        Returns how many samples were admitted.
+        """
+        if not self._announce_reader:
+            self.ensure_transport()
+        if not self._announce_reader:
+            return 0
+        admitted = 0
+        for sample in self._announce_reader.take() or []:
+            if not sample or getattr(sample, "msg_type", "") != "ANNOUNCE":
+                continue
+            try:
+                payload = json.loads(sample.payload_json)
+            except json.JSONDecodeError:
+                continue
+            if self._announces.admit(payload):
+                admitted += 1
+                self._last_announce = payload
+        return admitted
+
+    def announce_records(self):
+        """Live, unexpired announce records for the discovery endpoints."""
+        self.drain_announces()
+        return self._announces.records()
+
+    def announce_stats(self) -> Dict[str, int]:
+        self.drain_announces()
+        return self._announces.stats()
+
     def latest_announce(self, timeout: float = 2.0) -> Optional[Dict[str, Any]]:
         if self._last_announce and self._announce_fresh(self._last_announce):
             return self._last_announce
@@ -131,15 +187,11 @@ class SpatialDDSBridge:
             return None
         deadline = time.time() + timeout
         while time.time() < deadline:
-            samples = self._announce_reader.take()
-            if samples:
-                for sample in samples:
-                    if not sample or sample.msg_type != "ANNOUNCE":
-                        continue
-                    candidate = json.loads(sample.payload_json)
-                    if self._announce_fresh(candidate):
-                        self._last_announce = candidate
-                        return candidate
+            # Same drain the discovery endpoints use, so every announce the
+            # bridge sees lands in the cache no matter who asked first.
+            if self.drain_announces() and self._last_announce:
+                if self._announce_fresh(self._last_announce):
+                    return self._last_announce
             time.sleep(0.05)
         return self._last_announce
 
@@ -626,7 +678,69 @@ def api_stats() -> Dict[str, Any]:
         "topics_active": len(client_mgr.router.get_topics()),
         "dds_domain": bridge._domain_id,
         "publish_enabled": ALLOW_PUBLISH,
+        "announce_cache": bridge.announce_stats(),
     }
+
+
+# ─── Spec discovery, Layer 1.5 (HTTP binding) ────────────────────────────────
+#
+# Answered from the live announce cache in one round trip — no CoverageQuery is
+# issued onto the bus per request. Semantics come from
+# spatialdds_demo/discovery_http.py, shared with ar_demo/http_binding.py, so
+# both servers answer the same request identically.
+
+
+def _served_manifest(record) -> Optional[Dict[str, Any]]:
+    """
+    Serve-or-synthesize: if this deployment hosts an authored manifest for the
+    announce's manifest_uri, return that document verbatim; otherwise return
+    None and let the core synthesize one from the announce.
+
+    Uses the same resolver the demo client uses, so "hosted here" means exactly
+    what it means everywhere else in the repo.
+    """
+    uri = record.manifest_uri
+    if not uri:
+        return None
+    try:
+        manifest, status = resolve_manifest(uri)
+    except Exception:
+        return None
+    if not manifest:
+        return None
+    # Debug only. Which path produced a result is not part of the response.
+    print(f"discovery: serving authored manifest for {uri} ({status.get('mode')})")
+    return manifest
+
+
+@app.post("/.well-known/spatialdds/search")
+def wellknown_search(payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return discovery_search(
+            bridge.announce_records(), payload, manifest_provider=_served_manifest
+        )
+    except DiscoveryError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+
+@app.get("/.well-known/spatialdds/search")
+def wellknown_search_geohash(geohash: str, kind: Optional[str] = None) -> Dict[str, Any]:
+    """
+    GET shorthand from the spec: expand the geohash to its bounding box and
+    treat it as the query coverage. Thin translation onto the POST path.
+    """
+    try:
+        query = query_from_geohash(geohash, [kind] if kind else None)
+        return discovery_search(
+            bridge.announce_records(), query, manifest_provider=_served_manifest
+        )
+    except DiscoveryError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+
+@app.get("/.well-known/spatialdds/bootstrap")
+def wellknown_bootstrap() -> Dict[str, Any]:
+    return bootstrap_manifest()
 
 
 @app.websocket("/ws")
