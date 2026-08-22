@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-SpatialDDS v1.6 HTTP Binding
+SpatialDDS v1.7 HTTP Binding
 Provides REST API endpoints for discovery-style registration and search using
 discovery.Announce and discovery.CoverageQuery/Response shapes.
+
+1.7 consolidated the well-known namespace to a single RFC 8615 registration:
+/.well-known/spatialdds/{bootstrap,resolver,search}. `register` and `list` are
+demo-local extensions that live alongside them.
 """
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
+import os
 import uuid
 import time
 from datetime import datetime, timezone
@@ -27,8 +32,46 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def bootstrap_manifest() -> Dict[str, Any]:
+    """
+    Bootstrap manifest served at /.well-known/spatialdds/bootstrap (spec 5.x).
+
+    Mirrors the site table spatialdds_bootstrap_server.py serves over the bus,
+    so the HTTPS and DDS bootstrap paths agree. 1.7 replaced the `auth` object
+    (with its method enum) with an optional `auth_hint` string; the demo omits
+    it entirely rather than advertising a fake one.
+    """
+    site = os.getenv("SPATIALDDS_BOOTSTRAP_SITE", "sf-downtown")
+    peers = [
+        peer.strip()
+        for peer in os.getenv("SPATIALDDS_BOOTSTRAP_PEERS", "udpv4://127.0.0.1:7400").split(",")
+        if peer.strip()
+    ]
+    manifest: Dict[str, Any] = {
+        "spatialdds_bootstrap": "1.7",
+        "domain_id": int(os.getenv("SPATIALDDS_BOOTSTRAP_DOMAIN", "1")),
+        "initial_peers": peers,
+        "discovery_topic": "spatialdds/discovery/announce/v1",
+        "site": site,
+    }
+    manifest_uris = [
+        item.strip()
+        for item in os.getenv(
+            "SPATIALDDS_BOOTSTRAP_MANIFESTS",
+            "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+        ).split(",")
+        if item.strip()
+    ]
+    if manifest_uris:
+        manifest["manifest_uri"] = manifest_uris[0]
+    auth_hint = os.getenv("SPATIALDDS_BOOTSTRAP_AUTH_HINT", "")
+    if auth_hint:
+        manifest["auth_hint"] = auth_hint
+    return manifest
+
+
 class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
-    """HTTP handler for SpatialDDS v1.6 endpoints"""
+    """HTTP handler for SpatialDDS v1.7 endpoints"""
 
     @property
     def announce_registry(self):
@@ -55,21 +98,28 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
         self._set_headers(204)
 
     def do_GET(self):
-        parsed_path = self.path
+        parsed_path = self.path.split("?", 1)[0]
 
         if parsed_path == "/":
             self._send_json(
                 {
                     "name": "SpatialDDS HTTP Binding",
-                    "version": "1.5.0",
+                    "version": "1.7.0",
                     "endpoints": {
+                        # Consolidated well-known namespace (one RFC 8615
+                        # registration). `resolver` is not served here — this
+                        # binding has no manifests of its own to resolve.
+                        "bootstrap": "/.well-known/spatialdds/bootstrap",
                         "search": "/.well-known/spatialdds/search",
+                        # demo-local extensions
                         "register": "/.well-known/spatialdds/register",
                         "list": "/.well-known/spatialdds/list",
                     },
                     "spec": "https://github.com/OpenArCloud/SpatialDDS-spec",
                 }
             )
+        elif parsed_path == "/.well-known/spatialdds/bootstrap":
+            self._send_json(bootstrap_manifest())
         elif parsed_path == "/.well-known/spatialdds/list":
             self._send_json(
                 {"count": len(self.announce_registry), "announces": self.announce_registry}
@@ -107,6 +157,17 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
             # Validate required fields
             if "coverage" not in query or "coverage_frame_ref" not in query:
                 self._send_error_json("CoverageQuery requires coverage[] and coverage_frame_ref", 400)
+                return
+
+            # Hard cutover: 1.7 deleted CoverageQuery.expr (and Appendix F.X).
+            # Reject rather than silently ignoring a filter the caller believes
+            # is being applied.
+            if "expr" in query:
+                self._send_error_json(
+                    "CoverageQuery.expr was removed in SpatialDDS 1.7; use the "
+                    "structured 'filter' (CoverageFilter) instead",
+                    400,
+                )
                 return
 
             try:
@@ -181,10 +242,18 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
         print(f"Registered service: {service_id} ({label})")
 
     def _search_announces(self, query: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Match registered services against a CoverageQuery and return
+        ServiceSummary rows.
+
+        1.7 changed CoverageResponse.results from sequence<Announce> to
+        sequence<ServiceSummary>: callers can no longer pull caps/topics out
+        of a search result. They rank on the summary, then resolve
+        manifest_uri (or read the retained Announce off the bus) for detail.
+        """
         results: List[Dict[str, Any]] = []
         has_filter = bool(query.get("has_filter"))
         filter_obj = query.get("filter", {}) if has_filter else {}
-        expr = "" if has_filter else query.get("expr", "")
         coverage_q = query["coverage"]
         for ann in _announce_registry:
             try:
@@ -196,29 +265,11 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
                 if has_filter and not self._matches_filter(filter_obj, ann):
                     continue
 
-                if expr and not self._matches_expr(expr, ann.get("payload", {})):
-                    continue
-
-                results.append(ann.get("payload", {}))
+                results.append(_to_service_summary(ann))
             except Exception:
                 # Best-effort: include on validation failure to avoid accidental drops
-                results.append(ann.get("payload", {}))
+                results.append(_to_service_summary(ann))
         return results
-
-    @staticmethod
-    def _matches_expr(expr: str, announce: Dict[str, Any]) -> bool:
-        """
-        Minimal filter: supports expressions like kind=="VPS" or org=="ExampleOrg".
-        This is intentionally simple for demo purposes.
-        """
-        if "==" not in expr:
-            return True
-        key, _, value = expr.partition("==")
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if not key:
-            return True
-        return announce.get(key) == value
 
     @staticmethod
     def _matches_filter(filter_obj: Dict[str, Any], announce: Dict[str, Any]) -> bool:
@@ -254,27 +305,56 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
                 max_minor = profile.get("max_minor")
                 if not name or major is None or max_minor is None:
                     continue
-                candidate = f"spatial.{name}/{int(major)}.{int(max_minor)}"
+                # 1.7: ProfileSupport.name already carries the module family
+                # ("spatial.core"), so it is NOT re-prefixed here — doing so
+                # would produce "spatial.spatial.core/1.7".
+                candidate = f"{name}/{int(major)}.{int(max_minor)}"
                 if candidate in module_id_in:
                     module_match = True
                     break
 
         return topic_match and module_match
-        try:
-            left, right = expr.split("==")
-            left = left.strip()
-            right = right.strip().strip('"').strip("'")
-            value = str(announce.get(left, ""))
-            return value == right
-        except Exception:
-            return True
 
 
 def run_server(port: int = 8080):
     server_address = ("", port)
     httpd = HTTPServer(server_address, SpatialDDSHTTPHandler)
-    print(f"Serving SpatialDDS v1.6 HTTP binding on port {port}")
+    print(f"Serving SpatialDDS v1.7 HTTP binding on port {port}")
     httpd.serve_forever()
+
+
+def _to_service_summary(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Project a registered announce/manifest onto a disco::ServiceSummary row.
+
+    Deliberately narrow: caps, topics and transforms are NOT carried — that is
+    the whole point of the 1.7 change. Consumers resolve manifest_uri (or read
+    the retained Announce) when they need detail.
+    """
+    payload = entry.get("payload", {}) if isinstance(entry, dict) else {}
+    if entry.get("kind") == "manifest":
+        service = payload.get("service", {}) if isinstance(payload, dict) else {}
+        service_id = service.get("service_id", "")
+        kind = service.get("kind", "OTHER")
+        name = service.get("name", "")
+        manifest_uri = payload.get("id", "")
+    else:
+        service_id = payload.get("service_id", "")
+        kind = payload.get("kind", "OTHER")
+        name = payload.get("name", "")
+        manifest_uri = payload.get("manifest_uri", "")
+
+    summary = {
+        "service_id": service_id,
+        "kind": kind,
+        "name": name,
+        "manifest_uri": manifest_uri,
+        "coverage": entry.get("coverage", []),
+        "coverage_frame_ref": entry.get("coverage_frame_ref"),
+        "stamp": payload.get("stamp") or SpatialDDSValidator.now_time(),
+        "ttl_sec": int(payload.get("ttl_sec", 300) or 300),
+    }
+    return summary
 
 
 def _is_service_manifest(payload: Dict[str, Any]) -> bool:
@@ -282,10 +362,14 @@ def _is_service_manifest(payload: Dict[str, Any]) -> bool:
         return False
     profile = payload.get("profile", "")
     rtype = payload.get("rtype")
-    return isinstance(profile, str) and profile.startswith("spatial.manifest@1.") and rtype == "service"
+    # 1.7 retired the `spatial.manifest@1.x` form — slash form only.
+    return isinstance(profile, str) and profile.startswith("spatial.manifest/1.") and rtype == "service"
 
 
 def _normalize_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:
+    # Hard cutover: @-form profiles and pre-1.7 minors are rejected outright.
+    SpatialDDSValidator.validate_manifest_profile(manifest.get("profile", ""))
+
     service = manifest.get("service", {})
     if not isinstance(service, dict) or not service.get("service_id"):
         raise ValueError("Service manifest missing service.service_id")

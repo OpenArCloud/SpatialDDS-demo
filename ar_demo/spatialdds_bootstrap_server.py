@@ -67,6 +67,10 @@ def run_server(
         )
 
         response = {
+            # Demo-local bootstrap topic pair, but tagged with the 1.7
+            # bootstrap schema version so it matches the manifest served at
+            # /.well-known/spatialdds/bootstrap.
+            "spatialdds_bootstrap": "1.7",
             "client_id": data.get("client_id", ""),
             "dds_domain": mapping["dds_domain"],
             "cyclonedds_profile": os.getenv("SPATIALDDS_BOOTSTRAP_PROFILE", ""),

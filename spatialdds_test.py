@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-SpatialDDS Test Implementation v1.6
-Demonstrates discovery (Announce/CoverageQuery), a mock localization exchange
-using 1.6 primitives, and an anchor delta publication.
+SpatialDDS Test Implementation v1.7
+Demonstrates discovery (Announce/CoverageQuery -> ServiceSummary rows), a mock
+localization exchange using 1.7 primitives, and an anchor delta publication.
 """
 
 import json
@@ -233,12 +233,12 @@ class MockSensorData:
 
 
 class VPSServiceV15:
-    """Mock VPS service implementing v1.6 shapes"""
+    """Mock VPS service implementing v1.7 shapes"""
 
     def __init__(self, logger: SpatialDDSLogger):
         self.logger = logger
         self.service_id = os.getenv("SPATIALDDS_VPS_SERVICE_ID", "svc:vps:demo/sf-downtown")
-        self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.6")
+        self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.7")
         self.manifest_uri = os.getenv(
             "SPATIALDDS_DEMO_MANIFEST_URI",
             "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
@@ -274,17 +274,36 @@ class VPSServiceV15:
 
     def _capabilities(self) -> Dict[str, Any]:
         return {
-            # Per v1.6 CHANGELOG: only core/discovery (and sensing.common, types) bumped to 1.6.
-            # sensing.vision and anchors remain at 1.5 — selective per-profile minor bumps.
+            # 1.7 drops selective per-profile minor bumps: every module
+            # versions together with the spec, so every row is 1.7. `name`
+            # now carries the full module family, ProfileSupport.preferred
+            # is deleted, and features is a plain string sequence.
             "supported_profiles": [
-                {"name": "core", "major": 1, "min_minor": 6, "max_minor": 6, "preferred": True},
-                {"name": "discovery", "major": 1, "min_minor": 6, "max_minor": 6, "preferred": True},
-                {"name": "sensing.vision", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": False},
-                {"name": "anchors", "major": 1, "min_minor": 5, "max_minor": 5, "preferred": False},
+                {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7},
+                {"name": "spatial.discovery", "major": 1, "min_minor": 7, "max_minor": 7},
+                {"name": "spatial.sensing.vision", "major": 1, "min_minor": 7, "max_minor": 7},
+                {"name": "spatial.anchors", "major": 1, "min_minor": 7, "max_minor": 7},
             ],
-            "preferred_profiles": ["discovery@1.6", "core@1.6"],
-            "features": [{"name": "blob.crc32"}, {"name": "vision.codec.jpeg"}],
+            "preferred_profiles": ["spatial.discovery/1.7", "spatial.core/1.7"],
+            "features": ["blob.crc32", "vision.codec.jpeg"],
         }
+
+    def _topic_meta(self) -> List[Dict[str, Any]]:
+        """TopicMeta rows using the 1.7 registered type / QoS names (3.3.2, 3.3.3)."""
+        return [
+            {
+                "name": TOPIC_VPS_QUERY_V1,
+                "type": "vps_query",
+                "version": "v1",
+                "qos_profile": "VPS_REQ",
+            },
+            {
+                "name": TOPIC_VPS_RESULT_V1,
+                "type": "geopose",
+                "version": "v1",
+                "qos_profile": "VPS_RESP",
+            },
+        ]
 
     def create_announce(self) -> Dict[str, Any]:
         stamp = SpatialDDSValidator.now_time()
@@ -292,11 +311,11 @@ class VPSServiceV15:
             "service_id": self.service_id,
             "name": self.service_name,
             "kind": "VPS",
-            "version": "1.6",
+            "version": "1.7",
             "org": "ExampleOrg",
             "hints": [{"key": "priority", "value": "edge"}],
             "caps": self._capabilities(),
-            "topics": [],
+            "topics": self._topic_meta(),
             "coverage": self.coverage,
             "coverage_frame_ref": self.coverage_frame_ref,
             "has_coverage_eval_time": False,
@@ -310,13 +329,37 @@ class VPSServiceV15:
         SpatialDDSValidator.validate_coverage(self.coverage, self.coverage_frame_ref)
         return announce
 
+    def create_service_summary(self) -> Dict[str, Any]:
+        """
+        Build a disco::ServiceSummary — the compact row 1.7 returns from
+        CoverageResponse in place of a full Announce.
+
+        Consumers rank on these, then get detail from the retained Announce
+        (matched by service_id) or by resolving manifest_uri.
+        """
+        return {
+            "service_id": self.service_id,
+            "kind": "VPS",
+            "name": self.service_name,
+            "manifest_uri": self.manifest_uri,
+            "coverage": self.coverage,
+            "coverage_frame_ref": self.coverage_frame_ref,
+            "stamp": SpatialDDSValidator.now_time(),
+            "ttl_sec": 300,
+        }
+
     def handle_coverage_query(self, query: Dict[str, Any]) -> Dict[str, Any]:
+        if "expr" in query:
+            raise ValueError(
+                "CoverageQuery.expr was removed in 1.7; use the structured "
+                "'filter' (CoverageFilter) instead"
+            )
         SpatialDDSValidator.validate_coverage(query["coverage"], query["coverage_frame_ref"])
 
         intersects = SpatialDDSValidator.check_coverage_intersection(
             query["coverage"], self.coverage
         )
-        results = [self.create_announce()] if intersects else []
+        results = [self.create_service_summary()] if intersects else []
         response = {
             "query_id": query["query_id"],
             "results": results,
@@ -402,9 +445,9 @@ class SpatialDDSClientV15:
             "coverage": [coverage_elem],
             "coverage_frame_ref": coverage_frame_ref,
             "has_coverage_eval_time": False,
+            # 1.7 deleted CoverageQuery.expr — `filter` is the only query form.
             "has_filter": True,
             "filter": {"type_in": [], "qos_profile_in": [], "module_id_in": []},
-            "expr": "",
             "reply_topic": TOPIC_DISCOVERY_RESPONSE(query_id),
             "stamp": SpatialDDSValidator.now_time(),
             "ttl_sec": 60,
@@ -506,8 +549,17 @@ class SpatialDDSClientV15:
         reply_topic: str,
         limit: int = 20,
         page_token: str = "",
-        expr: str = "",
+        kind_in: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
+        """
+        Build a demo-local catalog query.
+
+        The catalog protocol is demo-specific, not a spec surface, but it
+        used to carry an `expr` string mirroring the (now deleted)
+        CoverageQuery.expr. It now carries a structured `filter` in the same
+        has_filter + `*_in` style discovery uses, so the two query surfaces
+        share one vocabulary.
+        """
         query_id = str(uuid.uuid4())
         padding = 0.005
         coverage_frame_ref, coverage_elem = create_coverage_bbox_earth_fixed(
@@ -516,13 +568,15 @@ class SpatialDDSClientV15:
             lon_deg + padding,
             lat_deg + padding,
         )
+        kinds = list(kind_in or [])
         query = {
             "query_id": query_id,
             "reply_topic": reply_topic,
             "coverage": [coverage_elem],
             "coverage_frame_ref": coverage_frame_ref,
             "has_coverage_eval_time": False,
-            "expr": expr,
+            "has_filter": bool(kinds),
+            "filter": {"kind_in": kinds},
             "limit": limit,
             "page_token": page_token,
             "stamp": SpatialDDSValidator.now_time(),
@@ -534,7 +588,7 @@ class SpatialDDSClientV15:
 def simulate_dds_communication(logger: SpatialDDSLogger):
     """Simulate the DDS communication layer"""
     print("🔧 Initializing SpatialDDS communication layer...")
-    print("   - v1.6 typed topics + QoS metadata")
+    print("   - v1.7 registered typed topics + QoS profiles")
     print("   - Coverage-aware discovery")
     print("   - Blob references for heavy payloads\n")
 
@@ -632,14 +686,15 @@ def _manifest_list(raw: str) -> List[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-def _matches_expr(entry: Dict[str, Any], expr: str) -> bool:
-    if not expr:
+def matches_catalog_filter(entry: Dict[str, Any], query: Dict[str, Any]) -> bool:
+    """
+    Demo-local catalog filter (not spec CoverageQuery.filter, which is
+    CoverageFilter). An empty kind_in means "match all", mirroring the
+    discovery filter's empty-array semantics.
+    """
+    if not query.get("has_filter"):
         return True
-    kinds = []
-    for part in expr.split("kind=="):
-        if '"' in part:
-            value = part.split('"', 2)[1]
-            kinds.append(value)
+    kinds = (query.get("filter") or {}).get("kind_in") or []
     if not kinds:
         return True
     return entry.get("kind") in kinds
@@ -652,7 +707,7 @@ def _catalog_response(
     query_coverage = query.get("coverage", [])
     results = []
     for entry in dataset:
-        if not _matches_expr(entry, query.get("expr", "")):
+        if not matches_catalog_filter(entry, query):
             continue
         entry_coverage = entry.get("coverage", [])
         if query_coverage and entry_coverage:
@@ -691,12 +746,12 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     anchor_zone = "sf-downtown"
 
     print("=" * 80)
-    print("🚀 SPATIALDDS PROTOCOL TEST v1.6")
+    print("🚀 SPATIALDDS PROTOCOL TEST v1.7")
     print("=" * 80)
-    print("📋 Testing SpatialDDS v1.6 features:")
+    print("📋 Testing SpatialDDS v1.7 features:")
     print("   • FrameRef + Time payloads")
     print("   • CoverageElement presence flags")
-    print("   • discovery.Announce/CoverageQuery/Response")
+    print("   • discovery.Announce/CoverageQuery/Response (ServiceSummary rows)")
     print("   • GeoPose (x,y,z,w) quaternions")
     print("   • catalog content discovery")
     print("   • AnchorDelta publication\n")
@@ -755,6 +810,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         show_message_content,
     )
     response = {
+        "spatialdds_bootstrap": "1.7",
         "client_id": client_id,
         "dds_domain": int(os.getenv("SPATIALDDS_BOOTSTRAP_DOMAIN", "1")),
         "cyclonedds_profile": "",
@@ -830,6 +886,22 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         print("❌ No services matched coverage query")
         return False
 
+    # 1.7: CoverageResponse rows are compact ServiceSummary records. They carry
+    # no caps/topics/transforms — rank on the summary, then pull detail from the
+    # retained Announce (matched by service_id) or by resolving manifest_uri.
+    summary = coverage_response["results"][0]
+    SpatialDDSValidator.validate_service_summary(summary)
+    detail = announce if announce.get("service_id") == summary["service_id"] else None
+    print(
+        f"✅ Discovery: {len(coverage_response['results'])} ServiceSummary row(s); "
+        f"selected {summary['service_id']}"
+    )
+    print(
+        "   detail source: retained Announce"
+        if detail
+        else f"   detail source: resolve {summary['manifest_uri']}"
+    )
+
     time.sleep(0.2)
 
     print("📤 Phase 3: Localization Request")
@@ -900,7 +972,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         geopose["lon_deg"],
         reply_topic,
         limit=20,
-        expr='kind=="mesh" OR kind=="poi"',
+        kind_in=["mesh", "poi"],
     )
     logger.log_message(
         "CATALOG_QUERY",
@@ -985,7 +1057,7 @@ def main():
     """Main test function"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="SpatialDDS Protocol Test v1.6")
+    parser = argparse.ArgumentParser(description="SpatialDDS Protocol Test v1.7")
     parser.add_argument(
         "--show-content",
         action="store_true",
@@ -1035,7 +1107,7 @@ def main():
     print("   1. Exercise multiple services to validate paging in CoverageResponse")
     print("   2. Swap mock frames with live camera blobs")
     print("   3. Emit AnchorDelta streams into a registry for persistence")
-    print("   4. Validate manifests against manifests/v1.6/* examples")
+    print("   4. Validate manifests against manifests/v1.7/* examples")
 
     return success
 

@@ -35,14 +35,17 @@ def _parse_page_token(token: str) -> int:
     return 0
 
 
-def _matches_expr(entry: Dict[str, Any], expr: str) -> bool:
-    if not expr:
+def _matches_filter(entry: Dict[str, Any], query: Dict[str, Any]) -> bool:
+    """
+    Demo-local catalog filter — NOT spec CoverageQuery.filter (which is a
+    CoverageFilter of type_in/qos_profile_in/module_id_in). The catalog is a
+    demo-specific protocol; it carries a structured filter in the same
+    has_filter + `*_in` style so both query surfaces share one vocabulary.
+    An empty kind_in means "match all".
+    """
+    if not query.get("has_filter"):
         return True
-    kinds = []
-    for part in expr.split("kind=="):
-        if '"' in part:
-            value = part.split('"', 2)[1]
-            kinds.append(value)
+    kinds = (query.get("filter") or {}).get("kind_in") or []
     if not kinds:
         return True
     return entry.get("kind") in kinds
@@ -102,7 +105,7 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
         query_coverage = data.get("coverage", [])
         results = []
         for entry in dataset:
-            if not _matches_expr(entry, data.get("expr", "")):
+            if not _matches_filter(entry, data):
                 continue
             entry_coverage = entry.get("coverage", [])
             if query_coverage and entry_coverage:

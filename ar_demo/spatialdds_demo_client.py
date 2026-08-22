@@ -239,7 +239,31 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         show_message_content,
     )
 
-    loc_request = client.create_localize_request(announce.get("service_id", ""))
+    # 1.7: results are compact ServiceSummary rows — no caps/topics inline.
+    # Select on the summary, then take detail from the retained Announce we
+    # already hold (matched by service_id); resolving manifest_uri is the
+    # other route when the Announce isn't on this bus.
+    summaries = coverage_response.get("results", []) or []
+    service_id = announce.get("service_id", "")
+    for summary in summaries:
+        try:
+            SpatialDDSValidator.validate_service_summary(summary)
+        except Exception as exc:
+            print(f"⚠️  discarding malformed ServiceSummary: {exc}")
+            continue
+        if summary.get("service_id") == service_id:
+            print(f"discovery: selected {service_id} from ServiceSummary row")
+            break
+    else:
+        if summaries:
+            summary = summaries[0]
+            service_id = summary.get("service_id", service_id)
+            print(
+                f"discovery: selected {service_id}; detail via "
+                f"{summary.get('manifest_uri', '(no manifest_uri)')}"
+            )
+
+    loc_request = client.create_localize_request(service_id)
     loc_request_topic, loc_request_source = _select_topic(
         manifest_topics, "vps_query", TOPIC_VPS_QUERY_V1
     )
@@ -292,7 +316,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
             geopose.get("lon_deg", -122.4194),
             reply_topic,
             limit=20,
-            expr='kind=="mesh" OR kind=="poi"',
+            kind_in=["mesh", "poi"],
         )
         transport.publish(
             TOPIC_CATALOG_QUERY_V1,

@@ -62,9 +62,19 @@ def test_demo_output() -> bool:
 
 
 def test_manifest_fallback() -> bool:
+    """
+    An unresolvable manifest_uri must fall back to the spec default topics.
+
+    Uses an unmapped spatialdds:// URI rather than an https:// one: 1.7 types
+    Announce.manifest_uri / ServiceSummary.manifest_uri as SpatialUri, so an
+    https URI would make the announce itself non-conformant. The HTTPS-disabled
+    guard is covered directly by test_https_resolution_disabled below.
+    """
     env = os.environ.copy()
     env["SLIDE_MODE"] = "1"
-    env["SPATIALDDS_DEMO_MANIFEST_URI"] = "https://example.com/demo.json"
+    env["SPATIALDDS_DEMO_MANIFEST_URI"] = (
+        "spatialdds://vps.example.com/zone:not-mapped/manifest:vps"
+    )
     result = subprocess.run(
         [sys.executable, "-m", "spatialdds_test", "--summary-only"],
         capture_output=True,
@@ -74,13 +84,20 @@ def test_manifest_fallback() -> bool:
     )
     output = result.stdout + result.stderr
     required = [
-        "manifest_resolver: HTTPS_DISABLED",
+        "manifest_resolver: LOCAL_MISSING",
         "manifest_loaded: no",
         "topic=spatialdds/vps/query/v1",
         "topic=spatialdds/vps/result/v1",
         "topic_source=fallback",
     ]
     return result.returncode == 0 and all(item in output for item in required)
+
+
+def test_https_resolution_disabled() -> bool:
+    """HTTPS manifest resolution stays opt-in behind ALLOW_HTTPS=1."""
+    os.environ.pop("ALLOW_HTTPS", None)
+    manifest, status = resolve_manifest("https://example.com/demo-no-https.json")
+    return manifest is None and status.get("mode") == "HTTPS_DISABLED"
 
 
 def test_volume_aabb_frame_ref() -> bool:
@@ -130,6 +147,7 @@ def main() -> int:
         ("topic_validator", test_topic_validator),
         ("demo_output", test_demo_output),
         ("manifest_fallback", test_manifest_fallback),
+        ("https_resolution_disabled", test_https_resolution_disabled),
         ("volume_frame_ref", test_volume_aabb_frame_ref),
         ("no_identity_transforms", test_no_identity_transforms),
         ("catalog_seed", test_catalog_seed),

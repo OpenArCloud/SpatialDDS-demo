@@ -31,7 +31,7 @@ import time
 import uuid
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -60,6 +60,9 @@ DEFAULT_LAT = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LAT", "30.284996"))
 DEFAULT_LON = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LON", "-97.739494"))
 DEFAULT_ALT = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_ALT", "18"))
 ANNOUNCE_TTL_SEC = int(os.getenv("SPATIALDDS_BRIDGE_ANNOUNCE_TTL", "300"))
+# Demo-local catalog filter default (the catalog protocol is not a spec
+# surface). Replaces the old expr string now that CoverageQuery.expr is gone.
+DEFAULT_CATALOG_KINDS = ["overlay", "poi", "mesh"]
 
 
 class SpatialDDSBridge:
@@ -185,7 +188,7 @@ class SpatialDDSBridge:
     def catalog_query(
         self,
         geopose: Dict[str, Any],
-        expr: str = "kind==\"overlay\" OR kind==\"poi\" OR kind==\"mesh\"",
+        kind_in: Optional[List[str]] = None,
         limit: int = 20,
     ) -> Dict[str, Any]:
         _lock(self._request_lock)
@@ -196,7 +199,9 @@ class SpatialDDSBridge:
 
             client_id = f"bridge-{uuid.uuid4().hex[:6]}"
             reply_topic = TOPIC_CATALOG_REPLIES(client_id)
-            query = self._create_catalog_query(geopose, reply_topic, limit=limit, expr=expr)
+            query = self._create_catalog_query(
+                geopose, reply_topic, limit=limit, kind_in=kind_in
+            )
             self._transport.publish(
                 TOPIC_CATALOG_QUERY_V1,
                 "CATALOG_QUERY",
@@ -276,8 +281,16 @@ class SpatialDDSBridge:
         reply_topic: str,
         limit: int = 20,
         page_token: str = "",
-        expr: str = "",
+        kind_in: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
+        """
+        Build a demo-local catalog query.
+
+        The catalog protocol is demo-specific, not a spec surface, but it used
+        to carry an `expr` string mirroring the (now deleted)
+        CoverageQuery.expr. It now carries a structured filter in the same
+        has_filter + `*_in` style discovery uses.
+        """
         query_id = str(uuid.uuid4())
         padding = 0.005
         coverage_frame_ref, coverage_elem = create_coverage_bbox_earth_fixed(
@@ -286,13 +299,15 @@ class SpatialDDSBridge:
             geopose.get("lon_deg", DEFAULT_LON) + padding,
             geopose.get("lat_deg", DEFAULT_LAT) + padding,
         )
+        kinds = list(kind_in if kind_in is not None else DEFAULT_CATALOG_KINDS)
         return {
             "query_id": query_id,
             "reply_topic": reply_topic,
             "coverage": [coverage_elem],
             "coverage_frame_ref": coverage_frame_ref,
             "has_coverage_eval_time": False,
-            "expr": expr,
+            "has_filter": bool(kinds),
+            "filter": {"kind_in": kinds},
             "limit": limit,
             "page_token": page_token,
             "stamp": SpatialDDSValidator.now_time(),
@@ -307,8 +322,8 @@ def _default_prior_geopose() -> Dict[str, Any]:
         "lon_deg": DEFAULT_LON,
         "alt_m": DEFAULT_ALT,
         "q": [0.4967, -0.0336, -0.0585, 0.8653],
-        "frame_kind": "ENU",
-        "frame_ref": SpatialDDSValidator.create_frame_ref("earth-fixed"),
+        # 1.7 removed GeoPose.frame_kind / frame_ref: orientation is fixed to
+        # the local ENU tangent frame at the encoded position.
         "stamp": stamp,
         "cov": "COV_NONE",
     }
@@ -553,10 +568,18 @@ def catalog_query(payload: Dict[str, Any]) -> Dict[str, Any]:
     geopose = payload.get("geopose") if isinstance(payload, dict) else None
     if not geopose:
         raise HTTPException(status_code=400, detail="geopose required")
-    expr = payload.get("expr", "kind==\"overlay\" OR kind==\"poi\" OR kind==\"mesh\"")
+    if "expr" in payload:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "'expr' was removed in SpatialDDS 1.7; pass 'kind_in': "
+                "[\"overlay\", \"poi\", \"mesh\"] instead"
+            ),
+        )
+    kind_in = payload.get("kind_in")
     limit = int(payload.get("limit", 20) or 20)
     try:
-        return bridge.catalog_query(geopose, expr=expr, limit=limit)
+        return bridge.catalog_query(geopose, kind_in=kind_in, limit=limit)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

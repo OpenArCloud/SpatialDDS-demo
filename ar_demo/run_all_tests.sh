@@ -1,6 +1,6 @@
 #!/bin/bash
-# SpatialDDS v1.6 - Run All Tests
-# This script runs the complete test suite for v1.6 implementation
+# SpatialDDS v1.7 - Run All Tests
+# This script runs the complete test suite for v1.7 implementation
 
 set -e  # Exit on error
 
@@ -14,7 +14,7 @@ cd "${SCRIPT_DIR}"
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
 echo "╔══════════════════════════════════════════════════════════════════════════════╗"
-echo "║              SPATIALDDS v1.6 - COMPREHENSIVE TEST SUITE                      ║"
+echo "║              SPATIALDDS v1.7 - COMPREHENSIVE TEST SUITE                      ║"
 echo "╚══════════════════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -87,19 +87,29 @@ announce = {
 handler._register_announce(handler, _normalize_announce(announce))
 
 frame_ref_q, cov_elem_q = create_coverage_bbox_earth_fixed(-122.45, 37.75, -122.4, 37.8)
+
+# 1.7: 'expr' is gone; 'filter' (CoverageFilter) is the only query form.
 query = {
     'query_id': str(uuid.uuid4()),
     'coverage': [cov_elem_q],
     'coverage_frame_ref': frame_ref_q,
-    'expr': 'kind==\"VPS\"'
+    'has_filter': True,
+    'filter': {'type_in': [], 'qos_profile_in': [], 'module_id_in': []}
 }
 
 results = handler._search_announces(handler, query)
 
-if len(results) == 1:
+# 1.7: results are compact ServiceSummary rows, never full announces.
+ok = len(results) == 1
+if ok:
+    row = results[0]
+    SpatialDDSValidator.validate_service_summary(row)
+    ok = row['service_id'] == 'svc:vps:test/001' and not (set(row) & {'caps', 'topics'})
+
+if ok:
     print('✅ HTTP binding logic: PASSED')
     print('   - Registration: OK')
-    print(f'   - Search: OK ({len(results)} result found)')
+    print(f'   - Search: OK ({len(results)} ServiceSummary row found)')
     exit(0)
 else:
     print('❌ HTTP binding logic: FAILED')
