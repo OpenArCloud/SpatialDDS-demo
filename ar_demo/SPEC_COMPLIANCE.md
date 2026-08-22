@@ -1,47 +1,150 @@
-# SpatialDDS v1.6 Compliance Notes
+# SpatialDDS v1.7 Compliance Notes
 
-**Status:** ✅ Aligned with v1.6 draft profiles
-**Date:** 2026-04-30
+**Status:** ✅ Aligned with v1.7 draft profiles
+**Date:** 2026-08-22
 
-## What changed from v1.5
+## What changed from v1.6
 
-Per the upstream v1.6 CHANGELOG, this is a deliberately backward-compatible release with selective per-profile minor bumps — only profiles whose IDL changed move to `/1.6`:
+1.7 is a **hard cutover**, not a compatible bump. Under the pre-adoption
+instability clause (§3.1) a MINOR revision in the 1.x series may break the wire
+format, and 1.7 does. This repo carries no dual-version support, no
+compatibility shims, and no deprecation path — where the old and new shapes
+conflict, the 1.7 shape is the only one accepted.
 
-| Profile | Version | Notes |
-|---|---|---|
-| `spatial.core` | bumped to **1.6** | Adds `PlannedTrajectory`, `PlannedWaypoint`, `EntityBinding`, `ComponentRef` (not exercised by this demo) |
-| `spatial.discovery` | bumped to **1.6** | Adds `CoverageElement.has_coverage_window` + `coverage_window_start`/`end` (optional, not exercised) |
-| `spatial.sensing.common` | bumped to **1.6** | Adds `COV_ROT3`, `COV_POSE6_TWIST6`, `Mat12x12` (demo uses `COV_NONE` only) |
-| `spatial.types` | bumped to **1.6** | |
-| `spatial.anchors`, `spatial.sensing.{vision,lidar,rad}`, `spatial.argeo`, `spatial.events`, `spatial.mapping`, `spatial.semantics`, `spatial.slam_frontend`, `spatial.vio` | stay at **1.5** | No IDL change |
+### Unified module versioning
 
-Also tightened in 1.6 (no code-breaking shape changes):
-- Spatial privacy, enum serialization, time semantics, bbox ordering, schema-stability signaling
-- `CoverageQuery.expr` deprecation **scheduled for removal in 2.0** (still legal in 1.6)
-- Topic version stability: `/v1` follows profile MAJOR, not MINOR — so `spatialdds/envelope/v1` stays `v1`
+1.6's selective per-profile minor bumps are gone. **All modules version
+together with the spec**: every `MODULE_ID` and every `schema_version` in this
+repo is `spatial.<profile>/1.7`. The per-profile version table that used to
+live here is obsolete — there is nothing left to track per profile.
 
-## Coverage & Frames
-- Uses `disco.CoverageElement` with explicit presence flags (`has_bbox` / `has_aabb`) and CRS on earth-fixed bboxes.
-- All discovery payloads carry a `coverage_frame_ref` (`FrameRef{uuid,fqn}`) with optional per-element overrides.
-- Intersection checks honor the 2D `[west,south,east,north]` bbox rule for earth-fixed frames.
-- The 1.6 `coverage_window_*` fields are not currently emitted; see `idl/v1.6/discovery.idl`.
+The dual identifier syntax is also retired. `spatial.<profile>/MAJOR.MINOR` is
+the only form; `name@MAJOR.MINOR` (e.g. `core@1.6`) is rejected, including in
+manifest `profile` strings, which must now match `spatial.manifest/1.<minor>`
+with `<minor>` ≥ 7.
 
-## Time & Quaternions
-- All timestamps use `builtin::Time { sec, nanosec }`.
-- GeoPose and PoseSE3 quaternions follow the 1.6 GeoPose order `[x,y,z,w]` and are normalized before use.
+### Breaking wire changes exercised here
 
-## Discovery Flow
-- Service discovery uses `Announce` + `CoverageQuery`/`CoverageResponse` with capabilities (`ProfileSupport` ranges) and typed topics (`TopicMeta` with `type/version/qos_profile`).
-- Capability advertisements declare `core@1.6`, `discovery@1.6`, plus `sensing.vision@1.5` and `anchors@1.5` per the per-profile rule.
-- HTTP binding mirrors the same shapes for registration and search.
+| Change | Effect in this demo |
+|---|---|
+| `CoverageResponse` returns `sequence<ServiceSummary>` | Both responders (bus + HTTP binding) emit compact rows; clients rank on the summary, then resolve `manifest_uri` or read the retained `Announce` |
+| `CoverageQuery.expr` removed (and Appendix F.X) | `filter` is the only query form; a body carrying `expr` is rejected, not ignored |
+| `CoverageElement.type` removed | Geometry kind derived from `has_bbox` / `has_aabb` / `global` |
+| `GeoPose.frame_kind` / `frame_ref` removed | Orientation is *defined* as the local ENU tangent frame at the encoded position |
+| `Capabilities.features` is `sequence<string>` | `[{"name": "blob.crc32"}]` → `["blob.crc32"]` |
+| `ProfileSupport.preferred` removed; `name` carries the module family | `{"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7}` |
+| `Time.sec` widened to int64 | No change needed — JSON integers carry int64, and nothing here clamps to 32 bits |
 
-## Sensing & Localization Demo
-- Mock localization response uses `argeo.NodeGeo` with `poses[]` + optional `geopose` per 1.6 IDL.
-- Sensor payloads reference vision and SLAM frontend structures (FrameRefs, BlobRefs, KeyframeFeatures) at their `1.5` versions (these profiles did not bump in 1.6).
+Not exercised by this demo, but part of 1.7: compound `@key` on
+`core::Node`/`Edge` and `mapping::Edge`, `TileMeta`'s single `Aabb3 aabb`
+(replacing `min_xyz`/`max_xyz`/`lod`), and the removal of `BlobChunk.last`.
+The envelope transport ships JSON payloads rather than spec-typed DDS
+instances, so keyed-instance semantics are not fabricated anywhere here.
+
+## Discovery flow
+
+- `Announce` + `CoverageQuery` → `CoverageResponse`, with capabilities
+  (`ProfileSupport` ranges) and typed topics (`TopicMeta` carrying
+  `type` / `version` / `qos_profile`, all mandatory in 1.7).
+- Capability advertisements declare `spatial.core/1.7`,
+  `spatial.discovery/1.7`, `spatial.sensing.vision/1.7`, `spatial.anchors/1.7`.
+- Responses are `ServiceSummary` rows: `service_id`, `kind`, `name`,
+  `manifest_uri`, `coverage`, `coverage_frame_ref`, `stamp`, `ttl_sec`. They
+  deliberately carry **no** `caps`, `topics` or `transforms` — that is the
+  point of the change, and `validate_service_summary()` rejects rows that do.
+  Pagination (`next_page_token`) is unchanged.
+- The demo-local `register` / `list` endpoints still traffic in full
+  announces: they are registration *inputs*, not `CoverageResponse`.
+
+### Registered typed topics and QoS profiles
+
+1.7 registered the types and QoS profiles this demo had been using informally.
+`spatialdds/vps/query/v1` is `vps_query` / `VPS_REQ`; `spatialdds/vps/result/v1`
+is `geopose` / `VPS_RESP` (it was the unregistered `node_geo` before).
+`spatialdds_demo/topics.py` carries the full §3.3.2 and §3.3.3 registries.
+
+Anchor deltas have no registered type or QoS profile in 1.7, so
+`spatialdds/anchors/<zone>/delta/v1` uses **documented deployment-specific
+extensions** — type `oarc.anchor_delta`, QoS profile `ANCHOR_DELTA` — following
+the `myorg.depth_frame` / `DEPTH_LIVE` naming pattern §3.3.2 recommends, rather
+than being force-fitted onto `map_event` / `MAP_META`.
+
+Demo topic *names* are unchanged: 1.7 exempts well-known and profile-defined
+topics from the application-topic pattern, and reply topics are consumer-chosen.
+
+## Well-known paths
+
+1.7 consolidates to a single RFC 8615 registration,
+`/.well-known/spatialdds/{bootstrap,resolver,search}`:
+
+- `search` — the HTTP discovery binding (`ar_demo/http_binding.py`).
+- `bootstrap` — new here; serves a 1.7 bootstrap manifest built from the same
+  site table `spatialdds_bootstrap_server.py` serves over the bus, so the HTTPS
+  and DDS bootstrap paths agree. Auth is the optional `auth_hint` string; the
+  `auth` object with its `method` enum is gone. The demo omits `auth_hint`
+  unless one is configured rather than advertising a fake one.
+- `resolver` — not served by this binding (it has no manifests of its own to
+  resolve), but `spatialdds_demo/manifest_resolver.py` *consumes* it: resolution
+  follows §7.5.1 order — cache → advertised resolver → HTTPS fallback → failure.
+
+Because the three names are reserved, direct manifest fetches moved down a
+level to `https://{authority}/.well-known/spatialdds/manifests/{path}.json`,
+where a manifest path can no longer shadow `bootstrap`/`resolver`/`search`.
+
+`register` and `list` remain demo-local extensions alongside the reserved names.
+
+## Coverage & frames
+
+- `disco.CoverageElement` with explicit presence flags and CRS on earth-fixed
+  bboxes; no `type` field.
+- Every discovery payload carries a `coverage_frame_ref` (`FrameRef{uuid,fqn}`,
+  plus the 1.6 `coord_convention`, ENU throughout) with optional per-element
+  overrides.
+- Intersection checks honour the 2D `[west,south,east,north]` ordering.
+- `Aabb3` keeps `min_xyz` / `max_xyz` — only `TileMeta`'s loose pair was
+  removed. The demo publishes no tilesets, so nothing needed folding.
+- The `coverage_window_*` fields are still not emitted; see
+  `idl/v1.7/discovery.idl`.
+
+## Time & quaternions
+
+- Timestamps are `builtin::Time { sec, nanosec }` with `sec` now int64. JSON
+  integers carry that natively and no validator, schema, or JS client here
+  bounds `sec` at 2^31.
+- GeoPose and PoseSE3 quaternions are `[x,y,z,w]`, normalized before use.
+
+## Sensing & localization demo
+
+- Mock localization responses use `argeo.NodeGeo` with `poses[]` and an
+  optional `geopose`.
+- Sensor payloads (FrameRefs, BlobRefs, KeyframeFeatures) now carry `/1.7`
+  schema versions along with everything else.
 
 ## Manifests
-- Bundled manifests under `manifests/v1.6/` are demo-flavored (`spatial.manifest@1.6`) used by the demo's parser. Upstream `vps_manifest.json` examples use a different schema (`schema_version: spatial.core/1.6`); see the SpatialDDS-spec repo for those.
+
+- Bundled manifests under `manifests/v1.7/` are demo-flavored
+  (`spatial.manifest/1.7`) and are what the demo's parser reads. Upstream
+  `vps_manifest.json` examples use the `schema_version: spatial.core/1.7`
+  envelope instead; see the SpatialDDS-spec repo for those.
+- `manifests/v1.4/` and `manifests/v1.6/`, like `idl/v1.4/` and `idl/v1.6/`,
+  are retained as **inert historical reference**. Nothing loads them.
 
 ## Validation
-- `spatialdds_validation.py` enforces FrameRef, Time, coverage presence flags, CRS rules, and unit quaternions.
-- Helpers include deterministic `FrameRef` creation, GeoPose samples, and bbox intersection checks for discovery filtering.
+
+- `spatialdds_validation.py` enforces FrameRef, Time, coverage presence flags,
+  CRS rules, unit quaternions, GeoPose shape, and ServiceSummary shape.
+- `validate_module_version()` and `validate_manifest_profile()` are hard-cutover
+  checks: `/1.5`, `/1.6` and every `@` form are rejected.
+- `spatialdds_demo/topics.py::validate_topic_meta()` checks TopicMeta rows
+  against the 1.7 registries plus the documented extensions above.
+
+## Known divergence
+
+`ar_demo/http_binding.py` returns `ServiceSummary` rows from
+`/.well-known/spatialdds/search`. The spec's HTTP discovery binding (§ HTTP
+Discovery Search Binding) specifies an array of full **service manifests**
+there, and a `{results, next_page_token}` envelope without `query_id`. This
+demo intentionally keeps its existing envelope and mirrors the on-bus
+`CoverageResponse` row shape so both discovery surfaces agree. Treat the HTTP
+binding here as demo-flavored rather than a conformant implementation of that
+section.

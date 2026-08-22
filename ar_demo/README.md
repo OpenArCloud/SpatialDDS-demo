@@ -4,8 +4,8 @@ Bootstrap → discovery → coverage query → localization → catalog → anch
 The cold-start flow an AR client follows: find a VPS that covers your
 area, get a 6DoF localisation, discover content, publish anchors.
 Exercised against the canonical IDL bundled at
-[`../idl/v1.6`](../idl/v1.6) and the manifests at
-[`../manifests/v1.6`](../manifests/v1.6).
+[`../idl/v1.7`](../idl/v1.7) and the manifests at
+[`../manifests/v1.7`](../manifests/v1.7).
 
 ![Cesium web UI](../web/screenshot.png)
 
@@ -102,7 +102,7 @@ python3 http_binding.py
 # Register a service manifest
 curl -X POST http://localhost:8080/.well-known/spatialdds/register \
   -H "Content-Type: application/json" \
-  -d @../manifests/v1.6/vps_manifest.json
+  -d @../manifests/v1.7/vps_manifest.json
 
 # Search by coverage
 curl -X POST http://localhost:8080/.well-known/spatialdds/search \

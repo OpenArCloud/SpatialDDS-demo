@@ -72,8 +72,6 @@ function seedPriorGeopose(): GeoPose {
     lon_deg: START_LON,
     alt_m: 18,
     q: START_Q,
-    frame_kind: 'ENU',
-    frame_ref: { uuid: 'web-seed', fqn: 'earth-fixed' },
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
     cov: 'COV_NONE'
   };
@@ -172,8 +170,6 @@ function cameraGeoPose(activeViewer: Cesium.Viewer): GeoPose {
     lon_deg: Cesium.Math.toDegrees(cartographic.longitude),
     alt_m: cartographic.height,
     q: [orientation.x, orientation.y, orientation.z, orientation.w],
-    frame_kind: 'ENU',
-    frame_ref: { uuid: 'camera-frame', fqn: 'camera.enu' },
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
     cov: 'COV_NONE'
   };

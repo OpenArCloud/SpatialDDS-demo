@@ -38,7 +38,7 @@ def _env_for_dds() -> Dict[str, str]:
     env["SPATIALDDS_VPS_COVERAGE_BBOX"] = "-97.75,30.27,-97.72,30.29"
     env["SPATIALDDS_VPS_MAP_FQN"] = "map/austin"
     env["SPATIALDDS_VPS_MAP_ID"] = "austin-map"
-    env["SPATIALDDS_CATALOG_SEED"] = os.path.join(ROOT, "bridge", "tests", "catalog_seed_austin.json")
+    env["SPATIALDDS_CATALOG_SEED"] = os.path.join(ROOT, "bridges", "web_bridge", "tests", "catalog_seed_austin.json")
     env["PYTHONPATH"] = ROOT
     return env
 
@@ -98,7 +98,6 @@ def _coverage_query(domain_id: int = 1) -> Dict[str, object]:
         "has_coverage_eval_time": False,
         "has_filter": True,
         "filter": {"type_in": [], "qos_profile_in": [], "module_id_in": []},
-        "expr": "",
         "reply_topic": TOPIC_DISCOVERY_RESPONSE("bridge-test-coverage"),
         "stamp": SpatialDDSValidator.now_time(),
         "ttl_sec": 60,
@@ -169,8 +168,8 @@ def bridge_stack():
     catalog_log = log_dir / "catalog.log"
     bridge_log = log_dir / "bridge.log"
 
-    vps = _start_process([sys.executable, "spatialdds_demo_server.py", "--detailed"], env, vps_log)
-    catalog = _start_process([sys.executable, "spatialdds_catalog_server.py", "--detailed"], env, catalog_log)
+    vps = _start_process([sys.executable, "ar_demo/spatialdds_demo_server.py", "--detailed"], env, vps_log)
+    catalog = _start_process([sys.executable, "ar_demo/spatialdds_catalog_server.py", "--detailed"], env, catalog_log)
     bridge = _start_process([sys.executable, "bridges/web_bridge/server.py"], env, bridge_log)
 
     try:
@@ -211,8 +210,6 @@ def test_bridge_http_flow(bridge_stack):
         "lon_deg": AUSTIN_LON,
         "alt_m": AUSTIN_ALT,
         "q": [0.0, 0.0, 0.0, 1.0],
-        "frame_kind": "ENU",
-        "frame_ref": {"uuid": "austin-seed", "fqn": "earth-fixed"},
         "stamp": SpatialDDSValidator.now_time(),
         "cov": "COV_NONE",
     }
@@ -225,7 +222,7 @@ def test_bridge_http_flow(bridge_stack):
 
     catalog_response = _post_json(
         "/v1/catalog/query",
-        {"geopose": geopose, "expr": 'kind=="overlay" OR kind=="poi"'},
+        {"geopose": geopose, "kind_in": ["overlay", "poi"]},
     )
     results = catalog_response.get("results", []) if isinstance(catalog_response, dict) else []
     ids = {entry.get("content_id") for entry in results}

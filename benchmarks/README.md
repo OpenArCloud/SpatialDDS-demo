@@ -61,6 +61,39 @@ Generated PDFs:
 
 Matplotlib style is `seaborn-v0_8-paper` with single-column ACM-friendly figure width (3.5 in).
 
+## SpatialDDS 1.7: CoverageResponse payload size
+
+1.7 changed `disco::CoverageResponse.results` from `sequence<Announce>` to
+compact `sequence<ServiceSummary>` rows. A summary carries identity, coverage
+and `manifest_uri` only — capabilities, topics and transforms are fetched
+afterwards by resolving `manifest_uri` or reading the service's retained
+`Announce`. Measured on this repo's mock VPS (two coverage elements: an
+earth-fixed bbox plus a local volume):
+
+| CoverageResponse row | Bytes | 10 results | 100 results |
+|---|---|---|---|
+| 1.6 full `Announce` | 1589 | 15.9 KB | 159.2 KB |
+| 1.7 `ServiceSummary` | 872 | 8.8 KB | 87.5 KB |
+
+That is a **45% smaller discovery page** at any page size (49% against the
+1.7 announce, which is slightly larger than its 1.6 counterpart because the
+announce now advertises real `TopicMeta` rows). This is an expected 1.7
+result, not a regression: the dropped bytes are exactly the detail a client
+is expected to fetch on demand for the one service it selects, rather than
+receive for every service in the page.
+
+Reproduce with the mock VPS directly:
+
+```bash
+python3 -c "
+import json
+from spatialdds_test import SpatialDDSLogger, VPSServiceV15
+svc = VPSServiceV15(SpatialDDSLogger())
+print(len(json.dumps(svc.create_announce()).encode()),
+      len(json.dumps(svc.create_service_summary()).encode()))
+"
+```
+
 ## Notes
 
 - All timings use `time.perf_counter_ns()`.

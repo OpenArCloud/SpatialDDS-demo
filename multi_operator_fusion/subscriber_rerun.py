@@ -680,7 +680,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--grpc-port", type=int, default=9876)
     p.add_argument("--debug", action="store_true",
                    help="Print per-msg-type arrival counts every 5 s plus a "
-                        "GOT line for each v1.6 envelope.")
+                        "GOT line for each such envelope.")
     return p.parse_args()
 
 
@@ -711,7 +711,7 @@ def main() -> int:
         "# SpatialDDS 1.6 — Multi-Operator Fusion\n\n"
         "Three vehicle operators (a/b/c) plus a roadside radar "
         "(infrastructure) sharing Detection3D on a SpatialDDS bus.\n\n"
-        "**v1.6 wire types rendered here:**\n"
+        "**wire types added in v1.6, rendered here:**\n"
         "* `PlannedTrajectory` — semi-transparent path ahead of each ego\n"
         "* trajectory-conflict `SpatialEvent` — red marker + warn log\n"
         "* `EntityBinding` — grey markers with source provenance label\n"

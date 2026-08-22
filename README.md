@@ -1,9 +1,18 @@
 # SpatialDDS Demo
 
-Reference demos for the SpatialDDS 1.6 draft spec (https://spatialdds.org), running
-on CycloneDDS. The repo bundles the upstream IDL under `idl/v1.6`, mirrors the
-manifest examples in `manifests/v1.6`, and ships four runnable demos that build on
+Reference demos for the SpatialDDS 1.7 draft spec (https://spatialdds.org), running
+on CycloneDDS. The repo bundles the upstream IDL under `idl/v1.7`, mirrors the
+manifest examples in `manifests/v1.7`, and ships four runnable demos that build on
 top of a shared `spatialdds/envelope/v1` transport.
+
+> **1.7 is a hard cutover.** Under the spec's pre-adoption instability clause,
+> 1.7 breaks the wire format: `CoverageResponse` returns compact `ServiceSummary`
+> rows, `CoverageQuery.expr` and `CoverageElement.type` are gone, `GeoPose` lost
+> `frame_kind`/`frame_ref`, and every module now versions together as
+> `spatial.<profile>/1.7` (the `name@MAJOR.MINOR` form is retired). This repo
+> carries no compatibility shims. `idl/v1.4`, `idl/v1.6`, `manifests/v1.4` and
+> `manifests/v1.6` are retained only as inert historical reference — nothing
+> loads them. See [`ar_demo/SPEC_COMPLIANCE.md`](ar_demo/SPEC_COMPLIANCE.md).
 
 ![Multi-operator fusion canvas dashboard](multi_operator_fusion/screenshot.png)
 

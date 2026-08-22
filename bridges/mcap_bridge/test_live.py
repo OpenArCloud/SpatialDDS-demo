@@ -34,10 +34,10 @@ import replayer as replayer_mod  # noqa: E402
 
 # A synthetic mix that exercises three operator namespaces and four msg_types.
 SAMPLES: List[Tuple[str, str, dict]] = [
-    ("ANNOUNCE",            "spatialdds/operator_x/announce/v1",                  {"service_id": "svc:op_x", "version": "1.6"}),
+    ("ANNOUNCE",            "spatialdds/operator_x/announce/v1",                  {"service_id": "svc:op_x", "version": "1.7"}),
     ("NUSC_EGO_POSE",       "spatialdds/operator_x/ego/pose/v1",                  {"frame_seq": 1, "stamp": {"sec": 1700000000, "nanosec": 0}}),
     ("NUSC_DET3D_SET",      "spatialdds/operator_x/sensing/detection3d/v1",       {"frame_seq": 1, "detections": [{"det_id": "d1"}]}),
-    ("NUSC_VISION_FRAME",   "spatialdds/operator_x/vision/CAM_FRONT/frame/v1",    {"stream_id": "cam", "schema_version": "1.6"}),
+    ("NUSC_VISION_FRAME",   "spatialdds/operator_x/vision/CAM_FRONT/frame/v1",    {"stream_id": "cam", "schema_version": "1.7"}),
     ("NUSC_DET3D_SET",      "spatialdds/operator_y/sensing/detection3d/v1",       {"frame_seq": 1, "detections": [{"det_id": "d2"}]}),
     ("NUSC_FUSED_TRACK_SET","spatialdds/platform/fusion/track/v1",                {"frame_seq": 1, "tracks": [{"track_id": "t1"}]}),
     ("NUSC_EGO_POSE",       "spatialdds/operator_x/ego/pose/v1",                  {"frame_seq": 2, "stamp": {"sec": 1700000001, "nanosec": 0}}),

@@ -55,13 +55,13 @@ SAMPLES = [
     _FakeEnvelope(
         "NUSC_VISION_FRAME",
         "spatialdds/operator_a/vision/CAM_FRONT/frame/v1",
-        {"stream_id": "cam_front", "schema_version": "1.6", "codec": "JPEG"},
+        {"stream_id": "cam_front", "schema_version": "1.7", "codec": "JPEG"},
         100_500_000_000,
     ),
     _FakeEnvelope(
         "DEEPSENSE_RF_BEAM_FRAME",
         "spatialdds/infrastructure/rf_beam/unit1/frame/v1",
-        {"stream_id": "bs_beam", "schema_version": "1.6"},
+        {"stream_id": "bs_beam", "schema_version": "1.7"},
         101_000_000_000,
     ),
     _FakeEnvelope(
@@ -73,7 +73,7 @@ SAMPLES = [
     _FakeEnvelope(
         "ANNOUNCE",
         "spatialdds/operator_a/announce/v1",
-        {"service_id": "svc:op_a", "version": "1.6"},
+        {"service_id": "svc:op_a", "version": "1.7"},
         99_000_000_000,
     ),
 ]
@@ -147,7 +147,7 @@ class RoundTripTests(unittest.TestCase):
             self.assertEqual(channel.topic, env.logical_topic)
             self.assertEqual(schema.name, env.msg_type)
             self.assertEqual(channel.metadata.get("spatialdds_msg_type"), env.msg_type)
-            self.assertEqual(channel.metadata.get("spatialdds_version"), "1.6")
+            self.assertEqual(channel.metadata.get("spatialdds_version"), "1.7")
             self.assertEqual(message.log_time, env.stamp_ns)
             self.assertEqual(json.loads(message.data), json.loads(env.payload_json))
 

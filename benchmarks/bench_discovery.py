@@ -116,10 +116,21 @@ class ServiceAnnouncer:
             "manifest_uri": f"spatialdds://bench.local/zone:austin-{index}/manifest:vps",
             "coverage": [coverage],
             "coverage_frame_ref": coverage_frame_ref,
+            # 1.7 registered type / QoS names (spec 3.3.2, 3.3.3).
             "topics": [
-                {"name": "spatialdds/vps/query/v1", "type": "LOCALIZE_REQUEST", "qos_profile": "reliable"},
-                {"name": "spatialdds/vps/result/v1", "type": "LOCALIZE_RESPONSE", "qos_profile": "reliable"},
+                {"name": "spatialdds/vps/query/v1", "type": "vps_query",
+                 "version": "v1", "qos_profile": "VPS_REQ"},
+                {"name": "spatialdds/vps/result/v1", "type": "geopose",
+                 "version": "v1", "qos_profile": "VPS_RESP"},
             ],
+            "caps": {
+                "supported_profiles": [
+                    {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7},
+                    {"name": "spatial.discovery", "major": 1, "min_minor": 7, "max_minor": 7},
+                ],
+                "preferred_profiles": ["spatial.discovery/1.7", "spatial.core/1.7"],
+                "features": [],
+            },
             "ttl_sec": 300,
             "stamp": SpatialDDSValidator.now_time(),
         }

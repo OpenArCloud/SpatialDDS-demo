@@ -78,7 +78,8 @@ class TestDashboardRoutes(unittest.TestCase):
         self.assertIn("SpatialDDSClient", resp.text)
 
     def test_dashboard_subscribes_to_v1_6_topics(self):
-        """The dashboard must subscribe to all v1.6 topics, otherwise the
+        """The dashboard must subscribe to every topic in the v1.6-era set
+        (PlannedTrajectory, EntityBinding, Announce, conflict events), otherwise the
         viz can't render the new features."""
         body = self.client.get("/").text
         for needle in (

@@ -8,10 +8,11 @@ from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_VPS_QUERY_V1,
     TOPIC_VPS_RESULT_V1,
+    validate_topic_meta,
     validate_topics_are_canonical,
 )
 from spatialdds_test import SpatialDDSLogger, VPSServiceV15
-from spatialdds_validation import SpatialDDSValidator
+from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 
 
 def test_manifest_resolver() -> bool:
@@ -117,6 +118,95 @@ def test_volume_aabb_frame_ref() -> bool:
     return volume.get("has_aabb") and (volume.get("has_frame_ref") or service.coverage_frame_ref)
 
 
+def test_search_returns_service_summaries() -> bool:
+    """(a) Discovery search returns ServiceSummary rows, not full announces."""
+    import http_binding
+
+    http_binding._announce_registry = []
+    handler = http_binding.SpatialDDSHTTPHandler
+
+    frame_ref, cov_elem = create_coverage_bbox_earth_fixed(-122.5, 37.7, -122.3, 37.8)
+    announce = {
+        "service_id": "svc:vps:test/summary",
+        "name": "Test Service",
+        "kind": "VPS",
+        "coverage": [cov_elem],
+        "coverage_frame_ref": frame_ref,
+        "manifest_uri": "spatialdds://test.com/zone:test/manifest:svc",
+        "caps": {"supported_profiles": [], "preferred_profiles": [], "features": []},
+        "topics": [{"name": "spatialdds/vps/query/v1", "type": "vps_query",
+                    "version": "v1", "qos_profile": "VPS_REQ"}],
+        "stamp": SpatialDDSValidator.now_time(),
+        "ttl_sec": 60,
+    }
+    handler._register_announce(handler, http_binding._normalize_announce(announce))
+
+    frame_ref_q, cov_elem_q = create_coverage_bbox_earth_fixed(-122.45, 37.75, -122.4, 37.8)
+    results = handler._search_announces(
+        handler,
+        {
+            "query_id": "q-summary",
+            "coverage": [cov_elem_q],
+            "coverage_frame_ref": frame_ref_q,
+            "has_filter": False,
+        },
+    )
+    if len(results) != 1:
+        return False
+    row = results[0]
+    try:
+        SpatialDDSValidator.validate_service_summary(row)
+    except Exception:
+        return False
+    # The whole point of the 1.7 change: no caps/topics/transforms inline.
+    return (
+        row.get("service_id") == "svc:vps:test/summary"
+        and not (set(row) & {"caps", "topics", "transforms"})
+    )
+
+
+def test_coverage_query_expr_rejected() -> bool:
+    """(b) A CoverageQuery carrying the deleted `expr` field is rejected."""
+    service = VPSServiceV15(SpatialDDSLogger())
+    frame_ref, cov_elem = create_coverage_bbox_earth_fixed(-122.45, 37.75, -122.4, 37.8)
+    query = {
+        "query_id": "q-expr",
+        "coverage": [cov_elem],
+        "coverage_frame_ref": frame_ref,
+        "expr": 'kind=="VPS"',
+    }
+    try:
+        service.handle_coverage_query(query)
+    except ValueError:
+        return True
+    return False
+
+
+def test_at_form_profile_rejected() -> bool:
+    """(c) Manifests using the retired `@` identifier form fail validation."""
+    for bad in ("spatial.manifest@1.6", "spatial.manifest@1.7", "spatial.manifest/1.6"):
+        try:
+            SpatialDDSValidator.validate_manifest_profile(bad)
+        except Exception:
+            continue
+        return False
+    try:
+        SpatialDDSValidator.validate_manifest_profile("spatial.manifest/1.7")
+    except Exception:
+        return False
+    return True
+
+
+def test_manifest_topics_are_registered() -> bool:
+    """Bundled 1.7 manifest topics use registered (or documented) type/QoS names."""
+    manifest, _ = resolve_manifest("spatialdds://vps.example.com/zone:sf-downtown/manifest:vps")
+    topics = manifest.get("service", {}).get("topics", []) if manifest else []
+    if not topics:
+        return False
+    ok, _ = validate_topic_meta(topics)
+    return ok
+
+
 def test_no_identity_transforms() -> bool:
     service = VPSServiceV15(SpatialDDSLogger())
     announce = service.create_announce()
@@ -149,6 +239,10 @@ def main() -> int:
         ("manifest_fallback", test_manifest_fallback),
         ("https_resolution_disabled", test_https_resolution_disabled),
         ("volume_frame_ref", test_volume_aabb_frame_ref),
+        ("search_returns_service_summaries", test_search_returns_service_summaries),
+        ("coverage_query_expr_rejected", test_coverage_query_expr_rejected),
+        ("at_form_profile_rejected", test_at_form_profile_rejected),
+        ("manifest_topics_are_registered", test_manifest_topics_are_registered),
         ("no_identity_transforms", test_no_identity_transforms),
         ("catalog_seed", test_catalog_seed),
     ]

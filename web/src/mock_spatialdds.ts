@@ -1,9 +1,4 @@
-import type { CatalogItem, DiscoverResponse, FrameRef, GeoPose, LocalizeResponse, TimeStamp } from './types';
-
-const FRAME_REF: FrameRef = {
-  uuid: 'f30b4e64-6b58-4d45-8da8-2a0f5b3b6a01',
-  fqn: 'earth-fixed'
-};
+import type { CatalogItem, DiscoverResponse, GeoPose, LocalizeResponse, TimeStamp } from './types';
 
 const FIXED_STAMP: TimeStamp = {
   sec: 1700000000,
@@ -15,8 +10,6 @@ const BASE_GEOPOSE: GeoPose = {
   lon_deg: -97.739494,
   alt_m: 18,
   q: [0.4967, -0.0336, -0.0585, 0.8653],
-  frame_kind: 'ENU',
-  frame_ref: FRAME_REF,
   stamp: FIXED_STAMP,
   cov: 'COV_NONE'
 };

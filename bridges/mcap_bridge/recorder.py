@@ -65,7 +65,7 @@ class _ChannelTable:
             message_encoding="json",
             metadata={
                 "spatialdds_msg_type": msg_type,
-                "spatialdds_version": "1.6",
+                "spatialdds_version": "1.7",
             },
         )
         self._channel_ids[logical_topic] = ch_id

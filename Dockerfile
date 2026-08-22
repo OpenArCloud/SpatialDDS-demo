@@ -3,7 +3,7 @@ FROM ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
 
 WORKDIR /app
 
-# Copy SpatialDDS v1.6 files. AR-demo files live under ar_demo/ on the host
+# Copy SpatialDDS v1.7 files. AR-demo files live under ar_demo/ on the host
 # but are flattened into /app inside the container so existing in-container
 # entry points (`python3 spatialdds_test.py`, etc.) keep working unchanged.
 COPY spatialdds_test.py .

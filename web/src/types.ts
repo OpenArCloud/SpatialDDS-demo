@@ -8,13 +8,15 @@ export type TimeStamp = {
   nanosec: number;
 };
 
+// core::GeoPose. 1.7 removed frame_kind and frame_ref: the quaternion is
+// fixed to the local ENU tangent frame at (lat_deg, lon_deg, alt_m), so
+// there is no frame left to declare. `sec` is int64 on the wire — JS Numbers
+// stay exact past year 285,000,000, so no BigInt and no 2^31 bound here.
 export type GeoPose = {
   lat_deg: number;
   lon_deg: number;
   alt_m: number;
   q: [number, number, number, number];
-  frame_kind: 'ENU';
-  frame_ref: FrameRef;
   stamp: TimeStamp;
   cov: 'COV_NONE';
 };

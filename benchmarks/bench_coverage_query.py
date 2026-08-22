@@ -116,7 +116,9 @@ class QueryClient:
             "coverage": [bbox_elem],
             "coverage_frame_ref": frame_ref,
             "has_coverage_eval_time": False,
-            "expr": "",
+            # Demo-local catalog filter; CoverageQuery.expr is gone in 1.7.
+            "has_filter": False,
+            "filter": {"kind_in": []},
             "limit": 10000,
             "page_token": "",
             "stamp": SpatialDDSValidator.now_time(),
