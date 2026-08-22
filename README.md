@@ -44,15 +44,21 @@ per-demo wiring.
 
 ## Two HTTP servers — which one do I want?
 
-| | `ar_demo/http_binding.py` | `bridges/web_bridge/server.py` |
-|---|---|---|
-| Purpose | Spec-compliance REST wrapper that mirrors the discovery payload shapes | HTTP-to-DDS bridge that the Cesium / canvas dashboard talks to |
-| Port (default) | 8080 | 8088 |
-| Used by | `ar_demo/run_all_tests.sh`, the [AR demo README](ar_demo/README.md) | `run_bridge_server_docker.sh`, `web/`, `bridges/web_bridge/static/` |
-| Run with DDS? | No (in-process registration) | Yes (publishes/subscribes envelopes) |
+Both serve the spec's HTTP discovery binding, and both answer it from the same
+module (`spatialdds_demo/discovery_http.py`), so they cannot drift. They differ
+in where their services come from:
 
-They are not interchangeable. Use the bridge for the web and canvas demos; use the
-HTTP binding to exercise registration and search payload shapes on their own.
+| | `bridges/web_bridge/server.py` | `ar_demo/http_binding.py` |
+|---|---|---|
+| Role | Gateway: the per-deployment process | Conformance harness and reference implementation |
+| Services from | The live DDS bus, via a cached announce feed | An in-memory registry fed by `register` |
+| Also serves | `/ws` live streams, `/v1/*`, the canvas dashboard | `register` / `list` |
+| Port (default) | 8088 | 8080 |
+| Needs DDS? | Yes | No |
+
+Use the bridge when you want discovery over a real bus alongside live data. Use
+the HTTP binding to exercise the binding's payload shapes on their own, with a
+registry you control.
 
 ## Browser UIs
 

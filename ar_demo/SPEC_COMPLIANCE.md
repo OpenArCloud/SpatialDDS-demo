@@ -115,6 +115,27 @@ where a manifest path can no longer shadow `bootstrap`/`resolver`/`search`.
 
 `register` and `list` remain demo-local extensions alongside the reserved names.
 
+## Layer 1.5 conformance
+
+The spec's three discovery layers map onto this repo as follows:
+
+| Layer | Where |
+|---|---|
+| 1 — bootstrap | `GET /.well-known/spatialdds/bootstrap` on both HTTP servers, and the bus bootstrap topic pair |
+| 1.5 — HTTP discovery | `POST /.well-known/spatialdds/search` (plus the `?geohash=` shorthand) on both HTTP servers |
+| 2 — on-bus discovery | `Announce` + `CoverageQuery`/`CoverageResponse` over DDS |
+
+`bridges/web_bridge` is the gateway shape: it answers Layer 1.5 from a live
+cache of announces seen on the bus, so a client with no DDS stack can bootstrap,
+search, and open a WebSocket stream without SpatialDDS-specific code.
+`ar_demo/http_binding.py` answers the same binding over a registry it controls,
+which is what makes it useful as a conformance harness. Both call one module,
+`spatialdds_demo/discovery_http.py`.
+
+`/.well-known/spatialdds/resolver` is not implemented on either server. The
+manifest resolver in `spatialdds_demo/manifest_resolver.py` *consumes* resolver
+metadata when an authority publishes it, but neither server publishes its own.
+
 ## Coverage & frames
 
 - `disco.CoverageElement` with explicit presence flags and CRS on earth-fixed

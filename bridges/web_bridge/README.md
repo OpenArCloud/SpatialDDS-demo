@@ -38,6 +38,54 @@ Environment knobs:
 | `SPATIALDDS_BRIDGE_ALLOW_PUBLISH` | `1` | Set to `0` to refuse all `publish` messages (read-only mode) |
 | `SPATIALDDS_BRIDGE_STATIC_DIR` | `bridges/web_bridge/static` | Directory served at `/static` (debug dashboard lives there) |
 
+## Spec discovery (`/.well-known/spatialdds/*`)
+
+The bridge serves the spec's Layer 1.5 HTTP discovery binding, so a client with
+no DDS stack can bootstrap, find services, and open a live stream over plain
+HTTP:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /.well-known/spatialdds/bootstrap` | Bootstrap manifest (`spatialdds_bootstrap: "1.7"`), from `SPATIALDDS_BOOTSTRAP_*` config |
+| `POST /.well-known/spatialdds/search` | `{"results": [<service manifest>, ...], "next_page_token": ""}` |
+| `GET /.well-known/spatialdds/search?geohash=&kind=` | Same, from the geohash shorthand |
+
+Search takes a CoverageQuery body and supports `filter`, the top-level `kind`
+array, `max_results` and `page_token`. Results are ordered by `service_id`, so
+paging is stable. There is no `query_id`: HTTP correlates request and response
+itself, unlike the on-bus `CoverageResponse`.
+
+The semantics live in `spatialdds_demo/discovery_http.py`, shared with
+`ar_demo/http_binding.py`. The two servers differ only in where their service
+records come from.
+
+`/.well-known/spatialdds/resolver` is not served.
+
+### Answered from cache, not from the bus
+
+Search reads a cache of retained announces rather than issuing a CoverageQuery
+per request, so it answers in one round trip. That makes cache freshness the
+endpoint's correctness. A service leaves the cache when:
+
+- **it departs** — a `DEPART` message evicts it immediately;
+- **its announce expires** — entries older than `stamp + 2 x ttl_sec` are swept
+  on the next read.
+
+DDS dispose is deliberately *not* a removal path here. Announces ride the same
+unkeyed envelope type as everything else (`spatialdds_demo/dds_transport.py`
+declares no `@key`), so every announce is a sample on one instance and
+NOT_ALIVE_DISPOSED would refer to the announce topic rather than to a service.
+A keyed announce type would let the bridge honour dispose; until then Depart and
+TTL are the signals. `GET /api/stats` reports the cache counters.
+
+### Serving authored manifests
+
+If an announce's `manifest_uri` resolves to a manifest this deployment hosts,
+that document is returned verbatim. Otherwise one is synthesized from the
+announce, carrying across what the announce provides and omitting optional
+fields rather than inventing them. Which path ran is logged, not signalled in
+the response.
+
 ## Legacy endpoints (the Cesium demo)
 
 ```
