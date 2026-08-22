@@ -58,11 +58,14 @@ then `docker build -t cyclonedds-python .`.
 - `run_bridge_http_tests_docker.sh` can flake with `COVERAGE_RESPONSE timeout`:
   its discovery query is one-shot with no retry. Re-run it. The pytest variant
   (`run_bridge_http_tests_with_logs.sh`) is more reliable.
-- `ar_demo/spatialdds.idl` (the convenience aggregator) does **not** compile:
-  `core.idl` never defines `SPATIAL_CORE_INCLUDED`, so `discovery.idl`'s include
-  guard never trips and `MODULE_ID` collides. This originates upstream in the
-  spec repo and affects v1.6 identically. Compile individual profile files
-  instead, as `comprehensive_test.py` does.
+- `ar_demo/spatialdds.idl` is a convenience aggregator with **no types of its
+  own** — only `#include`s of `idl/v1.7/*.idl`. Nothing in the demo consumes
+  generated bindings (the wire type is the JSON envelope in
+  `spatialdds_demo/dds_transport.py`), so it affects downstream consumers only.
+  Two `idlc` quirks, both documented with working commands in
+  `ar_demo/DOCKER_GUIDE.md`: the Python backend generates nothing from an
+  include-only wrapper (use individual profile files) and ignores `-o` (writes
+  into the cwd); and the C++ backend is not built into the image.
 
 ## Code of Conduct
 

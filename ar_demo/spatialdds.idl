@@ -1,13 +1,30 @@
 // SPDX-License-Identifier: MIT
 // SpatialDDS Convenience Aggregator (v1.7)
 //
-// The official v1.7 IDL lives under idl/v1.7/*.idl in this repository.
-// This wrapper simply includes the individual profile files so existing
-// build scripts that expect a single IDL can continue to function.
+// The official v1.7 IDL lives under idl/v1.7/*.idl in this repository and is a
+// verbatim copy of the spec repo. This wrapper adds NO types of its own — it
+// only #includes the profile files so build scripts that expect a single IDL
+// entry point keep working.
+//
+// Include-guard contract: types.idl self-guards, but core.idl and common.idl
+// do NOT guard their own bodies — each *consumer* wraps the include in
+// `#ifndef SPATIAL_CORE_INCLUDED / #define ... / #endif` (see discovery.idl).
+// So a direct include of core.idl or common.idl must set the same sentinel,
+// or the next profile file pulls the body in a second time and idlc fails with
+// "Declaration 'MODULE_ID' collides with an earlier declaration".
 
 #include "idl/v1.7/types.idl"
-#include "idl/v1.7/common.idl"
+
+#ifndef SPATIAL_CORE_INCLUDED
+#define SPATIAL_CORE_INCLUDED
 #include "idl/v1.7/core.idl"
+#endif
+
+#ifndef SPATIAL_SENSING_COMMON_INCLUDED
+#define SPATIAL_SENSING_COMMON_INCLUDED
+#include "idl/v1.7/common.idl"
+#endif
+
 #include "idl/v1.7/discovery.idl"
 #include "idl/v1.7/anchors.idl"
 #include "idl/v1.7/vision.idl"
@@ -17,3 +34,5 @@
 #include "idl/v1.7/lidar.idl"
 #include "idl/v1.7/rad.idl"
 #include "idl/v1.7/semantics.idl"
+#include "idl/v1.7/events.idl"
+#include "idl/v1.7/mapping.idl"

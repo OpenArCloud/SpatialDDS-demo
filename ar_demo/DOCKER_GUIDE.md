@@ -89,16 +89,46 @@ docker run --rm -p 9000:9000 cyclonedds-python python3 http_binding.py 9000
 ```
 
 ### IDL Compilation
+
+`/app/spatialdds.idl` is a convenience aggregator: it defines no types of its
+own, it only `#include`s the profile files under `idl/v1.7/`. Nothing in the
+demo consumes generated bindings — the wire type is the JSON envelope declared
+in `spatialdds_demo/dds_transport.py` — so this is purely for downstream
+consumers who want typed stubs.
+
+**C** — the aggregator works, and `-o` is honoured:
+
 ```bash
-# Compile to Python
-docker run --rm -v $(pwd):/output cyclonedds-python idlc -l py -o /output /app/spatialdds.idl
-
-# Compile to C
-docker run --rm -v $(pwd):/output cyclonedds-python idlc -l c -o /output /app/spatialdds.idl
-
-# Compile to C++
-docker run --rm -v $(pwd):/output cyclonedds-python idlc -l cpp -o /output /app/spatialdds.idl
+docker run --rm -v $(pwd):/output cyclonedds-python \
+  idlc -l c -o /output /app/spatialdds.idl
+# -> spatialdds.c, spatialdds.h
 ```
+
+**Python** — two gotchas, both verified against this image:
+
+1. Point `idlc` at an **individual profile file, not the aggregator**. The
+   Python backend generates from the declarations in the input file itself, and
+   an include-only wrapper has none, so it exits 0 and writes nothing.
+   (Reproducible with a one-line wrapper around any IDL — not specific to
+   SpatialDDS.)
+2. The Python backend **ignores `-o`**. It writes a package tree into the
+   current working directory, so `cd` into the mounted directory first.
+
+```bash
+# One profile
+docker run --rm -v $(pwd)/output:/output cyclonedds-python bash -lc \
+  'cd /output && idlc -l py -I /app/idl/v1.7 /app/idl/v1.7/discovery.idl'
+# -> output/spatial/disco/_discovery.py
+
+# Every profile
+docker run --rm -v $(pwd)/output:/output cyclonedds-python bash -lc \
+  'cd /output && for f in /app/idl/v1.7/*.idl; do idlc -l py -I /app/idl/v1.7 "$f"; done'
+```
+
+**C++** — not available in this image. `idlc -l cpp` fails with
+`Cannot load generator libcycloneddsidlcpp.so`; the C++ backend ships with
+`cyclonedds-cxx`, which `Dockerfile.base` does not build. Add it there if you
+need C++ stubs.
 
 ## Interactive Shell
 
@@ -116,8 +146,9 @@ python3 spatialdds_test.py
 ddsperf --help
 idlc --help
 
-# Compile IDL
-idlc -l py spatialdds.idl
+# Compile IDL (C from the aggregator; Python from a profile file — see above)
+idlc -l c spatialdds.idl
+idlc -l py -I idl/v1.7 idl/v1.7/discovery.idl   # writes ./spatial/... (ignores -o)
 
 # Check Python packages
 pip3 list | grep cyclone
@@ -148,7 +179,8 @@ docker run --rm -v $(pwd):/data cyclonedds-python python3 /data/my_test.py
 
 ### Mount Output Directory
 ```bash
-docker run --rm -v $(pwd)/output:/output cyclonedds-python idlc -l py -o /output /app/spatialdds.idl
+docker run --rm -v $(pwd)/output:/output cyclonedds-python bash -lc \
+  'cd /output && idlc -l py -I /app/idl/v1.7 /app/idl/v1.7/discovery.idl'
 ```
 
 ## Docker Compose
@@ -278,7 +310,8 @@ docker run --rm --network host \
 | Validation test | `docker run --rm cyclonedds-python python3 spatialdds_validation.py` |
 | HTTP server | `docker run --rm -p 8080:8080 cyclonedds-python python3 http_binding.py` |
 | Interactive shell | `docker run --rm -it --network host cyclonedds-python bash` |
-| Compile IDL | `docker run --rm -v $(pwd):/out cyclonedds-python idlc -l py -o /out /app/spatialdds.idl` |
+| Compile IDL (C) | `docker run --rm -v $(pwd):/out cyclonedds-python idlc -l c -o /out /app/spatialdds.idl` |
+| Compile IDL (Python) | `docker run --rm -v $(pwd):/out cyclonedds-python bash -lc 'cd /out && idlc -l py -I /app/idl/v1.7 /app/idl/v1.7/discovery.idl'` |
 
 ## Notes
 
