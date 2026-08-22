@@ -20,6 +20,7 @@ import sys
 
 from spatialdds_validation import (
     SpatialDDSValidator,
+    ValidationError,
 )
 
 # Module-level registry (shared across all request handlers)
@@ -206,7 +207,16 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
             body = self.rfile.read(content_length).decode("utf-8")
             payload = json.loads(body)
 
-            if _is_service_manifest(payload):
+            if _looks_like_manifest(payload):
+                # Validate the profile before dispatching, so a retired @-form
+                # manifest reports that rather than falling through to the
+                # announce path and complaining about a missing service_id.
+                SpatialDDSValidator.validate_manifest_profile(payload.get("profile", ""))
+                if not _is_service_manifest(payload):
+                    raise ValueError(
+                        f"Unsupported manifest rtype '{payload.get('rtype')}'; "
+                        "this binding registers rtype='service' manifests"
+                    )
                 entry = _normalize_manifest(payload)
             else:
                 entry = _normalize_announce(payload)
@@ -227,6 +237,9 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
 
         except json.JSONDecodeError as exc:
             self._send_error_json(f"Invalid JSON: {exc}", 400)
+        except (ValidationError, ValueError) as exc:
+            # A malformed body is the caller's problem, not ours — 400, not 500.
+            self._send_error_json(str(exc), 400)
         except Exception as exc:
             self._send_error_json(f"Internal error: {exc}", 500)
 
@@ -357,13 +370,17 @@ def _to_service_summary(entry: Dict[str, Any]) -> Dict[str, Any]:
     return summary
 
 
-def _is_service_manifest(payload: Dict[str, Any]) -> bool:
+def _looks_like_manifest(payload: Dict[str, Any]) -> bool:
+    """A manifest-shaped body, regardless of whether its profile is valid."""
     if not isinstance(payload, dict):
         return False
     profile = payload.get("profile", "")
-    rtype = payload.get("rtype")
+    return isinstance(profile, str) and profile.startswith("spatial.manifest") and "rtype" in payload
+
+
+def _is_service_manifest(payload: Dict[str, Any]) -> bool:
     # 1.7 retired the `spatial.manifest@1.x` form — slash form only.
-    return isinstance(profile, str) and profile.startswith("spatial.manifest/1.") and rtype == "service"
+    return _looks_like_manifest(payload) and payload.get("rtype") == "service"
 
 
 def _normalize_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:
