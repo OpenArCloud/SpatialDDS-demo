@@ -258,8 +258,8 @@ class VPSServiceV15:
         self.map_frame_ref = SpatialDDSValidator.create_frame_ref(map_fqn)
         self.map_id = os.getenv("SPATIALDDS_VPS_MAP_ID", "sf-downtown-map")
         volume_frame_ref = self.map_frame_ref
+        # 1.7 deleted CoverageElement.type — has_aabb alone is the volume form.
         volume_elem = {
-            "type": "volume",
             "has_crs": False,
             "has_bbox": False,
             "has_aabb": True,

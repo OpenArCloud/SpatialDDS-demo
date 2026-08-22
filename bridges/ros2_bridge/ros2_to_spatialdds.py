@@ -26,12 +26,12 @@ from frame_mapping import FrameMapper
 
 
 # ---------- Schema-version literals ------------------------------------------
-# These mirror the v1.6 IDL profile names. Per the v1.6 CHANGELOG, only
-# ``core``, ``discovery``, ``sensing.common``, and ``types`` bumped; the
-# extension profiles for sensing-specific topics stay at 1.5.
-SCHEMA_CORE = "spatial.core/1.6"
-SCHEMA_VISION = "spatial.sensing.vision/1.5"
-SCHEMA_SEMANTICS = "spatial.semantics/1.5"
+# These mirror the v1.7 IDL profile names. 1.7 dropped selective per-profile
+# minor bumps: every module versions together with the spec, so every
+# MODULE_ID and schema_version is spatial.<profile>/1.7.
+SCHEMA_CORE = "spatial.core/1.7"
+SCHEMA_VISION = "spatial.sensing.vision/1.7"
+SCHEMA_SEMANTICS = "spatial.semantics/1.7"
 
 
 # ---------- Wire-format msg_type strings -------------------------------------
@@ -130,13 +130,16 @@ def pose_stamped_to_framed_pose(msg: Any, operator: str,
 
 
 def nav_sat_fix_to_geo_pose(msg: Any, operator: str,
-                             sensor_id: str = "gnss",
-                             frame_kind: str = "ENU") -> Dict[str, Any]:
+                             sensor_id: str = "gnss") -> Dict[str, Any]:
     """``sensor_msgs/NavSatFix`` → SpatialDDS GeoPose payload.
 
     The status (no-fix / fix / SBAS / GBAS) is preserved as ``fix_status``
     so consumers can drop unfixed samples. Position covariance is forwarded
     when present.
+
+    1.7 removed ``GeoPose.frame_kind``: orientation is fixed to the local
+    ENU tangent frame at the encoded position, which is what NavSatFix
+    already implies, so the field (and its parameter) is simply gone.
     """
     h = msg.header
     cov_type = int(getattr(msg, "position_covariance_type", 0) or 0)
@@ -145,7 +148,6 @@ def nav_sat_fix_to_geo_pose(msg: Any, operator: str,
         "source_operator": operator,
         "sensor_id": sensor_id,
         "stamp": _ros_time_to_sdds(h.stamp),
-        "frame_kind": frame_kind,
         "lat_deg": float(msg.latitude),
         "lon_deg": float(msg.longitude),
         "alt_m": float(msg.altitude),

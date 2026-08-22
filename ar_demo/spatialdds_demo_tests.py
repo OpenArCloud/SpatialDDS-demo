@@ -85,7 +85,15 @@ def test_manifest_fallback() -> bool:
 
 def test_volume_aabb_frame_ref() -> bool:
     service = VPSServiceV15(SpatialDDSLogger())
-    volume = next((elem for elem in service.coverage if elem.get("type") == "volume"), None)
+    # 1.7: no CoverageElement.type — the volume form is has_aabb without bbox.
+    volume = next(
+        (
+            elem
+            for elem in service.coverage
+            if elem.get("has_aabb") and not elem.get("has_bbox")
+        ),
+        None,
+    )
     if not volume:
         return False
     SpatialDDSValidator.validate_coverage(service.coverage, service.coverage_frame_ref)

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-SpatialDDS v1.6 Validation Utilities
-Lightweight helpers for Time/FrameRef/Coverage/Quaternion validation aligned
-with the 1.6 IDL shapes under idl/v1.6.
+SpatialDDS v1.7 Validation Utilities
+Lightweight helpers for Time/FrameRef/Coverage/GeoPose/ServiceSummary
+validation aligned with the 1.7 IDL shapes under idl/v1.7.
+
+1.7 is a hard cutover (pre-adoption instability clause, spec 3.1): the
+1.5/1.6 shapes are rejected outright, not tolerated.
 """
 
 import math
@@ -17,7 +20,7 @@ class ValidationError(Exception):
 
 
 class SpatialDDSValidator:
-    """Validator for SpatialDDS v1.6 structures"""
+    """Validator for SpatialDDS v1.7 structures"""
 
     # spatialdds://<authority>/zone:<zone_id>/<rtype>:<rid>
     SPATIAL_URI_PATTERN = (
@@ -25,7 +28,11 @@ class SpatialDDSValidator:
     )
 
     VALID_CRS = {"EPSG:4979", "EPSG:4326"}
-    VALID_COVERAGE_TYPES = {"bbox", "volume"}
+    # 1.7 unifies every module on /1.7 and retires the `name@MAJOR.MINOR`
+    # form; `spatial.<profile>/MAJOR.MINOR` is the only identifier syntax.
+    MODULE_VERSION_PATTERN = r"^spatial\.[a-z_][a-z0-9_.]*/1\.7$"
+    MANIFEST_PROFILE_PATTERN = r"^spatial\.manifest/1\.(\d+)$"
+    MANIFEST_MIN_MINOR = 7
     VALID_SERVICE_KINDS = {
         "VPS",
         "MAPPING",
@@ -61,7 +68,7 @@ class SpatialDDSValidator:
         Deterministically create a FrameRef using UUIDv5 so the same fqn
         always yields the same uuid (useful for tests/demos).
 
-        v1.6 §2.12 adds an axis convention. Every demo here is
+        §2.12 adds an axis convention. Every demo here is
         ENU-anchored; callers can override for body-frame or camera-frame
         references.
         """
@@ -123,7 +130,7 @@ class SpatialDDSValidator:
     @classmethod
     def validate_spatial_uri(cls, uri: str) -> Dict[str, str]:
         """
-        Validate SpatialDDS URI format (used for manifests in 1.6)
+        Validate SpatialDDS URI format (used for manifests in 1.7)
         """
         import re
 
@@ -149,15 +156,20 @@ class SpatialDDSValidator:
         element: Dict[str, Any],
         coverage_frame_ref: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Validate discovery::CoverageElement"""
-        if "type" not in element:
-            raise ValidationError("CoverageElement missing required 'type'")
-        cov_type = element["type"]
-        if cov_type not in cls.VALID_COVERAGE_TYPES:
+        """
+        Validate discovery::CoverageElement.
+
+        1.7 deleted ``CoverageElement.type``: the geometry kind is derived
+        from the presence flags. ``has_bbox`` is the geographic (bbox) form,
+        ``has_aabb`` alone is the local volume form, and neither plus
+        ``global: true`` is the global form.
+        """
+        if "type" in element:
             raise ValidationError(
-                f"Invalid coverage type '{cov_type}'. "
-                f"Valid types: {', '.join(sorted(cls.VALID_COVERAGE_TYPES))}"
+                "CoverageElement.type was removed in 1.7; derive the geometry "
+                "kind from has_bbox / has_aabb / global instead"
             )
+        is_volume = bool(element.get("has_aabb")) and not element.get("has_bbox")
 
         if element.get("has_bbox"):
             bbox = element.get("bbox")
@@ -182,7 +194,7 @@ class SpatialDDSValidator:
                 raise ValidationError("aabb vectors must have 3 components each")
             if not all(math.isfinite(v) for v in aabb["min_xyz"] + aabb["max_xyz"]):
                 raise ValidationError("aabb values must be finite numbers")
-            if cov_type == "volume":
+            if is_volume:
                 if element.get("has_crs"):
                     raise ValidationError("volume aabb must not set has_crs; use frame_ref instead")
                 frame_ref = element.get("frame_ref") if element.get("has_frame_ref") else coverage_frame_ref
@@ -208,7 +220,124 @@ class SpatialDDSValidator:
             cls.validate_frame_ref(frame_ref)
 
         if not element.get("has_bbox") and not element.get("has_aabb"):
-            raise ValidationError("CoverageElement must provide at least bbox or aabb geometry")
+            if not element.get("global"):
+                raise ValidationError(
+                    "CoverageElement must provide bbox or aabb geometry, "
+                    "or set global=true"
+                )
+
+    @classmethod
+    def validate_geo_pose(cls, geopose: Dict[str, Any]) -> None:
+        """
+        Validate core::GeoPose.
+
+        1.7 fixed the orientation to the local ENU tangent frame at the
+        encoded position and deleted ``frame_kind`` / ``frame_ref``
+        (and ``enum GeoFrameKind``). Their presence is a 1.6 payload.
+        """
+        if not isinstance(geopose, dict):
+            raise ValidationError("GeoPose must be an object")
+        for field in ("lat_deg", "lon_deg", "alt_m"):
+            value = geopose.get(field)
+            if not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValidationError(f"GeoPose.{field} must be a finite number")
+        for removed in ("frame_kind", "frame_ref"):
+            if removed in geopose:
+                raise ValidationError(
+                    f"GeoPose.{removed} was removed in 1.7; orientation is "
+                    "always the local ENU tangent frame at the encoded position"
+                )
+        cls.validate_quaternion_xyzw(geopose.get("q"))
+        if "stamp" in geopose:
+            cls.validate_time(geopose["stamp"])
+
+    @classmethod
+    def validate_module_version(cls, version: str) -> None:
+        """
+        Validate a module/schema version string.
+
+        Hard cutover: 1.7 unifies every module on ``spatial.<profile>/1.7``
+        and retires the ``name@MAJOR.MINOR`` form, so ``/1.5``, ``/1.6``
+        and every ``@`` form are rejected.
+        """
+        import re
+
+        if not isinstance(version, str) or not version:
+            raise ValidationError("Module version must be a non-empty string")
+        if "@" in version:
+            raise ValidationError(
+                f"Profile identifier '{version}' uses the retired "
+                "'name@MAJOR.MINOR' form; 1.7 accepts only "
+                "'spatial.<profile>/MAJOR.MINOR'"
+            )
+        if not re.match(cls.MODULE_VERSION_PATTERN, version):
+            raise ValidationError(
+                f"Invalid module version '{version}' (expected "
+                "'spatial.<profile>/1.7'; all modules version together in 1.7)"
+            )
+
+    @classmethod
+    def validate_manifest_profile(cls, profile: str) -> None:
+        """Validate a manifest ``profile`` string (spec 8.1)."""
+        import re
+
+        if not isinstance(profile, str) or not profile:
+            raise ValidationError("Manifest profile must be a non-empty string")
+        if "@" in profile:
+            raise ValidationError(
+                f"Manifest profile '{profile}' uses the retired "
+                "'spatial.manifest@MAJOR.MINOR' form; 1.7 requires "
+                "'spatial.manifest/1.<minor>'"
+            )
+        match = re.match(cls.MANIFEST_PROFILE_PATTERN, profile)
+        if not match:
+            raise ValidationError(
+                f"Invalid manifest profile '{profile}' "
+                "(expected 'spatial.manifest/1.<minor>')"
+            )
+        minor = int(match.group(1))
+        if minor < cls.MANIFEST_MIN_MINOR:
+            raise ValidationError(
+                f"Manifest profile '{profile}' predates 1.7; minor must be "
+                f">= {cls.MANIFEST_MIN_MINOR}"
+            )
+
+    @classmethod
+    def validate_service_summary(cls, summary: Dict[str, Any]) -> None:
+        """
+        Validate disco::ServiceSummary — the compact row 1.7 returns from
+        CoverageResponse in place of a full Announce.
+
+        Full capabilities, topics and transforms are no longer inlined;
+        consumers resolve ``manifest_uri`` or read the retained Announce.
+        """
+        if not isinstance(summary, dict):
+            raise ValidationError("ServiceSummary must be an object")
+        if not summary.get("service_id"):
+            raise ValidationError("ServiceSummary.service_id is required")
+        kind = summary.get("kind")
+        if kind not in cls.VALID_SERVICE_KINDS:
+            raise ValidationError(
+                f"Invalid ServiceSummary.kind '{kind}' "
+                f"(expected one of {sorted(cls.VALID_SERVICE_KINDS)})"
+            )
+        if not summary.get("manifest_uri"):
+            raise ValidationError("ServiceSummary.manifest_uri is required")
+        cls.validate_spatial_uri(summary["manifest_uri"])
+        for absent in ("caps", "topics", "transforms"):
+            if absent in summary:
+                raise ValidationError(
+                    f"ServiceSummary must not carry '{absent}'; resolve "
+                    "manifest_uri or read the retained Announce instead"
+                )
+        coverage_frame_ref = summary.get("coverage_frame_ref")
+        if coverage_frame_ref is not None:
+            cls.validate_frame_ref(coverage_frame_ref)
+        coverage = summary.get("coverage")
+        if coverage is not None:
+            cls.validate_coverage(coverage, coverage_frame_ref)
+        if "stamp" in summary:
+            cls.validate_time(summary["stamp"])
 
     @classmethod
     def validate_coverage(
@@ -268,7 +397,6 @@ def create_coverage_bbox_earth_fixed(
     """
     frame_ref = frame_ref or SpatialDDSValidator.create_frame_ref("earth-fixed")
     element = {
-        "type": "bbox",
         "has_crs": True,
         "crs": "EPSG:4979",
         "has_bbox": True,
@@ -283,7 +411,14 @@ def create_coverage_bbox_earth_fixed(
 
 
 def demo_geo_pose(lat: float, lon: float, alt: float) -> Dict[str, Any]:
-    """Create a simple GeoPose with ENU frame and unit quaternion"""
+    """
+    Create a simple GeoPose with a unit quaternion.
+
+    1.7 removed ``frame_kind`` and ``frame_ref`` from ``core::GeoPose``:
+    the orientation is *defined* to be in the local ENU tangent frame at
+    the encoded position (OGC GeoPose), so there is nothing left to
+    declare. The demo only ever used ENU, so this is a pure deletion.
+    """
     q = [0.0, 0.0, 0.0, 1.0]
     SpatialDDSValidator.validate_quaternion_xyzw(q)
     return {
@@ -291,15 +426,13 @@ def demo_geo_pose(lat: float, lon: float, alt: float) -> Dict[str, Any]:
         "lon_deg": lon,
         "alt_m": alt,
         "q": q,
-        "frame_kind": "ENU",
-        "frame_ref": SpatialDDSValidator.create_frame_ref("earth-fixed"),
         "stamp": SpatialDDSValidator.now_time(),
         "cov": "COV_NONE",
     }
 
 
 if __name__ == "__main__":
-    print("Testing SpatialDDS v1.6 Validation...")
+    print("Testing SpatialDDS v1.7 Validation...")
 
     # FrameRef + Time
     fr = SpatialDDSValidator.create_frame_ref("earth-fixed")
@@ -324,8 +457,35 @@ if __name__ == "__main__":
     intersects = SpatialDDSValidator.check_coverage_intersection([elem], [elem2])
     print(f"✓ Bbox intersection: {intersects}")
 
-    # GeoPose helper
+    # GeoPose helper (1.7: no frame_kind / frame_ref)
     pose = demo_geo_pose(37.7749, -122.4194, 15.0)
+    SpatialDDSValidator.validate_geo_pose(pose)
     print(f"✓ GeoPose sample: {pose}")
+
+    # Version strings — 1.7 only, slash form only
+    SpatialDDSValidator.validate_module_version("spatial.core/1.7")
+    SpatialDDSValidator.validate_manifest_profile("spatial.manifest/1.7")
+    for rejected in ("spatial.core/1.6", "core@1.6"):
+        try:
+            SpatialDDSValidator.validate_module_version(rejected)
+        except ValidationError:
+            pass
+        else:
+            raise AssertionError(f"{rejected} should not validate under 1.7")
+    print("✓ Version strings: spatial.<profile>/1.7 only")
+
+    # ServiceSummary — the 1.7 CoverageResponse row
+    summary = {
+        "service_id": "svc:vps:demo/sf-downtown",
+        "kind": "VPS",
+        "name": "MockVPS-v1.7",
+        "manifest_uri": "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+        "coverage": [elem],
+        "coverage_frame_ref": frame_ref,
+        "stamp": SpatialDDSValidator.now_time(),
+        "ttl_sec": 300,
+    }
+    SpatialDDSValidator.validate_service_summary(summary)
+    print(f"✓ ServiceSummary valid: {summary['service_id']}")
 
     print("\nAll validation checks completed.")

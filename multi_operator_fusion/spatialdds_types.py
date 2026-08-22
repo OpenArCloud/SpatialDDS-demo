@@ -1,9 +1,9 @@
-"""SpatialDDS 1.6 dict-builder helpers.
+"""SpatialDDS 1.7 dict-builder helpers.
 
 The repo's wire format is JSON-on-the-envelope — every demo emits dicts,
 not typed dataclasses (see ``nuscenes/dds_envelope_transport.py``). When
 v1.6 added new core types (``PlannedTrajectory``, ``PlannedWaypoint``,
-``EntityBinding``, ``ComponentRef``) we don't have native dataclasses
+``EntityBinding``, ``ComponentRef``) we didn't add native dataclasses
 for them; we have these helpers, which return well-formed JSON-
 serialisable dicts that match the IDL shape.
 
@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Sequence
 
 
-SCHEMA_CORE = "spatial.core/1.6"
+SCHEMA_CORE = "spatial.core/1.7"
 
 
 def _stamp(timestamp_s: float) -> Dict[str, int]:
@@ -152,7 +152,7 @@ def make_entity_binding(
     return binding
 
 
-SCHEMA_DISCOVERY = "spatial.discovery/1.6"
+SCHEMA_DISCOVERY = "spatial.discovery/1.7"
 
 
 def make_announce(

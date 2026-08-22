@@ -10,7 +10,6 @@ from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 import scipy.io
-from spatialdds_validation import SpatialDDSValidator
 
 from deepsense_types import BBox2D, Detection2D, Detection2DSet, RadTensorFrame, RadTensorMeta, RfBeamFrame, RfBeamMeta, TensorAxis
 from spatialdds_types import BlobRef, CamIntrinsics, FrameHeader, FrameRef, GeoPose, PoseSE3, QuaternionXYZW, StreamMeta, Time, Vec3, VisionFrame, VisionMeta
@@ -54,7 +53,7 @@ def make_beam_meta() -> RfBeamMeta:
         fov_az_deg=90.0,
         codebook_type="DFT-64",
         power_unit="DBM",
-        schema_version="spatial.sensing.rf_beam/1.5",
+        schema_version="spatial.sensing.rf_beam/1.7",
     )
 
 
@@ -76,7 +75,7 @@ def make_radar_meta() -> RadTensorMeta:
         chirps_per_frame=128,
         num_tx=1,
         num_rx=4,
-        schema_version="spatial.sensing.rad/1.5",
+        schema_version="spatial.sensing.rad/1.7",
     )
 
 
@@ -101,7 +100,7 @@ def make_vision_meta() -> VisionMeta:
             height=IMAGE_HEIGHT,
         ),
         rig_id="unit1",
-        schema_version="spatial.sensing.vision/1.5",
+        schema_version="spatial.sensing.vision/1.7",
     )
 
 
@@ -122,7 +121,7 @@ def row_to_beam_frame(row: Dict[str, str], dataroot: Path) -> RfBeamFrame:
         is_blocked=best_power < BLOCKAGE_THRESHOLD,
         blockage_confidence=0.8,
         has_quality=False,
-        schema_version="spatial.sensing.rf_beam/1.5",
+        schema_version="spatial.sensing.rf_beam/1.7",
         stamp=_time_from_row(row),
     )
 
@@ -142,7 +141,7 @@ def row_to_radar_tensor(row: Dict[str, str], dataroot: Path) -> Tuple[RadTensorF
         ),
         shape=list(cube.shape),
         dtype="complex64",
-        schema_version="spatial.sensing.rad/1.5",
+        schema_version="spatial.sensing.rad/1.7",
     )
     return frame, cube
 
@@ -158,7 +157,7 @@ def row_to_vision_frame(row: Dict[str, str]) -> VisionFrame:
             t_end=stamp,
             blobs=[BlobRef(blob_id=row["unit1_rgb"].lstrip("./"), role="image")],
         ),
-        schema_version="spatial.sensing.vision/1.5",
+        schema_version="spatial.sensing.vision/1.7",
     )
 
 
@@ -171,9 +170,8 @@ def row_to_geoposes(row: Dict[str, str], dataroot: Path) -> Tuple[GeoPose, GeoPo
     bs_lat, bs_lon = _load_latlon(dataroot / row["unit1_loc"].lstrip("./"))
     veh_lat, veh_lon = _load_latlon(dataroot / row["unit2_loc_cal"].lstrip("./"))
     stamp = _time_from_row(row)
-    frame_ref = SpatialDDSValidator.create_frame_ref("earth-fixed")
-    bs = GeoPose(bs_lat, bs_lon, 0.0, [0.0, 0.0, 0.0, 1.0], "ENU", frame_ref, stamp)
-    veh = GeoPose(veh_lat, veh_lon, 0.0, [0.0, 0.0, 0.0, 1.0], "ENU", frame_ref, stamp)
+    bs = GeoPose(bs_lat, bs_lon, 0.0, [0.0, 0.0, 0.0, 1.0], stamp)
+    veh = GeoPose(veh_lat, veh_lon, 0.0, [0.0, 0.0, 0.0, 1.0], stamp)
     return bs, veh
 
 

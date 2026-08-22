@@ -273,7 +273,7 @@ class FusionService:
                 continue
             self._reported_conflicts.add(key)
             payload = {
-                "schema_version": "spatial.events/1.5",
+                "schema_version": "spatial.events/1.7",
                 "stamp": {"sec": int(t), "nanosec": int((t % 1) * 1e9)},
                 "source_operator": "platform",
                 **c,

@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 from nuscenes.nuscenes import NuScenes
-from spatialdds_validation import SpatialDDSValidator
 
 from spatialdds_types import (
     BlobRef,
@@ -56,8 +55,6 @@ def ego_pose_to_spatialdds(ego_pose: Dict[str, Any]) -> Tuple[PoseSE3, GeoPose]:
         lon_deg=float(ego_pose["translation"][0]),
         alt_m=float(ego_pose["translation"][2]),
         q=[pose.q.x, pose.q.y, pose.q.z, pose.q.w],
-        frame_kind="ENU",
-        frame_ref=SpatialDDSValidator.create_frame_ref("earth-fixed"),
         stamp=stamp,
     )
     return pose, geopose
@@ -98,7 +95,7 @@ def camera_to_vision_meta(sample_data: Dict[str, Any], calibrated_sensor: Dict[s
             height=height,
         ),
         rig_id="ego",
-        schema_version="spatial.sensing.vision/1.5",
+        schema_version="spatial.sensing.vision/1.7",
     )
 
 
@@ -115,7 +112,7 @@ def sample_data_to_vision_frame(sample_data: Dict[str, Any], frame_seq: int) -> 
             blobs=[BlobRef(blob_id=sample_data["filename"], role="image")],
             has_sensor_pose=False,
         ),
-        schema_version="spatial.sensing.vision/1.5",
+        schema_version="spatial.sensing.vision/1.7",
     )
 
 
@@ -131,7 +128,7 @@ def lidar_to_meta_and_frame(
         n_rings=32,
         point_layout="XYZ_I_R",
         max_range_m=100.0,
-        schema_version="spatial.sensing.lidar/1.5",
+        schema_version="spatial.sensing.lidar/1.7",
     )
     frame = LidarFrame(
         stream_id=channel,
@@ -143,7 +140,7 @@ def lidar_to_meta_and_frame(
             blobs=[BlobRef(blob_id=sample_data["filename"], role="lidar_bin")],
             has_sensor_pose=False,
         ),
-        schema_version="spatial.sensing.lidar/1.5",
+        schema_version="spatial.sensing.lidar/1.7",
     )
     return meta, frame
 
@@ -170,7 +167,7 @@ def radar_to_detection_set(
         frame_seq=frame_seq,
         detections=detections,
         stamp=ns_time_to_time(int(sample_data["timestamp"])),
-        schema_version="spatial.sensing.rad/1.5",
+        schema_version="spatial.sensing.rad/1.7",
     )
 
 

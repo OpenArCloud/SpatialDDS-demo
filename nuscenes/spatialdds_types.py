@@ -46,12 +46,17 @@ class PoseSE3:
 
 @dataclass
 class GeoPose:
+    """core::GeoPose.
+
+    1.7 removed ``frame_kind`` and ``frame_ref``: the quaternion is fixed to
+    the local ENU tangent frame at (lat_deg, lon_deg, alt_m) per OGC GeoPose,
+    so there is no frame left to declare.
+    """
+
     lat_deg: float
     lon_deg: float
     alt_m: float
     q: List[float]
-    frame_kind: str
-    frame_ref: FrameRef
     stamp: Time
     cov: str = "COV_NONE"
 
