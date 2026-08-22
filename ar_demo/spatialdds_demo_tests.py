@@ -186,13 +186,19 @@ def test_http_search_returns_service_manifests() -> bool:
 
 
 def test_http_search_response_has_no_query_id() -> bool:
-    """The HTTP binding's envelope is {results, next_page_token} — no query_id."""
-    import http_binding
-    import inspect
+    """
+    The HTTP binding's envelope is {results, next_page_token} — no query_id.
 
-    src = inspect.getsource(http_binding.SpatialDDSHTTPHandler._handle_search)
-    body = src.split("response = {", 1)[1].split("}", 1)[0]
-    return '"query_id"' not in body and '"results"' in body and '"next_page_token"' in body
+    Asserts on the response the binding actually produces. (This previously
+    scraped the handler's source for a `response = {` literal, which said
+    nothing about behaviour and broke the moment the envelope moved into the
+    shared core.)
+    """
+    from spatialdds_demo.discovery_http import search
+
+    frame_ref, elem = create_coverage_bbox_earth_fixed(-122.5, 37.7, -122.3, 37.8)
+    response = search([], {"coverage": [elem], "coverage_frame_ref": frame_ref})
+    return set(response) == {"results", "next_page_token"}
 
 
 def test_bus_search_returns_service_summaries() -> bool:
