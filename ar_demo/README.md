@@ -104,14 +104,23 @@ curl -X POST http://localhost:8080/.well-known/spatialdds/register \
   -H "Content-Type: application/json" \
   -d @../manifests/v1.7/vps_manifest.json
 
-# Search by coverage
+# Fetch the bootstrap manifest
+curl http://localhost:8080/.well-known/spatialdds/bootstrap
+
+# Search by coverage. 1.7 removed CoverageElement.type and CoverageQuery.expr;
+# `filter` is the only query form.
 curl -X POST http://localhost:8080/.well-known/spatialdds/search \
   -H "Content-Type: application/json" \
-  -d '{"coverage":[{"type":"bbox","has_crs":true,"crs":"EPSG:4979",
+  -d '{"coverage":[{"has_crs":true,"crs":"EPSG:4979",
        "has_bbox":true,"bbox":[-122.45,37.75,-122.35,37.85],
        "has_aabb":false,"global":false,"has_frame_ref":false}],
        "coverage_frame_ref":{"uuid":"00000000-0000-0000-0000-000000000000",
        "fqn":"earth-fixed"},"has_filter":true,
-       "filter":{"type_in":[],"qos_profile_in":[],"module_id_in":[]},
-       "expr":""}'
+       "filter":{"type_in":[],"qos_profile_in":[],"module_id_in":[]}}'
 ```
+
+The HTTP binding answers with full service manifests —
+`{"results": [<manifest>, ...], "next_page_token": ""}`. The on-bus discovery
+binding answers the same query with compact `ServiceSummary` rows plus a
+`query_id`; see [SPEC_COMPLIANCE.md](SPEC_COMPLIANCE.md) for why the two
+bindings differ.

@@ -15,7 +15,7 @@ import os
 import uuid
 import time
 from datetime import datetime, timezone
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Optional
 import sys
 
 from spatialdds_validation import (
@@ -144,7 +144,8 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
         POST /.well-known/spatialdds/search
 
         Request body: CoverageQuery JSON
-        Response: CoverageResponse JSON
+        Response: { "results": [ <service manifest>, ... ],
+                    "next_page_token": "" }
         """
         try:
             content_length = int(self.headers.get("Content-Length", 0))
@@ -178,13 +179,15 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
                 self._send_error_json(f"Invalid coverage: {exc}", 400)
                 return
 
-            results = self._search_announces(query)
+            results = self._search_manifests(query)
 
+            # Spec HTTP-binding envelope: results + next_page_token only. No
+            # query_id — HTTP correlates request and response itself. (The
+            # on-bus CoverageResponse keeps query_id; see the note on
+            # _search_manifests for why the two bindings differ.)
             response = {
-                "query_id": query.get("query_id", str(uuid.uuid4())),
                 "results": results,
                 "next_page_token": "",
-                "stamp": SpatialDDSValidator.now_time(),
             }
             self._send_json(response)
 
@@ -254,21 +257,30 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
         label = "manifest" if entry.get("kind") == "manifest" else "announce"
         print(f"Registered service: {service_id} ({label})")
 
-    def _search_announces(self, query: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _search_manifests(self, query: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Match registered services against a CoverageQuery and return
-        ServiceSummary rows.
+        Match registered services against a CoverageQuery and return full
+        **service manifests** (spec 8.2.3).
 
-        1.7 changed CoverageResponse.results from sequence<Announce> to
-        sequence<ServiceSummary>: callers can no longer pull caps/topics out
-        of a search result. They rank on the summary, then resolve
-        manifest_uri (or read the retained Announce off the bus) for detail.
+        1.7's two discovery bindings are deliberately asymmetric:
+
+          * the **DDS binding** returns compact `ServiceSummary` rows — a bus
+            client already holds the service's retained `Announce`, so detail
+            is a local lookup;
+          * the **HTTP binding** (this one) returns whole service manifests —
+            an HTTP client has no bus, so it gets everything in one round trip.
+
+        See `VPSService.handle_coverage_query` for the bus side.
         """
         results: List[Dict[str, Any]] = []
+        seen: set = set()
         has_filter = bool(query.get("has_filter"))
         filter_obj = query.get("filter", {}) if has_filter else {}
         coverage_q = query["coverage"]
         for ann in _announce_registry:
+            service_id = _entry_service_id(ann)
+            if service_id and service_id in seen:
+                continue
             try:
                 if not SpatialDDSValidator.check_coverage_intersection(
                     coverage_q, ann.get("coverage", [])
@@ -278,10 +290,12 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
                 if has_filter and not self._matches_filter(filter_obj, ann):
                     continue
 
-                results.append(_to_service_summary(ann))
+                results.append(_to_service_manifest(ann))
             except Exception:
                 # Best-effort: include on validation failure to avoid accidental drops
-                results.append(_to_service_summary(ann))
+                results.append(_to_service_manifest(ann))
+            if service_id:
+                seen.add(service_id)
         return results
 
     @staticmethod
@@ -336,38 +350,84 @@ def run_server(port: int = 8080):
     httpd.serve_forever()
 
 
-def _to_service_summary(entry: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Project a registered announce/manifest onto a disco::ServiceSummary row.
+MANIFEST_PROFILE = "spatial.manifest/1.7"
 
-    Deliberately narrow: caps, topics and transforms are NOT carried — that is
-    the whole point of the 1.7 change. Consumers resolve manifest_uri (or read
-    the retained Announce) when they need detail.
+
+def _coverage_block(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Build a manifest `coverage` block (spec 8.1 / 3.3.4) from a registration
+    record's coverage elements.
+
+    Follows the spec's own manifest idiom: the canonical `frame_ref` plus the
+    primary element's geometry inlined, and an `elements` array whenever there
+    is more than one element (or the primary carries a per-element frame
+    override, which must not be hoisted onto the canonical frame).
+    """
+    elements = entry.get("coverage") or []
+    frame_ref = entry.get("coverage_frame_ref")
+    if not elements and not frame_ref:
+        return None
+
+    block: Dict[str, Any] = {}
+    if frame_ref:
+        block["frame_ref"] = frame_ref
+
+    primary = elements[0] if elements else None
+    primary_overrides_frame = bool(primary and primary.get("has_frame_ref"))
+    if primary and not primary_overrides_frame:
+        block.update(
+            {k: v for k, v in primary.items() if k not in ("has_frame_ref", "frame_ref")}
+        )
+    if len(elements) > 1 or primary_overrides_frame:
+        block["elements"] = elements
+
+    block.setdefault("global", any(bool(e.get("global")) for e in elements))
+    return block
+
+
+def _to_service_manifest(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Project a registration record onto a service manifest document
+    (spec 8.1 envelope + 8.2.3 service block) — the row shape the HTTP
+    discovery binding returns.
+
+    A registered manifest is already one, and is returned as-is. A registered
+    announce is projected: fields the announce provides are carried across,
+    and optional manifest fields it cannot supply are omitted rather than
+    invented.
     """
     payload = entry.get("payload", {}) if isinstance(entry, dict) else {}
     if entry.get("kind") == "manifest":
-        service = payload.get("service", {}) if isinstance(payload, dict) else {}
-        service_id = service.get("service_id", "")
-        kind = service.get("kind", "OTHER")
-        name = service.get("name", "")
-        manifest_uri = payload.get("id", "")
-    else:
-        service_id = payload.get("service_id", "")
-        kind = payload.get("kind", "OTHER")
-        name = payload.get("name", "")
-        manifest_uri = payload.get("manifest_uri", "")
+        return payload
 
-    summary = {
-        "service_id": service_id,
-        "kind": kind,
-        "name": name,
-        "manifest_uri": manifest_uri,
-        "coverage": entry.get("coverage", []),
-        "coverage_frame_ref": entry.get("coverage_frame_ref"),
-        "stamp": payload.get("stamp") or SpatialDDSValidator.now_time(),
-        "ttl_sec": int(payload.get("ttl_sec", 300) or 300),
+    service: Dict[str, Any] = {
+        "service_id": payload.get("service_id", ""),
+        "kind": payload.get("kind", "OTHER"),
     }
-    return summary
+    for field in ("name", "org", "version"):
+        if payload.get(field):
+            service[field] = payload[field]
+    if payload.get("topics"):
+        service["topics"] = payload["topics"]
+
+    manifest: Dict[str, Any] = {
+        "id": payload.get("manifest_uri", ""),
+        "profile": MANIFEST_PROFILE,
+        "rtype": "service",
+        "service": service,
+    }
+    if payload.get("caps"):
+        manifest["caps"] = payload["caps"]
+    coverage = _coverage_block(entry)
+    if coverage:
+        manifest["coverage"] = coverage
+    if payload.get("transforms"):
+        manifest["transforms"] = payload["transforms"]
+    if payload.get("stamp"):
+        manifest["stamp"] = payload["stamp"]
+    if payload.get("ttl_sec") is not None:
+        manifest["ttl_sec"] = payload["ttl_sec"]
+    return manifest
 
 
 def _looks_like_manifest(payload: Dict[str, Any]) -> bool:

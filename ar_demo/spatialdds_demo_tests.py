@@ -118,34 +118,50 @@ def test_volume_aabb_frame_ref() -> bool:
     return volume.get("has_aabb") and (volume.get("has_frame_ref") or service.coverage_frame_ref)
 
 
-def test_search_returns_service_summaries() -> bool:
-    """(a) Discovery search returns ServiceSummary rows, not full announces."""
+def test_http_search_returns_service_manifests() -> bool:
+    """
+    (a) The HTTP discovery binding returns full service manifests.
+
+    1.7's two discovery bindings are deliberately asymmetric: HTTP returns
+    whole manifests (no bus, so one round trip must carry everything), while
+    the DDS binding returns compact ServiceSummary rows — see
+    test_bus_search_returns_service_summaries below.
+    """
     import http_binding
 
     http_binding._announce_registry = []
     handler = http_binding.SpatialDDSHTTPHandler
 
     frame_ref, cov_elem = create_coverage_bbox_earth_fixed(-122.5, 37.7, -122.3, 37.8)
+    caps = {
+        "supported_profiles": [
+            {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7}
+        ],
+        "preferred_profiles": ["spatial.core/1.7"],
+        "features": ["blob.crc32"],
+    }
+    topics = [{"name": "spatialdds/vps/query/v1", "type": "vps_query",
+               "version": "v1", "qos_profile": "VPS_REQ"}]
     announce = {
         "service_id": "svc:vps:test/summary",
         "name": "Test Service",
         "kind": "VPS",
+        "org": "ExampleOrg",
         "coverage": [cov_elem],
         "coverage_frame_ref": frame_ref,
         "manifest_uri": "spatialdds://test.com/zone:test/manifest:svc",
-        "caps": {"supported_profiles": [], "preferred_profiles": [], "features": []},
-        "topics": [{"name": "spatialdds/vps/query/v1", "type": "vps_query",
-                    "version": "v1", "qos_profile": "VPS_REQ"}],
+        "caps": caps,
+        "topics": topics,
         "stamp": SpatialDDSValidator.now_time(),
         "ttl_sec": 60,
     }
     handler._register_announce(handler, http_binding._normalize_announce(announce))
 
     frame_ref_q, cov_elem_q = create_coverage_bbox_earth_fixed(-122.45, 37.75, -122.4, 37.8)
-    results = handler._search_announces(
+    results = handler._search_manifests(
         handler,
         {
-            "query_id": "q-summary",
+            "query_id": "q-manifest",
             "coverage": [cov_elem_q],
             "coverage_frame_ref": frame_ref_q,
             "has_filter": False,
@@ -155,14 +171,59 @@ def test_search_returns_service_summaries() -> bool:
         return False
     row = results[0]
     try:
+        SpatialDDSValidator.validate_manifest_profile(row.get("profile", ""))
+    except Exception:
+        return False
+    return (
+        row.get("id") == "spatialdds://test.com/zone:test/manifest:svc"
+        and row.get("rtype") == "service"
+        and row.get("service", {}).get("service_id") == "svc:vps:test/summary"
+        and row.get("service", {}).get("topics") == topics
+        and row.get("caps") == caps
+        and row.get("coverage", {}).get("frame_ref") == frame_ref
+        and row["coverage"].get("has_bbox") is True
+    )
+
+
+def test_http_search_response_has_no_query_id() -> bool:
+    """The HTTP binding's envelope is {results, next_page_token} — no query_id."""
+    import http_binding
+    import inspect
+
+    src = inspect.getsource(http_binding.SpatialDDSHTTPHandler._handle_search)
+    body = src.split("response = {", 1)[1].split("}", 1)[0]
+    return '"query_id"' not in body and '"results"' in body and '"next_page_token"' in body
+
+
+def test_bus_search_returns_service_summaries() -> bool:
+    """
+    The DDS binding still returns compact ServiceSummary rows (with query_id).
+
+    This is the counterpart to test_http_search_returns_service_manifests:
+    the two bindings intentionally differ and both are checked.
+    """
+    service = VPSServiceV15(SpatialDDSLogger())
+    frame_ref, cov_elem = create_coverage_bbox_earth_fixed(-122.45, 37.75, -122.4, 37.8)
+    response = service.handle_coverage_query(
+        {
+            "query_id": "q-bus",
+            "coverage": [cov_elem],
+            "coverage_frame_ref": frame_ref,
+            "has_filter": False,
+        }
+    )
+    if response.get("query_id") != "q-bus" or "next_page_token" not in response:
+        return False
+    rows = response.get("results", [])
+    if len(rows) != 1:
+        return False
+    row = rows[0]
+    try:
         SpatialDDSValidator.validate_service_summary(row)
     except Exception:
         return False
-    # The whole point of the 1.7 change: no caps/topics/transforms inline.
-    return (
-        row.get("service_id") == "svc:vps:test/summary"
-        and not (set(row) & {"caps", "topics", "transforms"})
-    )
+    # The point of the 1.7 DDS change: no caps/topics/transforms inline.
+    return not (set(row) & {"caps", "topics", "transforms", "profile", "rtype"})
 
 
 def test_coverage_query_expr_rejected() -> bool:
@@ -239,7 +300,9 @@ def main() -> int:
         ("manifest_fallback", test_manifest_fallback),
         ("https_resolution_disabled", test_https_resolution_disabled),
         ("volume_frame_ref", test_volume_aabb_frame_ref),
-        ("search_returns_service_summaries", test_search_returns_service_summaries),
+        ("http_search_returns_service_manifests", test_http_search_returns_service_manifests),
+        ("http_search_response_has_no_query_id", test_http_search_response_has_no_query_id),
+        ("bus_search_returns_service_summaries", test_bus_search_returns_service_summaries),
         ("coverage_query_expr_rejected", test_coverage_query_expr_rejected),
         ("at_form_profile_rejected", test_at_form_profile_rejected),
         ("manifest_topics_are_registered", test_manifest_topics_are_registered),

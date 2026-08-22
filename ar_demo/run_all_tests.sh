@@ -97,19 +97,24 @@ query = {
     'filter': {'type_in': [], 'qos_profile_in': [], 'module_id_in': []}
 }
 
-results = handler._search_announces(handler, query)
+results = handler._search_manifests(handler, query)
 
-# 1.7: results are compact ServiceSummary rows, never full announces.
+# 1.7 HTTP binding returns full service manifests (the DDS binding returns
+# compact ServiceSummary rows instead - the asymmetry is deliberate).
 ok = len(results) == 1
 if ok:
     row = results[0]
-    SpatialDDSValidator.validate_service_summary(row)
-    ok = row['service_id'] == 'svc:vps:test/001' and not (set(row) & {'caps', 'topics'})
+    SpatialDDSValidator.validate_manifest_profile(row['profile'])
+    ok = (
+        row['rtype'] == 'service'
+        and row['service']['service_id'] == 'svc:vps:test/001'
+        and 'coverage' in row
+    )
 
 if ok:
     print('✅ HTTP binding logic: PASSED')
     print('   - Registration: OK')
-    print(f'   - Search: OK ({len(results)} ServiceSummary row found)')
+    print(f'   - Search: OK ({len(results)} service manifest found)')
     exit(0)
 else:
     print('❌ HTTP binding logic: FAILED')

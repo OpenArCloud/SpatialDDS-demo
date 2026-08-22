@@ -48,13 +48,37 @@ instances, so keyed-instance semantics are not fabricated anywhere here.
   `type` / `version` / `qos_profile`, all mandatory in 1.7).
 - Capability advertisements declare `spatial.core/1.7`,
   `spatial.discovery/1.7`, `spatial.sensing.vision/1.7`, `spatial.anchors/1.7`.
-- Responses are `ServiceSummary` rows: `service_id`, `kind`, `name`,
-  `manifest_uri`, `coverage`, `coverage_frame_ref`, `stamp`, `ttl_sec`. They
-  deliberately carry **no** `caps`, `topics` or `transforms` — that is the
-  point of the change, and `validate_service_summary()` rejects rows that do.
-  Pagination (`next_page_token`) is unchanged.
 - The demo-local `register` / `list` endpoints still traffic in full
   announces: they are registration *inputs*, not `CoverageResponse`.
+
+### The two discovery bindings are deliberately asymmetric
+
+1.7's DDS and HTTP discovery bindings return **different row shapes**, and
+that asymmetry is intentional rather than an inconsistency to paper over:
+
+| | DDS binding (on-bus) | HTTP binding (`/.well-known/spatialdds/search`) |
+|---|---|---|
+| Row shape | compact `ServiceSummary` | full service manifest (§8.2.3) |
+| Envelope | `query_id` + `results` + `next_page_token` | `results` + `next_page_token` |
+| Why | the client already holds the service's retained `Announce`, so detail is a local lookup by `service_id` | the client has no bus, so one round trip must carry everything |
+
+A bus client correlates a response to its query with `query_id`, because
+several queries may be in flight on a shared reply path. HTTP correlates
+request and response itself, so the HTTP envelope carries no `query_id`.
+
+`ServiceSummary` rows are `service_id`, `kind`, `name`, `manifest_uri`,
+`coverage`, `coverage_frame_ref`, `stamp`, `ttl_sec` — deliberately carrying
+**no** `caps`, `topics` or `transforms`. `validate_service_summary()` rejects
+rows that do. Pagination (`next_page_token`) is unchanged on both bindings.
+
+Registered *manifests* are returned by the HTTP binding as-is. Registered
+*announces* are projected into a manifest: the announce's fields are carried
+across, and optional manifest fields it cannot supply are omitted rather than
+invented. Multi-element coverage follows the spec's own manifest idiom —
+canonical `frame_ref` plus the primary element inlined, with an `elements`
+array whenever there is more than one element (or the primary carries a
+per-element frame override, which must not be hoisted onto the canonical
+frame).
 
 ### Registered typed topics and QoS profiles
 
@@ -137,14 +161,3 @@ where a manifest path can no longer shadow `bootstrap`/`resolver`/`search`.
   checks: `/1.5`, `/1.6` and every `@` form are rejected.
 - `spatialdds_demo/topics.py::validate_topic_meta()` checks TopicMeta rows
   against the 1.7 registries plus the documented extensions above.
-
-## Known divergence
-
-`ar_demo/http_binding.py` returns `ServiceSummary` rows from
-`/.well-known/spatialdds/search`. The spec's HTTP discovery binding (§ HTTP
-Discovery Search Binding) specifies an array of full **service manifests**
-there, and a `{results, next_page_token}` envelope without `query_id`. This
-demo intentionally keeps its existing envelope and mirrors the on-bus
-`CoverageResponse` row shape so both discovery surfaces agree. Treat the HTTP
-binding here as demo-flavored rather than a conformant implementation of that
-section.
