@@ -1,18 +1,16 @@
-# nuScenes -> SpatialDDS -> Rerun Demo
+# nuScenes → SpatialDDS → Rerun
 
-Demonstrates SpatialDDS transporting real autonomous driving data from nuScenes and visualizing with Rerun.
+Real autonomous-driving data from nuScenes over a SpatialDDS bus, rendered in
+Rerun. Publisher and subscriber are separate processes, so the DDS decoupling is
+real rather than simulated.
 
-## What This Shows
+Payloads cover ego pose, camera frames, LiDAR, radar and 3D annotations; Rerun
+renders them with stock archetypes (`Transform3D`, `EncodedImage`, `Points3D`,
+`Boxes3D`, `GeoPoints`).
 
-- Typed SpatialDDS-style payloads for ego pose, camera frames, LiDAR, radar, and 3D annotations.
-- DDS pub/sub decoupling: publisher and subscriber are separate processes.
-- Visualization in Rerun using standard archetypes (`Transform3D`, `EncodedImage`, `Points3D`, `Boxes3D`, `GeoPoints`).
+## Dataset
 
-## Dataset Location
-
-Expected dataroot:
-
-`nuscenes/data/v1.0-mini`
+Expected dataroot: `nuscenes/data/v1.0-mini`
 
 ## Install
 
@@ -73,8 +71,5 @@ python nuscenes/subscriber_rerun.py --dataroot nuscenes/data/v1.0-mini --spawn-v
 
 By default, subscriber runs headless (`spawn=False`) so it also works in containers/CI.
 
-## Notes
-
-- All code is additive under `nuscenes/`.
-- Existing SpatialDDS demo files are untouched.
-- Dataset files remain ignored via `.gitignore` (`nuscenes/data/`).
+Dataset files under `nuscenes/data/` are gitignored and not redistributed;
+nuScenes requires accepting its own terms of use.

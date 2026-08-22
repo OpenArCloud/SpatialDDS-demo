@@ -1,6 +1,6 @@
-# SpatialDDS Benchmark Suite
+# SpatialDDS benchmarks
 
-This directory contains additive benchmark scripts for evaluating SpatialDDS protocol overhead and scalability.
+Scripts for measuring SpatialDDS protocol overhead and scalability.
 
 ## Benchmarks
 
@@ -61,28 +61,21 @@ Generated PDFs:
 
 Matplotlib style is `seaborn-v0_8-paper` with single-column ACM-friendly figure width (3.5 in).
 
-## SpatialDDS 1.7: CoverageResponse payload size
+## Discovery page size, 1.6 vs 1.7
 
 1.7 changed `disco::CoverageResponse.results` from `sequence<Announce>` to
-compact `sequence<ServiceSummary>` rows. A summary carries identity, coverage
-and `manifest_uri` only — capabilities, topics and transforms are fetched
-afterwards by resolving `manifest_uri` or reading the service's retained
-`Announce`. Measured on this repo's mock VPS (two coverage elements: an
-earth-fixed bbox plus a local volume):
+compact `ServiceSummary` rows. A summary carries identity, coverage and
+`manifest_uri`; capabilities, topics and transforms are fetched afterwards from
+`manifest_uri` or the service's retained `Announce`. Measured against this
+repo's mock VPS, which advertises two coverage elements:
 
 | CoverageResponse row | Bytes | 10 results | 100 results |
 |---|---|---|---|
 | 1.6 full `Announce` | 1589 | 15.9 KB | 159.2 KB |
 | 1.7 `ServiceSummary` | 872 | 8.8 KB | 87.5 KB |
 
-That is a **45% smaller discovery page** at any page size (49% against the
-1.7 announce, which is slightly larger than its 1.6 counterpart because the
-announce now advertises real `TopicMeta` rows). This is an expected 1.7
-result, not a regression: the dropped bytes are exactly the detail a client
-is expected to fetch on demand for the one service it selects, rather than
-receive for every service in the page.
-
-Reproduce with the mock VPS directly:
+45% smaller at any page size. The saving is the point of the change, not a
+regression: a client fetches the full detail only for the service it picks.
 
 ```bash
 python3 -c "
@@ -96,8 +89,6 @@ print(len(json.dumps(svc.create_announce()).encode()),
 
 ## Notes
 
-- All timings use `time.perf_counter_ns()`.
-- Warmup runs are executed before recorded iterations.
-- Progress and summaries are printed to `stderr` so `stdout` remains pipeline-friendly.
-- Full suite execution is container-first: Python benchmark/plot scripts run in Docker.
-- Benchmarks are additive and do not modify existing demo code.
+- Timings use `time.perf_counter_ns()`, after warmup iterations.
+- Progress and summaries go to `stderr`, so `stdout` stays pipeline-friendly.
+- The benchmark and plot scripts run inside the `cyclonedds-python` container.

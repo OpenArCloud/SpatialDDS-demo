@@ -7,10 +7,10 @@ The other demos have their own Docker launchers — use those instead:
 
 | Demo | Launcher |
 |---|---|
-| Multi-operator fusion | [`multi_operator_fusion/run_docker_demo.sh`](multi_operator_fusion/run_docker_demo.sh) |
-| nuScenes → Rerun | [`nuscenes/run_docker_demo.sh`](nuscenes/run_docker_demo.sh) |
-| DeepSense → Rerun | [`deepsense/run_docker_demo.sh`](deepsense/run_docker_demo.sh) |
-| Web demo (DDS bridge) | [`run_bridge_server_docker.sh`](run_bridge_server_docker.sh) |
+| Multi-operator fusion | [`multi_operator_fusion/run_docker_demo.sh`](../multi_operator_fusion/run_docker_demo.sh) |
+| nuScenes → Rerun | [`nuscenes/run_docker_demo.sh`](../nuscenes/run_docker_demo.sh) |
+| DeepSense → Rerun | [`deepsense/run_docker_demo.sh`](../deepsense/run_docker_demo.sh) |
+| Web demo (DDS bridge) | [`run_bridge_server_docker.sh`](../run_bridge_server_docker.sh) |
 
 Each demo's `README.md` documents its own Docker workflow.
 

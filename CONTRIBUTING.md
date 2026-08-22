@@ -22,50 +22,46 @@ If you institute patent litigation against any entity (including a cross-claim o
 
 ## Test matrix
 
-Most suites run on the host; the ones needing DDS, ROS 2 or a broker run in
-containers. "Test your changes" means the host column at minimum, plus any
-container suite covering what you touched.
+Most suites run on the host. The ones needing DDS, ROS 2 or a broker run in
+containers. "Test your changes" means the host suites at minimum, plus whichever
+container suite covers what you touched.
 
 | Suite | How to run | Needs |
 |---|---|---|
 | Unit + bridge logic | `python3 -m pytest multi_operator_fusion bridges/ros2_bridge/test_conversions.py bridges/mqtt_bridge bridges/web_bridge/test_router.py bridges/web_bridge/test_client.py bridges/web_bridge/test_dashboard_routes.py bridges/mcap_bridge` | host |
-| ROS 2 envelope round-trip | `python3 -m pytest bridges/ros2_bridge/test_envelope_roundtrip.py` | host; run it **on its own** (see below) |
+| ROS 2 envelope round-trip | `python3 -m pytest bridges/ros2_bridge/test_envelope_roundtrip.py` | host, run on its own |
 | AR-demo protocol | `cd ar_demo && ./run_all_tests.sh` | host |
 | Cesium web UI | `cd web && npm test` | host + Playwright browsers |
-| Web bridge HTTP integration | `bash run_bridge_http_tests_docker.sh` | Docker |
-| IDL compilation + protocol | `docker run --rm cyclonedds-python` | Docker (`idlc` is not on most hosts, and the test silently self-skips without it) |
-| ROS 2 bridge, all tiers | `bash bridges/ros2_bridge/run_docker_tests.sh` | Docker (emulates amd64 on Apple Silicon) |
-| MQTT bridge Tier-2 | `cd bridges/mqtt_bridge && docker compose -f docker-compose.test.yaml up --abort-on-container-exit --exit-code-from tests` | Docker (Mosquitto) |
+| Web bridge HTTP | `bash run_bridge_http_tests_docker.sh` | Docker |
+| IDL compile + protocol | `docker run --rm cyclonedds-python` | Docker |
+| ROS 2 bridge, all tiers | `bash bridges/ros2_bridge/run_docker_tests.sh` | Docker, emulates amd64 on Apple Silicon |
+| MQTT bridge Tier-2 | `cd bridges/mqtt_bridge && docker compose -f docker-compose.test.yaml up --abort-on-container-exit --exit-code-from tests` | Docker + Mosquitto |
 
-On Apple Silicon, `ghcr.io/openarcloud/cyclonedds-python-base` has no arm64
-manifest — build it locally first with
-`docker build -t ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04 -f Dockerfile.base .`,
-then `docker build -t cyclonedds-python .`.
+On Apple Silicon the published `cyclonedds-python-base` image has no arm64
+manifest, so build it locally first:
 
-### Known quirks
+```bash
+docker build -t ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04 -f Dockerfile.base .
+docker build -t cyclonedds-python .
+```
 
-- **Don't run `pytest bridges` wholesale.** Two collection collisions:
-  `test_integration.py` exists under both `multi_operator_fusion/` and
-  `bridges/web_bridge/`, and `bridges/ros2_bridge/test_envelope_roundtrip.py`
-  imports a shadowed `envelope_io`. Both files pass when run individually.
-- **Three `test_`-prefixed files are not pytest modules** and correctly report
-  "no tests ran": `ros2_bridge/test_mocks.py` is a mock *library*, while
-  `mcap_bridge/test_live.py` and `test_with_deepsense.py` are standalone
-  scripts needing live DDS and the DeepSense dataset respectively.
-- `web/tests/smoke.spec.ts` (mock mode) and `web/tests/live-bridge.spec.ts`
-  (real DDS bridge) each skip when the other's precondition holds, so exactly
-  one runs. `live-bridge` needs a stack seeded for Austin — see `web/README.md`.
-- `run_bridge_http_tests_docker.sh` can flake with `COVERAGE_RESPONSE timeout`:
-  its discovery query is one-shot with no retry. Re-run it. The pytest variant
-  (`run_bridge_http_tests_with_logs.sh`) is more reliable.
-- `ar_demo/spatialdds.idl` is a convenience aggregator with **no types of its
-  own** — only `#include`s of `idl/v1.7/*.idl`. Nothing in the demo consumes
-  generated bindings (the wire type is the JSON envelope in
-  `spatialdds_demo/dds_transport.py`), so it affects downstream consumers only.
-  Two `idlc` quirks, both documented with working commands in
-  `ar_demo/DOCKER_GUIDE.md`: the Python backend generates nothing from an
-  include-only wrapper (use individual profile files) and ignores `-o` (writes
-  into the cwd); and the C++ backend is not built into the image.
+### Things that look like failures but aren't
+
+- **Don't run `pytest bridges` wholesale.** `test_integration.py` exists under
+  both `multi_operator_fusion/` and `bridges/web_bridge/`, and
+  `test_envelope_roundtrip.py` imports a shadowed `envelope_io`. Both pass when
+  run individually.
+- Three `test_`-prefixed files aren't pytest modules, so "no tests ran" is
+  correct: `ros2_bridge/test_mocks.py` is a mock library, and
+  `mcap_bridge/test_live.py` and `test_with_deepsense.py` are scripts needing
+  live DDS and the DeepSense dataset.
+- The two web specs skip each other by design; see `web/README.md`.
+- `run_bridge_http_tests_docker.sh` can report `COVERAGE_RESPONSE timeout`. Its
+  discovery query is sent once with no retry. Re-run it, or use the pytest
+  variant.
+- `idlc -l py` writes nothing for `ar_demo/spatialdds.idl` and ignores `-o`, and
+  there's no C++ backend in the image. See `ar_demo/DOCKER_GUIDE.md` for the
+  commands that do work.
 
 ## Code of Conduct
 
