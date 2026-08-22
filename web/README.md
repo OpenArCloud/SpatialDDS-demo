@@ -63,6 +63,41 @@ npm run preview
 npm test
 ```
 
+`tests/smoke.spec.ts` runs the app in mock mode. `tests/live-bridge.spec.ts`
+drives it against a **real** DDS bridge and skips itself when no bridge answers
+on `VITE_SPATIALDDS_BRIDGE_URL`, so the default run stays hermetic.
+
+To run the live 1.7 smoke, bring up a stack seeded for the app's default
+location (Austin) and publish the bridge on port 8088:
+
+```bash
+docker run -d --name sdds-smoke -p 8088:8088 -v "$PWD:/app" -w /app \
+  -e PYTHONPATH=/app -e SPATIALDDS_TRANSPORT=dds -e SPATIALDDS_DDS_DOMAIN=1 \
+  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
+  -e SPATIALDDS_CATALOG_SEED=/app/bridges/web_bridge/tests/catalog_seed_austin.json \
+  -e SPATIALDDS_VPS_COVERAGE_BBOX="-97.75,30.27,-97.72,30.29" \
+  -e SPATIALDDS_VPS_MAP_FQN=map/austin -e SPATIALDDS_VPS_MAP_ID=austin-map \
+  cyclonedds-python bash -lc '
+    python3 -m pip install -q -r requirements.txt -r bridges/web_bridge/requirements.txt
+    python3 ar_demo/spatialdds_demo_server.py &
+    python3 ar_demo/spatialdds_catalog_server.py &
+    python3 bridges/web_bridge/server.py &
+    sleep 3600'
+
+cd web && npx playwright test tests/live-bridge.spec.ts
+docker rm -f sdds-smoke
+```
+
+Two things to know about this setup:
+
+- The default `ar_demo/catalog_seed.json` is **San Francisco** content, while
+  the web app starts over Austin — pair the Austin seed with the Austin VPS
+  bbox or discovery legitimately returns zero items.
+- On Docker Desktop for macOS, `--network host` does not expose container
+  ports to host loopback, so the browser cannot reach the bridge that way.
+  Publishing `-p 8088:8088` works because all the DDS processes share one
+  container and only HTTP has to cross the boundary.
+
 Notes:
 - No Cesium ion token is required for this baseline.
 - Later we can add 3D Tiles or buildings via ion token or OSM buildings once stable.
