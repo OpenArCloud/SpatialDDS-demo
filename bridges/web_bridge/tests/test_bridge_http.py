@@ -11,7 +11,10 @@ from typing import Dict, Optional, List
 
 import pytest
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# repo root is three levels up: tests -> web_bridge -> bridges -> root.
+# (It was two when these lived in bridge/tests/; the bridge ->
+# bridges/web_bridge move added a level.)
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 

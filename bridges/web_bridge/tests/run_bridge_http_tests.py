@@ -22,7 +22,10 @@ from spatialdds_demo.dds_transport import DDSTransport
 from spatialdds_demo.topics import TOPIC_DISCOVERY_QUERY_V1, TOPIC_DISCOVERY_RESPONSE
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# repo root is three levels up: tests -> web_bridge -> bridges -> root.
+# (It was two when these lived in bridge/tests/; the bridge ->
+# bridges/web_bridge move added a level.)
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BRIDGE_URL = os.getenv("SPATIALDDS_BRIDGE_URL", "http://localhost:8088")
 
 AUSTIN_LAT = 30.2847
