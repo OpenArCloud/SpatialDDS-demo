@@ -11,13 +11,16 @@ Removal paths, and one limitation worth stating plainly:
   * **Depart** — a `DEPART` message for a service_id evicts it.
   * **TTL expiry** — an entry older than ``ttl_sec × TTL_MULTIPLIER`` is swept.
     Swept lazily on read, which is sufficient at demo scale.
-  * **DDS dispose** — *not available at this layer.* Announces ride the same
-    unkeyed ``SpatialDDSEnvelope`` type as everything else (see
-    ``spatialdds_demo/dds_transport.py``: the struct declares no ``@key``), so
-    every announce is a sample on a single instance. NOT_ALIVE_DISPOSED would
-    refer to the announce topic as a whole, not to one service, and cannot be
-    used for per-service eviction. A keyed announce type would fix this; until
-    then Depart plus TTL are the removal signals.
+  * **DDS dispose** — not wired up *yet*, and the reason is local, not a spec
+    limitation. ``spatial::disco::Announce`` is properly keyed
+    (``@key string service_id``, ``idl/v1.7/discovery.idl``), so per-service
+    instance lifecycle is exactly what the spec intends. The demo simply does
+    not publish that type: it JSON-encodes announces into the unkeyed
+    ``SpatialDDSEnvelope`` (``spatialdds_demo/dds_transport.py``), which
+    collapses every service onto one instance and leaves NOT_ALIVE_DISPOSED
+    referring to the topic rather than to a service. The typed-wire migration
+    restores dispose as the primary eviction signal; until it lands here,
+    Depart plus TTL are what this cache can see.
 """
 
 from __future__ import annotations

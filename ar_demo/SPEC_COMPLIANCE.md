@@ -3,6 +3,33 @@
 **Status:** ✅ Aligned with v1.7 draft profiles
 **Date:** 2026-08-22
 
+## Interim: the wire is not yet conformant
+
+**The payload shapes in this document are 1.7-correct. The DDS transport
+carrying them is not.**
+
+Every demo flow serialises to JSON and rides a single hand-written, unkeyed
+`SpatialDDSEnvelope` struct on one topic (`spatialdds/envelope/v1`), with
+`logical_topic` and `msg_type` as string fields inside it. Consequences:
+
+- **§3.3.2 typed topics** — not met on the wire. A conformant participant built
+  from `idl/v1.7` cannot exchange samples with this demo today, because the demo
+  publishes its envelope type rather than `Announce`, `GeoPose`, `VisionFrame`
+  and friends.
+- **§3.3.3 QoS profiles** — advertised in `TopicMeta` but not applied. Endpoints
+  are created with ad-hoc QoS, and two different transports
+  (`nuscenes/dds_envelope_transport.py`, `bridges/envelope_io.py`) disagree on
+  it.
+- **§2.6 keys and instance lifecycle** — not exercised. The spec keys
+  `Announce`, `CoverageQuery`, `Depart` and others; the envelope has no key, so
+  every sample lands on one instance. Per-service dispose and per-key
+  late-join backfill are unavailable as a result.
+
+So this document describes conformance at the *payload* level. Typed-wire
+migration is planned in `directions/spatialdds-demo-typed-wire-migration.md`;
+this section comes out when it lands and the interop probe proves the exchange
+in both directions.
+
 ## What changed from v1.6
 
 1.7 is a hard cutover, not a compatible bump. The pre-adoption instability

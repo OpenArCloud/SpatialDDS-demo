@@ -71,12 +71,14 @@ endpoint's correctness. A service leaves the cache when:
 - **its announce expires** — entries older than `stamp + 2 x ttl_sec` are swept
   on the next read.
 
-DDS dispose is deliberately *not* a removal path here. Announces ride the same
-unkeyed envelope type as everything else (`spatialdds_demo/dds_transport.py`
-declares no `@key`), so every announce is a sample on one instance and
-NOT_ALIVE_DISPOSED would refer to the announce topic rather than to a service.
-A keyed announce type would let the bridge honour dispose; until then Depart and
-TTL are the signals. `GET /api/stats` reports the cache counters.
+DDS dispose is not yet a removal path here, for a local reason rather than a
+spec one. `spatial::disco::Announce` is properly keyed on `service_id`, so
+per-service instance lifecycle is what the spec intends — but this demo does not
+publish that type. It JSON-encodes announces into a single unkeyed envelope
+topic, which collapses every service onto one instance and leaves
+NOT_ALIVE_DISPOSED referring to the topic rather than to a service. The typed-wire
+migration restores dispose as the primary signal; until then Depart and TTL are
+what the cache can observe. `GET /api/stats` reports the cache counters.
 
 ### Serving authored manifests
 

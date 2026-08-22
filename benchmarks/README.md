@@ -2,6 +2,12 @@
 
 Scripts for measuring SpatialDDS protocol overhead and scalability.
 
+> **What these currently measure.** Every figure here is the demo's **JSON
+> envelope transport** — one unkeyed struct on one topic — not SpatialDDS typed
+> topics with their QoS profiles. Treat them as a baseline for the envelope, not
+> as SpatialDDS performance numbers. A typed arm is planned; see
+> `directions/spatialdds-demo-typed-wire-migration.md`.
+
 ## Benchmarks
 
 - `bench_latency.py`: Envelope RTT overhead vs raw DDS RTT across payload sizes.
