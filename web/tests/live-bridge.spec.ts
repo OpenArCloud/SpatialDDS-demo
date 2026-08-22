@@ -15,14 +15,16 @@ test('live 1.7 bridge: localize + discover against real DDS', async ({ page, req
   // "Expected width to be greater than 0".
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  let health;
+  // Probe first, then skip: test.skip() signals by throwing, so it must not be
+  // called from inside a try whose catch would swallow it.
+  let health: { status?: string } | null = null;
   try {
     health = await (await request.get(`${BRIDGE_URL}/health`, { timeout: 4000 })).json();
   } catch {
-    test.skip(true, `bridge not reachable at ${BRIDGE_URL}`);
-    return;
+    health = null;
   }
-  expect(health.status).toBe('ok');
+  test.skip(health === null, `bridge not reachable at ${BRIDGE_URL}`);
+  expect(health?.status).toBe('ok');
 
   const consoleErrors: string[] = [];
   page.on('console', (msg) => {
