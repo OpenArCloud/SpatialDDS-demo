@@ -113,12 +113,27 @@ function ensureOperator(name) {
 }
 
 // ── Message handlers ───────────────────────────────────────────────────
+
+// The spec's Vec3 is double[3], so it arrives as an array. The nuScenes and
+// DeepSense converters still emit the older {x,y,z} object, so read both.
+function secs(t) {
+  t = t || {};
+  return (+t.sec || 0) + (+t.nanosec || 0) / 1e9;
+}
+
+function vec(v) {
+  if (Array.isArray(v)) return { x: +v[0] || 0, y: +v[1] || 0, z: +v[2] || 0 };
+  v = v || {};
+  return { x: +v.x || 0, y: +v.y || 0, z: +v.z || 0 };
+}
+
 function onEgoPose(msg) {
   const op = ensureOperator(getOperator(msg.logical_topic));
-  // Synthetic publisher uses ``pose.t``; nuScenes uses ``pose_se3.t``.
-  const pose = (msg.payload && (msg.payload.pose_se3 || msg.payload.pose)) || {};
-  const t = pose.t || pose.position || {};
-  op.ego = { x: +t.x || 0, y: +t.y || 0, z: +t.z || 0 };
+  // FramedPose nests the pose inside the frame it is expressed in; the
+  // nuScenes publisher still emits a bare pose_se3.
+  let pose = (msg.payload && (msg.payload.pose_se3 || msg.payload.pose)) || {};
+  if (pose.pose) pose = pose.pose;
+  op.ego = vec(pose.t || pose.position);
   op.trail.push([op.ego.x, op.ego.y]);
   if (op.trail.length > 200) op.trail.shift();
   op.lastSeen = Date.now();
@@ -127,16 +142,21 @@ function onEgoPose(msg) {
 
 function onDetections(msg) {
   const op = ensureOperator(getOperator(msg.logical_topic));
-  const dets = (msg.payload && msg.payload.detections) || [];
-  op.detections = dets.map(d => ({
-    x: ((d.center || {}).x) || 0,
-    y: ((d.center || {}).y) || 0,
-    class_id: d.class_id || "unknown",
-    score: +d.score || 0,
-    w: ((d.size || {}).x) || 2,
-    h: ((d.size || {}).y) || 2,
-    det_id: d.det_id || "",
-  }));
+  // OperatorDetectionSet composes the spec Detection3D under `detection`
+  // and adds the velocity the spec type has no field for.
+  const dets = (msg.payload && (msg.payload.dets || msg.payload.detections)) || [];
+  op.detections = dets.map(row => {
+    const d = row.detection || row;
+    const c = vec(d.center), sz = vec(d.size);
+    return {
+      x: c.x, y: c.y,
+      class_id: d.class_id || "unknown",
+      score: +d.score || 0,
+      w: sz.x || 2,
+      h: sz.y || 2,
+      det_id: d.det_id || "",
+    };
+  });
   op.lastSeen = Date.now();
   op.messageCount++;
 }
@@ -145,12 +165,14 @@ function onTrajectory(msg) {
   const op = ensureOperator(getOperator(msg.logical_topic));
   const waypoints = (msg.payload && msg.payload.waypoints) || [];
   op.trajectory = waypoints.map(wp => {
-    const t = ((wp.pose || {}).t) || {};
+    const t = vec((wp.pose || {}).t);
     return {
-      x: +t.x || 0,
-      y: +t.y || 0,
-      uncertainty: +wp.position_uncertainty_m || 1,
-      confidence: +wp.confidence || 0.5,
+      x: t.x,
+      y: t.y,
+      // Presence-flagged: the value is always on the wire, the flag says
+      // whether it means anything.
+      uncertainty: wp.has_uncertainty ? (+wp.position_uncertainty_m || 1) : 1,
+      confidence: wp.has_confidence ? (+wp.confidence || 0.5) : 0.5,
     };
   });
   op.messageCount++;
@@ -159,8 +181,8 @@ function onTrajectory(msg) {
 function onFusedTracks(msg) {
   const tracks = (msg.payload && msg.payload.tracks) || [];
   state.fused.tracks = tracks.map(t => ({
-    x: ((t.position || {}).x) || 0,
-    y: ((t.position || {}).y) || 0,
+    x: vec(t.position).x,
+    y: vec(t.position).y,
     class_id: t.object_class || "?",
     sources: t.source_operators || [],
     source_count: +t.source_count || 0,
@@ -171,13 +193,26 @@ function onFusedTracks(msg) {
 
 function onConflict(msg) {
   const p = msg.payload || {};
-  if (p.event_type && p.event_type !== "trajectory_conflict") return;
+  // A predicted trajectory conflict is published as SpatialEvent with the
+  // nearest registered type, PROXIMITY_ALERT — 1.7 has no predicted-conflict
+  // type. The conflicting pair rides in event_id ("conflict:a|b") because
+  // SpatialEvent's trigger/secondary slots are det/track ids and its generic
+  // attributes field is a JSON string this demo will not put on the bus.
+  if (p.type && p.type !== "PROXIMITY_ALERT") return;
+  const pos = p.has_position ? vec(p.position) : vec(p.conflict_position);
+  const agents = p.agents
+    || String(p.event_id || "").split(":").pop().split("|").filter(Boolean);
   state.conflicts.push({
-    x: ((p.conflict_position || {}).x) || 0,
-    y: ((p.conflict_position || {}).y) || 0,
-    agents: p.agents || [],
-    time_to: +p.time_to_conflict || 0,
-    min_dist: +p.min_distance_m || 0,
+    x: pos.x,
+    y: pos.y,
+    agents: agents,
+    // Lead time without an extension field: event_start is when the
+    // conflict is predicted to occur, stamp is when the prediction was
+    // made, so the difference is the ETA.
+    time_to: p.time_to_conflict != null
+      ? +p.time_to_conflict
+      : Math.max(0, secs(p.event_start) - secs(p.stamp)),
+    min_dist: +p.measured_distance_m || +p.min_distance_m || 0,
     timestamp: Date.now(),
   });
   // Keep last 5 conflicts, age out after 10 s.

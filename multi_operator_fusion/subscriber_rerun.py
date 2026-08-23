@@ -117,6 +117,13 @@ def _set_time(stamp: Dict[str, Any], frame_num: int) -> None:
         rr.set_time("timestamp", timestamp=sec + nsec / 1e9)
 
 
+def _secs(stamp: Any) -> float:
+    """A builtin::Time as float seconds."""
+    if not isinstance(stamp, dict):
+        return 0.0
+    return float(stamp.get("sec", 0)) + float(stamp.get("nanosec", 0)) / 1e9
+
+
 def _xyz(value: Any, default: Tuple[float, float, float] = (0.0, 0.0, 0.0)) -> List[float]:
     """
     A Vec3 as [x, y, z].
@@ -563,9 +570,14 @@ class RerunMultiOpSubscriber:
                 else float(payload.get("measured_distance_m", 0.0)))
         px, py, pz = _xyz(pos)
         center = [px, py, pz + 1.0]
+        # event_start is when the conflict is predicted to occur, stamp is
+        # when the prediction was made, so their difference is the lead time.
+        # No extension field needed for it.
+        lead = _secs(payload.get("event_start")) - _secs(payload.get("stamp"))
+        ttc_str = f"{lead:.1f}s" if lead > 0 else "?"
         agents_str = " × ".join(agents) if agents else "?"
         description = payload.get("description") or ""
-        marker_label = f"⚠ CONFLICT {agents_str}"
+        marker_label = f"⚠ CONFLICT {agents_str} in {ttc_str}"
         rr.log(
             "world/fused/conflicts",
             rr.Points3D(np.array([center]),
@@ -575,7 +587,7 @@ class RerunMultiOpSubscriber:
             static=True,
         )
         rr.log("events/log", rr.TextLog(
-            f"CONFLICT: {agents_str} | dist={dist:.1f}m | "
+            f"CONFLICT: {agents_str} | dist={dist:.1f}m | ETA={ttc_str} | "
             f"pos=({px:.0f}, {py:.0f}) | {description}",
             level=rr.TextLogLevel.WARN,
         ))

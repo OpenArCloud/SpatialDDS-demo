@@ -27,6 +27,7 @@ import json
 import os
 import queue
 import sys
+import threading
 import time
 import uuid
 import asyncio
@@ -457,8 +458,8 @@ bridge = SpatialDDSBridge()
 broadcaster = DDSEventBroadcaster()
 client_mgr = ClientManager(TopicRouter())
 _event_loop: Optional[asyncio.AbstractEventLoop] = None
-_publisher = None  # bridges/envelope_io.EnvelopePublisher (lazy)
-_envelope_sub = None  # bridges/envelope_io.EnvelopeSubscriber (lossless reader)
+_publisher = None  # _BrowserPublisher (lazy)
+_envelope_sub = None  # _StreamPump (typed readers, discovered from announces)
 _total_dispatched = 0
 _start_time_ns = time.time_ns()
 ALLOW_PUBLISH = os.getenv("SPATIALDDS_BRIDGE_ALLOW_PUBLISH", "1") not in ("0", "false", "no")
@@ -519,33 +520,156 @@ def _emit_dds_event(event: Dict[str, Any]) -> None:  # noqa: F811 — intentiona
     _event_loop.call_soon_threadsafe(asyncio.ensure_future, _go())
 
 
-def _envelope_callback(msg_type: str, logical_topic: str,
-                        payload: Dict[str, Any], stamp_ns: int) -> None:
-    """RELIABLE+KEEP_ALL ``EnvelopeSubscriber`` callback. Synthesizes the
-    same dict-shaped event the legacy ``DDSTransport.on_message`` used to
-    emit so /v1/stream and /ws downstream keep working unchanged.
+def _stream_callback(type_name: str, logical_topic: str,
+                     payload: Dict[str, Any], stamp_ns: int) -> None:
+    """
+    ``StreamSubscriber`` callback: one typed sample, as JSON for the browser.
+
+    This is the JSON edge. The bus carries real types; everything a
+    WebSocket client sees is produced here, in the shape the /ws protocol
+    has always used. ``msg_type`` keeps its place in that protocol — its
+    value is now the announced 3.3.2 type rather than a demo-private label,
+    which is strictly more information for the same field.
     """
     _emit_dds_event({
         "ts": stamp_ns / 1_000_000_000.0 if stamp_ns else time.time(),
         "dir": "rx",
         "domain": bridge._domain_id,
-        "msg_type": msg_type,
+        "msg_type": type_name,
         "logical_topic": logical_topic,
         "request_id": "",
         "payload": payload,
     })
 
 
+def _announce_callback(service_id: str, announce: Dict[str, Any]) -> None:
+    """
+    Announces reach browsers under a per-service logical topic.
+
+    On the bus they are one keyed topic — Announce is @key service_id, so
+    each service is its own instance. Browsers subscribe with a wildcard
+    (``spatialdds/*/discovery/announce/v1``) and have since before the
+    announce topic was consolidated, so the bridge names the service in the
+    logical topic it hands out. The /ws protocol does not change.
+    """
+    name = announce.get("name") or service_id.removeprefix("svc:")
+    _stream_callback("spatialdds/discovery/announce",
+                     f"spatialdds/{name}/discovery/announce/v1",
+                     announce, time.time_ns())
+
+
+class _BrowserPublisher:
+    """
+    browser -> DDS, typed.
+
+    A /ws publish names a logical_topic and a msg_type; the msg_type is
+    resolved through the 3.3.2 registry and the payload is built into that
+    class before it is written. A payload that is not a well-formed sample
+    of its declared type is refused here, with a message the browser sees —
+    under the envelope it went out as a well-formed string and failed, if at
+    all, in some other process.
+    """
+
+    # 3.3.3 profile per registered type. A browser publishes on the lane the
+    # spec assigns that type, not on whatever the bridge felt like.
+    _PROFILES = {
+        "geopose": "POSE_RT",
+        "navsat_status": "POSE_RT",
+        "planned_trajectory": "EVENT_RT",
+        "entity_binding": "MAP_META",
+        "spatial_event": "EVENT_RT",
+        "video_frame": "VIDEO_LIVE",
+        "radar_tensor": "RADAR_RT",
+        "radar_detection": "RADAR_RT",
+        "rf_beam": "RF_BEAM_RT",
+        "vps_query": "VPS_REQ",
+        "oarc.detection3d_velocity": "RADAR_RT",
+        "oarc.framed_pose": "POSE_RT",
+        "oarc.fused_track": "POSE_RT",
+        "oarc.fusion_coverage": "MAP_META",
+        "oarc.vps_response": "VPS_RESP",
+        "oarc.catalog_query": "VPS_REQ",
+        "oarc.catalog_response": "VPS_RESP",
+    }
+    DEFAULT_PROFILE = "EVENT_RT"
+
+    def __init__(self, domain_id: int):
+        from cyclonedds.domain import DomainParticipant
+
+        self._participant = DomainParticipant(domain_id)
+        self._writers: Dict[str, Any] = {}
+
+    def publish(self, logical_topic: str, type_name: str,
+                payload: Dict[str, Any]) -> None:
+        from spatialdds_demo import topic_types, typed_transport as tt
+
+        writer = self._writers.get(logical_topic)
+        if writer is None:
+            datatype = topic_types.resolve(type_name)
+            writer = tt.TypedDictWriter(
+                self._participant, logical_topic, datatype,
+                self._PROFILES.get(type_name, self.DEFAULT_PROFILE))
+            self._writers[logical_topic] = writer
+        elif writer.datatype is not topic_types.resolve(type_name):
+            raise ValueError(
+                f"{logical_topic} already carries "
+                f"{writer.datatype.__name__}; a topic is one type")
+        writer.write(payload)
+
+
+class _StreamPump:
+    """
+    Runs a ``StreamSubscriber`` on its own thread and feeds the fanout.
+
+    The bridge is a FastAPI app, so DDS polling cannot live on the event
+    loop; the callbacks hop back to it via ``call_soon_threadsafe``.
+    """
+
+    def __init__(self, domain_id: int, poll_interval: float = 0.02):
+        from cyclonedds.domain import DomainParticipant
+
+        from spatialdds_demo.stream import StreamSubscriber
+
+        self._interval = poll_interval
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._sub = StreamSubscriber(
+            DomainParticipant(domain_id), _stream_callback,
+            on_announce=_announce_callback,
+        )
+
+    @property
+    def topics(self):
+        return self._sub.topics
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self._sub.poll(stamp_ns=time.time_ns())
+            except Exception:
+                # One malformed sample must not take the bridge's whole
+                # stream down; the next poll continues.
+                pass
+            self._stop.wait(self._interval)
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+
+
 def _ensure_publisher():
-    """Lazily build the RELIABLE+KEEP_ALL writer for browser→DDS publishing."""
+    """Lazily build the typed writer pool for browser->DDS publishing."""
     global _publisher
     if _publisher is not None:
         return _publisher
     if _event_loop is None:
         return None
-    domain_id = bridge.ensure_transport()
-    from envelope_io import EnvelopePublisher  # type: ignore
-    _publisher = EnvelopePublisher(domain_id)
+    _publisher = _BrowserPublisher(bridge.ensure_transport())
     return _publisher
 
 
@@ -563,12 +687,10 @@ def on_startup() -> None:
     broadcaster.attach_loop(loop)
     loop.create_task(broadcaster.run())
 
-    # Lossless envelope reader — feeds /v1/stream + /ws via _emit_dds_event.
-    # DDSTransport already handles legacy localize/catalog request-response;
-    # this is purely the streaming-side fanout, sized to never drop a
-    # burst when a publisher emits multiple operators back-to-back.
-    from envelope_io import EnvelopeSubscriber  # type: ignore
-    _envelope_sub = EnvelopeSubscriber(domain_id, _envelope_callback)
+    # Typed reader per announced lane, discovered from announces — this is
+    # the streaming-side fanout to /v1/stream + /ws. DDSTransport still
+    # handles the localize/catalog request-response correlation.
+    _envelope_sub = _StreamPump(domain_id)
     _envelope_sub.start()
 
 

@@ -439,8 +439,14 @@ def make_trajectory_conflict_event(conflict: Dict, *, timestamp_s: float,
     ``PROXIMITY_ALERT`` is the closest registered EventType, but it is not
     an exact fit: 1.7's event types all describe something that has already
     happened or is happening now, and this is a *predicted* conflict some
-    seconds ahead. The lead time is therefore carried as an attribute rather
-    than being implied by the type — see the findings list.
+    seconds ahead.
+
+    The lead time needs no extension, though. ``event_start`` is when the
+    event begins and ``stamp`` is when this sample was produced; for a
+    prediction those are different instants, and their difference *is* the
+    lead time. So event_start is the predicted conflict time and stamp is
+    now — which also makes an already-started event and a predicted one
+    distinguishable by comparing the two, without a new field.
 
     The conflicting pair has nowhere typed to go. SpatialEvent models one
     trigger and one secondary, and both slots are det/track ids rather than
@@ -490,9 +496,9 @@ def make_trajectory_conflict_event(conflict: Dict, *, timestamp_s: float,
             f"predicted conflict between {' and '.join(sorted(agents))}"
             + (f" in {lead_s:.1f}s" if lead_s is not None else "")
         ),
-        # The conflict is predicted for `lead_s` from now; the event itself
-        # starts now, which is when the prediction was made.
-        "event_start": _stamp(timestamp_s),
+        # When the conflict is predicted to occur; `stamp` below is when the
+        # prediction was made, so event_start - stamp is the lead time.
+        "event_start": _stamp(timestamp_s + (lead_s or 0.0)),
         "stamp": _stamp(timestamp_s),
         "source_id": str(source_id),
         "attributes": [],
