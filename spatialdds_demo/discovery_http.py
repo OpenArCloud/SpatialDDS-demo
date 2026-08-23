@@ -561,16 +561,23 @@ def search(
 
     offset = _parse_page_token(str(query.get("page_token") or ""))
     max_results = query.get("max_results")
-    try:
-        limit = int(max_results) if max_results is not None else len(matched)
-    except (TypeError, ValueError):
-        raise DiscoveryError("max_results must be an integer")
-    if limit < 0:
-        raise DiscoveryError("max_results must not be negative")
+    if max_results is None:
+        limit = None                       # unset: the server's own choice
+    else:
+        try:
+            limit = int(max_results)
+        except (TypeError, ValueError):
+            raise DiscoveryError("max_results must be an integer")
+        if limit < 0:
+            raise DiscoveryError("max_results must not be negative")
 
-    page = matched[offset: offset + limit] if limit else matched[offset:]
+    # `None` and `0` are different requests: unset means "server-defined",
+    # which here is all of them, while an explicit zero asked for none.
+    page = matched[offset:] if limit is None else matched[offset: offset + limit]
     next_token = ""
-    if limit and offset + limit < len(matched):
+    # `limit > 0`, not just `limit is not None`: a zero-sized page advances the
+    # offset by nothing, so offering a token would hand the client a loop.
+    if limit is not None and limit > 0 and offset + limit < len(matched):
         next_token = f"o={offset + limit}"
 
     return {

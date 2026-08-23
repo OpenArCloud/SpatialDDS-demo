@@ -300,7 +300,7 @@ class VPSServiceV15:
             },
             {
                 "name": TOPIC_VPS_RESULT_V1,
-                "type": "geopose",
+                "type": "vps_response",
                 "version": "v1",
                 "qos_profile": "VPS_RESP",
                 "target_rate_hz": 0.0,
@@ -976,7 +976,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     print("-" * 40)
     loc_response = service.process_localize_request(loc_request)
     loc_response_topic, loc_response_source = _select_topic(
-        manifest_topics, "geopose", TOPIC_VPS_RESULT_V1
+        manifest_topics, "vps_response", TOPIC_VPS_RESULT_V1
     )
     logger.log_message(
         "LOCALIZE_RESPONSE",

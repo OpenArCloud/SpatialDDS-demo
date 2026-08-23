@@ -90,7 +90,7 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
             logger.log_message(
                 "LOCALIZE_RESPONSE", "SEND", f"VPS:{service.service_name}", "Client",
                 response, TOPIC_VPS_RESULT_V1,
-                _topic_source_for(manifest_topics, "geopose", TOPIC_VPS_RESULT_V1),
+                _topic_source_for(manifest_topics, "vps_response", TOPIC_VPS_RESULT_V1),
                 show_message_content,
             )
 

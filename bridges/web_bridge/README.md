@@ -55,12 +55,32 @@ HTTP:
 |---|---|
 | `GET /.well-known/spatialdds/bootstrap` | Bootstrap manifest (`spatialdds_bootstrap: "1.7"`), from `SPATIALDDS_BOOTSTRAP_*` config |
 | `POST /.well-known/spatialdds/search` | `{"results": [<service manifest>, ...], "next_page_token": ""}` |
-| `GET /.well-known/spatialdds/search?geohash=&kind=` | Same, from the geohash shorthand |
+| `GET /.well-known/spatialdds/search?geohash=&kind=` | Same. §3.3.0 makes the GET form REQUIRED alongside POST, for the Geospatial DNS-SD binding, and defines it as equivalent to `POST {"geohash": ...}` — so it is implemented as exactly that body through the same call |
 
 Search takes a CoverageQuery body and supports `filter`, the top-level `kind`
 array, `max_results` and `page_token`. Results are ordered by `service_id`, so
 paging is stable. There is no `query_id`: HTTP correlates request and response
 itself, unlike the on-bus `CoverageResponse`.
+
+The request table in §3.3.0 is not quite the on-bus `CoverageQuery` struct, and
+the endpoint follows the table:
+
+- `geohash` is a top-level shorthand, expanded to a bbox and added as an
+  *additional* coverage element — so `{"geohash": "9q8yy"}` alone is a complete
+  request, and a geohash alongside a coverage block widens the query.
+- `coverage_frame_ref` is optional. It is not in the request table and appears
+  in none of its examples; absent, the query is read as earth-fixed.
+- Presence flags may be omitted, as the spec's own examples omit them:
+  `{"crs": "EPSG:4326", "bbox": [...]}` is read as `has_bbox: true`. An
+  explicit `false` is still honoured — inference applies only when the flag is
+  missing. `has_circle` is never inferred, because `circle_center` is
+  present-but-zero on anything that came off the bus.
+- `expr` is rejected with a 400. 1.7 deleted it, and answering with the filter
+  the caller believes is being applied would be worse than refusing.
+
+Coverage matching is the full §3.3.4 model — `bbox`, `aabb` and `circle`, per
+frame, with `global` on either side — and it is the same predicate the on-bus
+`CoverageQuery` responder applies.
 
 The semantics live in `spatialdds_demo/discovery_http.py`, shared with
 `ar_demo/http_binding.py`. The two servers differ only in where their service
@@ -95,6 +115,59 @@ announce, carrying across what the announce provides and omitting optional
 fields rather than inventing them. Which path ran is logged, not signalled in
 the response.
 
+### Cold start with no SpatialDDS client code
+
+[`scripts/cold_start.sh`](../../scripts/cold_start.sh) walks the whole Layer 1 →
+1.5 → 2 path with curl and one `websocket-client` call: bootstrap, search a
+geohash cell, read the topics off a returned manifest, subscribe on `/ws`, and
+watch the exchange. Nothing in it imports the demo, the IDL, or CycloneDDS.
+
+```
+$ ./run_bridge_server_docker.sh          # bridge on :8088, VPS + catalogue behind it
+$ scripts/cold_start.sh                  # BRIDGE=… GEOHASH=… to point it elsewhere
+
+== 1. Bootstrap — which bus, and where
+{"spatialdds_bootstrap":"1.7","domain_id":1,"initial_peers":["udpv4://127.0.0.1:7400"],
+ "discovery_topic":"spatialdds/discovery/announce/v1","site":"sf-downtown",
+ "manifest_uri":"spatialdds://vps.example.com/zone:sf-downtown/manifest:vps"}
+
+== 2. Search — who covers geohash 9v6kr
+1 service manifest(s), next_page_token=''
+  svc:vps:demo/austin-downtown     VPS        spatialdds://vps.example.com/zone:austin-downtown/manifest:vps
+      spatialdds/vps/query/v1          vps_query    VPS_REQ
+      spatialdds/vps/result/v1         vps_response VPS_RESP
+
+== 3. Pick a manifest and the topics it advertises
+service:    svc:vps:demo/austin-downtown
+subscribe:  spatialdds/vps/*
+dds domain: 1  (from bootstrap — a manifest synthesized from an
+                      announce carries no service.connection)
+
+== 4. Subscribe over /ws, use the service, take the sample
+-> {'type': 'subscribed', 'id': 'cold_start', 'pattern': 'spatialdds/vps/*', 'status': 'ok'}
+-> curl -X POST http://127.0.0.1:8088/v1/localize -d {"service_id": "svc:vps:demo/austin-downtown"}
+<- data on spatialdds/vps/query/v1 (LOCALIZE_REQUEST)
+   fields: query_id, service_id, client_frame_ref, has_prior_geopose, prior_geopose, ...
+<- data on spatialdds/vps/query/v1 (vps_query)
+   fields: query_id, service_id, client_frame_ref, has_prior_geopose, prior_geopose, ...
+<- data on spatialdds/vps/result/v1 (vps_response)
+   fields: query_id, service_id, status, has_node_geo, node_geo, confidence, has_rmse_m, rmse_m
+   {"query_id": "8e0ca2be-…", "status": "VPS_SUCCESS", "has_node_geo": true, …}
+
+== Cold start complete — bootstrap to live data, no SpatialDDS client code.
+```
+
+Two things in that transcript are worth knowing about:
+
+- The query appears twice — once as `LOCALIZE_REQUEST`, the bridge's own tx
+  event for the dashboard, and once as `vps_query`, the sample read back off
+  the bus. Same `query_id` both times.
+- `service.connection` is absent from the manifest, so the domain id comes from
+  bootstrap. An `Announce` has no connection block to carry and §8.2.3 makes
+  the field OPTIONAL, so synthesis omits it rather than inventing one; §3.3.0
+  nonetheless says clients "MUST be able to extract `service.connection` from
+  any result", which a synthesized manifest cannot satisfy. Filed against 1.8.
+
 ## Legacy endpoints (the Cesium demo)
 
 ```
@@ -104,9 +177,12 @@ POST /v1/catalog/query        → Phase 4 CATALOG_QUERY one-shot
 WS   /v1/stream               → every received sample, no filtering
 ```
 
-`/v1/localize` accepts `{ "prior_geopose": ..., "service_id": ... }` and returns a
-LOCALIZE_RESPONSE shape. `/v1/catalog/query` accepts a `geopose`, optional `expr`,
-optional `limit`. These remain exactly as the Cesium UI expects.
+`/v1/localize` accepts `{ "prior_geopose": ..., "service_id": ... }` and returns
+`spatial::argeo::VpsResponse` as JSON — `status` (a `VpsStatus` identifier),
+`node_geo` behind `has_node_geo`, `confidence`, and `rmse_m` behind
+`has_rmse_m`. `/v1/catalog/query` accepts a `geopose`, an optional `kind_in`
+array and an optional `limit`; `expr` is refused with a 400, since 1.7 removed
+it.
 
 ## Generic protocol (`/ws`)
 

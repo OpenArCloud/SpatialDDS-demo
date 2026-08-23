@@ -33,6 +33,7 @@ from spatialdds_demo.discovery_http import (  # noqa: E402
 )
 from spatialdds_validation import (  # noqa: E402
     SpatialDDSValidator,
+    complete_coverage_element,
     create_coverage_bbox_earth_fixed,
 )
 
@@ -40,15 +41,46 @@ SF = (-122.52, 37.70, -122.35, 37.85)
 AUSTIN = (-97.75, 30.27, -97.72, 30.29)
 
 
-def _announce(service_id, bbox, *, kind="VPS", name="Svc", topics=None, caps=None,
-              ttl_sec=300, stamp=None, manifest_uri=None):
-    frame_ref, element = create_coverage_bbox_earth_fixed(*bbox)
+def _local_frame(fqn):
+    return {"uuid": "6f1d0e9c-0b3a-4a3f-9f4e-2f1a5c7d8e90", "fqn": fqn,
+            "has_coord_convention": True, "coord_convention": "ENU"}
+
+
+def _aabb_element(min_x, min_y, max_x, max_y):
+    """A local volume, in metres. In CoverageElement since 1.4."""
+    return complete_coverage_element(
+        has_aabb=True,
+        aabb={"min_xyz": [min_x, min_y, 0.0], "max_xyz": [max_x, max_y, 0.0]})
+
+
+def _circle_element(center_x, center_y, radius_m):
+    """Centre and radius, added by 1.7's findings-batch-2 revision."""
+    return complete_coverage_element(
+        has_circle=True, circle_center=[center_x, center_y, 0.0],
+        circle_radius_m=radius_m)
+
+
+def _geo_circle_element(lon, lat, radius_m):
+    """A circle in an earth-fixed frame: centre in degrees, radius in metres."""
+    return complete_coverage_element(
+        has_crs=True, crs="EPSG:4979",
+        has_circle=True, circle_center=[lon, lat, 0.0], circle_radius_m=radius_m)
+
+
+def _announce(service_id, bbox=None, *, kind="VPS", name="Svc", topics=None, caps=None,
+              ttl_sec=300, stamp=None, manifest_uri=None,
+              coverage=None, coverage_frame_ref=None):
+    if coverage is None:
+        frame_ref, element = create_coverage_bbox_earth_fixed(*bbox)
+        coverage, coverage_frame_ref = [element], frame_ref
+    frame_ref = coverage_frame_ref
+    element = coverage[0]
     return {
         "service_id": service_id,
         "name": name,
         "kind": kind,
         "org": "ExampleOrg",
-        "coverage": [element],
+        "coverage": list(coverage),
         "coverage_frame_ref": frame_ref,
         "manifest_uri": manifest_uri or f"spatialdds://demo.example/zone:z/manifest:{service_id[-4:]}",
         "caps": caps or {
@@ -74,6 +106,18 @@ def _query(bbox, **extra):
     return query
 
 
+def _local_query(element, fqn="scene/intersection", **extra):
+    """A query in a local metric frame, which is where aabb footprints live."""
+    query = {"coverage": [element], "coverage_frame_ref": _local_frame(fqn)}
+    query.update(extra)
+    return query
+
+
+# The frame the aabb/circle services declare. Local metres, so an earth-fixed
+# query cannot reach them and a query in this frame can — see
+# tests/test_coverage_model.py for why that is the intended answer.
+INTERSECTION = _local_frame("scene/intersection")
+
 # The shared table both backends must answer identically.
 ANNOUNCES = [
     _announce("svc:a", SF, kind="VPS", name="SF VPS"),
@@ -81,11 +125,22 @@ ANNOUNCES = [
     _announce("svc:c", SF, kind="CONTENT", name="SF Content",
               topics=[{"name": "spatialdds/x/tile/v1", "type": "geometry_tile",
                        "version": "v1", "qos_profile": "GEOM_TILE"}]),
+    # Geometry other than bbox. Every one of these matched nothing until the
+    # predicate became the §3.3.4 model.
+    _announce("svc:d", kind="SENSING", name="Intersection radar",
+              coverage=[_circle_element(0.0, 0.0, 120.0)],
+              coverage_frame_ref=INTERSECTION),
+    _announce("svc:e", kind="MAPPING", name="Intersection map",
+              coverage=[_aabb_element(-200.0, -200.0, -50.0, -50.0)],
+              coverage_frame_ref=INTERSECTION),
+    _announce("svc:f", kind="SENSING", name="SF roadside unit",
+              coverage=[_geo_circle_element(-122.4194, 37.7749, 400.0)],
+              coverage_frame_ref=create_coverage_bbox_earth_fixed(0, 0, 0, 0)[0]),
 ]
 
 CASES = [
     ("sf bbox matches sf services",
-     _query((-122.45, 37.75, -122.40, 37.80)), ["svc:a", "svc:c"]),
+     _query((-122.45, 37.75, -122.40, 37.80)), ["svc:a", "svc:c", "svc:f"]),
     ("austin bbox matches only austin",
      _query((-97.74, 30.28, -97.73, 30.285)), ["svc:b"]),
     ("disjoint bbox matches nothing",
@@ -101,14 +156,55 @@ CASES = [
      _query((-122.45, 37.75, -122.40, 37.80),
             has_filter=True,
             filter={"type_in": [], "qos_profile_in": [], "module_id_in": ["spatial.core/1.7"]}),
-     ["svc:a", "svc:c"]),
+     ["svc:a", "svc:c", "svc:f"]),
     ("empty filter arrays match all",
      _query((-122.45, 37.75, -122.40, 37.80),
             has_filter=True,
             filter={"type_in": [], "qos_profile_in": [], "module_id_in": []}),
-     ["svc:a", "svc:c"]),
+     ["svc:a", "svc:c", "svc:f"]),
     ("max_results pages",
      _query((-122.45, 37.75, -122.40, 37.80), max_results=1), ["svc:a"]),
+
+    # --- geometry beyond bbox (W.1) -----------------------------------------
+    ("a local circle is found by a query in its own frame",
+     _local_query(_aabb_element(-10.0, -10.0, 10.0, 10.0)), ["svc:d"]),
+    ("a local aabb is found by a query in its own frame",
+     _local_query(_aabb_element(-210.0, -210.0, -190.0, -190.0)), ["svc:e"]),
+    ("a query spanning both local footprints finds both",
+     _local_query(_aabb_element(-300.0, -300.0, 300.0, 300.0)), ["svc:d", "svc:e"]),
+    ("a local query outside both footprints finds neither",
+     _local_query(_aabb_element(5000.0, 5000.0, 5100.0, 5100.0)), []),
+    ("a circle is approximated by its bounding box",
+     # Clips the corner of svc:d's bounding box while missing the circle
+     # itself. §3.3.4 permits the approximation explicitly.
+     _local_query(_aabb_element(119.0, 119.0, 140.0, 140.0)), ["svc:d"]),
+    ("an earth-fixed query cannot reach a local frame",
+     _query((-180.0, -90.0, 180.0, 90.0)), ["svc:a", "svc:b", "svc:c", "svc:f"]),
+    ("a geographic circle is found by a bbox over it",
+     # Narrowed by kind so the case is about the circle rather than about the
+     # bbox services that also cover downtown SF.
+     _query((-122.4195, 37.7748, -122.4193, 37.7750), kind=["SENSING"]), ["svc:f"]),
+    ("a geographic circle's radius is metres, not degrees",
+     # ~4 km east of svc:f: outside a 400 m footprint. Read as degrees the
+     # footprint would span the planet and match this.
+     _query((-122.375, 37.7748, -122.374, 37.7750), kind=["SENSING"]), []),
+
+    # --- the binding's own request forms (W.2) ------------------------------
+    ("the spec's minimal example: geohash alone",
+     {"geohash": "9q8y"}, ["svc:a", "svc:c", "svc:f"]),
+    ("geohash widens a coverage block rather than replacing it",
+     _query(AUSTIN, geohash="9q8y"), ["svc:a", "svc:b", "svc:c", "svc:f"]),
+    ("the spec's full example: no coverage_frame_ref, no presence flags",
+     {"coverage": [{"crs": "EPSG:4326", "bbox": [-122.45, 37.75, -122.40, 37.80]}],
+      "kind": ["VPS"],
+      "filter": {"type_in": ["vps_query"], "qos_profile_in": [], "module_id_in": []},
+      "max_results": 10},
+     ["svc:a"]),
+    ("an explicit has_bbox=false is honoured, not inferred over",
+     {"coverage": [{"crs": "EPSG:4326", "has_bbox": False,
+                    "bbox": [-122.45, 37.75, -122.40, 37.80],
+                    "global": True}]},
+     ["svc:a", "svc:b", "svc:c", "svc:d", "svc:e", "svc:f"]),
 ]
 
 
@@ -171,15 +267,52 @@ class Parity(unittest.TestCase):
             self.assertEqual(doc["rtype"], "service")
 
     def test_rejections_agree_across_backends(self):
+        """
+        A malformed body is the caller's problem — 400, and the same 400 from
+        either server. §3.3.0's error table maps every one of these to 400.
+        """
         bad = [
             ("expr removed in 1.7", _query(SF, expr='kind=="VPS"')),
-            ("missing coverage", {"coverage_frame_ref": {"uuid": "u", "fqn": "earth-fixed"}}),
+            ("neither coverage nor geohash",
+             {"coverage_frame_ref": {"uuid": "u", "fqn": "earth-fixed"}}),
+            ("empty coverage array", {"coverage": []}),
+            ("body is not an object", ["not", "an", "object"]),
+            ("coverage is not an array", {"coverage": {"bbox": [0, 0, 1, 1]}}),
+            ("coverage element is not an object", {"coverage": ["nope"]}),
+            ("geohash is not a string", {"geohash": 9}),
+            ("geohash has characters outside the alphabet", {"geohash": "9q8yy!"}),
+            ("element declares no geometry",
+             {"coverage": [complete_coverage_element()]}),
+            ("CoverageElement.type removed in 1.7",
+             _query(SF, coverage=[dict(create_coverage_bbox_earth_fixed(*SF)[1],
+                                       type="bbox")])),
+            ("non-finite bbox",
+             {"coverage": [{"crs": "EPSG:4979", "bbox": [float("inf"), 0, 1, 1]}]}),
+            ("circle with a negative radius",
+             {"coverage": [_circle_element(0.0, 0.0, -1.0)],
+              "coverage_frame_ref": INTERSECTION}),
+            ("max_results is not an integer", _query(SF, max_results="ten")),
+            ("max_results is negative", _query(SF, max_results=-1)),
         ]
         for label, query in bad:
             for backend_cls in BACKENDS:
                 with self.subTest(case=label, backend=backend_cls.name):
                     with self.assertRaises(DiscoveryError):
-                        search(backend_cls(ANNOUNCES).records(), dict(query))
+                        search(backend_cls(ANNOUNCES).records(),
+                               dict(query) if isinstance(query, dict) else query)
+
+    def test_duplicate_service_ids_collapse_to_one_result(self):
+        """
+        Latest-wins is the registry's and the cache's job; search dedupes
+        anyway, because a gateway fed by two announce readers can legitimately
+        hold the same service twice and must not report it twice.
+        """
+        twice = [_announce("svc:a", SF, name="first"), _announce("svc:a", SF, name="second")]
+        for backend_cls in BACKENDS:
+            with self.subTest(backend=backend_cls.name):
+                response = search(backend_cls(twice).records(),
+                                  _query((-122.45, 37.75, -122.40, 37.80)))
+                self.assertEqual(_ids(response), ["svc:a"])
 
 
 class Pagination(unittest.TestCase):
@@ -193,7 +326,36 @@ class Pagination(unittest.TestCase):
         query["page_token"] = first["next_page_token"]
         second = search(records, dict(query))
         self.assertEqual(_ids(second), ["svc:c"])
-        self.assertEqual(second["next_page_token"], "")
+        self.assertEqual(second["next_page_token"], "o=2")
+
+        query["page_token"] = second["next_page_token"]
+        last = search(records, dict(query))
+        self.assertEqual(_ids(last), ["svc:f"])
+        self.assertEqual(last["next_page_token"], "",
+                         "the final page must not offer another")
+
+    def test_max_results_zero_returns_nothing_and_no_token(self):
+        """
+        Unset means server-defined; an explicit zero asked for none. A token
+        here would advance the offset by nothing and hand the client a loop.
+        """
+        records = RegistryBackend(ANNOUNCES).records()
+        response = search(records, _query((-122.45, 37.75, -122.40, 37.80), max_results=0))
+        self.assertEqual(response["results"], [])
+        self.assertEqual(response["next_page_token"], "")
+
+    def test_page_token_past_the_end_is_an_empty_final_page(self):
+        records = RegistryBackend(ANNOUNCES).records()
+        response = search(records, _query((-122.45, 37.75, -122.40, 37.80),
+                                          max_results=2, page_token="o=99"))
+        self.assertEqual(response["results"], [])
+        self.assertEqual(response["next_page_token"], "")
+
+    def test_max_results_larger_than_the_result_set_offers_no_token(self):
+        records = RegistryBackend(ANNOUNCES).records()
+        response = search(records, _query((-122.45, 37.75, -122.40, 37.80), max_results=99))
+        self.assertEqual(_ids(response), ["svc:a", "svc:c", "svc:f"])
+        self.assertEqual(response["next_page_token"], "")
 
     def test_ordering_is_stable_regardless_of_input_order(self):
         query = _query((-122.45, 37.75, -122.40, 37.80))

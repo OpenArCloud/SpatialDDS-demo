@@ -20,7 +20,7 @@
       },
       {
         "name": "spatialdds/vps/result/v1",
-        "type": "geopose",
+        "type": "vps_response",
         "version": "v1",
         "qos_profile": "VPS_RESP"
       }

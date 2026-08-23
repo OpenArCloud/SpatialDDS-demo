@@ -120,7 +120,7 @@ class ServiceAnnouncer:
             "topics": [
                 {"name": "spatialdds/vps/query/v1", "type": "vps_query",
                  "version": "v1", "qos_profile": "VPS_REQ"},
-                {"name": "spatialdds/vps/result/v1", "type": "geopose",
+                {"name": "spatialdds/vps/result/v1", "type": "vps_response",
                  "version": "v1", "qos_profile": "VPS_RESP"},
             ],
             "caps": {

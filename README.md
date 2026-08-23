@@ -80,6 +80,12 @@ Use the bridge when you want discovery over a real bus alongside live data. Use
 the HTTP binding to exercise the binding's payload shapes on their own, with a
 registry you control.
 
+[`scripts/cold_start.sh`](scripts/cold_start.sh) walks the whole path against a
+running bridge — bootstrap, search a geohash cell, read the topics off a
+returned manifest, subscribe on `/ws` — in curl and one `websocket-client`
+call, importing nothing from this repo. Transcript in the
+[bridge README](bridges/web_bridge/README.md#cold-start-with-no-spatialdds-client-code).
+
 ## Browser UIs
 
 - **AR demo** — 3D Cesium view of VPS coverage, catalog, localisation and anchor

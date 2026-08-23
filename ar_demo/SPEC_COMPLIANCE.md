@@ -175,7 +175,7 @@ The spec's three discovery layers map onto this repo as follows:
 | Layer | Where |
 |---|---|
 | 1 — bootstrap | `GET /.well-known/spatialdds/bootstrap` on both HTTP servers, and the bus bootstrap topic pair |
-| 1.5 — HTTP discovery | `POST /.well-known/spatialdds/search` (plus the `?geohash=` shorthand) on both HTTP servers |
+| 1.5 — HTTP discovery | `POST /.well-known/spatialdds/search` and `GET ...?geohash=` on both HTTP servers |
 | 2 — on-bus discovery | `Announce` + `CoverageQuery`/`CoverageResponse` over DDS |
 
 `bridges/web_bridge` is the gateway shape: it answers Layer 1.5 from a live
@@ -189,6 +189,36 @@ which is what makes it useful as a conformance harness. Both call one module,
 manifest resolver in `spatialdds_demo/manifest_resolver.py` *consumes* resolver
 metadata when an authority publishes it, but neither server publishes its own.
 
+**The GET convenience form.** §3.3.0 specifies it fully — REQUIRED alongside
+POST "for interoperability with the Geospatial DNS-SD binding", equivalent to a
+POST carrying `{"geohash": "..."}` plus an optional `kind`, identical response
+format — so both servers implement it as literally that translation. Nothing
+here is guessed, and there is no gap to file.
+
+**Where §3.3.0 and the demo differ, and why.** The HTTP request table is not
+the on-bus `CoverageQuery` struct, and three of its details are worth recording
+because the spec's own worked examples depend on them:
+
+- `coverage` is marked REQUIRED, yet the binding's minimal example is
+  `{"geohash": "9q8yy"}` with no coverage — and the GET form is *defined* as
+  equivalent to that body. Read as "coverage or geohash", which is what both
+  servers accept.
+- `coverage_frame_ref` is absent from the request table and from every example,
+  so a conformant client will not send one. Optional here, read as earth-fixed
+  when missing.
+- The examples write coverage elements without presence flags
+  (`{"crs": "EPSG:4326", "bbox": [...]}`). Both servers infer a flag when its
+  key is absent, and never over an explicit `false`.
+
+**`service.connection` on a synthesized manifest.** §3.3.0 says clients "MUST
+be able to extract `service.connection` from any result and use it to join the
+service's DDS domain", while §8.2.3 marks the field OPTIONAL. An `Announce` has
+no connection block to carry, so a manifest synthesized from one cannot supply
+it, and F.1's rule is to omit rather than invent. Clients here take the domain
+and peers from Layer 1 (`bootstrap`) instead, which §7.3 anticipates. Filed
+against 1.8; a manifest this deployment *hosts* is returned verbatim and does
+carry a connection block.
+
 ## Coverage & frames
 
 - `disco.CoverageElement` with explicit presence flags and CRS on earth-fixed
@@ -196,7 +226,19 @@ metadata when an authority publishes it, but neither server publishes its own.
 - Every discovery payload carries a `coverage_frame_ref` (`FrameRef{uuid,fqn}`,
   plus the 1.6 `coord_convention`, ENU throughout) with optional per-element
   overrides.
-- Intersection checks honour the 2D `[west,south,east,north]` ordering.
+- Intersection is the full §3.3.4 model: `bbox`, `aabb` and `circle`, unioned
+  across an element's geometries and across elements, with `global` matching on
+  either side. A circle is approximated by its bounding box, which §3.3.4
+  permits, and a geographic circle's metre radius is converted to degrees.
+- Elements are compared only within one frame — the element's own `frame_ref`
+  when set, `coverage_frame_ref` otherwise, earth-fixed when neither. Resolving
+  a transform between frames is a §3.3.4 MAY that is not attempted, so a local
+  metric footprint is invisible to a lon/lat query rather than matching it by
+  numeric coincidence.
+- One implementation, in `spatialdds_demo/discovery_http.py`. The on-bus
+  `CoverageQuery` responder and the catalogue server reach it through
+  `SpatialDDSValidator.check_coverage_intersection`, so bus matching and HTTP
+  matching cannot disagree.
 - `Aabb3` keeps `min_xyz` / `max_xyz` — only `TileMeta`'s loose pair was
   removed. The demo publishes no tilesets, so nothing needed folding.
 - The `coverage_window_*` fields are still not emitted; see
