@@ -1,4 +1,11 @@
-# Base image for SpatialDDS demo (Cyclone DDS + Python bindings)
+# Base image for SpatialDDS demo (Cyclone DDS + Python bindings).
+#
+# Pinned to CycloneDDS 11.0.1 (C library and Python binding move together;
+# upstream renumbered from 0.10.5 straight to 11.0.0). The typed-wire migration
+# requires it: idlc 0.10.5 emits the spec's `global` and `from` field names
+# verbatim, which are Python keywords, so the generated modules are a
+# SyntaxError — and 0.10.5 has no annotate.member_name to repair it. 11.0.1
+# emits `_global` / `_from` and imports cleanly.
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -18,7 +25,7 @@ RUN apt-get update && apt-get install -y \
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 WORKDIR /opt
-RUN git clone --depth 1 --branch 0.10.5 https://github.com/eclipse-cyclonedds/cyclonedds.git
+RUN git clone --depth 1 --branch 11.0.1 https://github.com/eclipse-cyclonedds/cyclonedds.git
 WORKDIR /opt/cyclonedds
 RUN mkdir build && cd build && \
     cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_SHARED_LIBS=ON -DENABLE_SECURITY=OFF -DBUILD_DDSPERF=OFF -DBUILD_IDLC=ON -DBUILD_TOOLS=ON && \
@@ -32,7 +39,7 @@ ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV PATH=/usr/local/bin:$PATH
 
 RUN python3 -m pip install --upgrade pip
-RUN python3 -m pip install --no-cache-dir cyclonedds==0.10.5
+RUN python3 -m pip install --no-cache-dir cyclonedds==11.0.1
 
 # Verify required tools are available in the image
 RUN idlc -h >/dev/null

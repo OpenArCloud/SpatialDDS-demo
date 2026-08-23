@@ -1,5 +1,5 @@
 # SpatialDDS demo image built on top of the prebuilt Cyclone DDS base
-FROM ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
+FROM ghcr.io/openarcloud/cyclonedds-python-base:11.0.1-ubuntu22.04
 
 WORKDIR /app
 
