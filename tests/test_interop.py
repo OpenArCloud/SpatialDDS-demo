@@ -36,12 +36,33 @@ DOMAIN = int(os.getenv("SPATIALDDS_INTEROP_DOMAIN", "31"))
 
 
 def _require_dds():
+    """
+    A participant, or a loud skip.
+
+    Gated on ``CYCLONEDDS_URI`` as well as on the import: cyclonedds will
+    happily build a participant on a host with no usable networking config,
+    and these tests then fail late and confusingly rather than skipping. The
+    demo image sets it; a developer laptop does not.
+    """
+    if not os.getenv("CYCLONEDDS_URI"):
+        raise unittest.SkipTest(
+            "DDS-UNAVAILABLE: CYCLONEDDS_URI is unset — run this in the "
+            "demo image (see the module docstring)")
     try:
         from cyclonedds.domain import DomainParticipant
 
         return DomainParticipant(DOMAIN)
     except Exception as exc:                           # pragma: no cover
         raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
+
+
+def _subprocess_env() -> dict:
+    """The probe runs as its own process; it needs the repo importable."""
+    env = dict(os.environ)
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (f"{_REPO}{os.pathsep}{existing}" if existing
+                         else str(_REPO))
+    return env
 
 
 class Interop(unittest.TestCase):
@@ -59,13 +80,15 @@ class Interop(unittest.TestCase):
             [sys.executable, "-m", "multi_operator_fusion.synthetic_publisher",
              "--domain", str(DOMAIN), "--operators", "2", "--rate", "5",
              "--max-frames", "300", "--quiet"],
-            cwd=str(_REPO), stderr=subprocess.DEVNULL)
+            cwd=str(_REPO), stderr=subprocess.DEVNULL,
+            env=_subprocess_env())
         try:
             time.sleep(4.0)
             probe = subprocess.run(
                 [sys.executable, str(PROBE), "--domain", str(DOMAIN),
                  "--receive-only", "--timeout", "15"],
-                cwd=str(_REPO), capture_output=True, text=True, timeout=120)
+                cwd=str(_REPO), capture_output=True, text=True, timeout=120,
+                env=_subprocess_env())
         finally:
             publisher.terminate()
             try:
@@ -108,7 +131,8 @@ class Interop(unittest.TestCase):
             probe = subprocess.run(
                 [sys.executable, str(PROBE), "--domain", str(DOMAIN),
                  "--publish-only", "--publish-seconds", "4"],
-                cwd=str(_REPO), capture_output=True, text=True, timeout=120)
+                cwd=str(_REPO), capture_output=True, text=True, timeout=120,
+                env=_subprocess_env())
             time.sleep(2.0)
         finally:
             stop.set()
