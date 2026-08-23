@@ -12,7 +12,7 @@ import numpy as np
 import scipy.io
 
 from deepsense_types import BBox2D, Detection2D, Detection2DSet, RadTensorFrame, RadTensorMeta, RfBeamFrame, RfBeamMeta, TensorAxis
-from spatialdds_types import BlobRef, CamIntrinsics, FrameHeader, FrameRef, GeoPose, PoseSE3, QuaternionXYZW, StreamMeta, Time, Vec3, VisionFrame, VisionMeta
+from sensor_types import BlobRef, CamIntrinsics, FrameHeader, FrameRef, GeoPose, PoseSE3, QuaternionXYZW, StreamMeta, Time, Vec3, VisionFrame, VisionMeta
 
 BLOCKAGE_THRESHOLD = 0.12
 IMAGE_WIDTH = 960

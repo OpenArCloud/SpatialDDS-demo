@@ -92,6 +92,7 @@ class MqttDdsBridge:
         "video_frame": "VIDEO_LIVE",
         "radar_tensor": "RADAR_RT",
         "radar_detection": "RADAR_RT",
+        "oarc.detection3d_set": "RADAR_RT",
         "rf_beam": "RF_BEAM_RT",
         "oarc.detection3d_velocity": "RADAR_RT",
         "oarc.framed_pose": "POSE_RT",

@@ -19,8 +19,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from dds_envelope_transport import EnvelopeTransport
-from spatialdds_types import to_dict
+from spatialdds_demo import payloads
+from sensor_types import to_dict
 from nuscenes_to_spatialdds import (
     camera_to_vision_meta,
     ego_pose_to_spatialdds,
@@ -68,6 +68,20 @@ def _topic_ego() -> str:
     return "spatialdds/nuscenes/ego/pose/v1"
 
 
+def _topic_geo() -> str:
+    return "spatialdds/nuscenes/geo/ego/pose/v1"
+
+
+def _topic_vision_meta(cam: str) -> str:
+    # Metadata is its own lane: a different type, and a latched one, so a
+    # late joiner gets the calibration without waiting for a republish.
+    return f"spatialdds/nuscenes/vision/{cam}/meta/v1"
+
+
+def _topic_lidar_meta() -> str:
+    return "spatialdds/nuscenes/lidar/LIDAR_TOP/meta/v1"
+
+
 def _iter_scene_samples(nusc: NuScenes, scene_name: str):
     scene = next((s for s in nusc.scene if s["name"] == scene_name), None)
     if scene is None:
@@ -80,13 +94,17 @@ def _iter_scene_samples(nusc: NuScenes, scene_name: str):
         token = sample["next"]
 
 
-def _publish_json(transport: EnvelopeTransport, logical_topic: str, msg_type: str, payload: Dict):
-    transport.publish(
-        logical_topic=logical_topic,
-        msg_type=msg_type,
-        payload_json=json.dumps(payload),
-        request_id=str(payload.get("frame_seq", "")),
-    )
+# Each lane: (§3.3.2 type name, §3.3.3 QoS profile). The announce and the
+# writers are built from this, so a lane cannot be announced under one type
+# and published as another.
+TYPE_EGO_POSE   = ("oarc.framed_pose", "POSE_RT")
+TYPE_GEO_POSE   = ("geopose", "POSE_RT")
+TYPE_VISION_META = ("oarc.video_frame_meta", "MAP_META")
+TYPE_VISION      = ("video_frame", "VIDEO_LIVE")
+TYPE_LIDAR_META  = ("oarc.lidar_meta", "MAP_META")
+TYPE_LIDAR       = ("oarc.lidar_frame", "GEOM_TILE")
+TYPE_RAD_DET     = ("radar_detection", "RADAR_RT")
+TYPE_DET3D       = ("oarc.detection3d_set", "RADAR_RT")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -96,12 +114,22 @@ def run(args: argparse.Namespace) -> int:
 
     nusc = NuScenes(version=args.version, dataroot=str(dataroot), verbose=not args.quiet)
 
-    transport = EnvelopeTransport(
-        on_message_callback=lambda _env: None,
-        domain_id=args.domain,
-        local_sender_id="nuscenes-publisher",
-    )
-    transport.start()
+    from cyclonedds.domain import DomainParticipant
+
+    from spatialdds_demo import topic_types, typed_transport as tt
+
+    participant = DomainParticipant(args.domain)
+    writers: Dict[str, tt.TypedDictWriter] = {}
+
+    def publish(topic: str, lane, payload: Dict) -> None:
+        """Write one sample on `topic`, building it into the lane's type."""
+        type_name, profile = lane
+        writer = writers.get(topic)
+        if writer is None:
+            writer = tt.TypedDictWriter(
+                participant, topic, topic_types.resolve(type_name), profile)
+            writers[topic] = writer
+        writer.write(payload)
 
     sent_meta = set()
     frame_seq = 0
@@ -114,17 +142,20 @@ def run(args: argparse.Namespace) -> int:
             lidar_sd = nusc.get("sample_data", sample["data"][LIDAR_CHANNEL])
             ego_pose = nusc.get("ego_pose", lidar_sd["ego_pose_token"])
             pose, geopose = ego_pose_to_spatialdds(ego_pose)
-            _publish_json(
-                transport,
-                _topic_ego(),
-                "NUSC_EGO_POSE",
-                {
-                    "frame_seq": frame_seq,
-                    "stamp": {"sec": ego_pose["timestamp"] // 1_000_000, "nanosec": (ego_pose["timestamp"] % 1_000_000) * 1000},
-                    "pose_se3": to_dict(pose),
-                    "geopose": to_dict(geopose),
-                },
-            )
+            stamp = {"sec": ego_pose["timestamp"] // 1_000_000,
+                     "nanosec": (ego_pose["timestamp"] % 1_000_000) * 1000}
+            # The old payload bundled pose_se3 and geopose in one message
+            # with a frame_seq — a shape no spec type has. A local pose and a
+            # geographic one are two types, so they are two lanes; a consumer
+            # that wants only the geographic pose subscribes to only that.
+            publish(_topic_ego(), TYPE_EGO_POSE, {
+                "pose": to_dict(pose),
+                "frame_ref": payloads.frame_ref("nuscenes/map"),
+                "cov": dict(payloads.COV_NONE),
+                "stamp": stamp,
+            })
+            publish(_topic_geo(), TYPE_GEO_POSE, {**to_dict(geopose),
+                                                  "stamp": stamp})
 
             for cam in CAM_CHANNELS:
                 if cam not in sample["data"]:
@@ -134,20 +165,20 @@ def run(args: argparse.Namespace) -> int:
 
                 if cam not in sent_meta:
                     meta = camera_to_vision_meta(sd, cs)
-                    _publish_json(transport, _topic_vision(cam), "NUSC_VISION_META", to_dict(meta))
+                    publish(_topic_vision_meta(cam), TYPE_VISION_META, to_dict(meta))
                     sent_meta.add(cam)
 
                 frame = sample_data_to_vision_frame(sd, frame_seq)
-                _publish_json(transport, _topic_vision(cam), "NUSC_VISION_FRAME", to_dict(frame))
+                publish(_topic_vision(cam), TYPE_VISION, to_dict(frame))
 
             if LIDAR_CHANNEL in sample["data"]:
                 sd = nusc.get("sample_data", sample["data"][LIDAR_CHANNEL])
                 cs = nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
                 lidar_meta, lidar_frame = lidar_to_meta_and_frame(sd, cs, frame_seq)
                 if LIDAR_CHANNEL not in sent_meta:
-                    _publish_json(transport, _topic_lidar(), "NUSC_LIDAR_META", to_dict(lidar_meta))
+                    publish(_topic_lidar_meta(), TYPE_LIDAR_META, to_dict(lidar_meta))
                     sent_meta.add(LIDAR_CHANNEL)
-                _publish_json(transport, _topic_lidar(), "NUSC_LIDAR_FRAME", to_dict(lidar_frame))
+                publish(_topic_lidar(), TYPE_LIDAR, to_dict(lidar_frame))
 
             for radar in RADAR_CHANNELS:
                 if radar not in sample["data"]:
@@ -158,10 +189,10 @@ def run(args: argparse.Namespace) -> int:
                     continue
                 radar_pc = RadarPointCloud.from_file(str(radar_path))
                 det_set = radar_to_detection_set(sd, radar_pc.points, frame_seq)
-                _publish_json(transport, _topic_radar(radar), "NUSC_RAD_DET_SET", to_dict(det_set))
+                publish(_topic_radar(radar), TYPE_RAD_DET, to_dict(det_set))
 
             det_set = sample_annotations_to_set(nusc, sample, frame_seq)
-            _publish_json(transport, _topic_det3d(), "NUSC_DET3D_SET", to_dict(det_set))
+            publish(_topic_det3d(), TYPE_DET3D, to_dict(det_set))
 
             if not args.quiet:
                 print(f"[publisher] frame_seq={frame_seq} sample={sample['token']}", file=sys.stderr)
@@ -171,7 +202,7 @@ def run(args: argparse.Namespace) -> int:
             if args.max_samples > 0 and frame_seq >= args.max_samples:
                 break
     finally:
-        transport.stop()
+        pass
 
     return 0
 

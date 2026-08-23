@@ -39,7 +39,9 @@ from spatialdds_idl.spatial.events import SpatialEvent
 from spatialdds_idl.spatial.semantics import Detection3DSet
 from spatialdds_idl.spatial.vio import ImuSample
 from spatialdds_idl.spatial.sensing.lidar import LidarFrame, LidarMeta
-from spatialdds_idl.spatial.sensing.rad import RadTensorFrame, RadTensorMeta
+from spatialdds_idl.spatial.sensing.rad import (
+    RadDetectionSet, RadTensorFrame, RadTensorMeta,
+)
 from spatialdds_idl.spatial.sensing.rf_beam import RfBeamFrame, RfBeamMeta
 from spatialdds_idl.spatial.sensing.vision import VisionFrame, VisionMeta
 
@@ -52,7 +54,9 @@ REGISTERED: Dict[str, Type] = {
     "spatial_event": SpatialEvent,
     "video_frame": VisionFrame,
     "radar_tensor": RadTensorFrame,
-    "radar_detection": Detection3DSet,
+    # "Per-frame detection set | Structured radar detections" — the
+    # radar-specific type, not the semantic one. See the extension below.
+    "radar_detection": RadDetectionSet,
     "vps_query": VpsRequest,
     # Appendix E provisional: registered in 3.3.2, IDL ships under
     # idl/v1.7/examples/. Provisional in the spec's sense — the type is
@@ -81,6 +85,11 @@ EXTENSIONS: Dict[str, Type] = {
     # though spatial::anchors::AnchorDelta is a stable 1.7 type — the same
     # registry gap as lidar and the sensor metadata types below.
     "oarc.anchor_delta": AnchorDelta,
+    # 3.3.2 registers no name for semantics::Detection3DSet — the answer to
+    # the spec's own "what objects exist and where?" question, and the type
+    # every perception consumer wants. `radar_detection` is radar's
+    # RadDetectionSet; there is nothing for the semantic set.
+    "oarc.detection3d_set": Detection3DSet,
 
     # --- registered-name gaps: the struct exists, the registry name does not.
     # 3.3.2 registers `radar_tensor` and `video_frame` for the frame types but

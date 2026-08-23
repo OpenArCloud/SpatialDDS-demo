@@ -553,6 +553,7 @@ class _BrowserPublisher:
         "video_frame": "VIDEO_LIVE",
         "radar_tensor": "RADAR_RT",
         "radar_detection": "RADAR_RT",
+        "oarc.detection3d_set": "RADAR_RT",
         "rf_beam": "RF_BEAM_RT",
         "vps_query": "VPS_REQ",
         "oarc.detection3d_velocity": "RADAR_RT",

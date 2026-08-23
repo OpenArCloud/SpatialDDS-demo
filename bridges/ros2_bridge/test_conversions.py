@@ -418,7 +418,7 @@ class TestDispatch(unittest.TestCase):
     def test_registered_types_route_to_a_decoder(self):
         for type_name, decoder in (
             ("oarc.detection3d_velocity", detection3d_set_to_array),
-            ("radar_detection", detection3d_set_to_array),
+            ("oarc.detection3d_set", detection3d_set_to_array),
             ("oarc.fused_track", detection3d_set_to_array),
             ("oarc.framed_pose", framed_pose_to_pose_stamped),
             ("geopose", geo_pose_to_nav_sat_fix),

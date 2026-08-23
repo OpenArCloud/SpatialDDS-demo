@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
-from spatialdds_types import FrameHeader, StreamMeta, Time
+from sensor_types import FrameHeader, StreamMeta, Time
 
 
 @dataclass

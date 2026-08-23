@@ -45,7 +45,11 @@ from test_mocks import (  # noqa: E402
 # demo-private `ROS2_*` / `NUSC_*` / `DEEPSENSE_*` labels — every publisher
 # invented its own name for the same thing, so every consumer kept an alias
 # list. One registry name per type now.
-SDDS_MSG_TYPES_DETECTION3D = ("oarc.detection3d_velocity", "radar_detection")
+# `radar_detection` is deliberately NOT here. It is rad::RadDetectionSet —
+# range/azimuth/doppler/rcs — not a 3D box set, so it does not decode into a
+# vision_msgs/Detection3DArray. 3.3.2 registers no name for the semantic
+# Detection3DSet, which is why the demo has to use an oarc.* one.
+SDDS_MSG_TYPES_DETECTION3D = ("oarc.detection3d_velocity", "oarc.detection3d_set")
 SDDS_MSG_TYPES_FUSED_TRACK = ("oarc.fused_track",)
 SDDS_MSG_TYPES_FRAMED_POSE = ("oarc.framed_pose",)
 SDDS_MSG_TYPES_GEO_POSE = ("geopose",)

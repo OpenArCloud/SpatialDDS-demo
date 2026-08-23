@@ -29,8 +29,21 @@ class Registry(unittest.TestCase):
             with self.subTest(type=name):
                 self.assertTrue(callable(topic_types.resolve(name)))
 
-    def test_radar_detection_is_the_spec_set_type(self):
-        self.assertEqual(topic_types.resolve("radar_detection").__name__, "Detection3DSet")
+    def test_radar_detection_is_the_radar_set_not_the_semantic_one(self):
+        """
+        3.3.2's `radar_detection` is "structured radar detections" —
+        rad::RadDetectionSet, which carries range/azimuth/doppler/rcs. It is
+        not semantics::Detection3DSet, which carries 3D boxes.
+
+        The registry names no type for the semantic set, though the spec's
+        own "what objects exist and where?" table points at exactly that
+        type. So the demo has to reach for an `oarc.*` name for the most
+        central perception type there is.
+        """
+        self.assertEqual(topic_types.resolve("radar_detection").__name__,
+                         "RadDetectionSet")
+        self.assertEqual(topic_types.resolve("oarc.detection3d_set").__name__,
+                         "Detection3DSet")
 
     def test_unknown_type_is_skippable_not_fatal(self):
         """§3.3.2 treats unregistered values as extension points."""
