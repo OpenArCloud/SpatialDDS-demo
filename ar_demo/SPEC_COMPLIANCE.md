@@ -1,7 +1,12 @@
 # SpatialDDS v1.7 Compliance Notes
 
-**Status:** ✅ Aligned with v1.7 draft profiles
-**Date:** 2026-08-22
+**Conformant to:** SpatialDDS 1.7 (2026-08-23, tag `v1.7`) — the stamped
+release, not a draft revision. `idl/v1.7/` is vendored verbatim from that tag
+and `docs/SpatialDDS-1.7-full.md` is its assembled text.
+
+**Not tracking `main`.** The spec repo's main branch is now the 1.8 draft. This
+demo moves to 1.8 under a deliberate migration brief; see
+`scripts/generate_types.py` for the pin and the resync command.
 
 ## The wire
 
@@ -135,7 +140,7 @@ is `geopose` / `VPS_RESP` (it was the unregistered `node_geo` before).
 
 Anchor deltas are `anchor_delta` / `ANCHOR_DELTA`, both registered. They used
 to be deployment-specific extensions (`oarc.anchor_delta`) because 1.7 named
-neither; the findings-batch-2 revision added both, along with twelve other
+neither; 1.7's findings-batch-2 revision added both, along with twelve other
 registry rows and four other QoS profiles that this demo had been working
 around. See "Extensions" below for what is left.
 
@@ -249,13 +254,13 @@ Five, down from twelve. The seven that went away, and what replaced them:
 
 | Was | Now | Added by |
 |---|---|---|
-| `oarc.detection3d_velocity` (`DetectionWithVelocity` wrapping `Detection3D`) | `detection3d` — `Detection3D` has `has_velocity`/`velocity` | findings batch 2 |
-| `oarc.framed_pose` | `framed_pose` | findings batch 2 |
-| `oarc.detection2d_set` (demo-local `Detection2D`/`BBox2D`) | `detection2d` — `semantics::Detection2DSet` | findings batch 2 |
-| `oarc.lidar_frame`, `oarc.lidar_meta`, `oarc.radar_tensor_meta`, `oarc.video_frame_meta`, `oarc.rf_beam_meta`, `oarc.imu_sample`, `oarc.anchor_delta` | the same names without the prefix | findings batch 2 |
-| `oarc.blob_chunk` (demo-local `BlobChunk` at a 65535 bound) | `spatial::core::BlobChunk` — the spec's bound is 65535 now | findings batch 2 |
-| VPS request/response (`oarc.vps_response`, and demo `VpsRequest`/`QualityRequirements`/`LocalizeQuality`) | `vps_query` / `vps_response` — `argeo::VpsRequest` / `VpsResponse` / `QualityRequirements` / `VpsStatus`. Query imagery rides `query_blobs` (`BlobRef`); result rides `NodeGeo` | batch 3 |
-| `oarc.fused_track` (`oarc_demo::FusedTrackSet`) | `fused_track` — `semantics::FusedTrackSet` on `DET_RT` | batch 3 |
+| `oarc.detection3d_velocity` (`DetectionWithVelocity` wrapping `Detection3D`) | `detection3d` — `Detection3D` has `has_velocity`/`velocity` | 1.7 findings batch 2 |
+| `oarc.framed_pose` | `framed_pose` | 1.7 findings batch 2 |
+| `oarc.detection2d_set` (demo-local `Detection2D`/`BBox2D`) | `detection2d` — `semantics::Detection2DSet` | 1.7 findings batch 2 |
+| `oarc.lidar_frame`, `oarc.lidar_meta`, `oarc.radar_tensor_meta`, `oarc.video_frame_meta`, `oarc.rf_beam_meta`, `oarc.imu_sample`, `oarc.anchor_delta` | the same names without the prefix | 1.7 findings batch 2 |
+| `oarc.blob_chunk` (demo-local `BlobChunk` at a 65535 bound) | `spatial::core::BlobChunk` — the spec's bound is 65535 now | 1.7 findings batch 2 |
+| VPS request/response (`oarc.vps_response`, and demo `VpsRequest`/`QualityRequirements`/`LocalizeQuality`) | `vps_query` / `vps_response` — `argeo::VpsRequest` / `VpsResponse` / `QualityRequirements` / `VpsStatus`. Query imagery rides `query_blobs` (`BlobRef`); result rides `NodeGeo` | 1.7 batch 3 |
+| `oarc.fused_track` (`oarc_demo::FusedTrackSet`) | `fused_track` — `semantics::FusedTrackSet` on `DET_RT` | 1.7 batch 3 |
 
 The VPS and fusion flows are now on spec types end-to-end — request/response,
 publisher, bridges and the interop probe all name the registered types. The
@@ -282,10 +287,14 @@ Three, all flagged rather than quietly resolved:
   data. The §3.3.3 table's deadline column is normative for that reason, and
   `tests/test_interop.py::DeadlineIsLoadBearing` pins the behaviour so it
   cannot be rediscovered the hard way.
-* **EntityBinding removal is unspecified (1.8 gaps note).** `core::EntityBinding`
-  is `@key entity_id`, RELIABLE + TRANSIENT_LOCAL, update-in-place — the spec
-  says how a binding is created and refreshed, but is silent on how one is
-  *removed* when the entity it correlates is gone (dispose vs. TTL vs. a
-  tombstone sample). The demo publishes bindings and lets the reader's
-  KEEP_LAST hold the latest per key; it does not invent a removal convention.
-  Raised for 1.8, not patched here.
+* **EntityBinding removal is unspecified — filed against 1.8.**
+  `core::EntityBinding` is `@key entity_id`, RELIABLE + TRANSIENT_LOCAL,
+  update-in-place. The spec says how a binding is created and refreshed and is
+  silent on how one is *removed* when the entity it correlates is gone:
+  dispose, TTL, and a tombstone sample are all defensible and they are not
+  interchangeable to a consumer.
+
+  1.7 is stamped, so this cannot be a 1.7 patch — it is a 1.8 item. The demo
+  publishes bindings and lets the reader's KEEP_LAST hold the latest per key;
+  it does not invent a removal convention, because inventing one is how two
+  implementations end up disagreeing silently.

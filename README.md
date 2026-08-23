@@ -1,8 +1,17 @@
 # SpatialDDS Demo
 
-Reference demos for the SpatialDDS 1.7 draft spec (https://spatialdds.org), running
-on CycloneDDS. The repo bundles the upstream IDL under `idl/v1.7`, mirrors the
-manifest examples in `manifests/v1.7`, and ships four runnable demos.
+Reference demos for **SpatialDDS 1.7** (https://spatialdds.org) — the stamped
+release, 2026-08-23, tag `v1.7` — running on CycloneDDS. The repo vendors that
+release's IDL verbatim under `idl/v1.7`, mirrors its manifest examples in
+`manifests/v1.7`, and ships four runnable demos.
+
+> **The pin is the `v1.7` tag, not the spec repo's `main`.** Main is now the
+> 1.8 draft, bootstrapped from 1.7 and still carrying unswept `/1.7`
+> identifiers. Resyncing from it would mix draft 1.8 IDL into a demo that
+> documents itself as 1.7 conformant — and the drift gate would not catch it,
+> because generated output always matches whatever is vendored. This demo
+> moves to 1.8 only under a deliberate migration brief. Resync instructions
+> and the reasoning are in `scripts/generate_types.py`.
 
 **The demos publish spec IDL types on spec-named topics with spec QoS
 profiles.** One DDS topic per logical topic, carrying the §3.3.2 type its

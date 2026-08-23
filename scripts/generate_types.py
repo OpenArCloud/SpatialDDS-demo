@@ -6,6 +6,26 @@ Runs ``idlc -l py`` over ``idl/v1.7/`` (the verbatim spec bundle) and
 ``idl/demo/`` (demo-owned structs for flows the spec has no type for), applies
 the fixes idlc's Python backend needs, and writes an importable package.
 
+Spec provenance
+---------------
+
+``idl/v1.7/`` is vendored verbatim from **SpatialDDS 1.7 (2026-08-23, tag
+``v1.7``)** in ``OpenArCloud/SpatialDDS-spec``. Resync with::
+
+    git -C ../SpatialDDS-spec archive v1.7 idl/v1.7 | tar -x -C .
+    python3 scripts/generate_types.py --check
+
+The pin is the **tag**, not a commit hash: ``v1.7`` is a stamped release and
+will not move, so it says what this demo conforms to in a way a hash does
+not.
+
+**Do not track the spec repo's ``main``.** Main is the 1.8 draft, bootstrapped
+from 1.7 and carrying unswept ``/1.7`` identifiers — resyncing from it would
+silently mix draft 1.8 IDL into a demo that documents itself as 1.7
+conformant, and the drift gate would pass because the generated output would
+match whatever was vendored. This demo moves to 1.8 only under a deliberate
+migration brief, the way it moved to each 1.7 revision.
+
 The generated tree is checked in, so day-to-day work needs neither idlc nor
 Docker. ``--check`` re-runs the generator into a temp directory and diffs, so
 stale output is a test failure rather than a surprise.

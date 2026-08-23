@@ -162,11 +162,15 @@ def _vec3(value, keys=("x", "y", "z")) -> Optional[tuple]:
 def _parse_detection(raw: dict, source_operator: str, modality: str,
                      default_sigma: float) -> Optional[Detection3D]:
     """
-    Parse one `oarc_demo::DetectionWithVelocity`.
+    Parse one `spatial::semantics::Detection3D`.
 
-    The row composes the spec `Detection3D` (which has no velocity member)
-    with the velocity this fuser gates on. `source_modality` comes from the
-    row when present, since the base station and the AV operators differ.
+    Velocity is a member of the type — `has_velocity` / `velocity` — so the
+    fuser gates on it directly. The demo used to wrap Detection3D in
+    `oarc_demo::DetectionWithVelocity` to add exactly those two fields;
+    1.7 added them and the wrapper is gone.
+
+    `modality` is the caller's, derived from the topic: the base station and
+    the AV operators differ, and Detection3D has no member for it.
     """
     detection = raw
     center = _vec3(detection.get("center"))

@@ -2,9 +2,9 @@
 
 *An open invitation to build a shared bus for spatial data, AI world models, and digital twins.*
 
-**Version**: 1.7 (Draft)
+**Version**: 1.7
 
-**Date**: 2026-XX-XX
+**Date**: 2026-08-23
 
 **Author**: James Jackson [Open AR Cloud] – james.jackson [at] openarcloud [dot] org
 
@@ -453,7 +453,7 @@ SpatialDDS uses semantic versioning of the form `spatial.<profile>/MAJOR.MINOR`.
 * **MAJOR** increments for breaking schema or wire changes.
 * **MINOR** increments for additive, compatible changes.
 
-> **Pre-adoption instability (Normative).** The compatibility contract above takes effect upon formal adoption of this specification. Throughout the 1.x pre-adoption series, MINOR revisions MAY include breaking schema or wire changes. Each revision's Profile Matrix (§3.5) and changelog identify breaking changes explicitly. Topic names retain the `/v1` segment through the 1.x series notwithstanding such changes.
+> **Pre-adoption instability (Normative).** The compatibility contract above takes effect upon formal adoption of this specification. Throughout the 1.x pre-adoption series, MINOR revisions MAY include breaking schema or wire changes. Each revision's Profile Matrix (§3.5) and changelog identify breaking changes explicitly. Topic names retain the `/v1` segment through the 1.x series notwithstanding such changes. 1.7 is a stamped release; subsequent breaking changes land in 1.8 or later, not in revisions to this document.
 
 Profile identifiers use the single form `spatial.<profile>/MAJOR.MINOR` (e.g., `spatial.core/1.7`) everywhere: prose, manifests, discovery payloads, and IDL constants.
 
@@ -487,6 +487,8 @@ EntityBinding is registered as type `entity_binding` in §3.3.2 and SHOULD be ad
 
 Blob payloads are transported as `BlobChunk` sequences. Consumers MUST be prepared for partial delivery and SHOULD apply a per-blob timeout window based on expected rate and `total_chunks`.
 
+Chunk payloads are bounded at 65,535 bytes for compatibility with common DDS language bindings' sequence-bound limits. Larger content is carried in more chunks; per-chunk `crc32` and blob-level checksums are unchanged.
+
 - **Timeout guidance:** Consumers SHOULD apply a per-blob timeout of at least `2 × (total_chunks / expected_rate)` seconds when an expected rate is known.
 - **Failure handling:** If all chunks have not arrived within this window under **RELIABLE** QoS, the consumer SHOULD discard the partial blob and MAY re-request it via `SnapshotRequest`.
 - **BEST_EFFORT behavior:** Under **BEST_EFFORT** QoS, consumers MUST NOT assume complete delivery and SHOULD treat blobs as opportunistic.
@@ -517,6 +519,8 @@ SpatialDDS distinguishes three discovery layers:
 - **Layer 2 — On-Bus Discovery:** how a device, once connected to a DDS domain, discovers services, coverage, and streams via DDS topics. This is what the Discovery profile's IDL types define.
 
 Layer 1 mechanisms deliver a **Bootstrap Manifest** that provides the parameters needed to transition to Layer 1.5 or Layer 2. Layer 1.5 delivers **Service Manifests** (§8.2.3) that provide the DDS connection parameters needed to transition to Layer 2. Clients MAY skip Layer 1.5 if Layer 1 already provides sufficient connection information (e.g., local mDNS bootstrap on the venue LAN).
+
+On-bus bootstrap exchanges (a participant querying an already-joined bus for deployment parameters) are deployment-specific and not standardized; the Layer 1 mechanisms above are the interoperable bootstrap path.
 
 ##### **Bootstrap Manifest (Normative)**
 
@@ -1184,62 +1188,94 @@ Profile MINOR bumps (`@extensibility(APPENDABLE)` additions) MUST NOT change top
 
 #### **3.3.2 Typed Topics Registry**
 
+> **Registry completeness rule.** Every struct in Appendices A–D intended for publication as a topic SHALL have a registry row. Adding a topic-bearing struct without a registry row is a spec defect. Provisional registered types (`rf_beam`, `radio_scan`) ship under `idl/<ver>/provisional/`.
+
 | Type | Typical Payload | Notes |
 |------|------------------|-------|
-| `geometry_tile` | 3D tile data (GLB, 3D Tiles) | Large, reliable transfers |
-| `video_frame` | Encoded video/image | Real-time camera streams |
-| `radar_detection` | Per-frame detection set | Structured radar detections |
-| `radar_tensor` | N-D float/int tensor | Raw/processed radar data cube |
-| `rf_beam` | Beam sweep power vectors | Phased-array beam power measurements |
-| `radio_scan` | Per-scan radio observations | WiFi/BLE/UWB/cellular fingerprint observations |
-| `seg_mask` | Binary or PNG mask | Frame-aligned segmentation |
-| `desc_array` | Feature descriptor sets | Vector or embedding batches |
-| `map_meta` | Map lifecycle descriptor | Latched; TRANSIENT_LOCAL |
-| `map_alignment` | Inter-map transform | Latched; TRANSIENT_LOCAL |
-| `map_event` | Map lifecycle event | Lightweight notifications |
-| `spatial_zone` | Named zone definition | Latched; TRANSIENT_LOCAL |
-| `spatial_event` | Spatially-scoped event | Typed alerts and anomalies |
-| `zone_state` | Zone occupancy snapshot | Periodic dashboard feed |
-| `agent_status` | Agent availability advertisement | Latched; TRANSIENT_LOCAL (provisional) |
-| `task_offer` | Agent bid on a task | Volatile offer with TTL (provisional) |
-| `task_assignment` | Coordinator task binding | Latched; TRANSIENT_LOCAL (provisional) |
-| `navsat_status` | GNSS receiver diagnostics | Companion to GeoPose |
-| `planned_trajectory` | Future agent trajectory with waypoints | Intent sharing, cooperative planning |
-| `entity_binding` | Cross-topic entity correlation | Scene graph construction, digital twins |
-| `geopose` | Global pose sample | GNSS/VPS localization outputs |
-| `vps_query` | VPS localization request | Query image/features + hints |
+| `geometry_tile` | 3D tile data (GLB, 3D Tiles) | Large, reliable transfers — `core::TileMeta`; QoS `GEOM_TILE` |
+| `video_frame` | Encoded video/image | Real-time camera streams — `sensing::vision::VisionFrame`; QoS `VIDEO_LIVE` |
+| `radar_detection` | Per-frame detection set | Structured radar detections — `sensing::rad::RadDetectionSet`; QoS `RADAR_RT` |
+| `radar_tensor` | N-D float/int tensor | Raw/processed radar data cube — `sensing::rad::RadTensorFrame`; QoS `RADAR_RT` |
+| `rf_beam` | Beam sweep power vectors | Phased-array beam power measurements — `sensing::rf_beam::RfBeamFrame`; QoS `RF_BEAM_RT` (provisional) |
+| `radio_scan` | Per-scan radio observations | WiFi/BLE/UWB/cellular fingerprint observations — `sensing::radio::RadioScan`; QoS `RADIO_SCAN_RT` (provisional) |
+| `seg_mask` | Binary or PNG mask | Frame-aligned segmentation — `sensing::vision::VisionFrame` (alias of `video_frame`); QoS `SEG_MASK_RT` |
+| `desc_array` | Feature descriptor sets | Vector or embedding batches — `slam_frontend::KeyframeFeatures`; QoS `DESC_BATCH` |
+| `map_meta` | Map lifecycle descriptor | Latched; TRANSIENT_LOCAL — `mapping::MapMeta`; QoS `MAP_META` |
+| `map_alignment` | Inter-map transform | Latched; TRANSIENT_LOCAL — `mapping::MapAlignment`; QoS `MAP_META` |
+| `map_event` | Map lifecycle event | Lightweight notifications — `mapping::MapEvent`; QoS `MAP_META` |
+| `spatial_zone` | Named zone definition | Latched; TRANSIENT_LOCAL — `events::SpatialZone`; QoS `ZONE_META` |
+| `spatial_event` | Spatially-scoped event | Typed alerts and anomalies — `events::SpatialEvent`; QoS `EVENT_RT` |
+| `zone_state` | Zone occupancy snapshot | Periodic dashboard feed — `events::ZoneState`; QoS `ZONE_META` |
+| `navsat_status` | GNSS receiver diagnostics | Companion to GeoPose — `core::NavSatStatus` |
+| `planned_trajectory` | Future agent trajectory with waypoints | Intent sharing, cooperative planning — `core::PlannedTrajectory`; QoS `EVENT_RT` |
+| `entity_binding` | Cross-topic entity correlation | Scene graph construction, digital twins — `core::EntityBinding` |
+| `geopose` | Global pose sample | GNSS/VPS localization outputs — `core::GeoPose`; QoS `POSE_RT` |
+| `vps_query` | VPS localization request | Query image/features + hints — `argeo::VpsRequest`; QoS `VPS_REQ` |
+| `vps_response` | VPS localization response | `argeo::VpsResponse`; QoS `VPS_RESP` |
+| `framed_pose` | Located metric pose | `core::FramedPose`; QoS `POSE_RT` |
+| `detection3d` | 3D detection set | `semantics::Detection3DSet`; QoS `DET_RT` |
+| `detection2d` | 2D (image-space) detection set | `semantics::Detection2DSet`; QoS `DET_RT` |
+| `fused_track` | Cross-source fused track set | `semantics::FusedTrackSet`; QoS `DET_RT` |
+| `lidar_frame` | Per-frame lidar cloud index | `sensing::lidar::LidarFrame`; QoS `LIDAR_RT` |
+| `lidar_meta` | Lidar stream metadata | `sensing::lidar::LidarMeta`; QoS `SENSOR_META` (latched) |
+| `radar_tensor_meta` | Radar tensor stream metadata | `sensing::rad::RadTensorMeta`; QoS `SENSOR_META` (latched) |
+| `video_meta` | Camera/vision stream metadata | `sensing::vision::VisionMeta`; QoS `SENSOR_META` (latched) |
+| `rf_beam_meta` | RF beam stream metadata (provisional) | `sensing::rf_beam::RfBeamMeta`; QoS `SENSOR_META` (latched) |
+| `imu_sample` | Raw IMU sample | `vio::ImuSample`; QoS `IMU_RT` |
+| `anchor_delta` | Anchor registry delta | `anchors::AnchorDelta`; QoS `ANCHOR_DELTA` |
+| `rad_sensor_meta` | Radar (detection) stream metadata | `sensing::rad::RadSensorMeta`; QoS `SENSOR_META` (latched) |
+| `radio_sensor_meta` | Radio stream metadata (provisional) | `sensing::radio::RadioSensorMeta`; QoS `SENSOR_META` (latched) |
 
 These registered types ensure consistent topic semantics without altering wire framing. New types can be registered additively through this table or extensions.
 
 Implementations defining custom `type` and `qos_profile` values SHOULD follow the naming pattern (`myorg.depth_frame`, `DEPTH_LIVE`) and document their DDS QoS mapping.
 
+##### **Informative Example Registrations**
+
+*Types defined only in Appendix E examples (informative). These registrations are **not** part of the conformance surface — the normative registry gate does not require or check them; it only confirms they resolve.*
+
+| Type | Typical Payload | Notes |
+|------|------------------|-------|
+| `agent_status` | Agent availability advertisement | `agent::AgentStatus` (informative example, Appendix E) |
+| `task_offer` | Agent bid on a task | `agent::TaskOffer` (informative example, Appendix E) |
+| `task_assignment` | Coordinator task binding | `agent::TaskAssignment` (informative example, Appendix E) |
+
 #### **3.3.3 QoS Profiles**
 
 QoS profiles define delivery guarantees and timing expectations for each topic type.
 
-| Profile | Reliability | Ordering | Typical Deadline | Use Case |
-|----------|--------------|----------|------------------|-----------|
-| `GEOM_TILE` | Reliable | Ordered | 200 ms | 3D geometry, large tile data |
-| `VIDEO_LIVE` | Best-effort | Ordered | 33 ms | Live video feeds |
-| `VIDEO_ARCHIVE` | Reliable | Ordered | 200 ms | Replay or stored media |
-| `RADAR_RT` | Partial | Ordered | 20 ms | Real-time radar data (detections or tensors) |
-| `RF_BEAM_RT` | Best-effort | Ordered | 20 ms | Real-time beam sweep data |
-| `RADIO_SCAN_RT` | Best-effort | Ordered | 500 ms | Radio fingerprint scans (WiFi/BLE/UWB) |
-| `SEG_MASK_RT` | Best-effort | Ordered | 33 ms | Live segmentation masks |
-| `DESC_BATCH` | Reliable | Ordered | 100 ms | Descriptor or feature batches |
-| `MAP_META` | Reliable | Ordered | 1000 ms | Map descriptors, alignments, events |
-| `ZONE_META` | Reliable | Ordered | 1000 ms | Zone definitions, zone state |
-| `EVENT_RT` | Reliable | Ordered | 100 ms | Spatial events and alerts |
-| `POSE_RT` | Best-effort | Ordered | 33 ms | Live pose streams |
-| `VPS_REQ` | Reliable | Ordered | 500 ms | VPS localization requests |
-| `VPS_RESP` | Reliable | Ordered | 500 ms | VPS localization responses |
+| Profile | Reliability | Ordering | Durability | History | Deadline | Use Case |
+|----------|--------------|----------|------------|---------|----------|-----------|
+| `GEOM_TILE` | Reliable | Ordered | Transient-local | KeepLast(1) | — | 3D geometry, large tile data |
+| `VIDEO_LIVE` | Best-effort | Ordered | Volatile | KeepLast(1) | 33 ms | Live video feeds |
+| `VIDEO_ARCHIVE` | Reliable | Ordered | Volatile | KeepAll | — | Replay or stored media |
+| `RADAR_RT` | Best-effort | Ordered | Volatile | KeepLast(1) | 100 ms | Real-time radar data (detections or tensors) |
+| `RF_BEAM_RT` | Best-effort | Ordered | Volatile | KeepLast(1) | 20 ms | Real-time beam sweep data |
+| `RADIO_SCAN_RT` | Best-effort | Ordered | Volatile | KeepLast(1) | — | Radio fingerprint scans (WiFi/BLE/UWB) |
+| `SEG_MASK_RT` | Best-effort | Ordered | Volatile | KeepLast(1) | 33 ms | Live segmentation masks |
+| `DESC_BATCH` | Reliable | Ordered | Volatile | KeepAll | — | Descriptor or feature batches |
+| `MAP_META` | Reliable | Ordered | Transient-local | KeepLast(1) | — | Map descriptors, alignments, events |
+| `ZONE_META` | Reliable | Ordered | Transient-local | KeepLast(1) | — | Zone definitions, zone state |
+| `EVENT_RT` | Reliable | Ordered | Volatile | KeepLast(64) | — | Spatial events and alerts |
+| `POSE_RT` | Best-effort | Ordered | Volatile | KeepLast(1) | 33 ms | Live pose streams |
+| `VPS_REQ` | Reliable | Ordered | Volatile | KeepAll | — | VPS localization requests |
+| `VPS_RESP` | Reliable | Ordered | Volatile | KeepAll | — | VPS localization responses |
+| `DET_RT` | Best-effort | Ordered | Volatile | KeepLast(1) | 100 ms | Detection sets (2D/3D) |
+| `LIDAR_RT` | Best-effort | Ordered | Volatile | KeepLast(1) | 100 ms | Lidar frames |
+| `IMU_RT` | Best-effort | Ordered | Volatile | KeepLast(1) | 10 ms | IMU samples |
+| `SENSOR_META` | Reliable | Ordered | Transient-local | KeepLast(1) | — | Sensor/stream metadata |
+| `ANCHOR_DELTA` | Reliable | Ordered | Volatile | KeepAll | — | Anchor delta streams; snapshots via manifests |
 
 ###### Notes
 
 * Each topic advertises its `qos_profile` during discovery.
 * Profiles capture trade-offs between latency, reliability, and throughput.
-* Implementations may tune low-level DDS settings, but the profile name is canonical.
+* `RADAR_RT` is **Best-effort**: detection sets tolerate loss, and integrity of individual samples is protected by per-type checksums where present. There is no partial-reliability kind in DDS.
 * Mixing unrelated data (e.g., radar + video) in a single QoS lane is discouraged.
+
+> **Normative QoS surface.** For each profile, Reliability, Durability, History, and Deadline (as specified in the table columns) are normative: writers and readers SHALL set exactly these policies. Where Deadline is "—", the Deadline QoS SHALL be left at its default (infinite). Other DDS policies MAY be tuned per deployment.
+>
+> **Deadline is request/offered.** A reader requesting a Deadline does not match a writer that offers none, and the failure is silent — no error is raised and no samples flow. This is why Deadline values are normative rather than typical. Note that DDS Deadline is a per-instance inter-sample-period contract, not a latency bound; it is therefore specified only for periodic stream profiles.
 
 ##### Discovery and Manifest Integration
 
@@ -1263,6 +1299,8 @@ Consumers use these three keys to match and filter streams without inspecting pa
 - When `global == false`, producers MAY supply any combination of regional hints; consumers SHOULD treat the union of all regions as the effective coverage.
 - Manifests MAY provide any combination of `bbox`, `geohash`, and `elements`. Discovery coverage MAY omit `geohash` and rely solely on `bbox` and `aabb`. Consumers SHALL treat all hints consistently according to the Coverage Model.
 - When `has_bbox == true`, `bbox` MUST contain finite coordinates; consumers SHALL reject non-finite values. When `has_bbox == false`, consumers MUST ignore `bbox` entirely. Same rules apply to `has_aabb` and `aabb`.
+- **Circle.** `circle_center` follows the same frame rules as `bbox` (geographic: lon, lat[, alt]; local: meters in `coverage_frame_ref`); `circle_radius_m` is always meters. For intersects evaluation a circle MAY be approximated by its bounding box; producers SHOULD prefer the circle form over a hand-computed bounding box so consumers can recover the exact footprint.
+- **Derived coverage.** A service whose coverage is a function of its inputs (e.g., a fusion service) SHOULD list the contributing services in `coverage_source_ids`. A non-empty list marks the declared coverage elements as an approximation of the union of the sources' coverage; consumers MAY resolve the sources for exact extents. An empty list means coverage is self-asserted.
 - Earth-fixed frames (`fqn` rooted at `earth-fixed`) encode WGS84 longitude/latitude/height. Local frames MUST reference anchors or manifests that describe the transform back to an earth-fixed root (Appendix G).
 - Discovery announces and manifests share the same coverage semantics and flags. `CoverageQuery` responders SHALL apply these rules consistently when filtering or paginating results.
 - See §2 Conventions for global normative rules.
@@ -1348,20 +1386,20 @@ Together, these profiles give SpatialDDS the flexibility to support robotics, AR
 
 | Profile | Version in 1.7 | Status | 1.7 Change |
 |---|---|---|---|
-| spatial.core | 1.7 | Stable | **Breaking:** `Time.sec` int64; compound `@key` on `Node`/`Edge`; `GeoPose` orientation fixed to local ENU (removed `frame_kind`/`frame_ref`, `GeoFrameKind`); `TileMeta` single `aabb` (removed `min_xyz`/`max_xyz`/`lod`); removed `BlobChunk.last` |
-| spatial.discovery | 1.7 | Stable | **Breaking:** `CoverageResponse` returns `ServiceSummary` rows; `caps.features` now `sequence<string>` (removed `FeatureFlag`); removed `ProfileSupport.preferred`, `CoverageElement.type`, `CoverageQuery.expr` |
-| spatial.sensing.common | 1.7 | Stable | No IDL change (version unified to 1.7) |
+| spatial.core | 1.7 | Stable | **Breaking:** `Time.sec` int64; compound `@key` on `Node`/`Edge`; `GeoPose` orientation fixed to local ENU (removed `frame_kind`/`frame_ref`, `GeoFrameKind`); `TileMeta` single `aabb` (removed `min_xyz`/`max_xyz`/`lod`); removed `BlobChunk.last`. **Findings batch 2 (draft rev):** Breaking — `BlobChunk.data` bound 262144→65535; Additive — `MetaKV.entries` typed rows + `common::KV` |
+| spatial.discovery | 1.7 | Stable | **Breaking:** `CoverageResponse` returns `ServiceSummary` rows; `caps.features` now `sequence<string>` (removed `FeatureFlag`); removed `ProfileSupport.preferred`, `CoverageElement.type`, `CoverageQuery.expr`. **Findings batch 2 (draft rev):** Additive — `ServiceKind` +SENSING/INFRASTRUCTURE/FUSION; `CoverageElement` circle; `Announce.coverage_source_ids` |
+| spatial.sensing.common | 1.7 | Stable | **Findings batch 2 (draft rev):** Additive — `Codec` +PNG |
 | spatial.manifest | 1.7 | Stable | Single-identifier profile string; schema bumped to `/1.7` |
 | spatial.anchors | 1.7 | Stable | No IDL change (version unified to 1.7) |
-| spatial.argeo | 1.7 | Stable | No IDL change (version unified to 1.7) |
+| spatial.argeo | 1.7 | Stable | **Findings batch 3 (draft rev):** Additive — VPS request/response pair (`VpsRequest`/`VpsResponse`/`QualityRequirements`/`VpsStatus`) |
 | spatial.sensing.rad | 1.7 | Stable | No IDL change (version unified to 1.7) |
 | spatial.sensing.lidar | 1.7 | Stable | No IDL change (version unified to 1.7) |
 | spatial.sensing.vision | 1.7 | Stable | No IDL change (version unified to 1.7) |
-| spatial.slam_frontend | 1.7 | Stable | No IDL change (version unified to 1.7) |
-| spatial.vio | 1.7 | Stable | No IDL change (version unified to 1.7) |
-| spatial.semantics | 1.7 | Stable | No IDL change (version unified to 1.7) |
+| spatial.slam_frontend | 1.7 | Stable | **Findings batch 2 (draft rev):** Breaking — `KeyframeFeatures.descriptors` bound 1048576→65535 (larger sets via blob transfer) |
+| spatial.vio | 1.7 | Stable | **Findings batch 2 (draft rev):** Additive — `ImuSample` accel/gyro covariance (`CovMatrix`) |
+| spatial.semantics | 1.7 | Stable | **Findings batch 2 (draft rev):** Additive — `Detection3D.velocity`. **Batch 3:** Additive — `FusedTrack` / `FusedTrackSet` |
 | spatial.mapping | 1.7 | Stable | **Breaking:** compound `@key` on `mapping::Edge` (`map_id`, `edge_id`), aligning with `core::Node`/`Edge` |
-| spatial.events | 1.7 | Stable | No IDL change (version unified to 1.7) |
+| spatial.events | 1.7 | Stable | **Findings batch 2 (draft rev):** Additive — `EventType.PREDICTED_CONFLICT`; `SpatialEvent.participant_ids` |
 | spatial.sensing.rf_beam | 1.7 | Provisional (Appendix E) | No IDL change (version unified to 1.7) |
 | spatial.sensing.radio | 1.7 | Provisional (Appendix E) | No IDL change (version unified to 1.7) |
 | spatial.neural | 1.7 | Informative example (Appendix E) | No IDL change (version unified to 1.7) |
@@ -1399,6 +1437,8 @@ While SpatialDDS establishes a practical baseline for real-time spatial computin
   The Mapping extension enables multi-agent map discovery, alignment, and lifecycle coordination. Future work could formalize map merge protocols, distributed optimization coordination, and standardized map quality benchmarks for fleet-scale deployments.  
 * **Standards Alignment**  
   Ongoing coordination with OGC, Khronos, W3C, and GSMA initiatives will help ensure SpatialDDS complements existing geospatial, XR, and telecom standards rather than duplicating them.
+* **On-bus content catalog query**  
+  `ContentAnnounce` plus manifests and HTTP search cover content discovery today. Whether an on-bus, area-scoped catalog query/response joins them is an open design question; evidence from federation prototypes will inform it. Deliberately not added in 1.7.
 
 ### Wire-Level Interop Testing
 
@@ -1953,10 +1993,19 @@ module spatial {
       CoordConvention coord_convention;
     };
 
+    // Simple typed key/value row for structured extension metadata.
+    // Added in 1.7 draft rev so MetaKV can carry typed extensions inline.
+    @extensibility(APPENDABLE) struct KV {
+      string key;    // SHOULD be namespaced, e.g., "org.key"
+      string value;  // scalar or string-valued extension
+    };
+
     // Optional namespaced metadata bag for asset descriptors.
     @extensibility(APPENDABLE) struct MetaKV {
       string namespace;  // e.g., "sensing.vision.features"
       string json;       // JSON object string; producer-defined for this namespace
+      // appended in 1.7 draft rev
+      sequence<KV, 64> entries;   // typed extension rows; see typed-first rule (§ Appendix A)
     };
 
     // Uniform contract for asset references, covering fetch + integrity.
@@ -1972,6 +2021,8 @@ module spatial {
 #endif // SPATIAL_COMMON_TYPES_INCLUDED
 
 ```
+
+> **Typed-first extension rule (Normative).** Producers SHOULD carry scalar and string-valued extensions in `MetaKV.entries` (typed key/value rows) and reserve `MetaKV.json` for genuinely free-form payloads. Consumers MUST accept either. Keys SHOULD be namespaced (`org.key`). This keeps extension data on the typed wire and inspectable without JSON parsing.
 
 ### **Core Module**
 
@@ -2058,7 +2109,7 @@ module spatial {
       @key uint32 index;     // chunk index (0..N-1)
       uint32 total_chunks;   // total number of chunks expected for this blob_id
       uint32 crc32;          // CRC32 checksum over 'data'
-      sequence<uint8, 262144> data; // ≤256 KiB per sample
+      sequence<uint8, 65535> data; // <=65535 bytes per chunk (binding-compatible bound; see §3.2)
     };
 
     // ---------- Pose Graph (minimal) ----------
@@ -2369,7 +2420,11 @@ module spatial {
       @value(4) STORAGE,
       @value(5) CONTENT,
       @value(6) ANCHOR_REGISTRY,
-      @value(7) OTHER
+      @value(7) OTHER,
+      // appended in 1.7 draft rev; ordinals frozen
+      @value(8) SENSING,          // sensor/data-producing service (e.g., AV fleet, RSU feed)
+      @value(9) INFRASTRUCTURE,   // fixed roadside/venue infrastructure unit
+      @value(10) FUSION           // multi-source fusion/aggregation service
     };
 
     @extensibility(APPENDABLE) struct KV {
@@ -2405,6 +2460,11 @@ module spatial {
       boolean has_coverage_window;
       Time    coverage_window_start;
       Time    coverage_window_end;
+
+      // appended in 1.7 draft rev
+      boolean has_circle;
+      double  circle_center[3];   // frame rules as bbox (§3.3.4); alt/z may be 0
+      double  circle_radius_m;    // radius in meters, always
     };
 
     // Validity window for time-bounded transforms.
@@ -2442,6 +2502,8 @@ module spatial {
       string auth_hint;
       Time stamp;
       uint32 ttl_sec;
+      // appended in 1.7 draft rev
+      sequence<string, 16> coverage_source_ids;  // empty = self-asserted coverage
     };
 
     @extensibility(APPENDABLE) struct CoverageHint {
@@ -2709,7 +2771,9 @@ module spatial { module sensing { module common {
     @value(23) AV1,
     @value(40) FP8Q,
     @value(41) FP4Q,
-    @value(42) AE_V1
+    @value(42) AE_V1,
+    // appended in 1.7 draft rev; ordinals frozen
+    @value(43) PNG       // lossless PNG raster (e.g., segmentation label masks)
   };
 
   enum PayloadKind {
@@ -2887,6 +2951,12 @@ module spatial {
       Time   stamp;
       string source_id;
       uint64 seq;
+
+      // appended in 1.7 draft rev
+      boolean has_accel_cov;
+      spatial::core::CovMatrix accel_cov;   // valid when has_accel_cov == true
+      boolean has_gyro_cov;
+      spatial::core::CovMatrix gyro_cov;    // valid when has_gyro_cov == true
     };
 
     // Magnetometer
@@ -3202,7 +3272,9 @@ module spatial {
       uint32 desc_len;                      // bytes per descriptor
       boolean row_major;                    // layout hint
       sequence<Feature2D, 4096> keypoints;  // ≤4096
-      sequence<uint8, 1048576> descriptors; // ≤1 MiB packed bytes
+      // <=65535 packed bytes per sample (binding-compatible bound; see §3.2).
+      // Larger descriptor sets ride blob transfer (BlobRef + BlobChunk).
+      sequence<uint8, 65535> descriptors;
       Time   stamp;
       string source_id;
       uint64 seq;
@@ -3348,6 +3420,10 @@ module spatial {
       boolean has_num_pts;
       uint32  num_lidar_pts;             // valid when has_num_pts == true
       uint32  num_radar_pts;             // valid when has_num_pts == true
+
+      // appended in 1.7 draft rev
+      boolean has_velocity;
+      spatial::common::Vec3 velocity;    // m/s in the detection's frame (valid when has_velocity == true)
     };
 
     @extensibility(APPENDABLE) struct Detection3DSet {
@@ -3358,6 +3434,46 @@ module spatial {
       sequence<Detection3D, spatial::sensing::common::SZ_SMALL> dets;    // ≤256
       Time   stamp;
       string source_id;
+    };
+
+    // ---- Cross-source fused tracks ----
+    // A FusedTrack is a track correlated across multiple contributing sources
+    // (operators/modalities) by a fusion service. Provenance — which sources
+    // fed the track — is the reason the type exists; per-source detection
+    // links are carried out-of-band via core::EntityBinding. §3.3.2 registers
+    // FusedTrackSet as topic type fused_track (QoS DET_RT).
+    @extensibility(APPENDABLE) struct FusedTrack {
+      string track_id;                   // stable fused-track id
+      string object_class;               // semantic label
+      float  confidence;                 // [0..1]
+
+      // Position with optional covariance, in the set's frame_ref.
+      spatial::common::Vec3 position;    // meters
+      boolean has_position_cov;
+      spatial::common::Mat3x3 position_cov; // 3x3 position covariance (row-major)
+
+      // Velocity with optional covariance (mirrors Detection3D velocity).
+      boolean has_velocity;
+      spatial::common::Vec3 velocity;    // m/s in the set's frame_ref
+      boolean has_velocity_cov;
+      spatial::common::Mat3x3 velocity_cov; // 3x3 velocity covariance (row-major)
+
+      // Provenance — the contributing sources.
+      sequence<string, 16> source_operators;   // operator ids that fed this track
+      sequence<string, 16> source_modalities;  // e.g., "camera", "radar", "lidar"
+      uint32 source_count;                     // number of distinct contributing sources
+
+      double track_age_s;                      // seconds since the track was first observed
+    };
+
+    @extensibility(APPENDABLE) struct FusedTrackSet {
+      @key string stream_id;             // fusion stream this set belongs to
+      string schema_version;             // MUST be "spatial.semantics/1.7"
+      FrameRef frame_ref;                // common frame for the set
+      sequence<FusedTrack, spatial::sensing::common::SZ_SMALL> tracks;  // ≤256
+      Time   stamp;
+      string source_id;
+      uint64 seq;
     };
 
   }; // module semantics
@@ -3775,6 +3891,8 @@ module spatial { module sensing { module lidar {
 
 The `poses` array uses `core::FramedPose` — each entry is self-contained with its own frame reference and covariance. This replaces the previous pattern of a single bare `PoseSE3` with frame_ref and cov as sibling fields, which could only express one local pose and left the relationship between the top-level cov and the geopose's cov ambiguous.
 
+**VPS request/response binding (Normative).** `VpsRequest` and `VpsResponse` correlate by `query_id` and are exchanged on the `VPS_REQ` / `VPS_RESP` topics (registered as `vps_query` / `vps_response` in §3.3.2). Query imagery and descriptors travel by blob reference (`VpsRequest.query_blobs`, `BlobRef`) — never inline bytes, per §3.2. The response carries its result in a `NodeGeo`: the `FramedPose` entries follow the frame rules of their `frame_ref`, and any `GeoPose` anchor follows the GeoPose orientation rule (orientation in the local ENU tangent frame at the encoded position).
+
 ```idl
 // SPDX-License-Identifier: MIT
 // SpatialDDS AR+Geo 1.7
@@ -3831,6 +3949,71 @@ module spatial {
       string  source_id;
       uint64  seq;                       // per-source monotonic
       uint64  graph_epoch;               // increments on major rebases/merges
+    };
+
+    // ---- VPS localization request/response ----
+    // Visual Positioning Service query/response pair. §3.3.2 registers the
+    // topic types vps_query (VpsRequest) and vps_response (VpsResponse);
+    // request and response correlate by query_id on the VPS_REQ / VPS_RESP
+    // topics. Query imagery and descriptors travel by blob reference
+    // (spatial::core::BlobRef) — never inline bytes (§3.2).
+
+    // Accuracy requirements the caller needs the fix to satisfy.
+    @extensibility(APPENDABLE) struct QualityRequirements {
+      double max_rmse_m;        // maximum acceptable position RMSE (meters)
+      double min_confidence;    // minimum acceptable confidence [0..1]
+    };
+
+    enum VpsStatus {
+      @value(0) VPS_SUCCESS,    // fix computed within the requested quality
+      @value(1) VPS_DEGRADED,   // fix computed but below requested quality
+      @value(2) VPS_FAILED      // no fix produced
+    };
+
+    @extensibility(APPENDABLE) struct VpsRequest {
+      @key string query_id;              // correlates the reply
+      string service_id;                 // which VPS service is being asked
+
+      FrameRef client_frame_ref;         // client's local frame
+
+      // Optional prior pose to seed localization.
+      boolean has_prior_geopose;
+      GeoPose prior_geopose;             // valid when has_prior_geopose == true
+
+      // Query imagery and/or descriptors, always by reference — never inline
+      // bytes (§3.2). BlobRef.role distinguishes payloads, e.g.
+      // "vps/query-image", "vps/query-descriptors".
+      sequence<spatial::core::BlobRef, 8> query_blobs;
+
+      // Optional link to the camera stream whose VisionMeta carries the
+      // intrinsics/calibration for query_blobs. Empty when not applicable.
+      string query_stream_id;
+
+      // Absent (has_quality_requirements == false) means the service's
+      // default accuracy requirements apply.
+      boolean has_quality_requirements;
+      QualityRequirements quality_requirements;
+
+      Time stamp;
+    };
+
+    @extensibility(APPENDABLE) struct VpsResponse {
+      @key string query_id;              // mirrors VpsRequest.query_id
+      string service_id;
+
+      VpsStatus status;                  // outcome of the localization attempt
+
+      // Localized result: NodeGeo carries the metric pose(s) (FramedPose with
+      // covariance) and an optional WGS84 GeoPose anchor. Absent on failure.
+      boolean has_node_geo;
+      NodeGeo node_geo;                  // valid when has_node_geo == true
+
+      // Quality report.
+      double confidence;                 // [0..1]
+      boolean has_rmse_m;
+      double rmse_m;                     // estimated position RMSE (m), valid when has_rmse_m == true
+
+      Time stamp;
     };
 
   }; // module argeo
@@ -4262,6 +4445,8 @@ The profile defines three types:
 
 **Integration with Discovery:** Zone publishers announce via `disco::Announce` with `kind: OTHER` (or a future `ZONE_MANAGER` kind) and `coverage` matching the zone's spatial extent. Consumers use `CoverageQuery` filtered by `module_id_in: ["spatial.events/1.7"]` to discover event sources in a region. `SpatialZone` geometry reuses the same `Aabb3` and `FrameRef` primitives as `CoverageElement`, ensuring consistent spatial reasoning.
 
+**Prediction semantics (Normative).** `stamp` is when the event sample was produced; `event_start` is when the event begins or is predicted to begin. For predicted events `event_start > stamp`, and `event_start − stamp` is the prediction lead time. An event in progress has `event_start ≤ stamp`. No additional lead-time field is needed.
+
 **Topic Layout**
 
 | Type | Topic | QoS | Notes |
@@ -4330,7 +4515,9 @@ module spatial {
           @value(9)  LINE_CROSS,      // object crossed a defined trip line
           @value(10) LOITERING,       // person/object lingering beyond threshold
           @value(11) TAILGATING,      // unauthorized entry following authorized person
-          @value(12) OTHER
+          @value(12) OTHER,
+          // appended in 1.7 draft rev; ordinals frozen
+          @value(13) PREDICTED_CONFLICT // predicted future conflict/collision (event_start > stamp)
         };
       };
 
@@ -4490,6 +4677,9 @@ module spatial {
       sequence<MetaKV, 8> attributes;
 
       string schema_version;            // MUST be "spatial.events/1.7"
+
+      // appended in 1.7 draft rev
+      sequence<string, 8> participant_ids;  // symmetric participants (track or agent ids)
     };
 
 
@@ -4778,7 +4968,7 @@ module spatial {
       @value(0) NAVIGATE,         // Move to a target pose or region
       @value(1) OBSERVE,          // Collect sensor data at/around a target
       @value(2) MANIPULATE,       // Physically interact with an object
-      @value(3) MAP,              // Build or extend a spatial map
+      @value(3) MAPPING,          // Build or extend a spatial map
       @value(4) DELIVER,          // Transport an item to a target
       @value(5) REPORT,           // Generate and publish a data report
       @value(255) CUSTOM          // Deployment-specific; describe in params
@@ -4828,7 +5018,7 @@ module spatial {
       // Examples:
       //   NAVIGATE: {"speed_mps": 1.5, "altitude_m": 30}
       //   OBSERVE:  {"sensor": "cam_front", "duration_sec": 60, "coverage_overlap": 0.3}
-      //   MAP:      {"resolution_m": 0.05, "region_radius_m": 50}
+      //   MAPPING:  {"resolution_m": 0.05, "region_radius_m": 50}
       //   REPORT:   {"format": "json", "include_images": true}
       string params;                     // JSON object string; empty if no params
 
@@ -5840,7 +6030,7 @@ The conformance tests in this appendix validate **schema expressiveness** — wh
 - **Runtime correctness** of publish/subscribe delivery, QoS enforcement, or temporal ordering.
 - **End-to-end data fidelity** of encode → transmit → decode round-trips.
 
-Wire-level interop tests across at least two DDS vendors are planned for a future revision (see §6 Future Directions).
+Wire-level interop tests across at least two DDS vendors are planned for a future revision (see §6 Future Directions). Such a suite SHOULD, per QoS profile (§3.3.3), verify endpoint matching between two independently configured participants — a reader and a writer that each set the profile's normative policies from scratch. Deadline is request/offered and matches silently: a reader requesting a Deadline will not match a writer that offers none, so a per-profile matching check is the class of failure this catches.
 
 Pass rates reported below reflect expressiveness coverage. A "pass" means the dataset field has a complete, lossless mapping to SpatialDDS types. A "gap" means no suitable type exists and an extension is needed. Deferred items are fields that can be carried (e.g., via `MetaKV`) but lack first-class typed support.
 
@@ -6187,7 +6377,7 @@ The dataset was chosen because it is the first C-SLAM dataset to include UWB int
 
 | ID | Check | Description |
 |---|---|---|
-| SD-01 | Service announcement | Each robot publishes `Announce` with `ServiceKind.SLAM` and sensor capabilities in `topics[]`. |
+| SD-01 | Service announcement | Each robot publishes `Announce` with `ServiceKind.MAPPING` and sensor capabilities in `topics[]`. |
 | SD-02 | Spatial coverage | `Announce.coverage` (Aabb3 or geo-bounds) advertises each robot's operational area. |
 | SD-03 | Multi-frame NodeGeo | After inter-map alignment, `NodeGeo.poses[]` carries a node's pose in multiple robots' map frames simultaneously (FramedPose array). |
 
@@ -6222,7 +6412,7 @@ Deferred items are fields that CAN be carried (typically via `MetaKV`) but lack 
 
 The S3E "teaching building" outdoor sequence illustrates the full multi-agent lifecycle:
 
-1. **Bootstrap.** Three robots (Alpha, Blob, Carol) power on and each publishes an `Announce` with `ServiceKind.SLAM`, their sensor capabilities, and an initial coverage bounding box. Each begins publishing `core::Node` and `core::Edge` (ODOM) on the pose graph topics with distinct `source_id` and `map_id` values.
+1. **Bootstrap.** Three robots (Alpha, Blob, Carol) power on and each publishes an `Announce` with `ServiceKind.MAPPING`, their sensor capabilities, and an initial coverage bounding box. Each begins publishing `core::Node` and `core::Edge` (ODOM) on the pose graph topics with distinct `source_id` and `map_id` values.
 
 2. **Independent mapping.** Each robot runs visual-inertial-lidar SLAM independently. `MapMeta` per robot shows `state = BUILDING`. Keyframes stream as `core::Node`; odometry constraints as `core::Edge` (ODOM); intra-robot loop closures as `core::Edge` (LOOP). `ImuSample`, `VisionFrame`, and `LidarFrame` are published on per-robot sensor topics.
 
@@ -6865,7 +7055,7 @@ spatialdds-idl/
     └── agent.idl           # Agent task coordination (Informative only in 1.7)
 ```
 
-This repository organizes the v1.7 IDL files in a flat layout under `idl/v1.7/` (with `examples/` for provisional and informative profiles); both organizations are valid as long as `#include` paths and module declarations match.
+This repository organizes the v1.7 IDL files in a flat layout under `idl/v1.7/` (with `provisional/` for provisional profiles — `rf_beam.idl`, `radio.idl` — and `examples/` for informative-only profiles — `neural_example.idl`, `agent_example.idl`); both organizations are valid as long as `#include` paths and module declarations match.
 
 Module namespacing follows the IDL `module` declarations:
 
