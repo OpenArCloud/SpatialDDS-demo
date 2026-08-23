@@ -33,7 +33,9 @@ export type LocalizeResponse = {
   quality: {
     success: boolean;
     confidence: number;
-    rmse_m: number;
+    /** null when the service did not report one — VpsResponse.has_rmse_m
+     *  is false. Not the same as a perfect 0.00 m fit. */
+    rmse_m: number | null;
   };
 };
 

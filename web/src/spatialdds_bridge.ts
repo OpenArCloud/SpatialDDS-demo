@@ -1,8 +1,11 @@
 import type { CatalogItem, DiscoverResponse, GeoPose, LocalizeResponse } from './types';
 
 const DEFAULT_BRIDGE_URL = 'http://localhost:8088';
-const BRIDGE_URL = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env
-  .VITE_SPATIALDDS_BRIDGE_URL || DEFAULT_BRIDGE_URL;
+// `import.meta.env` is Vite's, so it is absent when this module is imported
+// outside a bundle — which the parser tests do, to exercise the parsers
+// without standing up a browser and a bridge.
+const VITE_ENV = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+const BRIDGE_URL = VITE_ENV?.VITE_SPATIALDDS_BRIDGE_URL || DEFAULT_BRIDGE_URL;
 
 export type BridgeStatus = {
   ok: boolean;
@@ -11,11 +14,23 @@ export type BridgeStatus = {
   announce?: Record<string, unknown> | null;
 };
 
+// spatial::argeo::VpsResponse, as the bridge serialises it. The shape
+// changed with the 1.7 batch-3 types: the demo-local LocalizeQuality struct
+// became a VpsStatus enum with confidence and rmse alongside it, and the
+// correlation id is query_id rather than request_id.
+//
+// Every field the old parser read is gone, and because each read was
+// `?? <default>` the UI degraded silently — always "success", always 0.00
+// confidence, always 0.00 rmse, even on a VPS failure.
 type DdsLocalizeResponse = {
-  request_id?: string;
+  query_id?: string;
   service_id?: string;
-  node_geo?: { geopose?: GeoPose };
-  quality?: { success?: boolean; confidence?: number; rmse_m?: number };
+  status?: string;                    // VpsStatus identifier, e.g. VPS_SUCCESS
+  has_node_geo?: boolean;
+  node_geo?: { has_geopose?: boolean; geopose?: GeoPose };
+  confidence?: number;
+  has_rmse_m?: boolean;
+  rmse_m?: number;
 };
 
 type DdsCatalogResponse = {
@@ -60,16 +75,33 @@ export async function bridgeLocalize(prior: GeoPose): Promise<LocalizeResponse> 
     method: 'POST',
     body: JSON.stringify({ prior_geopose: prior })
   });
-  const dds = payload as DdsLocalizeResponse;
-  const geopose = dds.node_geo?.geopose ?? prior;
+  return parseLocalizeResponse(payload as DdsLocalizeResponse, prior);
+}
+
+// Exported so a fixture test can pin it to a captured bridge response
+// without needing a bridge, a bus, or a browser.
+export function parseLocalizeResponse(
+  dds: DdsLocalizeResponse,
+  prior: GeoPose
+): LocalizeResponse {
+  // Presence flags, not nullability: node_geo and geopose are always on the
+  // wire and the has_* boolean is what says whether to read them.
+  const located = dds.has_node_geo !== false && dds.node_geo?.has_geopose !== false;
+  const geopose = (located && dds.node_geo?.geopose) || prior;
+
   return {
-    request_id: dds.request_id || 'request-unknown',
+    request_id: dds.query_id || 'request-unknown',
     service_id: dds.service_id || 'service-unknown',
     geopose,
     quality: {
-      success: dds.quality?.success ?? true,
-      confidence: dds.quality?.confidence ?? 0.0,
-      rmse_m: dds.quality?.rmse_m ?? 0.0
+      // VpsStatus is an enum identifier (§2.8). Anything that is not an
+      // explicit success is a failure — an unknown status must not read as
+      // one, which is what the old `?? true` did.
+      success: dds.status === 'VPS_SUCCESS',
+      confidence: dds.confidence ?? 0.0,
+      // rmse is presence-flagged: absent means "not reported", which is not
+      // the same as a perfect 0.00 m fit, so it is null rather than 0.
+      rmse_m: dds.has_rmse_m ? (dds.rmse_m ?? 0.0) : null
     }
   };
 }
@@ -87,9 +119,15 @@ export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse
   };
 }
 
-function catalogEntryToItem(entry: Record<string, any>): CatalogItem {
+export function catalogEntryToItem(entry: Record<string, any>): CatalogItem {
   const coverage = Array.isArray(entry.coverage) ? entry.coverage : [];
-  const bbox = coverage.find((item) => Array.isArray(item.bbox) && item.bbox.length >= 4)?.bbox;
+  // `has_bbox` decides, not the presence of the key. Every CoverageElement
+  // carries a bbox member whatever the flag says, so testing the array alone
+  // matched [0, 0, 0, 0] and placed the item off Africa instead of falling
+  // back to the default.
+  const bbox = coverage.find(
+    (item) => item.has_bbox && Array.isArray(item.bbox) && item.bbox.length >= 4
+  )?.bbox;
   const lon = bbox ? (bbox[0] + bbox[2]) / 2 : -122.4194;
   const lat = bbox ? (bbox[1] + bbox[3]) / 2 : 37.7749;
   const nowMs = Date.now();

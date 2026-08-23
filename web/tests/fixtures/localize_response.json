@@ -1,0 +1,71 @@
+{
+  "confidence": 0.87,
+  "has_node_geo": true,
+  "has_rmse_m": true,
+  "node_geo": {
+    "geopose": {
+      "alt_m": 0.6408869742746275,
+      "cov": {
+        "discriminator": "COV_NONE",
+        "none": 0
+      },
+      "lat_deg": 3.491396556889078e-05,
+      "lon_deg": 4.2078220825889034e-05,
+      "q": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "stamp": {
+        "nanosec": 696960926,
+        "sec": 1787522227
+      }
+    },
+    "graph_epoch": 1,
+    "has_geopose": true,
+    "map_id": "sf-downtown-map",
+    "node_id": "node-0001",
+    "poses": [
+      {
+        "cov": {
+          "discriminator": "COV_NONE",
+          "none": 0
+        },
+        "frame_ref": {
+          "coord_convention": "ENU",
+          "fqn": "map/sf-downtown",
+          "has_coord_convention": true,
+          "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3"
+        },
+        "pose": {
+          "q": [
+            -0.03616055503101684,
+            -0.017617204034648934,
+            -0.006371523257027616,
+            0.9991703819035246
+          ],
+          "t": [
+            -0.6382182781275261,
+            -0.1295309154857356,
+            0.3657127379924916
+          ]
+        },
+        "stamp": {
+          "nanosec": 696964979,
+          "sec": 1787522227
+        }
+      }
+    ],
+    "seq": 1,
+    "source_id": "svc:vps:demo/sf-downtown"
+  },
+  "query_id": "fixture-query-0001",
+  "rmse_m": 0.42,
+  "service_id": "svc:vps:demo/sf-downtown",
+  "stamp": {
+    "nanosec": 696966886,
+    "sec": 1787522227
+  },
+  "status": "VPS_SUCCESS"
+}

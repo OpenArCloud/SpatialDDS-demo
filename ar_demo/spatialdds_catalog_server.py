@@ -18,14 +18,30 @@ from spatialdds_demo.topics import (
     TOPIC_SOURCE_SPEC,
 )
 from spatialdds_test import SpatialDDSLogger
-from spatialdds_validation import SpatialDDSValidator
+from spatialdds_validation import SpatialDDSValidator, complete_coverage_element
 
 
 def _load_seed(path: str) -> List[Dict[str, Any]]:
+    """
+    Load the authored catalogue and complete its coverage elements.
+
+    `catalog_seed.json` is hand-authored: it carries the fields a human cares
+    about and omits the presence-flagged ones that are always on the wire.
+    That is the right shape for authored data — it should not have to track
+    every field the IDL gains. `complete_coverage_element` fills the rest in,
+    so the seed does not silently stop building when the spec adds one, which
+    is exactly what happened when 1.7 added `has_circle`/`circle_center`/
+    `circle_radius_m` and this file was three revisions older than the IDL.
+    """
     with open(path, "r", encoding="utf-8") as handle:
         payload = json.load(handle)
     if not isinstance(payload, list):
         raise ValueError("catalog_seed.json must be a list")
+    for entry in payload:
+        entry["coverage"] = [
+            complete_coverage_element(**element)
+            for element in (entry.get("coverage") or [])
+        ]
     return payload
 
 
