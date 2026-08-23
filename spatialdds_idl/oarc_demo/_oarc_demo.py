@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     import spatial.common
     import spatial.core
     import spatial.disco
+    import spatial.semantics
     import spatial.sensing.vision
 
 
@@ -143,6 +144,82 @@ class CatalogResponse(idl.IdlStruct, typename="oarc_demo.CatalogResponse"):
     query_id: str
     results: types.sequence['spatialdds_idl.oarc_demo.CatalogEntry', 256]
     next_page_token: str
+    stamp: 'spatialdds_idl.oarc_demo.Time'
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class DetectionWithVelocity(idl.IdlStruct, typename="oarc_demo.DetectionWithVelocity"):
+    detection: 'spatialdds_idl.spatial.semantics.Detection3D'
+    has_velocity: bool
+    velocity: 'spatialdds_idl.spatial.common.Vec3'
+    source_modality: str
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class OperatorDetectionSet(idl.IdlStruct, typename="oarc_demo.OperatorDetectionSet"):
+    set_id: str
+    annotate.key("set_id")
+    source_operator: str
+    frame_ref: 'spatialdds_idl.spatial.common.FrameRef'
+    dets: types.sequence['spatialdds_idl.oarc_demo.DetectionWithVelocity', 256]
+    frame_seq: types.uint64
+    stamp: 'spatialdds_idl.oarc_demo.Time'
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class FusedTrack(idl.IdlStruct, typename="oarc_demo.FusedTrack"):
+    track_id: str
+    annotate.key("track_id")
+    position: 'spatialdds_idl.spatial.common.Vec3'
+    velocity: 'spatialdds_idl.spatial.common.Vec3'
+    position_uncertainty: types.float64
+    object_class: str
+    confidence: types.float64
+    source_operators: types.sequence[str, 16]
+    source_modalities: types.sequence[str, 16]
+    source_count: types.uint32
+    track_age: types.float64
+    stamp: 'spatialdds_idl.oarc_demo.Time'
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class FusedTrackSet(idl.IdlStruct, typename="oarc_demo.FusedTrackSet"):
+    source_operator: str
+    annotate.key("source_operator")
+    tracks: types.sequence['spatialdds_idl.oarc_demo.FusedTrack', 256]
+    stamp: 'spatialdds_idl.oarc_demo.Time'
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class OperatorTrackCount(idl.IdlStruct, typename="oarc_demo.OperatorTrackCount"):
+    operator_id: str
+    track_count: types.uint32
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class FusionCoverage(idl.IdlStruct, typename="oarc_demo.FusionCoverage"):
+    source_operator: str
+    annotate.key("source_operator")
+    track_count: types.uint32
+    multi_source_count: types.uint32
+    multi_source_pct: types.float64
+    best_single_operator_count: types.uint32
+    coverage_improvement: types.float64
+    best_av_operator_count: types.uint32
+    coverage_improvement_excl_infra: types.float64
+    per_operator_track_count: types.sequence['spatialdds_idl.oarc_demo.OperatorTrackCount', 16]
     stamp: 'spatialdds_idl.oarc_demo.Time'
 
 

@@ -6,8 +6,14 @@ CatalogEntry
 CatalogFilter
 CatalogQuery
 CatalogResponse
+DetectionWithVelocity
+FusedTrack
+FusedTrackSet
+FusionCoverage
 LocalizeQuality
 MODULE_ID
+OperatorDetectionSet
+OperatorTrackCount
 QualityRequirements
 Time
 VpsRequest

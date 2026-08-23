@@ -5,7 +5,7 @@
 
 """
 
-from ._oarc_demo import BootstrapQuery, BootstrapResponse, CatalogEntry, CatalogFilter, CatalogQuery, CatalogResponse, LocalizeQuality, MODULE_ID, QualityRequirements, Time, VpsRequest, VpsResponse
+from ._oarc_demo import BootstrapQuery, BootstrapResponse, CatalogEntry, CatalogFilter, CatalogQuery, CatalogResponse, DetectionWithVelocity, FusedTrack, FusedTrackSet, FusionCoverage, LocalizeQuality, MODULE_ID, OperatorDetectionSet, OperatorTrackCount, QualityRequirements, Time, VpsRequest, VpsResponse
 __all__ = [
 	"BootstrapQuery",
 	"BootstrapResponse",
@@ -13,8 +13,14 @@ __all__ = [
 	"CatalogFilter",
 	"CatalogQuery",
 	"CatalogResponse",
+	"DetectionWithVelocity",
+	"FusedTrack",
+	"FusedTrackSet",
+	"FusionCoverage",
 	"LocalizeQuality",
 	"MODULE_ID",
+	"OperatorDetectionSet",
+	"OperatorTrackCount",
 	"QualityRequirements",
 	"Time",
 	"VpsRequest",

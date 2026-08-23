@@ -146,3 +146,98 @@ def take_with_state(reader: DataReader, *, n: int = 100) -> List[TypedSample]:
             instance_handle=handle,
         ))
     return out
+
+
+@dataclass
+class TopicSample:
+    """A sample plus the topic it arrived on."""
+
+    topic: str
+    type_name: str
+    data: Any
+    alive: bool = True
+    instance_handle: Optional[int] = None
+
+
+class MultiTopicSubscriber:
+    """
+    One reader per typed topic, discovered rather than hardcoded.
+
+    This is what replaces the envelope's "single reader sees everything". The
+    envelope bought that convenience by putting every stream in one QoS lane;
+    here each topic keeps its own type and its own profile, and the consumer
+    pays for it by having to learn which topics exist.
+
+    Topics come from announced ``TopicMeta`` rows — the spec-native path, since
+    a service already advertises its topics with their type and QoS profile.
+    Unknown types are skipped, not fatal: §3.3.2 treats unregistered values as
+    extension points.
+    """
+
+    def __init__(self, participant: DomainParticipant):
+        self._participant = participant
+        self._readers: Dict[str, Tuple[Any, str]] = {}   # topic -> (reader, type_name)
+        self._lock = threading.Lock()
+
+    @property
+    def topics(self) -> List[str]:
+        with self._lock:
+            return sorted(self._readers)
+
+    def subscribe(self, topic: str, datatype: Type, qos_profile: str,
+                  type_name: str = "") -> bool:
+        """Add a reader for one topic. False if already subscribed."""
+        with self._lock:
+            if topic in self._readers:
+                return False
+        reader = make_reader(self._participant, topic, datatype, qos_profile)
+        with self._lock:
+            self._readers[topic] = (reader, type_name or datatype.__name__)
+        return True
+
+    def subscribe_from_topic_meta(self, topics: Any) -> List[str]:
+        """
+        Subscribe to every announced topic whose type this build can resolve.
+
+        ``topics`` is an announce's ``TopicMeta`` sequence (typed rows or the
+        JSON equivalent). Returns the topics newly subscribed.
+        """
+        from spatialdds_demo import topic_types
+
+        added: List[str] = []
+        for row in topics or []:
+            name = _meta_field(row, "name")
+            type_name = _meta_field(row, "type")
+            qos_profile = _meta_field(row, "qos_profile")
+            if not (name and type_name and qos_profile):
+                continue
+            datatype = topic_types.try_resolve(type_name)
+            if datatype is None:
+                continue
+            try:
+                if self.subscribe(name, datatype, qos_profile, type_name):
+                    added.append(name)
+            except Exception:
+                # A topic whose QoS profile this build does not know, or a
+                # type mismatch with an existing endpoint. Skip it rather than
+                # taking the whole consumer down.
+                continue
+        return added
+
+    def poll(self, *, n: int = 100) -> List[TopicSample]:
+        with self._lock:
+            readers = list(self._readers.items())
+        out: List[TopicSample] = []
+        for topic, (reader, type_name) in readers:
+            for sample in take_with_state(reader, n=n):
+                out.append(TopicSample(
+                    topic=topic, type_name=type_name, data=sample.data,
+                    alive=sample.alive, instance_handle=sample.instance_handle,
+                ))
+        return out
+
+
+def _meta_field(row: Any, field: str) -> str:
+    if isinstance(row, dict):
+        return str(row.get(field) or "")
+    return str(getattr(row, field, "") or "")

@@ -70,10 +70,26 @@ REGISTERED_QOS_PROFILES = {
     "VPS_RESP",
 }
 
-# Deployment-specific extensions this demo documents and uses. Anchor deltas
-# have no registered type or QoS profile in 1.7, so they ride the extension
-# escape hatch rather than being force-fitted onto map_event / MAP_META.
-DEPLOYMENT_TOPIC_TYPES = {"oarc.anchor_delta"}
+def _deployment_topic_types() -> set:
+    """
+    Deployment-specific type names this demo documents and uses.
+
+    Sourced from spatialdds_demo.topic_types.EXTENSIONS so the validator and
+    the type registry cannot disagree — they did once, and the publish-path
+    validator caught it, which is the point of having it there.
+
+    Imported lazily: topic_types imports the generated bindings, and this
+    module is imported by code that has no need of them.
+    """
+    names = {"oarc.anchor_delta"}   # anchors have no registered type or profile
+    try:
+        from spatialdds_demo.topic_types import EXTENSIONS
+        names |= set(EXTENSIONS)
+    except Exception:
+        pass
+    return names
+
+
 DEPLOYMENT_QOS_PROFILES = {"ANCHOR_DELTA"}
 
 
@@ -126,7 +142,7 @@ def validate_topic_meta(entries: List[dict]) -> Tuple[bool, List[str]]:
             errors.append(f"{name}: TopicMeta.type is required")
         elif (
             topic_type not in REGISTERED_TOPIC_TYPES
-            and topic_type not in DEPLOYMENT_TOPIC_TYPES
+            and topic_type not in _deployment_topic_types()
         ):
             errors.append(
                 f"{name}: unregistered topic type '{topic_type}' "

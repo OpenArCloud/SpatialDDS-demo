@@ -21,6 +21,7 @@
 #include "vision.idl"
 #include "argeo.idl"
 #include "discovery.idl"
+#include "semantics.idl"
 
 module oarc_demo {
 
@@ -121,6 +122,74 @@ module oarc_demo {
     string query_id;                   // mirrors CatalogQuery.query_id
     sequence<CatalogEntry, 256> results;
     string next_page_token;
+    Time   stamp;
+  };
+
+  // --- Multi-operator fusion ----------------------------------------------
+  // spatial::semantics::Detection3D is the right type for a 3D detection, and
+  // it is used verbatim below. It carries no **velocity**, though, and this
+  // demo's fuser gates association on position *and* velocity and fuses both.
+  // rad::RadDetection has velocity and PlannedWaypoint has velocity, but the
+  // semantic detection does not.
+  //
+  // The spec's extension hatch is MetaKV{namespace, json} — a JSON string —
+  // and putting JSON back on the bus is the thing this migration exists to
+  // stop. So the spec type is composed rather than replaced or smuggled into:
+  // a conformant consumer can lift `detection` out untouched.
+  @extensibility(APPENDABLE) struct DetectionWithVelocity {
+    spatial::semantics::Detection3D detection;   // the spec type, verbatim
+    boolean has_velocity;
+    spatial::common::Vec3 velocity;              // m/s, the gap
+    string source_modality;                      // "det3d", "radar", ...
+  };
+
+  @extensibility(APPENDABLE) struct OperatorDetectionSet {
+    @key string set_id;
+    string source_operator;                      // the interoperability contract
+    spatial::common::FrameRef frame_ref;
+    sequence<DetectionWithVelocity, 256> dets;
+    uint64 frame_seq;
+    Time   stamp;
+  };
+
+  // Fused output. 1.7 has no fused-track type: slam_frontend::Tracklet is
+  // feature-level and vision::Track2D is per-image, neither is a
+  // multi-operator object track.
+  @extensibility(APPENDABLE) struct FusedTrack {
+    @key string track_id;
+    spatial::common::Vec3 position;
+    spatial::common::Vec3 velocity;
+    double position_uncertainty;
+    string object_class;
+    double confidence;
+    sequence<string, 16> source_operators;
+    sequence<string, 16> source_modalities;
+    uint32 source_count;
+    double track_age;
+    Time   stamp;
+  };
+
+  @extensibility(APPENDABLE) struct FusedTrackSet {
+    @key string source_operator;                 // always "platform"
+    sequence<FusedTrack, 256> tracks;
+    Time   stamp;
+  };
+
+  @extensibility(APPENDABLE) struct OperatorTrackCount {
+    string operator_id;
+    uint32 track_count;
+  };
+
+  @extensibility(APPENDABLE) struct FusionCoverage {
+    @key string source_operator;                 // always "platform"
+    uint32 track_count;
+    uint32 multi_source_count;
+    double multi_source_pct;
+    uint32 best_single_operator_count;
+    double coverage_improvement;
+    uint32 best_av_operator_count;
+    double coverage_improvement_excl_infra;
+    sequence<OperatorTrackCount, 16> per_operator_track_count;
     Time   stamp;
   };
 
