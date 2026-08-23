@@ -12,7 +12,10 @@ from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
 from spatialdds_demo.discovery_bus import AnnounceSubscriber
-from spatialdds_demo.json_mapping import to_json
+from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds_demo.service_bus import CatalogClient, VpsClient
+from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
+from spatialdds_idl.oarc_demo import VpsRequest as TypedVpsRequest
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
     TOPIC_BOOTSTRAP_QUERY_V1,
@@ -269,12 +272,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     loc_request_topic, loc_request_source = _select_topic(
         manifest_topics, "vps_query", TOPIC_VPS_QUERY_V1
     )
-    transport.publish(
-        loc_request_topic,
-        "LOCALIZE_REQUEST",
-        json.dumps(loc_request),
-        loc_request.get("request_id", ""),
-    )
+    vps = VpsClient(announce_participant)
     logger.log_message(
         "LOCALIZE_REQUEST",
         "SEND",
@@ -285,25 +283,22 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         loc_request_source,
         show_message_content,
     )
-
-    loc_env = _wait_for(inbox, "LOCALIZE_RESPONSE", timeout=10)
-    if not loc_env:
+    # Correlated by request_id on the typed reply, not by an envelope field.
+    typed_response = vps.request(from_json(TypedVpsRequest, loc_request), timeout=10)
+    if typed_response is None:
         print("Client timed out waiting for LOCALIZE_RESPONSE.")
         transport.stop()
         return 1
 
-    loc_response = json.loads(loc_env.payload_json)
-    loc_response_source = _topic_source_for(
-        manifest_topics, "localize_response", loc_env.logical_topic
-    )
+    loc_response = to_json(typed_response)
     logger.log_message(
         "LOCALIZE_RESPONSE",
         "RECV",
         f"VPS:{announce.get('name', 'unknown')}",
         "Client",
         loc_response,
-        loc_env.logical_topic,
-        loc_response_source,
+        TOPIC_VPS_RESULT_V1,
+        _topic_source_for(manifest_topics, "geopose", TOPIC_VPS_RESULT_V1),
         show_message_content,
     )
 
@@ -320,12 +315,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
             limit=20,
             kind_in=["mesh", "poi"],
         )
-        transport.publish(
-            TOPIC_CATALOG_QUERY_V1,
-            "CATALOG_QUERY",
-            json.dumps(catalog_query),
-            catalog_query.get("query_id", ""),
-        )
+        catalog_client = CatalogClient(announce_participant, reply_topic)
         logger.log_message(
             "CATALOG_QUERY",
             "SEND",
@@ -336,19 +326,20 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
             TOPIC_SOURCE_SPEC,
             show_message_content,
         )
-
-        catalog_env = _wait_for(inbox, "CATALOG_RESPONSE", timeout=3)
-        if not catalog_env:
+        typed_catalog = catalog_client.query(
+            from_json(TypedCatalogQuery, catalog_query), timeout=5
+        )
+        if typed_catalog is None:
             print("⚠️  catalog timeout (no CATALOG_RESPONSE)")
         else:
-            catalog_response = json.loads(catalog_env.payload_json)
+            catalog_response = to_json(typed_catalog)
             logger.log_message(
                 "CATALOG_RESPONSE",
                 "RECV",
                 "Catalog:MockCatalog-v1",
                 "Client",
                 catalog_response,
-                catalog_env.logical_topic,
+                reply_topic,
                 TOPIC_SOURCE_REQUEST,
                 show_message_content,
             )

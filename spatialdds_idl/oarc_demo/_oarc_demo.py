@@ -19,6 +19,11 @@ from spatialdds_idl import oarc_demo
 
 if TYPE_CHECKING:
     import builtin
+    import spatial.argeo
+    import spatial.common
+    import spatial.core
+    import spatial.disco
+    import spatial.sensing.vision
 
 
 MODULE_ID = "oarc.demo/1.7"
@@ -47,6 +52,97 @@ class BootstrapResponse(idl.IdlStruct, typename="oarc_demo.BootstrapResponse"):
     cyclonedds_profile: str
     manifest_uris: types.sequence[str, 16]
     ttl_sec: types.uint32
+    stamp: 'spatialdds_idl.oarc_demo.Time'
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class QualityRequirements(idl.IdlStruct, typename="oarc_demo.QualityRequirements"):
+    max_rmse_m: types.float64
+    min_confidence: types.float64
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class LocalizeQuality(idl.IdlStruct, typename="oarc_demo.LocalizeQuality"):
+    success: bool
+    confidence: types.float64
+    rmse_m: types.float64
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class VpsRequest(idl.IdlStruct, typename="oarc_demo.VpsRequest"):
+    request_id: str
+    annotate.key("request_id")
+    service_id: str
+    client_frame_ref: 'spatialdds_idl.spatial.common.FrameRef'
+    prior_geopose: 'spatialdds_idl.spatial.core.GeoPose'
+    vision_frame: 'spatialdds_idl.spatial.sensing.vision.VisionFrame'
+    quality_requirements: 'spatialdds_idl.oarc_demo.QualityRequirements'
+    stamp: 'spatialdds_idl.oarc_demo.Time'
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class VpsResponse(idl.IdlStruct, typename="oarc_demo.VpsResponse"):
+    request_id: str
+    annotate.key("request_id")
+    service_id: str
+    node_geo: 'spatialdds_idl.spatial.argeo.NodeGeo'
+    quality: 'spatialdds_idl.oarc_demo.LocalizeQuality'
+    stamp: 'spatialdds_idl.oarc_demo.Time'
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class CatalogFilter(idl.IdlStruct, typename="oarc_demo.CatalogFilter"):
+    kind_in: types.sequence[str, 16]
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class CatalogQuery(idl.IdlStruct, typename="oarc_demo.CatalogQuery"):
+    query_id: str
+    annotate.key("query_id")
+    reply_topic: str
+    coverage: types.sequence['spatialdds_idl.spatial.disco.CoverageElement', 4]
+    coverage_frame_ref: 'spatialdds_idl.spatial.common.FrameRef'
+    has_filter: bool
+    filter: 'spatialdds_idl.oarc_demo.CatalogFilter'
+    limit: types.uint32
+    page_token: str
+    stamp: 'spatialdds_idl.oarc_demo.Time'
+    ttl_sec: types.uint32
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class CatalogEntry(idl.IdlStruct, typename="oarc_demo.CatalogEntry"):
+    content_id: str
+    kind: str
+    name: str
+    coverage: types.sequence['spatialdds_idl.spatial.disco.CoverageElement', 4]
+    frame_ref: 'spatialdds_idl.spatial.common.FrameRef'
+    formats: types.sequence[str, 8]
+    updated_sec: types.uint64
+    href: str
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class CatalogResponse(idl.IdlStruct, typename="oarc_demo.CatalogResponse"):
+    query_id: str
+    results: types.sequence['spatialdds_idl.oarc_demo.CatalogEntry', 256]
+    next_page_token: str
     stamp: 'spatialdds_idl.oarc_demo.Time'
 
 

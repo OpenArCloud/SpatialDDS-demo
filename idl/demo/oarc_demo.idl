@@ -13,6 +13,15 @@
 #include "core.idl"
 #endif
 
+#ifndef SPATIAL_SENSING_COMMON_INCLUDED
+#define SPATIAL_SENSING_COMMON_INCLUDED
+#include "common.idl"
+#endif
+
+#include "vision.idl"
+#include "argeo.idl"
+#include "discovery.idl"
+
 module oarc_demo {
 
   const string MODULE_ID = "oarc.demo/1.7";
@@ -38,6 +47,80 @@ module oarc_demo {
     string cyclonedds_profile;
     sequence<string, 16> manifest_uris;
     uint32 ttl_sec;
+    Time   stamp;
+  };
+
+  // --- VPS localization ---------------------------------------------------
+  // 3.3.2 registers the topic type `vps_query` ("VPS localization request —
+  // query image/features + hints") but the IDL defines no struct for it, so
+  // the request shape is demo-owned. The *response* needs no new payload type
+  // — argeo::NodeGeo is exactly right — but the request/response correlation
+  // and quality reporting around it have no spec home either.
+  @extensibility(APPENDABLE) struct QualityRequirements {
+    double max_rmse_m;
+    double min_confidence;
+  };
+
+  @extensibility(APPENDABLE) struct LocalizeQuality {
+    boolean success;
+    double  confidence;
+    double  rmse_m;
+  };
+
+  @extensibility(APPENDABLE) struct VpsRequest {
+    @key string request_id;            // correlates the reply
+    string service_id;                 // which VPS is being asked
+    spatial::common::FrameRef client_frame_ref;
+    spatial::core::GeoPose prior_geopose;
+    spatial::sensing::vision::VisionFrame vision_frame;
+    QualityRequirements quality_requirements;
+    Time stamp;
+  };
+
+  @extensibility(APPENDABLE) struct VpsResponse {
+    @key string request_id;            // mirrors VpsRequest.request_id
+    string service_id;
+    spatial::argeo::NodeGeo node_geo;  // the spec type; the pose itself
+    LocalizeQuality quality;
+    Time stamp;
+  };
+
+  // --- Content catalogue ---------------------------------------------------
+  // The demo's catalogue is a demo protocol. 1.7 has ContentAnnounce for
+  // advertising content, but no request/response pair for querying a
+  // catalogue by area, and no per-result row type.
+  @extensibility(APPENDABLE) struct CatalogFilter {
+    sequence<string, 16> kind_in;      // "mesh", "poi", "overlay", ...
+  };
+
+  @extensibility(APPENDABLE) struct CatalogQuery {
+    @key string query_id;
+    string reply_topic;
+    sequence<spatial::disco::CoverageElement, 4> coverage;
+    spatial::common::FrameRef coverage_frame_ref;
+    boolean has_filter;
+    CatalogFilter filter;
+    uint32 limit;
+    string page_token;
+    Time   stamp;
+    uint32 ttl_sec;
+  };
+
+  @extensibility(APPENDABLE) struct CatalogEntry {
+    string content_id;
+    string kind;
+    string name;
+    sequence<spatial::disco::CoverageElement, 4> coverage;
+    spatial::common::FrameRef frame_ref;
+    sequence<string, 8> formats;
+    uint64 updated_sec;
+    string href;
+  };
+
+  @extensibility(APPENDABLE) struct CatalogResponse {
+    string query_id;                   // mirrors CatalogQuery.query_id
+    sequence<CatalogEntry, 256> results;
+    string next_page_token;
     Time   stamp;
   };
 

@@ -5,10 +5,18 @@
 
 """
 
-from ._oarc_demo import BootstrapQuery, BootstrapResponse, MODULE_ID, Time
+from ._oarc_demo import BootstrapQuery, BootstrapResponse, CatalogEntry, CatalogFilter, CatalogQuery, CatalogResponse, LocalizeQuality, MODULE_ID, QualityRequirements, Time, VpsRequest, VpsResponse
 __all__ = [
 	"BootstrapQuery",
 	"BootstrapResponse",
+	"CatalogEntry",
+	"CatalogFilter",
+	"CatalogQuery",
+	"CatalogResponse",
+	"LocalizeQuality",
 	"MODULE_ID",
+	"QualityRequirements",
 	"Time",
+	"VpsRequest",
+	"VpsResponse",
 ]

@@ -6,7 +6,12 @@ import sys
 import time
 from typing import Any, Dict, List
 
-from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
+from cyclonedds.domain import DomainParticipant
+
+from spatialdds_demo.dds_transport import require_dds_env
+from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds_demo.service_bus import CatalogService
+from spatialdds_idl.oarc_demo import CatalogResponse
 from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
     TOPIC_SOURCE_REQUEST,
@@ -78,94 +83,70 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
     print(f"- subscribe: {TOPIC_CATALOG_QUERY_V1}")
     print(f"- dataset: {seed_path} ({len(dataset)} entries)\n")
 
-    def on_message(envelope: object) -> None:
-        if envelope.msg_type != "CATALOG_QUERY":
-            return
-        logical_topic = envelope.logical_topic
-        data = json.loads(envelope.payload_json)
-
-        if not _ttl_ok(data.get("stamp", {}), data.get("ttl_sec", 0)):
-            return
-
-        reply_topic = data.get("reply_topic", "")
-        if not reply_topic:
-            return
-
-        logger.log_message(
-            "CATALOG_QUERY",
-            "RECV",
-            "Client",
-            "Catalog:MockCatalog-v1",
-            data,
-            logical_topic,
-            TOPIC_SOURCE_SPEC,
-            show_message_content,
-        )
-
-        query_coverage = data.get("coverage", [])
-        results = []
-        for entry in dataset:
-            if not _matches_filter(entry, data):
+    def serve(catalog: CatalogService) -> None:
+        for query in catalog.take_queries():
+            data = to_json(query)
+            if not _ttl_ok(data.get("stamp", {}), data.get("ttl_sec", 0)):
                 continue
-            entry_coverage = entry.get("coverage", [])
-            if query_coverage and entry_coverage:
-                if not SpatialDDSValidator.check_coverage_intersection(
-                    query_coverage, entry_coverage
-                ):
-                    continue
-            results.append(entry)
+            reply_topic = data.get("reply_topic", "")
+            if not reply_topic:
+                continue
 
-        results.sort(
-            key=lambda item: (
-                -(item.get("updated_sec") or 0),
-                item.get("content_id") or "",
+            logger.log_message(
+                "CATALOG_QUERY", "RECV", "Client", "Catalog:MockCatalog-v1",
+                data, TOPIC_CATALOG_QUERY_V1, TOPIC_SOURCE_SPEC, show_message_content,
             )
-        )
 
-        limit = int(data.get("limit", 20) or 20)
-        offset = _parse_page_token(data.get("page_token", ""))
-        page = results[offset : offset + limit]
-        next_token = ""
-        if offset + limit < len(results):
-            next_token = f"o={offset + limit}"
+            query_coverage = data.get("coverage", [])
+            results = []
+            for entry in dataset:
+                if not _matches_filter(entry, data):
+                    continue
+                entry_coverage = entry.get("coverage", [])
+                if query_coverage and entry_coverage:
+                    if not SpatialDDSValidator.check_coverage_intersection(
+                        query_coverage, entry_coverage
+                    ):
+                        continue
+                results.append(entry)
 
-        response = {
-            "query_id": data.get("query_id", ""),
-            "results": page,
-            "next_page_token": next_token,
-            "stamp": SpatialDDSValidator.now_time(),
-        }
+            results.sort(
+                key=lambda item: (
+                    -(item.get("updated_sec") or 0),
+                    item.get("content_id") or "",
+                )
+            )
 
-        transport.publish(reply_topic, "CATALOG_RESPONSE", json.dumps(response), "")
-        logger.log_message(
-            "CATALOG_RESPONSE",
-            "SEND",
-            "Catalog:MockCatalog-v1",
-            "Client",
-            response,
-            reply_topic,
-            TOPIC_SOURCE_REQUEST,
-            show_message_content,
-        )
+            limit = int(data.get("limit", 20) or 20)
+            offset = _parse_page_token(data.get("page_token", ""))
+            page = results[offset: offset + limit]
+            next_token = ""
+            if offset + limit < len(results):
+                next_token = f"o={offset + limit}"
 
-        print(
-            f"catalog: results={len(page)} next_page_token={next_token or 'none'}"
-        )
+            response = {
+                "query_id": data.get("query_id", ""),
+                "results": page,
+                "next_page_token": next_token,
+                "stamp": SpatialDDSValidator.now_time(),
+            }
+            catalog.reply(reply_topic, from_json(CatalogResponse, response))
+            logger.log_message(
+                "CATALOG_RESPONSE", "SEND", "Catalog:MockCatalog-v1", "Client",
+                response, reply_topic, TOPIC_SOURCE_REQUEST, show_message_content,
+            )
+            print(f"catalog: results={len(page)} next_page_token={next_token or 'none'}")
 
-    transport = DDSTransport(
-        on_message_callback=on_message,
-        domain_id=domain_id,
-        local_sender_id="Catalog:MockCatalog-v1",
-    )
-    transport.start()
+    participant = DomainParticipant(domain_id)
+    catalog = CatalogService(participant)
 
     try:
         while True:
-            time.sleep(0.1)
+            serve(catalog)
+            time.sleep(0.05)
     except KeyboardInterrupt:
         pass
 
-    transport.stop()
     return 0
 
 

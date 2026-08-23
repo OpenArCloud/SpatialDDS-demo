@@ -137,7 +137,27 @@ def _coerce(target: Any, raw: Any) -> Any:
             return from_json(target, raw)
         if isinstance(raw, dict) and _is_union_type(target):
             return _union_from_json(target, raw)
+        if isinstance(raw, str) and _is_union_type(target):
+            # Shorthand: just the discriminator, e.g. "COV_NONE". The Cesium
+            # client and the demo's own builders have always written covariance
+            # this way, and it is unambiguous — the discriminator selects the
+            # case, and an empty case has nothing else to carry. Accepted at
+            # the edge; to_json always emits the explicit form.
+            return _union_from_discriminator(target, raw)
     return raw
+
+
+def _union_from_discriminator(cls: Type[T], label: str) -> T:
+    """Build a union from a bare discriminator name, defaulting the payload."""
+    for member, hint in _resolved_hints(cls).items():
+        labels = getattr(hint, "labels", None) or []
+        if any(getattr(v, "name", None) == label for v in labels):
+            subtype = _unwrap(getattr(hint, "subtype", None))
+            default = 0 if subtype in (int, float) else 0
+            return cls(**{member: default})
+    raise ValueError(
+        f"{_typename(cls)}: {label!r} is not one of its discriminator labels"
+    )
 
 
 def _is_union_type(target: Any) -> bool:

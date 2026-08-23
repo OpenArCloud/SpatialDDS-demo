@@ -15,13 +15,42 @@
           37.7714
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "gltf",
@@ -46,13 +75,42 @@
           37.7717
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "json"
@@ -76,13 +134,42 @@
           37.772
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "anchors"
@@ -106,13 +193,42 @@
           37.7723
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "jpeg",
@@ -137,13 +253,42 @@
           37.7726
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "gltf",
@@ -168,13 +313,42 @@
           37.7729
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "json"
@@ -198,13 +372,42 @@
           37.7734
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "anchors"
@@ -228,13 +431,42 @@
           37.7737
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "jpeg",
@@ -259,13 +491,42 @@
           37.774
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "gltf",
@@ -290,13 +551,42 @@
           37.7743
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "json"
@@ -320,13 +610,42 @@
           37.7746
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "anchors"
@@ -350,13 +669,42 @@
           37.7749
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "jpeg",
@@ -381,13 +729,42 @@
           37.7754
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "gltf",
@@ -412,13 +789,42 @@
           37.7757
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "json"
@@ -442,13 +848,42 @@
           37.776
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "anchors"
@@ -472,13 +907,42 @@
           37.7763
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "jpeg",
@@ -503,13 +967,42 @@
           37.7766
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "gltf",
@@ -534,13 +1027,42 @@
           37.7769
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "json"
@@ -564,13 +1086,42 @@
           37.7774
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "anchors"
@@ -594,13 +1145,42 @@
           37.7777
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "jpeg",
@@ -625,13 +1205,42 @@
           37.778
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "gltf",
@@ -656,13 +1265,42 @@
           37.7783
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "json"
@@ -686,13 +1324,42 @@
           37.7786
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "anchors"
@@ -716,13 +1383,42 @@
           37.7789
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "jpeg",
@@ -747,13 +1443,42 @@
           37.7794
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "gltf",
@@ -778,13 +1503,42 @@
           37.7797
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "json"
@@ -808,13 +1562,42 @@
           37.78
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "anchors"
@@ -838,13 +1621,42 @@
           37.7803
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "jpeg",
@@ -869,13 +1681,42 @@
           37.7806
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "gltf",
@@ -900,13 +1741,42 @@
           37.7809
         ],
         "has_aabb": false,
+        "aabb": {
+          "min_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_xyz": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
         "global": false,
-        "has_frame_ref": false
+        "has_frame_ref": false,
+        "frame_ref": {
+          "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+          "fqn": "earth-fixed",
+          "has_coord_convention": true,
+          "coord_convention": "ENU"
+        },
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
       }
     ],
     "frame_ref": {
       "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
-      "fqn": "map/sf-downtown"
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
     },
     "formats": [
       "json"

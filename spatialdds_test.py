@@ -479,7 +479,9 @@ class SpatialDDSClientV15:
             "pix": "RGB8",
             "color": "SRGB",
             "has_line_readout_us": False,
+            "line_readout_us": 0.0,
             "rectified": True,
+            "is_key_frame": True,
             "quality": {
                 "has_snr_db": True,
                 "snr_db": 28.0,

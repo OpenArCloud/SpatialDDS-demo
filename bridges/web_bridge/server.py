@@ -46,7 +46,10 @@ from spatialdds_demo.discovery_http import (
     query_from_geohash,
     search as discovery_search,
 )
-from spatialdds_demo.json_mapping import to_json
+from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds_demo.service_bus import CatalogClient, VpsClient
+from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
+from spatialdds_idl.oarc_demo import VpsRequest as TypedVpsRequest
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
@@ -82,6 +85,9 @@ class SpatialDDSBridge:
         self._inbox: queue.Queue = queue.Queue()
         self._last_announce: Optional[Dict[str, Any]] = None
         self._announce_sub: Optional[AnnounceSubscriber] = None
+        self._announce_participant = None
+        self._vps: Optional[VpsClient] = None
+        self._catalog: Optional[CatalogClient] = None
         self._announces = AnnounceCache()
         self._client_frame_ref = SpatialDDSValidator.create_frame_ref("client/handset")
         self._stream_ref = SpatialDDSValidator.create_frame_ref("rig/front_cam")
@@ -200,12 +206,8 @@ class SpatialDDSBridge:
                 raise RuntimeError("DDS transport not initialized")
 
             request = self._create_localize_request(service_id, prior_geopose)
-            self._transport.publish(
-                TOPIC_VPS_QUERY_V1,
-                "LOCALIZE_REQUEST",
-                json.dumps(request),
-                request.get("request_id", ""),
-            )
+            if self._vps is None:
+                self._vps = VpsClient(self._announce_participant)
             _emit_dds_event(
                 {
                     "ts": time.time(),
@@ -218,10 +220,10 @@ class SpatialDDSBridge:
                 }
             )
 
-            env = _wait_for(self._inbox, "LOCALIZE_RESPONSE", timeout=8)
-            if not env:
+            typed = self._vps.request(from_json(TypedVpsRequest, request), timeout=8)
+            if typed is None:
                 raise RuntimeError("LOCALIZE_RESPONSE timeout")
-            return json.loads(env.payload_json)
+            return to_json(typed)
         finally:
             _unlock(self._request_lock)
 
@@ -237,16 +239,13 @@ class SpatialDDSBridge:
             if not self._transport:
                 raise RuntimeError("DDS transport not initialized")
 
-            client_id = f"bridge-{uuid.uuid4().hex[:6]}"
-            reply_topic = TOPIC_CATALOG_REPLIES(client_id)
+            if self._catalog is None:
+                client_id = f"bridge-{uuid.uuid4().hex[:6]}"
+                self._catalog = CatalogClient(
+                    self._announce_participant, TOPIC_CATALOG_REPLIES(client_id))
+            reply_topic = self._catalog.reply_topic
             query = self._create_catalog_query(
                 geopose, reply_topic, limit=limit, kind_in=kind_in
-            )
-            self._transport.publish(
-                TOPIC_CATALOG_QUERY_V1,
-                "CATALOG_QUERY",
-                json.dumps(query),
-                query.get("query_id", ""),
             )
             _emit_dds_event(
                 {
@@ -260,10 +259,10 @@ class SpatialDDSBridge:
                 }
             )
 
-            env = _wait_for(self._inbox, "CATALOG_RESPONSE", timeout=6)
-            if not env:
+            typed = self._catalog.query(from_json(TypedCatalogQuery, query), timeout=6)
+            if typed is None:
                 raise RuntimeError("CATALOG_RESPONSE timeout")
-            return json.loads(env.payload_json)
+            return to_json(typed)
         finally:
             _unlock(self._request_lock)
 
@@ -305,7 +304,9 @@ class SpatialDDSBridge:
             "pix": "RGB8",
             "color": "SRGB",
             "has_line_readout_us": False,
+            "line_readout_us": 0.0,
             "rectified": True,
+            "is_key_frame": True,
             "quality": {
                 "has_snr_db": True,
                 "snr_db": 28.0,

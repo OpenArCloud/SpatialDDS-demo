@@ -2,5 +2,13 @@ oarc_demo
 
 BootstrapQuery
 BootstrapResponse
+CatalogEntry
+CatalogFilter
+CatalogQuery
+CatalogResponse
+LocalizeQuality
 MODULE_ID
+QualityRequirements
 Time
+VpsRequest
+VpsResponse
