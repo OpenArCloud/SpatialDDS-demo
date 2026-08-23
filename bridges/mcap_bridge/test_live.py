@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """End-to-end live test: publish → record → replay → subscribe round-trip.
 
-Drives the real `EnvelopeTransport` (CycloneDDS-backed) plus the real
-recorder/replayer. Run inside the cyclonedds-python image so DDS is wired
-up. Exits 0 on success, 1 on mismatch.
+Drives real typed publishers over CycloneDDS plus the real recorder and
+replayer. Run inside the cyclonedds-python image so DDS is wired up. Exits 0
+on success, 1 on mismatch.
+
+The samples are built with the publishers' own helpers, so what goes round
+the loop is what the demo actually emits — and because the replayer rebuilds
+each sample from the recording rather than relaying bytes, a recording that
+does not deserialise fails the test instead of reaching the bus.
 
 Usage (inside the cyclonedds-python container):
     python3 -m pip install -r bridges/requirements.txt
@@ -26,53 +31,173 @@ _REPO_ROOT = _HERE.parent.parent
 sys.path.insert(0, str(_HERE))
 sys.path.insert(0, str(_REPO_ROOT))
 
-from nuscenes.dds_envelope_transport import EnvelopeTransport  # noqa: E402
+sys.path.insert(0, str(_REPO_ROOT / "multi_operator_fusion"))
 
 import recorder as recorder_mod  # noqa: E402
 import replayer as replayer_mod  # noqa: E402
 
-
-# A synthetic mix that exercises three operator namespaces and four msg_types.
-SAMPLES: List[Tuple[str, str, dict]] = [
-    ("ANNOUNCE",            "spatialdds/operator_x/announce/v1",                  {"service_id": "svc:op_x", "version": "1.7"}),
-    ("NUSC_EGO_POSE",       "spatialdds/operator_x/ego/pose/v1",                  {"frame_seq": 1, "stamp": {"sec": 1700000000, "nanosec": 0}}),
-    ("NUSC_DET3D_SET",      "spatialdds/operator_x/sensing/detection3d/v1",       {"frame_seq": 1, "detections": [{"det_id": "d1"}]}),
-    ("NUSC_VISION_FRAME",   "spatialdds/operator_x/vision/CAM_FRONT/frame/v1",    {"stream_id": "cam", "schema_version": "1.7"}),
-    ("NUSC_DET3D_SET",      "spatialdds/operator_y/sensing/detection3d/v1",       {"frame_seq": 1, "detections": [{"det_id": "d2"}]}),
-    ("NUSC_FUSED_TRACK_SET","spatialdds/platform/fusion/track/v1",                {"frame_seq": 1, "tracks": [{"track_id": "t1"}]}),
-    ("NUSC_EGO_POSE",       "spatialdds/operator_x/ego/pose/v1",                  {"frame_seq": 2, "stamp": {"sec": 1700000001, "nanosec": 0}}),
-    ("NUSC_DET3D_SET",      "spatialdds/operator_x/sensing/detection3d/v1",       {"frame_seq": 2, "detections": []}),
-]
+SCENE = "scene/intersection"
+DET_TYPE = "oarc.detection3d_velocity"
+POSE_TYPE = "oarc.framed_pose"
+TRACK_TYPE = "oarc.fused_track"
 
 
-def _fingerprint(env_msg_type: str, env_topic: str, payload: str) -> Tuple[str, str, str]:
-    """Stable identity for a published envelope, comparable after JSON re-encoding."""
-    try:
-        normalized = json.dumps(json.loads(payload), sort_keys=True)
-    except Exception:
-        normalized = payload
-    return (env_msg_type, env_topic, normalized)
+def _samples() -> List[Tuple[str, str, dict]]:
+    """A mix over three service namespaces and three types, built for real."""
+    from spatialdds_types import (
+        make_detection, make_detection_set, make_detection_with_velocity,
+        make_framed_pose, make_fused_track_set,
+    )
+    from fusion import FusedTrack, Position, Velocity
+
+    def det_set(operator, det_id, seq):
+        det = make_detection(
+            det_id=det_id, class_id="vehicle.car", score=0.9,
+            center=(float(seq), 2.0, 0.0), size=(4.5, 1.8, 1.6),
+            q=(0.0, 0.0, 0.0, 1.0), frame_ref_fqn=SCENE,
+            timestamp_s=1700000000.0 + seq, source_id=operator)
+        return make_detection_set(
+            set_id=f"{operator}-{seq}", source_operator=operator,
+            frame_ref_fqn=SCENE,
+            dets=[make_detection_with_velocity(det, velocity=(1.0, 0.0, 0.0),
+                                               source_modality="det3d")],
+            frame_seq=seq, timestamp_s=1700000000.0 + seq)
+
+    def pose(operator, seq):
+        return make_framed_pose(
+            float(seq), 0.0, 0.0, q=(0.0, 0.0, 0.0, 1.0),
+            frame_ref_fqn=f"{operator}/map", timestamp_s=1700000000.0 + seq)
+
+    track = FusedTrack(
+        track_id="t1", position=Position(0.0, 0.0, 0.0),
+        velocity=Velocity(0.0, 0.0, 0.0), position_uncertainty=0.3,
+        object_class="vehicle.car", confidence=0.9,
+        source_operators=["operator_x", "operator_y"],
+        source_modalities=["det3d"], source_count=2,
+        timestamp=1700000001.0, track_age=1.0)
+
+    return [
+        (POSE_TYPE, "spatialdds/operator_x/ego/pose/v1", pose("operator_x", 1)),
+        (DET_TYPE, "spatialdds/operator_x/sensing/detection3d/v1",
+         det_set("operator_x", "d1", 1)),
+        (DET_TYPE, "spatialdds/operator_y/sensing/detection3d/v1",
+         det_set("operator_y", "d2", 1)),
+        (TRACK_TYPE, "spatialdds/platform/fusion/track/v1",
+         make_fused_track_set([track], timestamp_s=1700000001.0)),
+        (POSE_TYPE, "spatialdds/operator_x/ego/pose/v1", pose("operator_x", 2)),
+        (DET_TYPE, "spatialdds/operator_x/sensing/detection3d/v1",
+         det_set("operator_x", "d3", 2)),
+    ]
+
+
+SAMPLES: List[Tuple[str, str, dict]] = []      # filled in main()
+
+
+def _fingerprint(type_name: str, topic: str, payload) -> Tuple[str, str, str]:
+    """Stable identity for one sample, comparable after a JSON round trip."""
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            return (type_name, topic, payload)
+    return (type_name, topic, json.dumps(payload, sort_keys=True))
+
+
+# Half a float32 ulp near 1.0. Several spec fields are float32 — Detection3D
+# .score among them — so a value written as 0.9 comes back as
+# 0.8999999761581421. Exact JSON equality would call that a lost sample; it
+# is the type doing exactly what it says it does.
+FLOAT_TOL = 1e-6
+
+
+def _same(sent, got) -> bool:
+    """Structural equality, tolerant of float32 rounding."""
+    if isinstance(sent, dict) and isinstance(got, dict):
+        return (set(sent) == set(got)
+                and all(_same(sent[k], got[k]) for k in sent))
+    if isinstance(sent, list) and isinstance(got, list):
+        return (len(sent) == len(got)
+                and all(_same(a, b) for a, b in zip(sent, got)))
+    if isinstance(sent, bool) or isinstance(got, bool):
+        return sent is got
+    if isinstance(sent, (int, float)) and isinstance(got, (int, float)):
+        return abs(float(sent) - float(got)) <= FLOAT_TOL * max(
+            1.0, abs(float(sent)))
+    return sent == got
+
+
+def _diff(sent, got, path: str = "") -> List[str]:
+    """Field-level differences between what was sent and what came back."""
+    out: List[str] = []
+    if isinstance(sent, dict) and isinstance(got, dict):
+        for key in sorted(set(sent) | set(got)):
+            out += _diff(sent.get(key, "<absent>"), got.get(key, "<absent>"),
+                         f"{path}.{key}" if path else key)
+    elif isinstance(sent, list) and isinstance(got, list):
+        if len(sent) != len(got):
+            out.append(f"{path}: length {len(sent)} -> {len(got)}")
+        for i, (a, b) in enumerate(zip(sent, got)):
+            out += _diff(a, b, f"{path}[{i}]")
+    elif not _same(sent, got):
+        out.append(f"{path}: {sent!r} -> {got!r}")
+    return out
+
+
+def _announce_lanes(domain: int, samples):
+    """
+    Announce every lane, so the discovery-driven recorder opens readers.
+
+    Returns the publisher; the caller keeps it alive, since closing it
+    disposes each instance and tells consumers the services left.
+    """
+    from cyclonedds.domain import DomainParticipant
+
+    from spatialdds_demo.stream import StreamPublisher
+    from spatialdds_types import circle_coverage, make_announce, topic_meta
+
+    profiles = {DET_TYPE: "RADAR_RT", POSE_TYPE: "POSE_RT",
+                TRACK_TYPE: "POSE_RT"}
+    by_service = {}
+    for type_name, topic, _payload in samples:
+        service = topic.split("/")[1]
+        by_service.setdefault(service, {})[topic] = type_name
+
+    publisher = StreamPublisher(DomainParticipant(domain))
+    for service, lanes in by_service.items():
+        publisher.announce(make_announce(
+            operator=service, service_kind="SENSING",
+            topics=[topic_meta(t, tn, profiles[tn]) for t, tn in lanes.items()],
+            coverage=circle_coverage(0.0, 0.0, 100.0),
+            timestamp_s=time.time()))
+    return publisher
 
 
 def _publish_thread(domain: int, sender: str, samples: List[Tuple[str, str, dict]],
-                    inter_msg_delay: float, recorder_warmup: float, done_evt: threading.Event):
+                    inter_msg_delay: float, recorder_warmup: float,
+                    done_evt: threading.Event):
     """Run from a daemon thread: wait for recorder discovery, publish, then SIGINT."""
-    transport = EnvelopeTransport(lambda _e: None, domain, sender)
-    transport.start()
+    from cyclonedds.domain import DomainParticipant
+
+    from spatialdds_demo import topic_types, typed_transport as tt
+
+    profiles = {DET_TYPE: "RADAR_RT", POSE_TYPE: "POSE_RT",
+                TRACK_TYPE: "POSE_RT"}
+    participant = DomainParticipant(domain)
+    writers = {
+        topic: tt.TypedDictWriter(participant, topic,
+                                  topic_types.resolve(type_name),
+                                  profiles[type_name])
+        for type_name, topic, _ in samples
+    }
     try:
-        # Give the recorder's reader a moment to come up via DDS discovery.
+        # Give the recorder's readers a moment to come up via DDS discovery.
         time.sleep(recorder_warmup)
-        for msg_type, topic, payload in samples:
-            transport.publish(
-                logical_topic=topic,
-                msg_type=msg_type,
-                payload_json=json.dumps(payload),
-            )
+        for _type_name, topic, payload in samples:
+            writers[topic].write(payload)
             time.sleep(inter_msg_delay)
-        # Let the recorder drain the last envelopes.
+        # Let the recorder drain the last samples.
         time.sleep(1.0)
     finally:
-        transport.stop()
         done_evt.set()
         # Signal the main thread (recorder) to exit.
         try:
@@ -103,28 +228,35 @@ def _phase1_record(domain: int, mcap_path: Path) -> Dict[str, int]:
 
 def _phase2_replay(domain: int, mcap_path: Path):
     """Subscriber + replayer (main thread) → verify what the subscriber receives."""
+    from cyclonedds.domain import DomainParticipant
+
+    from spatialdds_demo.stream import StreamSubscriber
+
     received: List[Tuple[str, str, str]] = []
     rx_lock = threading.Lock()
+    stop = threading.Event()
 
-    def on_env(env: object) -> None:
+    def on_sample(type_name, topic, payload, _stamp_ns):
         with rx_lock:
-            received.append(
-                _fingerprint(
-                    getattr(env, "msg_type", "") or "",
-                    getattr(env, "logical_topic", "") or "",
-                    getattr(env, "payload_json", "") or "",
-                )
-            )
+            received.append(_fingerprint(type_name, topic, payload))
 
-    sub = EnvelopeTransport(on_env, domain, "live-subscriber")
-    sub.start()
+    sub = StreamSubscriber(DomainParticipant(domain), on_sample)
+
+    def _pump():
+        while not stop.is_set():
+            sub.poll()
+            stop.wait(0.02)
+
+    pump = threading.Thread(target=_pump, daemon=True)
+    pump.start()
     try:
-        # Allow DDS discovery to wire the subscriber up before the replayer publishes.
-        time.sleep(2.0)
-        # Real-time speed: keeps the publisher's 0.15s spacing, which is well
-        # above the EnvelopeTransport's 10ms poll loop. Squashing this with
-        # speed>>1 races the default KEEP_LAST(1) best-effort reader cache
-        # and drops samples — match production timing instead.
+        # Allow DDS discovery to wire the subscriber up before the replayer
+        # publishes — including the announces that tell it which lanes exist.
+        time.sleep(3.0)
+        # Real-time speed keeps the publisher's 0.15s spacing, comfortably
+        # above the subscriber's 20ms poll. Squashing it races the
+        # best-effort lanes' reader cache and drops samples — match
+        # production timing instead.
         n = replayer_mod.replay(
             str(mcap_path),
             domain_id=domain,
@@ -133,9 +265,10 @@ def _phase2_replay(domain: int, mcap_path: Path):
             sender_id="live-replayer",
         )
         # Let the subscriber drain.
-        time.sleep(2.0)
+        time.sleep(3.0)
     finally:
-        sub.stop()
+        stop.set()
+        pump.join(timeout=2)
     return n, received
 
 
@@ -143,11 +276,16 @@ def _prewarm_idl(domain: int) -> None:
     """CycloneDDS Python lazily fills the IDL type-object cache the first time
     a Topic is created. If two threads race that init concurrently, the
     second observer sees `version_support is None`. Pre-warm in the main
-    thread before any worker threads spin up their own transports."""
-    warm = EnvelopeTransport(lambda _e: None, domain, "live-prewarm")
-    warm.start()
-    time.sleep(0.2)
-    warm.stop()
+    thread before any worker threads build their own endpoints."""
+    from cyclonedds.domain import DomainParticipant
+
+    from spatialdds_demo import topic_types, typed_transport as tt
+
+    participant = DomainParticipant(domain)
+    for i, type_name in enumerate((DET_TYPE, POSE_TYPE, TRACK_TYPE)):
+        tt.make_writer(participant, f"spatialdds/prewarm/{i}/v1",
+                       topic_types.resolve(type_name), "EVENT_RT")
+    time.sleep(0.3)
 
 
 def main() -> int:
@@ -159,11 +297,11 @@ def main() -> int:
         mcap_path.unlink()
 
     _prewarm_idl(domain)
+    SAMPLES.extend(_samples())
+    lanes = _announce_lanes(domain, SAMPLES)      # keep alive for the run
 
-    expected = [
-        _fingerprint(t, topic, json.dumps(payload))
-        for (t, topic, payload) in SAMPLES
-    ]
+    expected = [_fingerprint(t, topic, payload)
+                for (t, topic, payload) in SAMPLES]
     print(f"[live] domain={domain} expected={len(expected)} mcap={mcap_path}", flush=True)
 
     # Phase 1: publish + record
@@ -172,7 +310,7 @@ def main() -> int:
     if not mcap_path.exists() or mcap_path.stat().st_size == 0:
         print("[live] FAIL: recorder produced no MCAP file", flush=True)
         return 1
-    print(f"[live] recorded {sum(counts.values())} envelopes across {len(counts)} topics, "
+    print(f"[live] recorded {sum(counts.values())} samples across {len(counts)} topics, "
           f"file size {mcap_path.stat().st_size} bytes", flush=True)
     for topic in sorted(counts):
         print(f"  {counts[topic]:>6}  {topic}", flush=True)
@@ -187,15 +325,34 @@ def main() -> int:
     print(f"[live] replayer published {n_published}, subscriber received {len(received)}",
           flush=True)
 
-    received_set = set(received)
-    missing = [fp for fp in expected if fp not in received_set]
+    # Match each expected sample against an unclaimed received one, so a
+    # duplicate on the wire cannot stand in for a missing sample.
+    unclaimed = list(received)
+    missing = []
+    for fp in expected:
+        sent = json.loads(fp[2])
+        hit = next((r for r in unclaimed if r[0] == fp[0] and r[1] == fp[1]
+                    and _same(sent, json.loads(r[2]))), None)
+        if hit is None:
+            missing.append(fp)
+        else:
+            unclaimed.remove(hit)
     if missing:
-        print("[live] FAIL: missing fingerprints in subscriber output:", flush=True)
+        print("[live] FAIL: samples did not survive the round trip:", flush=True)
         for fp in missing:
-            print(f"  - msg_type={fp[0]} topic={fp[1]} payload={fp[2][:80]}", flush=True)
+            print(f"  - type={fp[0]} topic={fp[1]}", flush=True)
+            # Say *what* differs, not just that something did. A sample can
+            # go missing because it was dropped or because it came back
+            # changed, and those are different bugs.
+            near = [r for r in received if r[0] == fp[0] and r[1] == fp[1]]
+            if not near:
+                print("      never arrived", flush=True)
+                continue
+            for diff in _diff(json.loads(fp[2]), json.loads(near[0][2])):
+                print(f"      {diff}", flush=True)
         return 1
 
-    print(f"[live] PASS — all {len(expected)} envelopes survived "
+    print(f"[live] PASS — all {len(expected)} samples survived "
           f"publish→record→replay→subscribe", flush=True)
     return 0
 

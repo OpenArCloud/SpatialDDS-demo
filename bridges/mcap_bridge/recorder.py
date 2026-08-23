@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
-"""Record SpatialDDS envelope traffic to an MCAP file.
+"""Record SpatialDDS traffic to an MCAP file.
 
-Subscribes to the single `spatialdds/envelope/v1` topic that every demo
-publisher uses, then writes each envelope to MCAP keyed by its
-`logical_topic` (channel) and `msg_type` (schema). The payload is already
-JSON in the envelope, so we write its bytes verbatim — no per-dataclass
-serialization needed.
+Discovers lanes from announces, opens a typed reader per lane, and writes
+each sample as JSON under a channel named by its topic and a schema
+generated from its IDL type.
+
+The schema is the substantive change. Under the envelope there was one DDS
+topic and every payload was an opaque string, so a recording could say what
+its messages were called and nothing about what was in them; every schema
+was a permissive `{"type": "object"}`. Now each channel carries the real
+shape of its messages, which is what makes an MCAP file readable by someone
+who does not have this repo.
+
+JSON is still the on-disk encoding — MCAP tooling (`mcap cat`, Foxglove)
+reads it without a plugin, and that is worth more here than byte-for-byte
+CDR fidelity. Replay rebuilds the typed sample from it.
 """
 
 from __future__ import annotations
@@ -85,37 +94,43 @@ class _ChannelTable:
         return sid
 
 
-def _make_lossless_reader(domain_id: int):
-    """Build a CycloneDDS reader on the envelope topic with QoS tuned for
-    recording: RELIABLE + KEEP_ALL so a burst of writes within one poll
-    interval doesn't get collapsed to just the most recent sample (which
-    is what `EnvelopeTransport`'s default best-effort + KEEP_LAST(1) does
-    for live consumers).
+class _Recorder:
     """
-    from cyclonedds.core import Policy, Qos
-    from cyclonedds.domain import DomainParticipant
-    from cyclonedds.sub import DataReader, Subscriber
-    from cyclonedds.topic import Topic
+    A typed reader per announced lane, feeding one MCAP writer.
 
-    from nuscenes.dds_envelope_transport import (
-        SpatialDDSEnvelope,
-        TOPIC_DDS_ENVELOPE_V1,
-    )
+    Recording is discovery-driven for the same reason consuming is: with a
+    topic per type there is no single topic to subscribe to, and the
+    announce already says which topics exist and what is on them.
+    """
 
-    qos = Qos(
-        Policy.Reliability.Reliable(0),
-        Policy.History.KeepAll,
-        Policy.Durability.Volatile,
-    )
-    participant = DomainParticipant(domain_id)
-    topic = Topic(participant, TOPIC_DDS_ENVELOPE_V1, SpatialDDSEnvelope)
-    subscriber = Subscriber(participant)
-    reader = DataReader(subscriber, topic, qos=qos)
-    # Hold strong refs so they don't GC out from under the reader.
-    reader._participant = participant
-    reader._topic = topic
-    reader._subscriber = subscriber
-    return reader
+    def __init__(self, domain_id: int, on_sample):
+        from cyclonedds.domain import DomainParticipant
+
+        from spatialdds_demo.stream import StreamSubscriber
+
+        self._on_sample = on_sample
+        self._sub = StreamSubscriber(
+            DomainParticipant(domain_id), self._deliver,
+            on_announce=self._deliver_announce,
+        )
+
+    def _deliver(self, type_name, topic, payload, stamp_ns):
+        self._on_sample(type_name, topic, payload, stamp_ns)
+
+    def _deliver_announce(self, service_id, announce):
+        # Announces are recorded too: without them a replay has no way to
+        # tell a consumer what is on the topics it is about to write to.
+        name = announce.get("name") or service_id.removeprefix("svc:")
+        self._on_sample(ANNOUNCE_TYPE,
+                        f"spatialdds/{name}/discovery/announce/v1",
+                        announce, time.time_ns())
+
+    def poll(self):
+        self._sub.poll(stamp_ns=time.time_ns())
+
+
+# Discovery is not a TopicMeta lane, so it has no registry type name.
+ANNOUNCE_TYPE = "spatialdds/discovery/announce"
 
 
 def record(
@@ -125,7 +140,7 @@ def record(
     duration_sec: Optional[float] = None,
     schema_overrides: Optional[Dict[str, dict]] = None,
 ) -> Dict[str, int]:
-    """Record envelopes from `domain_id` to `output_path`.
+    """Record typed SpatialDDS traffic from `domain_id` to `output_path`.
 
     Args:
         output_path: path to the .mcap file to create.
@@ -134,8 +149,8 @@ def record(
             (e.g. ``["spatialdds/operator_a/*"]``). None = record everything.
         duration_sec: stop after this many seconds of wall time. None = run
             until SIGINT (Ctrl-C) or SIGTERM.
-        schema_overrides: optional {msg_type: jsonschema-dict} to extend
-            the default permissive schema table.
+        schema_overrides: optional {type_name: jsonschema-dict} replacing
+            the schema generated from that type's IDL.
 
     Returns:
         ``{logical_topic: message_count}`` for diagnostics.
@@ -153,27 +168,25 @@ def record(
     writer.start(profile="x-jsonschema", library="spatialdds-mcap-bridge")
     table = _ChannelTable(writer, schemas)
 
-    def _ingest(env: object) -> None:
-        logical_topic = getattr(env, "logical_topic", "") or ""
-        msg_type = getattr(env, "msg_type", "") or ""
+    def _ingest(msg_type: str, logical_topic: str, payload: dict,
+                stamp_ns: int) -> None:
         if topics and not _topic_matches(logical_topic, topics):
             return
-        payload_json = getattr(env, "payload_json", "") or "{}"
-        stamp_ns = int(getattr(env, "stamp_ns", 0) or time.time_ns())
+        stamp_ns = int(stamp_ns or time.time_ns())
         try:
             ch_id = table.channel_id(logical_topic, msg_type)
             writer.add_message(
                 channel_id=ch_id,
                 log_time=stamp_ns,
                 publish_time=stamp_ns,
-                data=payload_json.encode("utf-8"),
+                data=json.dumps(payload).encode("utf-8"),
             )
         except Exception as exc:
             print(f"[recorder] write failed for {logical_topic}: {exc}", file=sys.stderr)
             return
         counts[logical_topic] = counts.get(logical_topic, 0) + 1
 
-    reader = _make_lossless_reader(domain_id)
+    recorder = _Recorder(domain_id, _ingest)
 
     def _sigint(_sig, _frame):
         stop_event.set()
@@ -189,25 +202,14 @@ def record(
     deadline = (time.monotonic() + duration_sec) if duration_sec else None
     try:
         while not stop_event.is_set():
-            samples = reader.take(N=512)
-            if samples:
-                for sample in samples:
-                    if sample is None or not hasattr(sample, "payload_json"):
-                        continue
-                    _ingest(sample)
-            else:
-                # No samples ready: short wait so SIGINT stays responsive.
-                stop_event.wait(timeout=0.05)
+            recorder.poll()
+            stop_event.wait(timeout=0.02)
             if deadline is not None and time.monotonic() >= deadline:
                 break
     finally:
         # Drain anything still queued before closing the file.
         try:
-            tail = reader.take(N=4096) or []
-            for sample in tail:
-                if sample is None or not hasattr(sample, "payload_json"):
-                    continue
-                _ingest(sample)
+            recorder.poll()
         except Exception:
             pass
         writer.finish()
@@ -221,7 +223,7 @@ def record(
 
 
 def _main() -> int:
-    parser = argparse.ArgumentParser(description="Record SpatialDDS envelope traffic to MCAP")
+    parser = argparse.ArgumentParser(description="Record SpatialDDS traffic to MCAP")
     parser.add_argument("output", help="Output .mcap file path")
     parser.add_argument("--domain", type=int, default=int(os.getenv("SPATIALDDS_DDS_DOMAIN", "0")))
     parser.add_argument(

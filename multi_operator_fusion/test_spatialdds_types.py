@@ -19,10 +19,15 @@ if str(_HERE) not in sys.path:
 
 from spatialdds_types import (  # noqa: E402
     SCHEMA_CORE,
+    circle_coverage,
+    make_announce,
     make_component_ref,
+    make_detection,
     make_entity_binding,
+    make_framed_pose,
     make_planned_trajectory,
     make_planned_waypoint,
+    topic_meta,
 )
 
 
@@ -167,3 +172,76 @@ class TestEntityBinding(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBuildersMatchTheIdl(unittest.TestCase):
+    """
+    A builder must not emit a field its type does not have.
+
+    ``from_json`` ignores keys it does not recognise — it has to, because
+    edge clients legitimately send extra ones — so a builder that invents a
+    field produces a payload that looks right, builds without complaint, and
+    silently loses that field on the wire. This is where to be strict: the
+    demo's own builders are not an edge, and a name here that the IDL does
+    not have is a bug.
+
+    Found exactly that: `make_detection` wrote `tile_key.map_id`, which
+    spatial::core::TileKey has never had.
+    """
+
+    def _assert_no_unknown_fields(self, cls, payload, path=""):
+        import dataclasses
+
+        from spatialdds_demo.json_mapping import _resolved_hints, _typename, _unwrap
+
+        typename = _typename(cls)
+        known = {f.name for f in dataclasses.fields(cls)}
+        from spatialdds_idl._field_aliases import FIELD_ALIASES
+        known |= set(FIELD_ALIASES.get(typename, {}).values())
+        for key, value in payload.items():
+            where = f"{path}.{key}" if path else key
+            self.assertIn(key, known,
+                          f"{where}: {typename} has no field {key!r}")
+
+        hints = _resolved_hints(cls)
+        for field in dataclasses.fields(cls):
+            wire = FIELD_ALIASES.get(typename, {}).get(field.name, field.name)
+            if wire not in payload:
+                continue
+            target = _unwrap(hints.get(field.name))
+            value = payload[wire]
+            if isinstance(target, type) and dataclasses.is_dataclass(target) \
+                    and isinstance(value, dict):
+                self._assert_no_unknown_fields(target, value,
+                                               f"{path}.{wire}" if path else wire)
+            elif isinstance(value, list):
+                element = _unwrap(getattr(target, "subtype", None))
+                if isinstance(element, type) and dataclasses.is_dataclass(element):
+                    for i, item in enumerate(value):
+                        if isinstance(item, dict):
+                            self._assert_no_unknown_fields(
+                                element, item, f"{path}.{wire}[{i}]")
+
+    def test_detection_has_no_invented_fields(self):
+        from spatialdds_idl.spatial.semantics import Detection3D
+
+        det = make_detection(
+            det_id="d", class_id="vehicle.car", score=0.5,
+            center=(0.0, 0.0, 0.0), size=(1.0, 1.0, 1.0), q=(0.0, 0.0, 0.0, 1.0),
+            frame_ref_fqn="scene", timestamp_s=1.0, source_id="op")
+        self._assert_no_unknown_fields(Detection3D, det)
+
+    def test_framed_pose_has_no_invented_fields(self):
+        from spatialdds_idl.spatial.core import FramedPose
+
+        self._assert_no_unknown_fields(FramedPose, make_framed_pose(
+            0.0, 0.0, 0.0, q=(0.0, 0.0, 0.0, 1.0), frame_ref_fqn="scene",
+            timestamp_s=1.0))
+
+    def test_announce_has_no_invented_fields(self):
+        from spatialdds_idl.spatial.disco import Announce
+
+        self._assert_no_unknown_fields(Announce, make_announce(
+            operator="op", service_kind="SENSING",
+            topics=[topic_meta("t/v1", "oarc.framed_pose", "POSE_RT")],
+            coverage=circle_coverage(0.0, 0.0, 10.0), timestamp_s=1.0))

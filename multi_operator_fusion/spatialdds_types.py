@@ -316,7 +316,9 @@ def make_detection(det_id: str, class_id: str, score: float,
         "det_id": str(det_id),
         "frame_ref": _frame_ref(frame_ref_fqn),
         "has_tile": False,
-        "tile_key": {"map_id": "", "level": 0, "x": 0, "y": 0, "z": 0},
+        # spatial::core::TileKey is (x, y, z, level) — no map_id. The map a
+        # tile belongs to is context, not part of the key.
+        "tile_key": {"level": 0, "x": 0, "y": 0, "z": 0},
         "class_id": str(class_id),
         "score": float(score),
         "center": _vec(center),
