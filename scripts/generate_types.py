@@ -50,7 +50,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 SPEC_IDL = REPO / "idl" / "v1.7"
 DEMO_IDL = REPO / "idl" / "demo"
-DEFAULT_OUT = REPO / "spatialdds_types"
+DEFAULT_OUT = REPO / "spatialdds_idl"
 
 # Top-level packages idlc emits are discovered from its output rather than
 # hardcoded, so adding an IDL module (e.g. idl/demo/) needs no change here.

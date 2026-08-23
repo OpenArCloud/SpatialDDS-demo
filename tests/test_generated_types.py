@@ -3,7 +3,7 @@ Tests for the generated SpatialDDS types and the generator that produces them.
 
 Three jobs:
 
-1. The checked-in output under ``spatialdds_types/`` is importable and
+1. The checked-in output under ``spatialdds_idl/`` is importable and
    round-trips — no idlc needed, so this runs anywhere.
 2. Keys and wire names survive the generator's post-processing, which is what
    makes typed topics behave per the spec rather than merely compile.
@@ -23,14 +23,14 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_types._field_aliases import FIELD_ALIASES, wire_name  # noqa: E402
-from spatialdds_types.builtin import Time  # noqa: E402
-from spatialdds_types.oarc_demo import BootstrapQuery, BootstrapResponse  # noqa: E402
-from spatialdds_types.spatial.common import CoordConvention, FrameRef  # noqa: E402
-from spatialdds_types.spatial.core import (  # noqa: E402
+from spatialdds_idl._field_aliases import FIELD_ALIASES, wire_name  # noqa: E402
+from spatialdds_idl.builtin import Time  # noqa: E402
+from spatialdds_idl.oarc_demo import BootstrapQuery, BootstrapResponse  # noqa: E402
+from spatialdds_idl.spatial.common import CoordConvention, FrameRef  # noqa: E402
+from spatialdds_idl.spatial.core import (  # noqa: E402
     Aabb3, CovMatrix, FramedPose, GeoPose, PoseSE3,
 )
-from spatialdds_types.spatial.disco import (  # noqa: E402
+from spatialdds_idl.spatial.disco import (  # noqa: E402
     Announce, Capabilities, CoverageElement, CoverageFilter, CoverageQuery,
     CoverageResponse, Depart, ProfileSupport, ServiceKind, ServiceSummary,
     TopicMeta,
@@ -151,7 +151,7 @@ class KeysAndNames(unittest.TestCase):
         self.assertFalse(COVERAGE._global)
 
     def test_typenames_are_the_spec_names(self):
-        """Nesting under spatialdds_types must not leak into DDS type identity."""
+        """Nesting under spatialdds_idl must not leak into DDS type identity."""
         self.assertEqual(Announce.__idl__.idl_transformed_typename, "spatial::disco::Announce")
         self.assertEqual(GeoPose.__idl__.idl_transformed_typename, "spatial::core::GeoPose")
 
