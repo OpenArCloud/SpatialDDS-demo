@@ -12,7 +12,7 @@ What goes on the wire, per operator:
     spatialdds/{operator}/sensing/detection3d/v1
         oarc.detection3d_velocity   (Detection3DSet)      RADAR_RT
     spatialdds/{operator}/ego/pose/v1
-        oarc.framed_pose            (spatial::core::FramedPose)  POSE_RT
+        framed_pose                 (spatial::core::FramedPose)  POSE_RT
     spatialdds/{operator}/plan/{operator}_ego/trajectory/v1
         planned_trajectory          (PlannedTrajectory)          EVENT_RT
 

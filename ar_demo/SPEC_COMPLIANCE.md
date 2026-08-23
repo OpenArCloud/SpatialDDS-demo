@@ -239,15 +239,13 @@ protocol — flows this demo needs and the spec does not describe.
 
 | Extension | Type | Why it exists |
 |---|---|---|
-| `oarc.fused_track` | `oarc_demo::FusedTrackSet` | No fused-track type. `semantics::Tracklet` is feature-level and `vision::Track2D` is per-image; a cross-operator fused track — the output of the flagship demo — has nowhere to go |
-| `oarc.fusion_coverage` | `oarc_demo::FusionCoverage` | No type for fusion coverage metrics |
-| `oarc.vps_response` | `oarc_demo::VpsResponse` | `vps_query` is a registered *topic type* but 1.7 defines no struct for the request, and names no type at all for the response |
+| `oarc.fusion_coverage` | `oarc_demo::FusionCoverage` | No type for fusion coverage metrics — a per-operator "no single source could build this" scoreboard, an aggregate diagnostic rather than track content |
 | `oarc.catalog_query` | `oarc_demo::CatalogQuery` | No catalogue query/response pair. `ContentAnnounce` advertises content; nothing asks a catalogue what is in an area |
 | `oarc.catalog_response` | `oarc_demo::CatalogResponse` | as above |
 | `oarc.bootstrap_query` | `oarc_demo::BootstrapQuery` | No bootstrap exchange. A participant is assumed to know its domain id and QoS profile already, which is exactly what a fresh device does not |
 | `oarc.bootstrap_response` | `oarc_demo::BootstrapResponse` | as above |
 
-Seven, down from twelve. The five that went away, and what replaced them:
+Five, down from twelve. The seven that went away, and what replaced them:
 
 | Was | Now | Added by |
 |---|---|---|
@@ -256,14 +254,24 @@ Seven, down from twelve. The five that went away, and what replaced them:
 | `oarc.detection2d_set` (demo-local `Detection2D`/`BBox2D`) | `detection2d` — `semantics::Detection2DSet` | findings batch 2 |
 | `oarc.lidar_frame`, `oarc.lidar_meta`, `oarc.radar_tensor_meta`, `oarc.video_frame_meta`, `oarc.rf_beam_meta`, `oarc.imu_sample`, `oarc.anchor_delta` | the same names without the prefix | findings batch 2 |
 | `oarc.blob_chunk` (demo-local `BlobChunk` at a 65535 bound) | `spatial::core::BlobChunk` — the spec's bound is 65535 now | findings batch 2 |
+| VPS request/response (`oarc.vps_response`, and demo `VpsRequest`/`QualityRequirements`/`LocalizeQuality`) | `vps_query` / `vps_response` — `argeo::VpsRequest` / `VpsResponse` / `QualityRequirements` / `VpsStatus`. Query imagery rides `query_blobs` (`BlobRef`); result rides `NodeGeo` | batch 3 |
+| `oarc.fused_track` (`oarc_demo::FusedTrackSet`) | `fused_track` — `semantics::FusedTrackSet` on `DET_RT` | batch 3 |
 
-Each of those was raised as a finding from building this demo; see
+The VPS and fusion flows are now on spec types end-to-end — request/response,
+publisher, bridges and the interop probe all name the registered types. The
+fused track's per-operator detection provenance, deliberately excluded from
+`semantics::FusedTrack`, is carried by `core::EntityBinding`: the fusion service
+publishes one binding per track linking its `track_id` to each contributing
+operator's most-recent detection, and a consumer rebuilds the old inline map by
+joining `FusedTrackSet` with `EntityBinding` on `track_id`.
+
+Each removed extension was raised as a finding from building this demo; see
 `directions/spatialdds-1.7-review-submission.md` for the full list and how
 each was resolved.
 
 ## Where the spec and DDS still do not line up
 
-Two, both flagged rather than quietly resolved:
+Three, all flagged rather than quietly resolved:
 
 * **Ordering is "Ordered" for every profile.** DDS orders per instance by
   default (`DestinationOrder` BY_RECEPTION_TIMESTAMP), so no policy is set;
@@ -274,3 +282,10 @@ Two, both flagged rather than quietly resolved:
   data. The §3.3.3 table's deadline column is normative for that reason, and
   `tests/test_interop.py::DeadlineIsLoadBearing` pins the behaviour so it
   cannot be rediscovered the hard way.
+* **EntityBinding removal is unspecified (1.8 gaps note).** `core::EntityBinding`
+  is `@key entity_id`, RELIABLE + TRANSIENT_LOCAL, update-in-place — the spec
+  says how a binding is created and refreshed, but is silent on how one is
+  *removed* when the entity it correlates is gone (dispose vs. TTL vs. a
+  tombstone sample). The demo publishes bindings and lets the reader's
+  KEEP_LAST hold the latest per key; it does not invent a removal convention.
+  Raised for 1.8, not patched here.

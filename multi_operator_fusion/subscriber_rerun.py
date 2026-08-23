@@ -12,7 +12,7 @@ and a type this build cannot resolve is skipped rather than fatal.
 
 Rendered types:
 
-    oarc.framed_pose / geopose      ego pose and trail
+    framed_pose / geopose           ego pose and trail
     oarc.detection3d_velocity       per-operator detections
     video_frame, oarc.lidar_frame   raw sensor frames
     radar_detection                 radar detection sets

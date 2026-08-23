@@ -6,13 +6,7 @@ CatalogEntry
 CatalogFilter
 CatalogQuery
 CatalogResponse
-FusedTrack
-FusedTrackSet
 FusionCoverage
-LocalizeQuality
 MODULE_ID
 OperatorTrackCount
-QualityRequirements
 Time
-VpsRequest
-VpsResponse

@@ -6,7 +6,7 @@ well-known discovery topic, runs :class:`fusion.TrackFusion`, and publishes
 its own four typed streams — which it announces the same way, so a consumer
 finds the platform exactly as it finds an operator:
 
-    spatialdds/platform/fusion/track/v1              oarc.fused_track
+    spatialdds/platform/fusion/track/v1              fused_track
     spatialdds/platform/fusion/coverage/v1           oarc.fusion_coverage
     spatialdds/platform/events/trajectory_conflict/v1  spatial_event
     spatialdds/platform/entity/binding/v1            entity_binding
