@@ -361,27 +361,29 @@ class SpatialDDSValidator:
         cls,
         coverage_a: List[Dict[str, Any]],
         coverage_b: List[Dict[str, Any]],
+        frame_ref_a: Optional[Dict[str, Any]] = None,
+        frame_ref_b: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
-        Best-effort intersection check for bbox elements in matching frames.
-        Returns True if any bbox pair overlaps (2D check).
-        """
-        for elem_a in coverage_a:
-            for elem_b in coverage_b:
-                if elem_a.get("has_bbox") and elem_b.get("has_bbox"):
-                    if cls._bbox_intersects(elem_a["bbox"], elem_b["bbox"]):
-                        return True
-        return False
+        The §3.3.4 intersects predicate: bbox, aabb and circle, per frame.
 
-    @staticmethod
-    def _bbox_intersects(b1: List[float], b2: List[float]) -> bool:
-        west1, south1, east1, north1 = b1
-        west2, south2, east2, north2 = b2
-        if east1 < west2 or east2 < west1:
-            return False
-        if north1 < south2 or north2 < south1:
-            return False
-        return True
+        The implementation lives in :mod:`spatialdds_demo.discovery_http`, the
+        one module that owns discovery-binding semantics; this stays as the
+        entry point the on-bus `CoverageQuery` responder and the catalogue
+        server already call, so bus matching and HTTP matching cannot disagree.
+        It used to have its own bbox-only copy, which meant a service
+        announcing an aabb or a circle — every service in the multi-operator
+        fusion demo — matched no query anywhere.
+
+        Imported here rather than at module scope because discovery_http
+        imports this class.
+        """
+        from spatialdds_demo.discovery_http import coverage_intersects
+
+        return coverage_intersects(
+            list(coverage_a or []), list(coverage_b or []),
+            query_frame_ref=frame_ref_a, record_frame_ref=frame_ref_b,
+        )
 
 
 def complete_coverage_element(**fields: Any) -> Dict[str, Any]:

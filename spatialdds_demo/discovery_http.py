@@ -19,6 +19,7 @@ Nothing here imports FastAPI, CycloneDDS, or either server's registry.
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
@@ -108,16 +109,158 @@ def validate_search_request(query: Dict[str, Any]) -> None:
 # Matching
 # --------------------------------------------------------------------------
 
+# The §3.3.4 coverage model, as one predicate.
+#
+# Every coverage consumer in the repo — HTTP search, the on-bus CoverageQuery
+# responder, the catalogue server — comes through here, via
+# `SpatialDDSValidator.check_coverage_intersection` for the two that predate
+# this module. Matching on the bus and matching over HTTP must agree, and the
+# only way to be sure of that is for there to be one of them.
+#
+# It used to consider `bbox` alone. `aabb` has been in CoverageElement since
+# 1.4 and `circle` arrived in 1.7's findings-batch-2 revision, so a service
+# that declared either — which is every service in the multi-operator fusion
+# demo, whose footprints are circles — was invisible to every coverage query
+# regardless of where it was.
+
+# Metres per degree of latitude on WGS84, near enough for a bounding-box
+# approximation of a circle. §3.3.4: "For intersects evaluation a circle MAY
+# be approximated by its bounding box."
+_M_PER_DEG_LAT = 111320.0
+
+EARTH_FIXED = "earth-fixed"
+
+
+def _frame_key(element: Dict[str, Any], default_frame_ref: Optional[Dict[str, Any]]) -> str:
+    """
+    Which frame an element's numbers are in, as a comparable key.
+
+    §3.3.4: an element uses its own `frame_ref` when `has_frame_ref` is set and
+    the announcement's `coverage_frame_ref` otherwise. Geometry in an
+    earth-fixed frame is degrees of longitude and latitude; geometry in a local
+    frame is metres. Numbers from two different frames are not comparable until
+    a transform relates them, which §3.3.4 leaves as a MAY and this predicate
+    does not attempt — so they do not intersect here, rather than intersecting
+    by numeric coincidence. A local footprint stays invisible to a lon/lat
+    query until someone resolves its frame, which is the honest answer.
+    """
+    frame = element.get("frame_ref") if element.get("has_frame_ref") else default_frame_ref
+    fqn = ((frame or {}).get("fqn") or "").strip()
+    if not fqn or fqn == EARTH_FIXED or fqn.startswith(EARTH_FIXED + "/"):
+        return EARTH_FIXED
+    return fqn
+
+
+def _finite(values: Sequence[Any]) -> bool:
+    """§3.3.4: consumers SHALL reject non-finite coordinates."""
+    try:
+        return all(math.isfinite(float(v)) for v in values)
+    except (TypeError, ValueError):
+        return False
+
+
+def _circle_extent(
+    center: Sequence[float], radius_m: float, frame: str
+) -> Tuple[float, float, float, float]:
+    """A circle's bounding box, in the units its frame uses."""
+    if frame != EARTH_FIXED:
+        # Local frames are metres throughout, so the radius needs no conversion.
+        return (center[0] - radius_m, center[1] - radius_m,
+                center[0] + radius_m, center[1] + radius_m)
+    lon, lat = float(center[0]), float(center[1])
+    d_lat = radius_m / _M_PER_DEG_LAT
+    # Longitude degrees shrink towards the poles. Clamped so a footprint at a
+    # pole widens to the whole band instead of dividing by zero.
+    cos_lat = max(math.cos(math.radians(lat)), 1e-6)
+    d_lon = min(radius_m / (_M_PER_DEG_LAT * cos_lat), 180.0)
+    return (lon - d_lon, lat - d_lat, lon + d_lon, lat + d_lat)
+
+
+def coverage_extents(
+    coverage: Sequence[Dict[str, Any]],
+    frame_ref: Optional[Dict[str, Any]] = None,
+) -> List[Tuple[str, float, float, float, float]]:
+    """
+    Every 2D extent a coverage block declares, as `(frame, w, s, e, n)`.
+
+    §3.3.4: "consumers SHOULD treat the union of all regions as the effective
+    coverage" — so an element contributes one extent per geometry it carries,
+    and an element carrying both a circle and its bounding aabb (which is what
+    the fusion demo publishes, so that aabb-only consumers still see something)
+    contributes both. Extents are only ever tested for overlap, so a redundant
+    one costs nothing.
+    """
+    extents: List[Tuple[str, float, float, float, float]] = []
+    for element in coverage or []:
+        if not isinstance(element, dict):
+            continue
+        frame = _frame_key(element, frame_ref)
+
+        if element.get("has_bbox"):
+            bbox = element.get("bbox") or []
+            if len(bbox) >= 4 and _finite(bbox[:4]):
+                w, s, e, n = (float(v) for v in bbox[:4])
+                extents.append((frame, min(w, e), min(s, n), max(w, e), max(s, n)))
+
+        if element.get("has_aabb"):
+            aabb = element.get("aabb") or {}
+            lo = aabb.get("min_xyz") or []
+            hi = aabb.get("max_xyz") or []
+            if len(lo) >= 2 and len(hi) >= 2 and _finite([*lo[:2], *hi[:2]]):
+                extents.append((frame,
+                                min(float(lo[0]), float(hi[0])),
+                                min(float(lo[1]), float(hi[1])),
+                                max(float(lo[0]), float(hi[0])),
+                                max(float(lo[1]), float(hi[1]))))
+
+        if element.get("has_circle"):
+            center = element.get("circle_center") or []
+            radius = element.get("circle_radius_m")
+            if len(center) >= 2 and _finite([*center[:2], radius]) and float(radius) >= 0.0:
+                extents.append((frame, *_circle_extent(center, float(radius), frame)))
+
+    return extents
+
+
+def _extents_overlap(
+    a: Tuple[str, float, float, float, float],
+    b: Tuple[str, float, float, float, float],
+) -> bool:
+    if a[0] != b[0]:
+        return False                       # different frames: not comparable
+    _, w1, s1, e1, n1 = a
+    _, w2, s2, e2, n2 = b
+    if e1 < w2 or e2 < w1:
+        return False
+    if n1 < s2 or n2 < s1:
+        return False
+    return True                            # touching edges count as overlapping
+
+
 def coverage_intersects(
     query_coverage: Sequence[Dict[str, Any]],
     record_coverage: Sequence[Dict[str, Any]],
+    *,
+    query_frame_ref: Optional[Dict[str, Any]] = None,
+    record_frame_ref: Optional[Dict[str, Any]] = None,
 ) -> bool:
-    """Same predicate the on-bus responder applies, so both agree."""
-    if any(elem.get("global") for elem in record_coverage or []):
-        return True
-    return SpatialDDSValidator.check_coverage_intersection(
-        list(query_coverage or []), list(record_coverage or [])
-    )
+    """
+    Does a query's coverage meet a record's? §3.3.4, bbox / aabb / circle.
+
+    Frame refs are optional because the two older call sites (the on-bus
+    responder and the catalogue server) never had them to pass; absent, an
+    element without its own `frame_ref` is read as earth-fixed, which is what
+    every announcement in this repo that omits one means.
+    """
+    # `global` is the explicit worldwide toggle, on either side: a worldwide
+    # service answers any query, and a worldwide query reaches any service.
+    for side in (record_coverage or [], query_coverage or []):
+        if any(isinstance(e, dict) and e.get("global") for e in side):
+            return True
+
+    query_extents = coverage_extents(query_coverage, query_frame_ref)
+    record_extents = coverage_extents(record_coverage, record_frame_ref)
+    return any(_extents_overlap(q, r) for q in query_extents for r in record_extents)
 
 
 def matches_kind(kinds: Sequence[str], record: ServiceRecord) -> bool:
@@ -313,7 +456,11 @@ def search(
     for record in records:
         if record.service_id and record.service_id in seen:
             continue
-        if not coverage_intersects(coverage_q, record.coverage):
+        if not coverage_intersects(
+            coverage_q, record.coverage,
+            query_frame_ref=query.get("coverage_frame_ref"),
+            record_frame_ref=record.coverage_frame_ref,
+        ):
             continue
         if not matches_kind(kinds, record):
             continue
