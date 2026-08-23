@@ -34,7 +34,6 @@ from typing import Dict, Iterable, Optional
 _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
-# nuscenes/dds_envelope_transport lives at repo_root/nuscenes/
 _REPO_ROOT = _HERE.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))

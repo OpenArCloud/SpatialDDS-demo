@@ -67,7 +67,6 @@ _BRIDGES = _HERE.parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 if str(_BRIDGES) not in sys.path:
-    # for the shared envelope_io
     sys.path.insert(0, str(_BRIDGES))
 
 from spatialdds_demo import blob, topic_types, typed_transport as tt  # noqa: E402

@@ -39,7 +39,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
+from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.discovery_bus import AnnounceSubscriber
 from spatialdds_demo.discovery_http import (
     DiscoveryError,
@@ -82,8 +82,6 @@ DEFAULT_CATALOG_KINDS = ["overlay", "poi", "mesh"]
 class SpatialDDSBridge:
     def __init__(self) -> None:
         self._domain_id: Optional[int] = None
-        self._transport: Optional[DDSTransport] = None
-        self._inbox: queue.Queue = queue.Queue()
         self._last_announce: Optional[Dict[str, Any]] = None
         self._announce_sub: Optional[AnnounceSubscriber] = None
         self._announce_participant = None
@@ -106,31 +104,12 @@ class SpatialDDSBridge:
         return domain_id
 
     def _start_transport(self, domain_id: int) -> None:
-        # The legacy DDSTransport's on_message has two jobs:
-        #   1. feed the request-response correlator (self._inbox) used by
-        #      /v1/localize and /v1/catalog/query
-        #   2. broadcast envelope events to /v1/stream and /ws
-        #
-        # Job (1) only cares about specific reply messages; QoS doesn't
-        # matter much because each request/response pair is a single
-        # message. Job (2) cares deeply about QoS — the default
-        # BEST_EFFORT + KEEP_LAST(1) reader silently drops samples when
-        # the publisher emits multiple writes within one ~10ms poll
-        # interval, which collapses the per-operator rates the dashboard
-        # shows. We split the two: DDSTransport handles job (1); a
-        # separate RELIABLE+KEEP_ALL EnvelopeSubscriber (the same one
-        # the MCAP / ROS 2 / MQTT bridges use) handles job (2).
-        def on_message(envelope: object) -> None:
-            self._inbox.put(envelope)
-
-        self._transport = DDSTransport(
-            on_message_callback=on_message,
-            domain_id=domain_id,
-            local_sender_id=self._client_frame_ref["fqn"],
-        )
-        self._transport.start()
-        # Typed, keyed announces. Per-instance lifecycle means a late joiner
-        # gets every live service and a dispose evicts exactly one.
+        # One participant for everything this bridge reads and writes:
+        # announces, the VPS and catalogue request/reply pairs, and the
+        # streaming fanout. The envelope transport that used to sit here
+        # existed to correlate replies; VpsClient and CatalogClient do that
+        # on their own typed topics now, correlating on the request_id and
+        # query_id the reply mirrors rather than on an envelope field.
         from cyclonedds.domain import DomainParticipant
         self._announce_participant = DomainParticipant(domain_id)
         self._announce_sub = AnnounceSubscriber(self._announce_participant)
@@ -203,9 +182,6 @@ class SpatialDDSBridge:
                 if not announce:
                     raise RuntimeError("No ANNOUNCE received")
                 service_id = announce.get("service_id", "")
-            if not self._transport:
-                raise RuntimeError("DDS transport not initialized")
-
             request = self._create_localize_request(service_id, prior_geopose)
             if self._vps is None:
                 self._vps = VpsClient(self._announce_participant)
@@ -237,9 +213,6 @@ class SpatialDDSBridge:
         _lock(self._request_lock)
         try:
             self.ensure_transport()
-            if not self._transport:
-                raise RuntimeError("DDS transport not initialized")
-
             if self._catalog is None:
                 client_id = f"bridge-{uuid.uuid4().hex[:6]}"
                 self._catalog = CatalogClient(
@@ -468,8 +441,7 @@ STATIC_DIR = os.getenv("SPATIALDDS_BRIDGE_STATIC_DIR", str(_HERE / "static"))
 
 def _dispatch_to_clients(envelope) -> None:
     """Schedule ClientManager.dispatch on the event loop. Called from the
-    sync DDS poll thread (DDSTransport's on_message), so we hop threads via
-    ``call_soon_threadsafe``."""
+    sync DDS poll thread, so we hop threads via ``call_soon_threadsafe``."""
     global _event_loop, _total_dispatched
     if _event_loop is None:
         return
@@ -688,8 +660,8 @@ def on_startup() -> None:
     loop.create_task(broadcaster.run())
 
     # Typed reader per announced lane, discovered from announces — this is
-    # the streaming-side fanout to /v1/stream + /ws. DDSTransport still
-    # handles the localize/catalog request-response correlation.
+    # the streaming-side fanout to /v1/stream + /ws. The VPS and catalogue
+    # request/reply pairs correlate themselves, on their own typed topics.
     _envelope_sub = _StreamPump(domain_id)
     _envelope_sub.start()
 

@@ -2,17 +2,17 @@
 
 Each ``*_to_spatialdds`` function takes a duck-typed ROS 2 message (real
 ``rclpy`` class or a mock from ``test_mocks``) plus operator/sensor context,
-and returns a JSON-serializable dict ready to ride inside the existing
-``spatialdds/envelope/v1`` envelope's ``payload_json`` field.
+and returns ``(topic, §3.3.2 type name, payload dict)``.
 
-Per repo convention (see ``nuscenes/dds_envelope_transport.py`` /
-``multi_operator_fusion/publisher.py``), the bridge emits dicts rather than
-typed SpatialDDS dataclasses. This keeps the shared
-``nuscenes/spatialdds_types.py`` lean — types are promoted to dataclasses
-only when a real consumer needs typed access.
+The payload is a dict because that is convenient to build and test, not
+because it is the wire format: ``bridge_node`` builds it into the named type
+before writing, so a payload that is not a well-formed sample fails at the
+bridge. ``spatialdds_to_ros2.py`` goes the other way.
 
-The companion ``envelope_io.py`` ships these dicts on the wire and
-``spatialdds_to_ros2.py`` unpacks them on the way back out.
+The builders for spec types come from ``spatialdds_demo.payloads``, shared
+with the multi-operator publishers. Each side used to have its own and both
+were wrong — a bridge and a publisher disagreeing about a spec type is
+exactly the drift a typed wire is meant to make impossible.
 
 NO ROS 2 imports. NO DDS imports. Pure-Python so Tier-1 tests can run
 without either dependency.
@@ -408,9 +408,10 @@ def _as_array(value: Any, keys=("x", "y", "z")) -> List[float]:
     return [float((value or {}).get(k, 1.0 if k == "w" else 0.0)) for k in keys]
 
 
-# ---------- Convenience: convert + topic + msg_type --------------------------
-# Each ``encode_*`` returns ``(logical_topic, msg_type, payload_dict)`` ready
-# for ``envelope_io.publish_envelope(...)``.
+# ---------- Convenience: convert + topic + type ------------------------------
+# Each ``encode_*`` returns ``(topic, type_name, payload)`` ready for a typed
+# writer. ``type_name`` is the §3.3.2 registry name, which is also what the
+# announce advertises and what a consumer resolves into a reader.
 
 def encode_pose_stamped(msg: Any, operator: str,
                          frame_mapper: FrameMapper) -> Tuple[str, str, Dict[str, Any]]:
