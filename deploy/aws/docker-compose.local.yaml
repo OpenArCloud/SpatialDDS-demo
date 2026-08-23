@@ -37,6 +37,10 @@ services:
       - ../..:/app:ro
     environment:
       - SPATIALDDS_DDS_DOMAIN=0
+      # The bootstrap manifest has its own domain variable, defaulting to 1.
+      # Unset, this stack advertises a domain it does not publish on.
+      - SPATIALDDS_BOOTSTRAP_DOMAIN=0
+      - SPATIALDDS_BOOTSTRAP_SITE=spatialdds-demo-local
       - SPATIALDDS_TRANSPORT=dds
       - SPATIALDDS_BRIDGE_ALLOW_PUBLISH=1
       - CYCLONEDDS_URI=file:///etc/cyclonedds.xml

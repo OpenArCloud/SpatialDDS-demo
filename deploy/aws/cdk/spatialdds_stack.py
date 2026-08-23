@@ -99,6 +99,14 @@ class SpatialDDSStack(Stack):
 
         common_env: Dict[str, str] = {
             "SPATIALDDS_DDS_DOMAIN": "0",
+            # The bootstrap manifest the bridge serves at
+            # /.well-known/spatialdds/bootstrap is driven by its own
+            # SPATIALDDS_BOOTSTRAP_* variables, which default to domain 1.
+            # Unset, a Layer-1 client that followed this deployment's own
+            # bootstrap would join domain 1 and find nothing, because the
+            # task publishes on domain 0. Keep the two in step.
+            "SPATIALDDS_BOOTSTRAP_DOMAIN": "0",
+            "SPATIALDDS_BOOTSTRAP_SITE": construct_id,
             "SPATIALDDS_TRANSPORT": "dds",
             "CYCLONEDDS_URI": "file:///etc/cyclonedds.xml",
             "PYTHONUNBUFFERED": "1",
