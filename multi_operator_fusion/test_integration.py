@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""In-process end-to-end test: envelope shapes from publishers round-trip
-correctly through the fusion service.
+"""In-process end-to-end test: publisher payloads round-trip through fusion.
 
-No DDS, no data files — synthesizes the exact JSON payloads each
-publisher emits and drives them through ``FusionService.on_envelope``,
-then asserts on the fuser's output and the ``NUSC_FUSED_TRACK_SET`` /
-``NUSC_FUSION_COVERAGE`` payloads on the platform topics.
+No DDS, no data files — builds payloads with the *same* helpers the
+publishers use, routes them through ``FusionService.on_message``, and asserts
+both on the fuser's output and on the platform payloads, each of which is
+built into its announced type.
 
-Catches contract drift between publisher (operator/infra) and the
-fusion parser — the kind of bug that only surfaces at wire time.
+Using the real builders rather than a hand-copied JSON shape is the point:
+the old version of this test restated the payload shape by hand, so it went
+on passing while the publishers and the parser drifted apart. Now a drift in
+either one fails here.
 """
 
 from __future__ import annotations
@@ -24,61 +25,70 @@ if str(SELF_DIR) not in sys.path:
     sys.path.insert(0, str(SELF_DIR))
 
 from fusion import TrackFusion  # noqa: E402
-from fusion_service import COVERAGE_TOPIC, FusionService, TRACK_TOPIC  # noqa: E402
+from fusion_service import (  # noqa: E402
+    COVERAGE_TOPIC, DET3D_TYPE, FusionService, TRACK_TOPIC,
+)
 from infrastructure_publisher import (  # noqa: E402
     _apply_offset,
     _stamp_from_index,
     make_detection3d_payload,
 )
+from spatialdds_demo.json_mapping import from_json  # noqa: E402
+from spatialdds_idl.oarc_demo import (  # noqa: E402
+    FusedTrackSet, FusionCoverage, OperatorDetectionSet,
+)
+from spatialdds_types import (  # noqa: E402
+    make_detection, make_detection_set, make_detection_with_velocity,
+)
 
-
-def _envelope(msg_type: str, topic: str, payload: dict):
-    return types.SimpleNamespace(
-        msg_type=msg_type, logical_topic=topic,
-        payload_json=json.dumps(payload), stamp_ns=0, request_id="",
-    )
+SCENE = "scene/intersection"
 
 
 class _FakeTransport:
-    """Mirrors bridges/envelope_io.EnvelopePublisher.publish (payload is a dict)."""
+    """Mirrors ``stream.StreamPublisher.publish``."""
 
     def __init__(self):
         self.sent = []
 
-    def publish(self, logical_topic, msg_type, payload, request_id="", stamp_ns=None):
-        self.sent.append((logical_topic, msg_type, payload))
+    def publish(self, topic, payload):
+        self.sent.append((topic, payload))
 
 
-def _operator_det3d_envelope(operator: str, x: float, y: float, z: float = 0.0,
-                             vx: float = 0.0, vy: float = 0.0,
-                             cls: str = "vehicle.car", score: float = 0.9):
-    """Shape matches what multi_operator_fusion/publisher.py emits."""
-    payload = {
-        "frame_seq": 1,
-        "stamp": {"sec": 0, "nanosec": 0},
-        "source_operator": operator,
-        "detections": [{
-            "det_id": f"{operator}-1",
-            "center": {"x": x, "y": y, "z": z},
-            "size": {"x": 2.0, "y": 1.6, "z": 4.5},
-            "q": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            "class_id": cls, "score": score,
-            "has_velocity": True,
-            "velocity": {"x": vx, "y": vy, "z": 0.0},
-        }],
-    }
-    return _envelope("NUSC_DET3D_SET",
-                     f"spatialdds/{operator}/sensing/detection3d/v1", payload)
+def _operator_det3d(operator: str, x: float, y: float, z: float = 0.0,
+                    vx: float = 0.0, vy: float = 0.0,
+                    cls: str = "vehicle.car", score: float = 0.9) -> dict:
+    """Built exactly as the operator publishers build it."""
+    det = make_detection(
+        det_id=f"{operator}-1", class_id=cls, score=score,
+        center=(x, y, z), size=(2.0, 1.6, 4.5), q=(0.0, 0.0, 0.0, 1.0),
+        frame_ref_fqn=SCENE, timestamp_s=0.0, source_id=operator,
+    )
+    return make_detection_set(
+        set_id=f"{operator}-1", source_operator=operator, frame_ref_fqn=SCENE,
+        dets=[make_detection_with_velocity(det, velocity=(vx, vy, 0.0),
+                                           source_modality="det3d")],
+        frame_seq=1, timestamp_s=0.0,
+    )
 
 
-def _infra_det3d_envelope(x: float, y: float, z: float = 0.0):
-    """Shape matches infrastructure_publisher.make_detection3d_payload."""
-    payload = make_detection3d_payload(
+def _infra_det3d(x: float, y: float, z: float = 0.0) -> dict:
+    return make_detection3d_payload(
         frame_seq=1, stamp=_stamp_from_index(1),
         east=x, north=y, up=z, velocity=(0.0, 0.0, 0.0),
     )
-    return _envelope("INFRA_DET3D_SET",
-                     "spatialdds/infrastructure/sensing/detection3d/v1", payload)
+
+
+def _feed(svc, operator: str, payload: dict) -> None:
+    """
+    Route one detection set in, having first proved it is a real sample.
+
+    Building it here is what makes this an end-to-end contract test: if a
+    publisher helper drifts out of the IDL, `from_json` raises before the
+    fuser is ever reached.
+    """
+    from_json(OperatorDetectionSet, payload)
+    svc.on_message(DET3D_TYPE,
+                   f"spatialdds/{operator}/sensing/detection3d/v1", payload, 0)
 
 
 class RoundTrip(unittest.TestCase):
@@ -92,9 +102,9 @@ class RoundTrip(unittest.TestCase):
 
     def test_three_operators_at_distinct_positions_yield_three_tracks(self):
         svc, transport = self._make()
-        svc.on_envelope(_operator_det3d_envelope("operator_a", x=0, y=-60))
-        svc.on_envelope(_operator_det3d_envelope("operator_b", x=60, y=0))
-        svc.on_envelope(_operator_det3d_envelope("operator_c", x=-60, y=0))
+        _feed(svc, "operator_a", _operator_det3d("operator_a", x=0, y=-60))
+        _feed(svc, "operator_b", _operator_det3d("operator_b", x=60, y=0))
+        _feed(svc, "operator_c", _operator_det3d("operator_c", x=-60, y=0))
         tracks = svc._fuser.tick(t=0.0)
         self.assertEqual(len(tracks), 3)
         for t in tracks:
@@ -104,9 +114,9 @@ class RoundTrip(unittest.TestCase):
         svc, _ = self._make()
         # Operator A, Operator B, and infrastructure all report the same object
         # near (10, 5) — the fuser should produce exactly one 3-source track.
-        svc.on_envelope(_operator_det3d_envelope("operator_a", x=10.0, y=5.0))
-        svc.on_envelope(_operator_det3d_envelope("operator_b", x=10.2, y=5.1))
-        svc.on_envelope(_infra_det3d_envelope(x=9.8, y=4.9))
+        _feed(svc, "operator_a", _operator_det3d("operator_a", x=10.0, y=5.0))
+        _feed(svc, "operator_b", _operator_det3d("operator_b", x=10.2, y=5.1))
+        _feed(svc, "infrastructure", _infra_det3d(x=9.8, y=4.9))
         tracks = svc._fuser.tick(t=0.0)
         self.assertEqual(len(tracks), 1)
         self.assertEqual(tracks[0].source_count, 3)
@@ -117,31 +127,32 @@ class RoundTrip(unittest.TestCase):
 
     def test_platform_topics_receive_fused_tracks_and_coverage(self):
         svc, transport = self._make()
-        svc.on_envelope(_operator_det3d_envelope("operator_a", x=0, y=0))
-        svc.on_envelope(_infra_det3d_envelope(x=0.3, y=0.1))
+        _feed(svc, "operator_a", _operator_det3d("operator_a", x=0, y=0))
+        _feed(svc, "infrastructure", _infra_det3d(x=0.3, y=0.1))
         tracks = svc._fuser.tick(t=1.0)
         svc._publish_tracks(tracks, t=1.0)
         svc._publish_coverage(tracks, t=1.0)
 
-        topics = {topic for topic, _, _ in transport.sent}
+        topics = {topic for topic, _ in transport.sent}
         self.assertIn(TRACK_TOPIC, topics)
         self.assertIn(COVERAGE_TOPIC, topics)
 
-        track_payload = next(p for topic, _, p in transport.sent if topic == TRACK_TOPIC)
-        self.assertEqual(len(track_payload["tracks"]), 1)
-        self.assertEqual(track_payload["tracks"][0]["source_count"], 2)
+        track_set = from_json(FusedTrackSet, next(
+            p for topic, p in transport.sent if topic == TRACK_TOPIC))
+        self.assertEqual(len(track_set.tracks), 1)
+        self.assertEqual(track_set.tracks[0].source_count, 2)
 
-        cov_payload = next(p for topic, _, p in transport.sent if topic == COVERAGE_TOPIC)
-        self.assertEqual(cov_payload["metrics"]["track_count"], 1)
-        self.assertEqual(cov_payload["metrics"]["multi_source_count"], 1)
-        self.assertAlmostEqual(cov_payload["metrics"]["multi_source_pct"], 1.0)
+        coverage = from_json(FusionCoverage, next(
+            p for topic, p in transport.sent if topic == COVERAGE_TOPIC))
+        self.assertEqual(coverage.track_count, 1)
+        self.assertEqual(coverage.multi_source_count, 1)
+        self.assertAlmostEqual(coverage.multi_source_pct, 1.0)
 
     def test_published_offset_preserved_end_to_end(self):
         """Offset baked into a publisher's Detection3D survives the round trip."""
         svc, _ = self._make()
         # Simulate operator_b applying a (+60, 0, 0) offset to a detection at origin
-        env = _operator_det3d_envelope("operator_b", x=60.0, y=0.0)
-        svc.on_envelope(env)
+        _feed(svc, "operator_b", _operator_det3d("operator_b", x=60.0, y=0.0))
         tracks = svc._fuser.tick(t=0.0)
         self.assertEqual(len(tracks), 1)
         self.assertAlmostEqual(tracks[0].position.x, 60.0)
@@ -155,10 +166,8 @@ class RoundTrip(unittest.TestCase):
             frame_seq=1, stamp=_stamp_from_index(1),
             east=0.0, north=0.0, up=0.0, velocity=(0.0, 0.0, 0.0),
         )
-        _apply_offset(payload["detections"][0], (-30.0, 30.0, 0.0))
-        env = _envelope("INFRA_DET3D_SET",
-                        "spatialdds/infrastructure/sensing/detection3d/v1", payload)
-        svc.on_envelope(env)
+        _apply_offset(payload["dets"][0], (-30.0, 30.0, 0.0))
+        _feed(svc, "infrastructure", payload)
         tracks = svc._fuser.tick(t=0.0)
         self.assertEqual(len(tracks), 1)
         self.assertAlmostEqual(tracks[0].position.x, -30.0)

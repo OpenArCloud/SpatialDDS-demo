@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Unit tests for the fusion_service adapter layer.
 
-Exercises the pure-Python envelope-handling path (no DDS, no threads).
+Exercises the pure-Python routing and payload-building path (no DDS, no
+threads). Every published payload is built into its announced type, which is
+the check that matters: under the envelope a payload only had to be JSON.
 """
 
 from __future__ import annotations
@@ -18,36 +20,26 @@ if str(SELF_DIR) not in sys.path:
 
 from fusion import TrackFusion  # noqa: E402
 from fusion_service import (  # noqa: E402
+    DET3D_TYPE,
     FusionService,
+    PLAN_TYPE,
     _parse_detection,
 )
 
 
-def _envelope(msg_type: str, logical_topic: str, payload: dict) -> types.SimpleNamespace:
-    return types.SimpleNamespace(
-        msg_type=msg_type,
-        logical_topic=logical_topic,
-        payload_json=json.dumps(payload),
-        stamp_ns=0,
-        request_id="",
-    )
-
-
 class _FakeTransport:
-    """Stand-in for EnvelopePublisher that records publishes in memory.
+    """
+    Stand-in for ``stream.StreamPublisher`` that records publishes in memory.
 
-    Mirrors ``bridges/envelope_io.EnvelopePublisher.publish``, which takes the
-    payload as a dict (it serialises internally) and an optional stamp_ns.
-    The older EnvelopeTransport took a pre-serialised ``payload_json``; this
-    fake tracked that signature and stopped matching when fusion_service moved
-    to the lossless publisher.
+    It deliberately does *not* build the payload into its type — the tests do
+    that explicitly, so a failure names the type that could not be built.
     """
 
     def __init__(self):
         self.sent = []
 
-    def publish(self, logical_topic, msg_type, payload, request_id="", stamp_ns=None):
-        self.sent.append((logical_topic, msg_type, payload))
+    def publish(self, topic, payload):
+        self.sent.append((topic, payload))
 
 
 class ParseDetection(unittest.TestCase):
@@ -82,7 +74,7 @@ class ParseDetection(unittest.TestCase):
         self.assertEqual((det.velocity.vx, det.velocity.vy, det.velocity.vz), (0.0, 0.0, 0.0))
 
 
-class EnvelopeDispatch(unittest.TestCase):
+class MessageRouting(unittest.TestCase):
     def _make_service(self):
         transport = _FakeTransport()
         svc = FusionService(
@@ -91,73 +83,113 @@ class EnvelopeDispatch(unittest.TestCase):
         )
         return svc, transport
 
-    def test_ignores_wrong_topic_suffix(self):
+    @staticmethod
+    def _det(x, y, cls="vehicle.car", score=0.9):
+        return {"detection": {"det_id": "d", "class_id": cls, "score": score,
+                              "center": [x, y, 0.0]},
+                "has_velocity": True, "velocity": [0.0, 0.0, 0.0],
+                "source_modality": "det3d"}
+
+    def test_ignores_a_type_it_does_not_fuse(self):
+        """
+        Routing is on the announced type, so a vision frame is ignored
+        because of what it is — not because its topic name looks wrong.
+        """
         svc, _ = self._make_service()
-        env = _envelope("NUSC_VISION_FRAME",
-                        "spatialdds/operator_a/vision/CAM_FRONT/frame/v1",
-                        {"source_operator": "operator_a"})
-        svc.on_envelope(env)
+        svc.on_message("video_frame",
+                       "spatialdds/operator_a/vision/CAM_FRONT/frame/v1",
+                       {"source_operator": "operator_a"}, 0)
         self.assertEqual(svc._fuser.tick(t=0.0), [])
 
     def test_ignores_payload_without_source_operator(self):
         svc, _ = self._make_service()
-        env = _envelope("NUSC_DET3D_SET",
-                        "spatialdds/operator_a/sensing/detection3d/v1",
-                        {"detections": [{"center": {"x": 0, "y": 0, "z": 0}, "score": 1.0}]})
-        svc.on_envelope(env)
+        svc.on_message(DET3D_TYPE,
+                       "spatialdds/operator_a/sensing/detection3d/v1",
+                       {"dets": [self._det(0, 0)]}, 0)
         self.assertEqual(svc._fuser.tick(t=0.0), [])
 
     def test_detections_are_fed_to_fuser(self):
         svc, _ = self._make_service()
-        env = _envelope("NUSC_DET3D_SET",
-                        "spatialdds/operator_a/sensing/detection3d/v1",
-                        {"source_operator": "operator_a",
-                         "detections": [
-                             {"center": {"x": 10, "y": 20, "z": 0},
-                              "velocity": {"x": 0, "y": 0, "z": 0},
-                              "has_velocity": True,
-                              "class_id": "vehicle.car", "score": 0.9},
-                         ]})
-        svc.on_envelope(env)
+        svc.on_message(DET3D_TYPE,
+                       "spatialdds/operator_a/sensing/detection3d/v1",
+                       {"source_operator": "operator_a",
+                        "dets": [self._det(10, 20)]}, 0)
         tracks = svc._fuser.tick(t=0.0)
         self.assertEqual(len(tracks), 1)
         self.assertIn("operator_a", tracks[0].source_operators)
 
-    def test_accepts_infrastructure_topic(self):
-        """Any source publishing to a */sensing/detection3d/v1 topic should be accepted."""
+    def test_accepts_infrastructure_source(self):
+        """The infrastructure radar publishes the same type; nothing special."""
         svc, _ = self._make_service()
-        env = _envelope("INFRA_DET3D_SET",
-                        "spatialdds/infrastructure/sensing/detection3d/v1",
-                        {"source_operator": "infrastructure",
-                         "detections": [
-                             {"center": {"x": 5, "y": 5, "z": 0},
-                              "velocity": {"x": 0, "y": 0, "z": 0},
-                              "has_velocity": True,
-                              "class_id": "vehicle", "score": 0.8},
-                         ]})
-        svc.on_envelope(env)
+        svc.on_message(DET3D_TYPE,
+                       "spatialdds/infrastructure/sensing/detection3d/v1",
+                       {"source_operator": "infrastructure",
+                        "dets": [self._det(5, 5, cls="vehicle", score=0.8)]}, 0)
         tracks = svc._fuser.tick(t=0.0)
         self.assertEqual(len(tracks), 1)
         self.assertEqual(tracks[0].source_operators, ["infrastructure"])
 
-    def test_publish_tracks_emits_on_platform_topic(self):
-        svc, transport = self._make_service()
-        svc._publish_tracks([], t=123.5)
-        self.assertEqual(len(transport.sent), 1)
-        topic, msg_type, payload = transport.sent[0]
-        self.assertEqual(topic, "spatialdds/platform/fusion/track/v1")
-        self.assertEqual(msg_type, "NUSC_FUSED_TRACK_SET")
-        self.assertEqual(payload["source_operator"], "platform")
-        self.assertEqual(payload["tracks"], [])
+    def test_publish_tracks_emits_a_real_fused_track_set(self):
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.oarc_demo import FusedTrackSet
 
-    def test_publish_coverage_includes_metrics(self):
         svc, transport = self._make_service()
-        svc._publish_coverage([], t=0.0)
-        topic, msg_type, payload = transport.sent[0]
+        svc.on_message(DET3D_TYPE,
+                       "spatialdds/operator_a/sensing/detection3d/v1",
+                       {"source_operator": "operator_a",
+                        "dets": [self._det(10, 20)]}, 0)
+        svc._publish_tracks(svc._fuser.tick(t=123.5), t=123.5)
+        self.assertEqual(len(transport.sent), 1)
+        topic, payload = transport.sent[0]
+        self.assertEqual(topic, "spatialdds/platform/fusion/track/v1")
+        track_set = from_json(FusedTrackSet, payload)
+        self.assertEqual(track_set.source_operator, "platform")
+        self.assertEqual(len(track_set.tracks), 1)
+        self.assertEqual(track_set.tracks[0].source_operators, ["operator_a"])
+
+    def test_publish_coverage_flattens_metrics_into_the_struct(self):
+        """
+        `metrics` used to be a nested free-form object. FusionCoverage names
+        each metric as a field, and the per-operator counts — which were a
+        JSON object keyed by operator — become a typed sequence.
+        """
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.oarc_demo import FusionCoverage
+
+        svc, transport = self._make_service()
+        svc.on_message(DET3D_TYPE,
+                       "spatialdds/operator_a/sensing/detection3d/v1",
+                       {"source_operator": "operator_a",
+                        "dets": [self._det(10, 20)]}, 0)
+        svc._publish_coverage(svc._fuser.tick(t=0.0), t=0.0)
+        topic, payload = transport.sent[0]
         self.assertEqual(topic, "spatialdds/platform/fusion/coverage/v1")
-        self.assertEqual(msg_type, "NUSC_FUSION_COVERAGE")
-        self.assertIn("metrics", payload)
-        self.assertIn("multi_source_pct", payload["metrics"])
+        coverage = from_json(FusionCoverage, payload)
+        self.assertEqual(coverage.track_count, 1)
+        self.assertEqual(
+            [(r.operator_id, r.track_count) for r in coverage.per_operator_track_count],
+            [("operator_a", 1)])
+
+    def test_conflict_event_builds_into_a_spatial_event(self):
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.spatial.events import SpatialEvent
+
+        svc, transport = self._make_service()
+        for agent, y in (("op_a_ego", 0.0), ("op_b_ego", 0.5)):
+            svc.on_message(PLAN_TYPE, f"spatialdds/x/plan/{agent}/trajectory/v1", {
+                "agent_id": agent,
+                "waypoints": [{"pose": {"t": [0.0, y, 0.0],
+                                        "q": [0.0, 0.0, 0.0, 1.0]},
+                               "stamp": {"sec": 100, "nanosec": 0}}],
+            }, 0)
+        svc._publish_trajectory_conflicts(t=1.0)
+        self.assertTrue(transport.sent, "no conflict published")
+        topic, payload = transport.sent[0]
+        self.assertEqual(topic, "spatialdds/platform/events/trajectory_conflict/v1")
+        event = from_json(SpatialEvent, payload)
+        self.assertTrue(event.has_measured_distance_m)
+        # MetaKV is a JSON string, so nothing rides in `attributes`.
+        self.assertEqual(event.attributes, [])
 
 
 if __name__ == "__main__":

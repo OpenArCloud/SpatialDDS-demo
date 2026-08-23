@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
 """Synthetic multi-operator Detection3D publisher.
 
-Generates a continuous stream of ``NUSC_DET3D_SET`` envelopes from N fake
-operators with overlapping fields-of-view, so the fusion service can
-merge them into multi-source tracks. No dataset prerequisites — the
-positions are computed from a closed-form path so the demo works on a
-fresh AWS deployment with nothing pre-staged.
+Generates a continuous stream of typed detection sets from N fake operators
+with overlapping fields-of-view, so the fusion service can merge them into
+multi-source tracks. No dataset prerequisites — the positions are computed
+from a closed-form path so the demo works on a fresh AWS deployment with
+nothing pre-staged.
 
-Topic shape (matches nuScenes / multi_operator_fusion publishers):
+What goes on the wire, per operator:
 
-    logical_topic = spatialdds/{operator}/sensing/detection3d/v1
-    msg_type      = NUSC_DET3D_SET
-    payload       = {
-        "frame_seq": int,
-        "stamp": {"sec": int, "nanosec": int},
-        "source_operator": str,
-        "detections": [
-            {"det_id": str, "center": {x,y,z}, "size": {x,y,z},
-             "q": {x,y,z,w}, "class_id": str, "score": float,
-             "has_velocity": true, "velocity": {x,y,z}},
-            ...
-        ]
-    }
+    spatialdds/{operator}/sensing/detection3d/v1
+        oarc.detection3d_velocity   (OperatorDetectionSet)      RADAR_RT
+    spatialdds/{operator}/ego/pose/v1
+        oarc.framed_pose            (spatial::core::FramedPose)  POSE_RT
+    spatialdds/{operator}/plan/{operator}_ego/trajectory/v1
+        planned_trajectory          (PlannedTrajectory)          EVENT_RT
+
+plus one roadside `infrastructure` service publishing the same detection
+type through a radar noise model.
+
+Each service announces those lanes on the well-known keyed discovery topic
+before it writes to them, so a consumer finds the topics, their types and
+their QoS profiles by reading discovery rather than by hardcoding a list.
 
 Run standalone:
 
@@ -40,11 +40,9 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# Reach the shared bridges/envelope_io.py (RELIABLE + KEEP_ALL writer).
-# This matters because we publish 3 operators back-to-back from ONE process
-# — the legacy ``EnvelopeTransport`` uses default ``KEEP_LAST(1)`` history
-# and silently drops all but the last sample in such bursts. The lossless
-# writer holds everything until it's acked.
+# Each lane gets its own typed writer with its own announced QoS profile
+# (3.3.3), so a burst of three operators back-to-back is not at the mercy of
+# one shared history depth the way the single-envelope writer was.
 _HERE = Path(__file__).resolve().parent
 _REPO_ROOT = _HERE.parent
 for p in (str(_REPO_ROOT), str(_REPO_ROOT / "nuscenes"),
@@ -61,23 +59,35 @@ if str(_HERE) in sys.path:
     sys.path.remove(str(_HERE))
 sys.path.insert(0, str(_HERE))
 
-from envelope_io import EnvelopePublisher  # noqa: E402
+from cyclonedds.domain import DomainParticipant  # noqa: E402
+
+from spatialdds_demo.stream import StreamPublisher  # noqa: E402
+
+SCENE_FRAME_FQN = "scene/intersection"
+
 from spatialdds_types import (  # noqa: E402
     circle_coverage,
     make_announce,
+    make_detection,
+    make_detection_set,
+    make_detection_with_velocity,
+    make_framed_pose,
     topic_meta,
     make_planned_trajectory,
     make_planned_waypoint,
 )
 
 
-MSG_TYPE = "NUSC_DET3D_SET"
+# Each lane is (topic, §3.3.2 type name, §3.3.3 QoS profile). The announce
+# and the writers are both built from these, so a lane cannot be announced
+# under one type and published as another.
+DET_TYPE, DET_QOS = "oarc.detection3d_velocity", "RADAR_RT"
 TOPIC_FMT = "spatialdds/{operator}/sensing/detection3d/v1"
 
-EGO_POSE_MSG_TYPE = "NUSC_EGO_POSE"
+EGO_POSE_TYPE, EGO_POSE_QOS = "oarc.framed_pose", "POSE_RT"
 EGO_POSE_TOPIC_FMT = "spatialdds/{operator}/ego/pose/v1"
 
-PLAN_MSG_TYPE = "PlannedTrajectory"
+PLAN_TYPE, PLAN_QOS = "planned_trajectory", "EVENT_RT"
 PLAN_TOPIC_FMT = "spatialdds/{operator}/plan/{operator}_ego/trajectory/v1"
 
 # ── Infrastructure (radar-plausible) detection stream ──────────────────
@@ -91,11 +101,14 @@ PLAN_TOPIC_FMT = "spatialdds/{operator}/plan/{operator}_ego/trajectory/v1"
 # track persistence) get filtered out by the multi-frame logic.
 INFRA_OPERATOR = "infrastructure"
 INFRA_TOPIC = f"spatialdds/{INFRA_OPERATOR}/sensing/detection3d/v1"
-INFRA_MSG_TYPE = "INFRA_DET3D_SET"
 INFRA_BS_POSITION = {"x": -25.0, "y": -25.0, "z": 2.0}  # roadside-pole-ish
 
-ANNOUNCE_TOPIC_FMT = "spatialdds/{operator}/discovery/announce/v1"
-ANNOUNCE_MSG_TYPE = "Announce"
+# Announces go on the one well-known keyed topic (C.5), not a topic per
+# operator. `Announce` is `@key service_id`, so every service is its own
+# instance on it: a late joiner gets the current announce of each live
+# service, and disposing an instance means "this one service left". The
+# per-operator announce topics existed only because the unkeyed envelope
+# collapsed to a single latched sample per topic.
 COVERAGE_RADIUS_M = 80.0
 INFRA_COVERAGE_RADIUS_M = 200.0
 
@@ -152,26 +165,16 @@ def _ego_state(op_idx: int, t_demo: float) -> Dict[str, float]:
 
 def _build_ego_pose(op_idx: int, ego: Dict[str, float], t_wall: float,
                      frame_seq: int) -> Dict:
-    """FramedPose-shape payload for the operator's current ego pose."""
+    """The operator's ego pose as a spec `FramedPose`.
+
+    frame_seq is no longer carried: FramedPose has no such member, and the
+    per-sample ordering DDS already provides makes it redundant.
+    """
     yaw = math.atan2(ego["vy"], ego["vx"]) if (ego["vx"] or ego["vy"]) else 0.0
-    return {
-        "frame_seq": int(frame_seq),
-        "stamp": {"sec": int(t_wall), "nanosec": int((t_wall % 1) * 1e9)},
-        "source_operator": _operator_id(op_idx),
-        "frame_ref": {
-            "uuid": "",
-            "fqn": f"{_operator_id(op_idx)}/map",
-            # v1.6 §2.12 — ENU axis convention.
-            "has_coord_convention": True,
-            "coord_convention": "ENU",
-        },
-        "pose": {
-            "t": {"x": ego["x"], "y": ego["y"], "z": ego["z"]},
-            "q": _quat_yaw(yaw),
-        },
-        "has_velocity": True,
-        "velocity": {"x": ego["vx"], "y": ego["vy"], "z": ego["vz"]},
-    }
+    return make_framed_pose(
+        ego["x"], ego["y"], ego["z"], _quat_yaw(yaw),
+        frame_ref_fqn=f"{_operator_id(op_idx)}/map", timestamp_s=t_wall,
+    )
 
 
 def _build_planned_trajectory(op_idx: int, t_demo: float, t_wall: float,
@@ -257,26 +260,31 @@ def _quat_yaw(yaw: float) -> Dict[str, float]:
 
 
 def _build_detection(op_idx: int, obj_idx: int, t: float) -> Dict:
+    """One detection: the spec Detection3D, plus the velocity it has no member for."""
     p = _object_path(t, op_idx, obj_idx)
     cls = CLASSES[obj_idx % len(CLASSES)]
     if cls == "vehicle.truck":
-        size = {"x": 7.0, "y": 2.4, "z": 3.0}
+        size = (7.0, 2.4, 3.0)
     elif cls == "vehicle.car":
-        size = {"x": 4.5, "y": 1.8, "z": 1.6}
+        size = (4.5, 1.8, 1.6)
     elif cls == "vehicle.bicycle":
-        size = {"x": 1.7, "y": 0.5, "z": 1.2}
+        size = (1.7, 0.5, 1.2)
     else:  # pedestrian
-        size = {"x": 0.6, "y": 0.6, "z": 1.7}
-    return {
-        "det_id": f"obj_{obj_idx:02d}",
-        "center": {"x": p["cx"], "y": p["cy"], "z": p["cz"]},
-        "size": size,
-        "q": _quat_yaw(p["yaw"]),
-        "class_id": cls,
-        "score": 0.85 + 0.05 * math.sin(t + obj_idx + op_idx),
-        "has_velocity": True,
-        "velocity": {"x": p["vx"], "y": p["vy"], "z": p["vz"]},
-    }
+        size = (0.6, 0.6, 1.7)
+    operator = _operator_id(op_idx)
+    detection = make_detection(
+        det_id=f"obj_{obj_idx:02d}",
+        class_id=cls,
+        score=0.85 + 0.05 * math.sin(t + obj_idx + op_idx),
+        center=(p["cx"], p["cy"], p["cz"]),
+        size=size,
+        q=_quat_yaw(p["yaw"]),
+        frame_ref_fqn=SCENE_FRAME_FQN,
+        timestamp_s=t,
+        source_id=operator,
+    )
+    return make_detection_with_velocity(
+        detection, (p["vx"], p["vy"], p["vz"]), source_modality="det3d")
 
 
 def _radar_observe(target_xyz: Tuple[float, float, float],
@@ -344,7 +352,6 @@ def _build_infra_set(t: float, frame_seq: int, n_operators: int,
                 "q": _quat_yaw(true["yaw"]),
                 "class_id": cls,
                 "score": score,
-                "has_velocity": False,
             })
 
     # False alarms: 0–2 per frame, scored low so fusion can drop them.
@@ -362,15 +369,25 @@ def _build_infra_set(t: float, frame_seq: int, n_operators: int,
             "q": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
             "class_id": "unknown",
             "score": rng.uniform(0.15, 0.35),
-            "has_velocity": False,
         })
 
-    return {
-        "frame_seq": int(frame_seq),
-        "stamp": {"sec": int(t), "nanosec": int((t % 1) * 1e9)},
-        "source_operator": INFRA_OPERATOR,
-        "detections": detections,
-    }
+    # The base station reports no velocity: its radar model here yields
+    # position only, so has_velocity is false on every row.
+    dets = [
+        make_detection_with_velocity(
+            make_detection(
+                det_id=d["det_id"], class_id=d["class_id"], score=d["score"],
+                center=d["center"], size=d["size"], q=d["q"],
+                frame_ref_fqn=SCENE_FRAME_FQN, timestamp_s=t,
+                source_id=INFRA_OPERATOR),
+            velocity=None, source_modality="radar")
+        for d in detections
+    ]
+    return make_detection_set(
+        set_id=f"{INFRA_OPERATOR}-{frame_seq}", source_operator=INFRA_OPERATOR,
+        frame_ref_fqn=SCENE_FRAME_FQN, dets=dets,
+        frame_seq=frame_seq, timestamp_s=t,
+    )
 
 
 def _operator_coverage(op_idx: int) -> Dict:
@@ -390,9 +407,9 @@ def _build_operator_announce(op_idx: int, t_wall: float) -> Dict:
     # Registered types and QoS profiles per 3.3.2 / 3.3.3, so the announce
     # says something a consumer can act on rather than a demo-private label.
     topics = [
-        topic_meta(TOPIC_FMT.format(operator=operator), "radar_detection", "RADAR_RT"),
-        topic_meta(EGO_POSE_TOPIC_FMT.format(operator=operator), "geopose", "POSE_RT"),
-        topic_meta(PLAN_TOPIC_FMT.format(operator=operator), "planned_trajectory", "EVENT_RT"),
+        topic_meta(TOPIC_FMT.format(operator=operator), DET_TYPE, DET_QOS),
+        topic_meta(EGO_POSE_TOPIC_FMT.format(operator=operator), EGO_POSE_TYPE, EGO_POSE_QOS),
+        topic_meta(PLAN_TOPIC_FMT.format(operator=operator), PLAN_TYPE, PLAN_QOS),
     ]
     return make_announce(
         operator=operator, service_kind="SENSING",
@@ -405,7 +422,7 @@ def _build_infra_announce(t_wall: float) -> Dict:
     coverage = circle_coverage(
         INFRA_BS_POSITION["x"], INFRA_BS_POSITION["y"], INFRA_COVERAGE_RADIUS_M,
     )
-    topics = [topic_meta(INFRA_TOPIC, "radar_detection", "RADAR_RT")]
+    topics = [topic_meta(INFRA_TOPIC, DET_TYPE, DET_QOS)]
     return make_announce(
         operator=INFRA_OPERATOR, service_kind="INFRASTRUCTURE",
         topics=topics, coverage=coverage, timestamp_s=t_wall,
@@ -424,12 +441,12 @@ def _build_set(op_idx: int, n_objects: int, t: float, frame_seq: int,
         if obj_idx == drop_idx:
             continue
         detections.append(_build_detection(op_idx, obj_idx, t))
-    return {
-        "frame_seq": int(frame_seq),
-        "stamp": {"sec": int(t), "nanosec": int((t % 1) * 1e9)},
-        "source_operator": _operator_id(op_idx),
-        "detections": detections,
-    }
+    operator = _operator_id(op_idx)
+    return make_detection_set(
+        set_id=f"{operator}-{frame_seq}", source_operator=operator,
+        frame_ref_fqn=SCENE_FRAME_FQN, dets=detections,
+        frame_seq=frame_seq, timestamp_s=t,
+    )
 
 
 def main() -> int:
@@ -458,7 +475,8 @@ def main() -> int:
         print("--rate must be > 0", file=sys.stderr)
         return 1
 
-    transport = EnvelopePublisher(args.domain)
+    participant = DomainParticipant(args.domain)
+    transport = StreamPublisher(participant)
     infra_rng = random.Random(args.seed)
 
     period = 1.0 / args.rate
@@ -483,20 +501,14 @@ def main() -> int:
     announce_period_s = 5.0
 
     def _emit_announces() -> None:
+        # Re-announcing refreshes each service's own instance rather than
+        # overwriting one shared latched sample, so this is idempotent per
+        # service and the TTL backstop stays meaningful.
         wall = time.time()
         for op_idx in range(args.operators):
-            transport.publish(
-                logical_topic=ANNOUNCE_TOPIC_FMT.format(
-                    operator=_operator_id(op_idx)),
-                msg_type=ANNOUNCE_MSG_TYPE,
-                payload=_build_operator_announce(op_idx, wall),
-            )
+            transport.announce(_build_operator_announce(op_idx, wall))
         if not args.no_infrastructure:
-            transport.publish(
-                logical_topic=ANNOUNCE_TOPIC_FMT.format(operator=INFRA_OPERATOR),
-                msg_type=ANNOUNCE_MSG_TYPE,
-                payload=_build_infra_announce(wall),
-            )
+            transport.announce(_build_infra_announce(wall))
 
     _emit_announces()
     last_announce_t = time.time()
@@ -513,40 +525,26 @@ def main() -> int:
                 # Detection3DSet (10 Hz)
                 payload = _build_set(op_idx, args.objects_per_operator, t,
                                        frame_seq)
-                transport.publish(
-                    logical_topic=TOPIC_FMT.format(operator=operator),
-                    msg_type=MSG_TYPE,
-                    payload=payload,
-                )
+                transport.publish(TOPIC_FMT.format(operator=operator), payload)
                 # Ego pose (10 Hz) — useful for the dashboard and for the
                 # fusion service's future use.
                 ego = _ego_state(op_idx, t_demo)
-                transport.publish(
-                    logical_topic=EGO_POSE_TOPIC_FMT.format(operator=operator),
-                    msg_type=EGO_POSE_MSG_TYPE,
-                    payload=_build_ego_pose(op_idx, ego, t, frame_seq),
-                )
+                transport.publish(EGO_POSE_TOPIC_FMT.format(operator=operator),
+                                  _build_ego_pose(op_idx, ego, t, frame_seq))
                 # PlannedTrajectory (2 Hz by default)
                 if frame_seq % plan_every_n == 0:
                     plan = _build_planned_trajectory(op_idx, t_demo, t)
                     transport.publish(
-                        logical_topic=PLAN_TOPIC_FMT.format(operator=operator),
-                        msg_type=PLAN_MSG_TYPE,
-                        payload=plan,
-                    )
+                        PLAN_TOPIC_FMT.format(operator=operator), plan)
             # Radar-plausible infrastructure stream (10 Hz, one consolidated
             # set covering every operator's objects). Off when --no-infrastructure.
             if not args.no_infrastructure:
-                transport.publish(
-                    logical_topic=INFRA_TOPIC,
-                    msg_type=INFRA_MSG_TYPE,
-                    payload=_build_infra_set(
-                        t=t, frame_seq=frame_seq,
-                        n_operators=args.operators,
-                        n_objects_per_operator=args.objects_per_operator,
-                        bs=INFRA_BS_POSITION, rng=infra_rng,
-                    ),
-                )
+                transport.publish(INFRA_TOPIC, _build_infra_set(
+                    t=t, frame_seq=frame_seq,
+                    n_operators=args.operators,
+                    n_objects_per_operator=args.objects_per_operator,
+                    bs=INFRA_BS_POSITION, rng=infra_rng,
+                ))
             if not args.quiet and frame_seq % 50 == 0:
                 print(f"[synthetic] frame_seq={frame_seq} "
                       f"t_demo={t_demo:.1f}", file=sys.stderr)

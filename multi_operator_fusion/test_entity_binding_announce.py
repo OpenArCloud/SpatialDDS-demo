@@ -31,7 +31,6 @@ if "envelope_io" not in sys.modules:
 from fusion import FusedTrack, Position, Velocity  # noqa: E402
 from fusion_service import (  # noqa: E402
     DET3D_TOPIC_FMT,
-    ENTITY_BINDING_MSG_TYPE,
     ENTITY_BINDING_TOPIC,
     FusionService,
     TRACK_TOPIC,
@@ -55,8 +54,8 @@ class _RecordingTransport:
     def __init__(self) -> None:
         self.calls = []
 
-    def publish(self, **kwargs) -> None:
-        self.calls.append(kwargs)
+    def publish(self, topic, payload) -> None:
+        self.calls.append({"topic": topic, "payload": payload})
 
 
 def _make_fused_track(track_id="fused-7", op_dets=None, cls="vehicle.car"):
@@ -99,8 +98,7 @@ class TestEntityBindingPublish(unittest.TestCase):
         self.svc._publish_entity_bindings(tracks, t=10.0)
         self.assertEqual(len(self.tx.calls), 2)
         for call in self.tx.calls:
-            self.assertEqual(call["logical_topic"], ENTITY_BINDING_TOPIC)
-            self.assertEqual(call["msg_type"], ENTITY_BINDING_MSG_TYPE)
+            self.assertEqual(call["topic"], ENTITY_BINDING_TOPIC)
 
     def test_components_include_track_and_each_operator_det(self):
         track = _make_fused_track("fused-7", {
@@ -140,16 +138,26 @@ class TestEntityBindingPublish(unittest.TestCase):
         self.svc._publish_entity_bindings([track], t=10.0)
         binding = self.tx.calls[0]["payload"]
         self.assertTrue(binding["has_pose"])
-        self.assertEqual(binding["pose"]["t"]["x"], 1.0)
-        self.assertEqual(binding["pose"]["t"]["y"], 2.0)
+        # EntityBinding.pose is a FramedPose — a pose plus the frame it is
+        # expressed in — not a bare PoseSE3.
+        self.assertEqual(binding["pose"]["pose"]["t"][:2], [1.0, 2.0])
+        self.assertTrue(binding["pose"]["frame_ref"]["fqn"])
         self.assertEqual(binding["entity_class"], "vehicle.car")
 
-    def test_payload_is_json_serialisable(self):
+    def test_payload_builds_into_the_real_type(self):
+        """
+        The assertion that matters now. JSON-serialisability was all the
+        envelope could check; what counts is that the payload is a complete,
+        well-formed EntityBinding — from_json refuses a partial one.
+        """
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.spatial.core import EntityBinding
+
         track = _make_fused_track("fused-1", {"operator_a": "det_1"})
         self.svc._publish_entity_bindings([track], t=10.0)
-        # Round-trips cleanly — the IDL's wire format is JSON-on-envelope.
-        round_tripped = json.loads(json.dumps(self.tx.calls[0]["payload"]))
-        self.assertEqual(round_tripped["entity_id"], "entity_fused-1")
+        binding = from_json(EntityBinding, self.tx.calls[0]["payload"])
+        self.assertEqual(binding.entity_id, "entity_fused-1")
+        self.assertEqual(binding.components[0].topic, TRACK_TOPIC)
 
 
 class TestAnnounceBuilder(unittest.TestCase):
@@ -196,10 +204,31 @@ class TestAnnounceBuilder(unittest.TestCase):
         })
         by_name = {t["name"]: t for t in a["topics"]}
         det = by_name["spatialdds/operator_b/sensing/detection3d/v1"]
-        self.assertEqual(det["type"], "radar_detection")
+        # Not the registered `radar_detection`: the fuser gates on per-detection
+        # velocity and semantics::Detection3D carries none, so this lane is a
+        # documented extension that composes the spec type. Announcing it under
+        # the registered name would misdescribe what is on the topic.
+        self.assertEqual(det["type"], "oarc.detection3d_velocity")
         self.assertEqual(det["qos_profile"], "RADAR_RT")
         plan = by_name["spatialdds/operator_b/plan/operator_b_ego/trajectory/v1"]
         self.assertEqual(plan["type"], "planned_trajectory")
+
+    def test_every_announced_topic_type_resolves_to_a_class(self):
+        """
+        The point of announcing a type name: a consumer can turn it into a
+        typed reader without a hardcoded topic list. Whatever this demo
+        announces must therefore be resolvable, registered or extension.
+        """
+        from spatialdds_demo import topic_types
+
+        for build in (lambda: _build_operator_announce(op_idx=1, t_wall=0.0),
+                      lambda: _build_infra_announce(t_wall=1.0)):
+            for topic in build()["topics"]:
+                with self.subTest(topic=topic["name"]):
+                    self.assertIsNotNone(
+                        topic_types.try_resolve(topic["type"]),
+                        f"announced type {topic['type']!r} resolves to nothing",
+                    )
 
     def test_coverage_is_a_coverage_element_centred_on_ego_start(self):
         """

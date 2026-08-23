@@ -40,6 +40,7 @@ for _p in (DEEPSENSE_DIR, REPO_ROOT, NUSCENES_DIR):
         sys.path.insert(0, str(_p))
 
 SOURCE_OPERATOR = "infrastructure"
+SCENE_FRAME_FQN = "scene/intersection"
 TOPIC_PREFIX = f"spatialdds/{SOURCE_OPERATOR}"
 EARTH_M_PER_DEG_LAT = 111_000.0
 
@@ -68,26 +69,34 @@ def make_detection3d_payload(
     class_id: str = "vehicle",
     score: float = 0.9,
 ) -> Dict:
-    """Build a Detection3DSet payload in the shape the fusion service expects.
-
-    One detection per frame — the Tx vehicle's known GPS-derived position.
     """
-    vx, vy, vz = velocity
-    return {
-        "frame_seq": frame_seq,
-        "stamp": stamp,
-        "source_operator": SOURCE_OPERATOR,
-        "detections": [{
-            "det_id": f"infra-{frame_seq}",
-            "center": {"x": float(east), "y": float(north), "z": float(up)},
-            "size": {"x": 2.0, "y": 1.6, "z": 4.5},  # generic car bbox (w, h, d)
-            "q": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            "class_id": class_id,
-            "score": float(score),
-            "has_velocity": True,
-            "velocity": {"x": float(vx), "y": float(vy), "z": float(vz)},
-        }],
-    }
+    One ``OperatorDetectionSet`` per frame — the Tx vehicle's GPS-derived
+    position, observed from the base station.
+
+    Built with the same helpers the synthetic publisher uses, so the two
+    infrastructure sources cannot drift into different payload shapes; that
+    drift is exactly what the round-trip test used to catch after the fact.
+    """
+    from multi_operator_fusion.spatialdds_types import (
+        make_detection, make_detection_set, make_detection_with_velocity,
+    )
+
+    timestamp_s = stamp["sec"] + stamp["nanosec"] / 1e9
+    det = make_detection(
+        det_id=f"infra-{frame_seq}", class_id=class_id, score=float(score),
+        center=(float(east), float(north), float(up)),
+        size=(2.0, 1.6, 4.5),                       # generic car bbox
+        q=(0.0, 0.0, 0.0, 1.0),
+        frame_ref_fqn=SCENE_FRAME_FQN, timestamp_s=timestamp_s,
+        source_id=SOURCE_OPERATOR,
+    )
+    return make_detection_set(
+        set_id=f"infra-{frame_seq}", source_operator=SOURCE_OPERATOR,
+        frame_ref_fqn=SCENE_FRAME_FQN,
+        dets=[make_detection_with_velocity(det, velocity=velocity,
+                                           source_modality="radar")],
+        frame_seq=frame_seq, timestamp_s=timestamp_s,
+    )
 
 
 def _velocity_from_history(
@@ -106,10 +115,10 @@ def _velocity_from_history(
     return (dx / dt, dy / dt, 0.0)
 
 
-def _apply_offset(detection: Dict, offset: Tuple[float, float, float]) -> None:
-    ox, oy, oz = offset
-    c = detection["center"]
-    c["x"] += ox; c["y"] += oy; c["z"] += oz
+def _apply_offset(det: Dict, offset: Tuple[float, float, float]) -> None:
+    """Shift one DetectionWithVelocity's centre. Vec3 is an array, not {x,y,z}."""
+    centre = det["detection"]["center"]
+    det["detection"]["center"] = [c + o for c, o in zip(centre, offset)]
 
 
 def _stamp_from_index(idx: int) -> Dict[str, int]:

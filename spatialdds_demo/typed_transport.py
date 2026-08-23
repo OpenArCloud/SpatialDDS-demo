@@ -241,3 +241,48 @@ def _meta_field(row: Any, field: str) -> str:
     if isinstance(row, dict):
         return str(row.get(field) or "")
     return str(getattr(row, field, "") or "")
+
+
+class TypedDictWriter:
+    """
+    A typed writer fed with JSON dicts.
+
+    The demo's publishers build payloads as dicts and always have. This keeps
+    that, while putting a real typed sample on the wire: the dict is built into
+    the struct before writing, so a malformed payload fails at the publisher
+    rather than becoming an opaque string a consumer discovers later.
+
+    It is a migration aid, not a hiding place — the bus carries the type, and
+    `from_json` refuses anything that is not a complete, well-formed sample.
+    """
+
+    def __init__(self, participant: DomainParticipant, topic: str, datatype: Type,
+                 qos_profile: str, *, lifespan_sec: Optional[float] = None):
+        self.topic = topic
+        self.datatype = datatype
+        self._writer = make_writer(
+            participant, topic, datatype, qos_profile, lifespan_sec=lifespan_sec)
+
+    def write(self, payload: Any) -> None:
+        from spatialdds_demo.json_mapping import from_json
+
+        sample = payload if isinstance(payload, self.datatype) else from_json(
+            self.datatype, payload)
+        self._writer.write(sample)
+
+    def dispose(self, payload: Any) -> None:
+        from spatialdds_demo.json_mapping import from_json
+
+        sample = payload if isinstance(payload, self.datatype) else from_json(
+            self.datatype, payload)
+        self._writer.dispose(sample)
+
+
+def samples_as_json(samples: List[TopicSample]) -> List[Tuple[str, str, Any]]:
+    """``(topic, type_name, dict)`` for consumers that work in JSON."""
+    from spatialdds_demo.json_mapping import to_json
+
+    return [
+        (s.topic, s.type_name, to_json(s.data))
+        for s in samples if s.data is not None
+    ]

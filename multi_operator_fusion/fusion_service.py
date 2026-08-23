@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Platform-level fusion service.
 
-Subscribes to every operator's Detection3D stream via the shared
-SpatialDDS envelope transport, runs :class:`fusion.TrackFusion`, and
-publishes FusedTracks plus coverage metrics on platform topics:
+Discovers every operator's detection stream through the announces on the
+well-known discovery topic, runs :class:`fusion.TrackFusion`, and publishes
+its own four typed streams — which it announces the same way, so a consumer
+finds the platform exactly as it finds an operator:
 
-    spatialdds/platform/fusion/track/v1       NUSC_FUSED_TRACK_SET
-    spatialdds/platform/fusion/coverage/v1    NUSC_FUSION_COVERAGE
+    spatialdds/platform/fusion/track/v1              oarc.fused_track
+    spatialdds/platform/fusion/coverage/v1           oarc.fusion_coverage
+    spatialdds/platform/events/trajectory_conflict/v1  spatial_event
+    spatialdds/platform/entity/binding/v1            entity_binding
 
-Detection3D payloads are recognized by ``msg_type == "NUSC_DET3D_SET"``
-with a logical_topic matching ``spatialdds/{operator}/sensing/detection3d/v1``.
-Operator provenance is read from the top-level ``source_operator`` field
-stamped by the per-operator publisher.
+Detection sets are recognised by the announced type on the topic they arrive
+on, not by a demo-private label inside the payload. Operator provenance is
+read from ``source_operator``, which the per-operator publisher stamps.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import signal
 import sys
 import threading
 import time
@@ -47,10 +50,18 @@ from fusion import (  # noqa: E402
     coverage_metrics,
 )
 from spatialdds_types import (  # noqa: E402
+    circle_coverage,
+    make_announce,
     make_component_ref,
     make_entity_binding,
+    make_fused_track_set,
+    make_fusion_coverage,
+    make_trajectory_conflict_event,
+    topic_meta,
 )
 
+DET3D_TYPE = "oarc.detection3d_velocity"
+PLAN_TYPE = "planned_trajectory"
 DET3D_TOPIC_SUFFIX = "sensing/detection3d/v1"
 DET3D_TOPIC_FMT = "spatialdds/{operator}/sensing/detection3d/v1"
 PLAN_TOPIC_SUFFIX = "trajectory/v1"
@@ -58,10 +69,18 @@ TRACK_TOPIC = "spatialdds/platform/fusion/track/v1"
 COVERAGE_TOPIC = "spatialdds/platform/fusion/coverage/v1"
 TRAJ_CONFLICT_TOPIC = "spatialdds/platform/events/trajectory_conflict/v1"
 ENTITY_BINDING_TOPIC = "spatialdds/platform/entity/binding/v1"
-TRACK_MSG_TYPE = "NUSC_FUSED_TRACK_SET"
-TRAJ_CONFLICT_MSG_TYPE = "SpatialEvent"
-COVERAGE_MSG_TYPE = "NUSC_FUSION_COVERAGE"
-ENTITY_BINDING_MSG_TYPE = "EntityBinding"
+SCENE_FRAME_FQN = "scene/intersection"
+
+# (topic, §3.3.2 type, §3.3.3 QoS profile) for each lane the platform owns.
+# The announce and the writers are both built from this, so the two cannot
+# disagree about what is on a topic.
+PLATFORM_SERVICE_ID = "platform-fusion"
+PLATFORM_LANES = (
+    (TRACK_TOPIC, "oarc.fused_track", "POSE_RT"),
+    (COVERAGE_TOPIC, "oarc.fusion_coverage", "MAP_META"),
+    (TRAJ_CONFLICT_TOPIC, "spatial_event", "EVENT_RT"),
+    (ENTITY_BINDING_TOPIC, "entity_binding", "MAP_META"),
+)
 
 
 def _infer_modality_from_topic(logical_topic: str) -> str:
@@ -72,26 +91,40 @@ def _infer_modality_from_topic(logical_topic: str) -> str:
     return "det3d"
 
 
+def _vec3(value, keys=("x", "y", "z")) -> Optional[tuple]:
+    """Vec3 arrives as an IDL array; tolerate the legacy {x,y,z} object too."""
+    if isinstance(value, dict):
+        return tuple(float(value.get(k, 0.0)) for k in keys)
+    if isinstance(value, (list, tuple)) and len(value) >= len(keys):
+        return tuple(float(v) for v in value[:len(keys)])
+    return None
+
+
 def _parse_detection(raw: dict, source_operator: str, modality: str,
                      default_sigma: float) -> Optional[Detection3D]:
-    center = raw.get("center")
-    if not isinstance(center, dict):
+    """
+    Parse one `oarc_demo::DetectionWithVelocity`.
+
+    The row composes the spec `Detection3D` (which has no velocity member)
+    with the velocity this fuser gates on. `source_modality` comes from the
+    row when present, since the base station and the AV operators differ.
+    """
+    detection = raw.get("detection") if isinstance(raw.get("detection"), dict) else raw
+    center = _vec3(detection.get("center"))
+    if center is None:
         return None
-    velocity = raw.get("velocity") or {}
-    vx = float(velocity.get("x", 0.0))
-    vy = float(velocity.get("y", 0.0))
-    vz = float(velocity.get("z", 0.0))
+    velocity = _vec3(raw.get("velocity")) or (0.0, 0.0, 0.0)
     if not raw.get("has_velocity", True):
-        vx = vy = vz = 0.0
+        velocity = (0.0, 0.0, 0.0)
     return Detection3D(
-        position=Position(x=float(center["x"]), y=float(center["y"]), z=float(center["z"])),
-        velocity=Velocity(vx=vx, vy=vy, vz=vz),
+        position=Position(x=center[0], y=center[1], z=center[2]),
+        velocity=Velocity(vx=velocity[0], vy=velocity[1], vz=velocity[2]),
         source_operator=source_operator,
-        source_modality=modality,
-        object_class=str(raw.get("class_id", "unknown")),
-        confidence=float(raw.get("score", 1.0)),
+        source_modality=str(raw.get("source_modality") or modality),
+        object_class=str(detection.get("class_id", "unknown")),
+        confidence=float(detection.get("score", 1.0)),
         position_uncertainty=default_sigma,
-        det_id=str(raw.get("det_id", "")),
+        det_id=str(detection.get("det_id", "")),
     )
 
 
@@ -155,23 +188,25 @@ class TrajectoryConflictDetector:
 
         for wp_a in traj_a.get("waypoints", []) or []:
             t_a = self._stamp_seconds(wp_a.get("stamp") or {})
-            pos_a = (wp_a.get("pose") or {}).get("t") or {}
+            pos_a = _vec3((wp_a.get("pose") or {}).get("t"))
+            if pos_a is None:
+                continue
             for wp_b in traj_b.get("waypoints", []) or []:
                 t_b = self._stamp_seconds(wp_b.get("stamp") or {})
                 if abs(t_a - t_b) > self.time_tolerance_s:
                     continue
-                pos_b = (wp_b.get("pose") or {}).get("t") or {}
-                dx = float(pos_a.get("x", 0.0)) - float(pos_b.get("x", 0.0))
-                dy = float(pos_a.get("y", 0.0)) - float(pos_b.get("y", 0.0))
-                dz = float(pos_a.get("z", 0.0)) - float(pos_b.get("z", 0.0))
+                pos_b = _vec3((wp_b.get("pose") or {}).get("t"))
+                if pos_a is None or pos_b is None:
+                    continue
+                dx, dy, dz = (a - b for a, b in zip(pos_a, pos_b))
                 dist = (dx * dx + dy * dy + dz * dz) ** 0.5
                 if dist < min_dist:
                     min_dist = dist
                     conflict_time = (t_a + t_b) / 2.0
                     conflict_pos = {
-                        "x": (float(pos_a.get("x", 0.0)) + float(pos_b.get("x", 0.0))) / 2.0,
-                        "y": (float(pos_a.get("y", 0.0)) + float(pos_b.get("y", 0.0))) / 2.0,
-                        "z": (float(pos_a.get("z", 0.0)) + float(pos_b.get("z", 0.0))) / 2.0,
+                        "x": (pos_a[0] + pos_b[0]) / 2.0,
+                        "y": (pos_a[1] + pos_b[1]) / 2.0,
+                        "z": (pos_a[2] + pos_b[2]) / 2.0,
                     }
 
         if min_dist >= self.conflict_distance_m or conflict_time is None:
@@ -203,29 +238,21 @@ class FusionService:
         self._conflict_detector = TrajectoryConflictDetector()
         self._reported_conflicts: set = set()  # dedupes (agent_a, agent_b) pairs
 
-    def on_envelope(self, envelope) -> None:
-        """Legacy ``EnvelopeTransport`` callback path — accepts an envelope
-        object with ``.logical_topic`` and ``.payload_json``."""
-        topic = getattr(envelope, "logical_topic", "") or ""
-        try:
-            payload = json.loads(envelope.payload_json)
-        except (json.JSONDecodeError, TypeError):
-            return
-        self._dispatch(topic, payload)
+    def on_message(self, type_name: str, topic: str,
+                   payload: dict, stamp_ns: int) -> None:
+        """
+        ``spatialdds_demo.stream.StreamSubscriber`` callback.
 
-    def on_message(self, msg_type: str, logical_topic: str,
-                    payload: dict, stamp_ns: int) -> None:
-        """``bridges/envelope_io.EnvelopeSubscriber`` callback path —
-        called by the lossless RELIABLE+KEEP_ALL reader. Same dispatch
-        logic as the legacy path; just a different signature."""
-        self._dispatch(logical_topic or "", payload)
-
-    def _dispatch(self, topic: str, payload: dict) -> None:
+        ``type_name`` is the announced §3.3.2 type, so routing is on what the
+        sample *is* rather than on what its topic name happens to end with.
+        The topic suffix is still checked for the detection lanes because the
+        same type is legitimately published by several services.
+        """
         if not isinstance(payload, dict):
             return
-        if topic.endswith(DET3D_TOPIC_SUFFIX):
+        if type_name == DET3D_TYPE:
             self._on_detection_set(topic, payload)
-        elif topic.endswith(PLAN_TOPIC_SUFFIX) and "/plan/" in topic:
+        elif type_name == PLAN_TYPE:
             self._conflict_detector.update(payload, time.time())
 
     def _on_detection_set(self, topic: str, payload: dict) -> None:
@@ -233,7 +260,7 @@ class FusionService:
         if not operator:
             return
         modality = _infer_modality_from_topic(topic)
-        for raw in payload.get("detections", []) or []:
+        for raw in payload.get("dets") or payload.get("detections") or []:
             det = _parse_detection(raw, operator, modality, self._default_sigma)
             if det is not None:
                 self._fuser.on_detection(det)
@@ -272,18 +299,11 @@ class FusionService:
             if key in self._reported_conflicts:
                 continue
             self._reported_conflicts.add(key)
-            payload = {
-                "schema_version": "spatial.events/1.7",
-                "stamp": {"sec": int(t), "nanosec": int((t % 1) * 1e9)},
-                "source_operator": "platform",
-                **c,
-            }
-            self._transport.publish(
-                logical_topic=TRAJ_CONFLICT_TOPIC,
-                msg_type=TRAJ_CONFLICT_MSG_TYPE,
-                payload=payload,
-                request_id=str(int(t * 1000)),
-            )
+            self._transport.publish(TRAJ_CONFLICT_TOPIC,
+                                    make_trajectory_conflict_event(
+                                        c, timestamp_s=t,
+                                        frame_ref_fqn=SCENE_FRAME_FQN,
+                                        source_id=PLATFORM_SERVICE_ID))
             if not self._quiet:
                 print(f"[fusion] conflict: {c['agents']} dist={c['min_distance_m']}m "
                       f"in {c['time_to_conflict']}s at "
@@ -316,62 +336,31 @@ class FusionService:
                     topic=DET3D_TOPIC_FMT.format(operator=op),
                     key=det_id,
                 ))
-            payload = make_entity_binding(
+            self._transport.publish(ENTITY_BINDING_TOPIC, make_entity_binding(
                 entity_id=f"entity_{trk.track_id}",
                 entity_class=trk.object_class,
                 components=components,
-                pose={
-                    "t": dataclasses.asdict(trk.position),
-                    "q": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-                },
-                source_id="platform-fusion",
+                position=(trk.position.x, trk.position.y, trk.position.z),
+                frame_ref_fqn=SCENE_FRAME_FQN,
+                source_id=PLATFORM_SERVICE_ID,
                 timestamp_s=t,
-            )
-            self._transport.publish(
-                logical_topic=ENTITY_BINDING_TOPIC,
-                msg_type=ENTITY_BINDING_MSG_TYPE,
-                payload=payload,
-                request_id=trk.track_id,
-            )
+            ))
 
     def _publish_tracks(self, tracks, t: float) -> None:
-        payload = {
-            "stamp": {"sec": int(t), "nanosec": int((t % 1) * 1e9)},
-            "source_operator": "platform",
-            "tracks": [dataclasses.asdict(trk) for trk in tracks],
-        }
-        self._transport.publish(
-            logical_topic=TRACK_TOPIC,
-            msg_type=TRACK_MSG_TYPE,
-            payload=payload,
-            request_id=str(int(t * 1000)),
-        )
+        self._transport.publish(TRACK_TOPIC, make_fused_track_set(
+            tracks, source_operator="platform", timestamp_s=t))
 
     def _publish_coverage(self, tracks, t: float) -> None:
-        metrics = coverage_metrics(tracks)
-        payload = {
-            "stamp": {"sec": int(t), "nanosec": int((t % 1) * 1e9)},
-            "source_operator": "platform",
-            "metrics": metrics,
-        }
-        self._transport.publish(
-            logical_topic=COVERAGE_TOPIC,
-            msg_type=COVERAGE_MSG_TYPE,
-            payload=payload,
-            request_id=str(int(t * 1000)),
-        )
+        # `metrics` was a nested free-form object under the old payload; the
+        # struct flattens it, because "a dict of numbers" is not a type.
+        self._transport.publish(COVERAGE_TOPIC, make_fusion_coverage(
+            coverage_metrics(tracks), source_operator="platform", timestamp_s=t))
 
 
 def run(args: argparse.Namespace) -> int:
-    # Use the lossless RELIABLE+KEEP_ALL transport from bridges/envelope_io.
-    # The legacy EnvelopeTransport's reader QoS (KEEP_LAST(1)) collapses
-    # back-to-back writes from one publisher in a single poll interval —
-    # which is exactly what the synthetic publisher does (3 operators, each
-    # writing detection + ego pose + plan per cycle). With KEEP_LAST(1) the
-    # fusion service ends up seeing only the last operator's plan in each
-    # poll, so the trajectory conflict detector never has all 3 ego paths
-    # in its window. Same fix as the web bridge — see commit b19a54b.
-    from bridges.envelope_io import EnvelopePublisher, EnvelopeSubscriber
+    from cyclonedds.domain import DomainParticipant
+
+    from spatialdds_demo.stream import StreamPublisher, StreamSubscriber
 
     fuser = TrackFusion(
         gate_distance_m=args.gate_distance_m,
@@ -382,32 +371,67 @@ def run(args: argparse.Namespace) -> int:
 
     service_holder: dict = {}
 
-    def on_msg(msg_type: str, logical_topic: str, payload: dict, stamp_ns: int):
+    def on_msg(type_name: str, topic: str, payload: dict, stamp_ns: int):
         svc = service_holder.get("svc")
         if svc is not None:
-            svc.on_message(msg_type, logical_topic, payload, stamp_ns)
+            svc.on_message(type_name, topic, payload, stamp_ns)
 
-    publisher = EnvelopePublisher(domain_id=args.domain)
-    subscriber = EnvelopeSubscriber(domain_id=args.domain, callback=on_msg)
+    participant = DomainParticipant(args.domain)
+    publisher = StreamPublisher(participant)
+    subscriber = StreamSubscriber(participant, on_msg)
+
+    # The platform announces itself before writing, like any other service —
+    # its outputs are discoverable rather than a set of topic names a
+    # consumer has to be told about out of band.
+    publisher.announce(_platform_announce(time.time()))
 
     svc = FusionService(
         transport=publisher, fuser=fuser, tick_hz=args.tick_hz,
         default_sigma=args.default_sigma, quiet=args.quiet,
     )
     service_holder["svc"] = svc
-
-    subscriber.start()
     svc.start()
+
+    stopping = threading.Event()
+
+    def _shutdown(_signum, _frame):
+        stopping.set()
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
+    announce_period_s = 5.0
+    last_announce = time.time()
     try:
-        while True:
-            time.sleep(1.0)
-    except KeyboardInterrupt:
-        pass
+        while not stopping.is_set():
+            # Reading announces is what opens readers for operators that
+            # started after this service did.
+            subscriber.poll()
+            now = time.time()
+            if now - last_announce >= announce_period_s:
+                publisher.announce(_platform_announce(now))
+                last_announce = now
+            time.sleep(0.02)
     finally:
         svc.stop()
-        subscriber.stop()
         publisher.close()
     return 0
+
+
+def _platform_announce(t_wall: float) -> dict:
+    """The platform's own announce, built from the same lane table it writes."""
+    return make_announce(
+        operator="platform", service_kind="FUSION",
+        topics=[topic_meta(topic, type_name, profile)
+                for topic, type_name, profile in PLATFORM_LANES],
+        # The platform fuses whatever reaches it, so its coverage is the
+        # union of its inputs rather than a sensing footprint of its own.
+        # A generous circle over the scene is the honest approximation
+        # available without tracking input coverage, which 1.7 gives no
+        # way to express as "derived from my subscriptions".
+        coverage=circle_coverage(0.0, 0.0, 500.0),
+        timestamp_s=t_wall,
+    )
 
 
 def parse_args() -> argparse.Namespace:

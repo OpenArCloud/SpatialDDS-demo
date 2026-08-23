@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Sequence
 
 
 SCHEMA_CORE = "spatial.core/1.7"
+SCHEMA_EVENTS = "spatial.events/1.7"
 
 
 def _stamp(timestamp_s: float) -> Dict[str, int]:
@@ -33,6 +34,18 @@ def _stamp(timestamp_s: float) -> Dict[str, int]:
         sec -= 1
         nsec += 1_000_000_000
     return {"sec": sec, "nanosec": nsec}
+
+
+def _vec(value, keys=("x", "y", "z"), default=0.0) -> List[float]:
+    """
+    Normalise a vector to the IDL array form.
+
+    Vec3 and QuaternionXYZW are IDL arrays, but much of this demo builds them
+    as {"x": .., "y": ..} objects. Accept either so callers need not care.
+    """
+    if isinstance(value, dict):
+        return [float(value.get(k, default)) for k in keys]
+    return [float(v) for v in value]
 
 
 def make_planned_waypoint(
@@ -54,25 +67,21 @@ def make_planned_waypoint(
     component is omitted the others default to 0.
     """
     wp: Dict[str, object] = {
+        # Vec3 and QuaternionXYZW are IDL arrays, not {x,y,z} objects.
         "pose": {
-            "t": {"x": float(x), "y": float(y), "z": float(z)},
-            "q": {"x": float(qx), "y": float(qy), "z": float(qz), "w": float(qw)},
+            "t": [float(x), float(y), float(z)],
+            "q": [float(qx), float(qy), float(qz), float(qw)],
         },
         "stamp": _stamp(timestamp_s),
+        # Presence flags gate meaning, not presence: every member still
+        # carries a value, so the struct can always be built.
         "has_velocity": vx is not None,
+        "velocity": [float(vx or 0.0), float(vy or 0.0), float(vz or 0.0)],
         "has_uncertainty": uncertainty_m is not None,
+        "position_uncertainty_m": float(uncertainty_m or 0.0),
         "has_confidence": confidence is not None,
+        "confidence": float(confidence if confidence is not None else 0.0),
     }
-    if vx is not None:
-        wp["velocity"] = {
-            "x": float(vx),
-            "y": float(vy or 0.0),
-            "z": float(vz or 0.0),
-        }
-    if uncertainty_m is not None:
-        wp["position_uncertainty_m"] = float(uncertainty_m)
-    if confidence is not None:
-        wp["confidence"] = float(confidence)
     return wp
 
 
@@ -94,31 +103,22 @@ def make_planned_trajectory(
     ``frame_ref_fqn`` is required; ``frame_ref_uuid`` is optional and
     defaults to "" since the demo doesn't use UUIDs end-to-end yet.
     """
+    identity_pose = {"t": [0.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]}
     traj: Dict[str, object] = {
         "schema_version": SCHEMA_CORE,
         "agent_id": str(agent_id),
         "plan_id": str(plan_id),
         "plan_revision": int(plan_revision),
-        # v1.6 §2.12 — FrameRef carries an axis convention; all demo
-        # code is ENU-anchored.
-        "frame_ref": {
-            "uuid": frame_ref_uuid,
-            "fqn": frame_ref_fqn,
-            "has_coord_convention": True,
-            "coord_convention": "ENU",
-        },
+        "frame_ref": _frame_ref(frame_ref_fqn, uuid=frame_ref_uuid),
         "waypoints": list(waypoints),
         "has_goal_pose": goal_pose is not None,
+        "goal_pose": goal_pose or identity_pose,
         "has_horizon_sec": horizon_sec is not None,
+        "horizon_sec": float(horizon_sec or 0.0),
         "has_replan_rate_hz": replan_rate_hz is not None,
+        "replan_rate_hz": float(replan_rate_hz or 0.0),
         "stamp": _stamp(timestamp_s),
     }
-    if goal_pose is not None:
-        traj["goal_pose"] = goal_pose
-    if horizon_sec is not None:
-        traj["horizon_sec"] = float(horizon_sec)
-    if replan_rate_hz is not None:
-        traj["replan_rate_hz"] = float(replan_rate_hz)
     return traj
 
 
@@ -132,32 +132,45 @@ def make_entity_binding(
     entity_class: str,
     components: Sequence[Dict],
     *,
-    pose: Optional[Dict] = None,
+    position: Optional[Sequence[float]] = None,
+    frame_ref_fqn: str = "",
     source_id: str = "",
     timestamp_s: float = 0.0,
 ) -> Dict:
-    """Build an ``EntityBinding`` dict that links one logical entity to
-    every (topic, key) that contributes to it."""
-    binding: Dict[str, object] = {
+    """
+    Build an ``EntityBinding`` dict that links one logical entity to every
+    (topic, key) that contributes to it.
+
+    ``EntityBinding.pose`` is a ``FramedPose``, not a bare ``PoseSE3``: a
+    pose without the frame it is expressed in is not interpretable, so the
+    caller gives a position and the frame it lives in and gets both.
+    """
+    return {
         "schema_version": SCHEMA_CORE,
         "entity_id": str(entity_id),
         "entity_class": str(entity_class),
         "components": list(components),
-        "has_pose": pose is not None,
+        # Presence flag, not omission: FramedPose is a value type, so the
+        # field is always on the wire and `has_pose` says whether to read it.
+        "has_pose": position is not None,
+        "pose": make_framed_pose(
+            *(position if position is not None else (0.0, 0.0, 0.0)),
+            q=(0.0, 0.0, 0.0, 1.0),
+            frame_ref_fqn=frame_ref_fqn,
+            timestamp_s=timestamp_s,
+        ),
         "stamp": _stamp(timestamp_s),
         "source_id": str(source_id),
     }
-    if pose is not None:
-        binding["pose"] = pose
-    return binding
 
 
-def _frame_ref(fqn: str) -> Dict:
+
+def _frame_ref(fqn: str, uuid: str = "") -> Dict:
     """A FrameRef with the 2.12 axis convention. Everything here is ENU."""
     import uuid as _uuid
 
     return {
-        "uuid": str(_uuid.uuid5(_uuid.NAMESPACE_URL, fqn)),
+        "uuid": uuid or str(_uuid.uuid5(_uuid.NAMESPACE_URL, fqn)),
         "fqn": fqn,
         "has_coord_convention": True,
         "coord_convention": "ENU",
@@ -166,13 +179,17 @@ def _frame_ref(fqn: str) -> Dict:
 
 SCHEMA_DISCOVERY = "spatial.discovery/1.7"
 
-# The spec's ServiceKind has no member for a sensor fleet or a roadside unit,
-# so both map to OTHER and the real role travels in `hints`. Worth WG input:
-# an AV-fleet / infrastructure kind would be useful to more than this demo.
+# ServiceKind has no member for a sensor fleet, a roadside unit or a fusion
+# service, so all of them map to OTHER and the real role travels in `hints`.
+# That works, but it means the enum cannot discriminate the three service
+# classes this demo is actually built out of — a consumer filtering "show me
+# the fusion services" has to know the demo's hint convention. Worth WG
+# input; on the findings list.
 _SERVICE_KIND = {
     "SENSING": "OTHER",
     "INFRASTRUCTURE": "OTHER",
     "AV_FLEET": "OTHER",
+    "FUSION": "OTHER",
 }
 
 
@@ -266,4 +283,217 @@ def make_announce(
         "auth_hint": "",
         "stamp": _stamp(timestamp_s),
         "ttl_sec": 300,
+    }
+
+
+def make_framed_pose(x: float, y: float, z: float, q: Sequence[float],
+                     frame_ref_fqn: str, timestamp_s: float) -> Dict:
+    """
+    A `spatial::core::FramedPose` — the spec type for a local metric pose.
+
+    Note what it does NOT carry: velocity, or a source_operator field. The
+    demo's old ego payload had both. Velocity was never read by any consumer
+    (dashboard and Rerun both ignore it), and the operator is already in the
+    topic name, which is where DDS expects that kind of identity to live.
+    """
+    return {
+        "pose": {"t": [float(x), float(y), float(z)], "q": _vec(q, ("x", "y", "z", "w"))},
+        "frame_ref": _frame_ref(frame_ref_fqn),
+        "cov": {"discriminator": "COV_NONE", "none": 0},
+        "stamp": _stamp(timestamp_s),
+    }
+
+
+def make_detection(det_id: str, class_id: str, score: float,
+                   center: Sequence[float], size: Sequence[float],
+                   q: Sequence[float], frame_ref_fqn: str,
+                   timestamp_s: float, source_id: str) -> Dict:
+    """One `spatial::semantics::Detection3D`, complete."""
+    zero3 = [0.0, 0.0, 0.0]
+    return {
+        "det_id": str(det_id),
+        "frame_ref": _frame_ref(frame_ref_fqn),
+        "has_tile": False,
+        "tile_key": {"map_id": "", "level": 0, "x": 0, "y": 0, "z": 0},
+        "class_id": str(class_id),
+        "score": float(score),
+        "center": _vec(center),
+        "size": _vec(size),
+        "q": _vec(q, ("x", "y", "z", "w")),
+        "has_covariance": False,
+        "cov_pos": [0.0] * 9,
+        "cov_rot": [0.0] * 9,
+        "has_track_id": False,
+        "track_id": "",
+        "stamp": _stamp(timestamp_s),
+        "source_id": str(source_id),
+        "has_attributes": False,
+        "attributes": [],
+        "has_visibility": False,
+        "visibility": 0.0,
+        "has_num_pts": False,
+        "num_lidar_pts": 0,
+        "num_radar_pts": 0,
+    }
+
+
+def make_detection_set(set_id: str, source_operator: str, frame_ref_fqn: str,
+                       dets: Sequence[Dict], frame_seq: int,
+                       timestamp_s: float) -> Dict:
+    """
+    An `oarc_demo::OperatorDetectionSet`.
+
+    Each row composes the spec `Detection3D` verbatim and adds the velocity
+    the fuser gates on, which `Detection3D` has no member for. See
+    idl/demo/oarc_demo.idl for why that is a composed struct rather than a
+    MetaKV attribute.
+    """
+    return {
+        "set_id": str(set_id),
+        "source_operator": str(source_operator),
+        "frame_ref": _frame_ref(frame_ref_fqn),
+        "dets": list(dets),
+        "frame_seq": int(frame_seq),
+        "stamp": _stamp(timestamp_s),
+    }
+
+
+def make_detection_with_velocity(detection: Dict, velocity: Optional[Sequence[float]],
+                                 source_modality: str = "det3d") -> Dict:
+    return {
+        "detection": detection,
+        "has_velocity": velocity is not None,
+        "velocity": _vec(velocity if velocity is not None else (0.0, 0.0, 0.0)),
+        "source_modality": str(source_modality),
+    }
+
+
+# ── Platform fusion outputs ───────────────────────────────────────────
+# The fusion service's three published streams. Each is a real struct on
+# its own typed topic; under the envelope all three were JSON blobs whose
+# shape lived only in the subscriber's parser.
+
+
+def make_fused_track(track, timestamp_s: float) -> Dict:
+    """One :class:`fusion.FusedTrack` as an ``oarc_demo::FusedTrack`` dict."""
+    return {
+        "track_id": str(track.track_id),
+        "position": _vec((track.position.x, track.position.y, track.position.z)),
+        "velocity": _vec((track.velocity.vx, track.velocity.vy, track.velocity.vz)),
+        "position_uncertainty": float(track.position_uncertainty),
+        "object_class": str(track.object_class),
+        "confidence": float(track.confidence),
+        "source_operators": [str(o) for o in track.source_operators],
+        "source_modalities": [str(m) for m in track.source_modalities],
+        "source_count": int(track.source_count),
+        "track_age": float(track.track_age),
+        "stamp": _stamp(getattr(track, "timestamp", timestamp_s)),
+    }
+
+
+def make_fused_track_set(tracks, *, source_operator: str = "platform",
+                         timestamp_s: float = 0.0) -> Dict:
+    return {
+        "source_operator": str(source_operator),
+        "tracks": [make_fused_track(t, timestamp_s) for t in tracks],
+        "stamp": _stamp(timestamp_s),
+    }
+
+
+def make_fusion_coverage(metrics: Dict, *, source_operator: str = "platform",
+                         timestamp_s: float = 0.0) -> Dict:
+    """
+    Coverage metrics as a struct.
+
+    ``per_operator_track_count`` was a free-form JSON object keyed by
+    operator id — not expressible as an IDL struct field, so it becomes a
+    sequence of ``OperatorTrackCount`` rows. Sorted so the sequence is
+    stable across ticks and a diff of two samples means something.
+    """
+    per_op = metrics.get("per_operator_track_count") or {}
+    return {
+        "source_operator": str(source_operator),
+        "track_count": int(metrics.get("track_count", 0)),
+        "multi_source_count": int(metrics.get("multi_source_count", 0)),
+        "multi_source_pct": float(metrics.get("multi_source_pct", 0.0)),
+        "best_single_operator_count": int(
+            metrics.get("best_single_operator_count", 0)),
+        "coverage_improvement": float(metrics.get("coverage_improvement", 0.0)),
+        "best_av_operator_count": int(metrics.get("best_av_operator_count", 0)),
+        "coverage_improvement_excl_infra": float(
+            metrics.get("coverage_improvement_excl_infra", 0.0)),
+        "per_operator_track_count": [
+            {"operator_id": str(op), "track_count": int(n)}
+            for op, n in sorted(per_op.items())
+        ],
+        "stamp": _stamp(timestamp_s),
+    }
+
+
+def make_trajectory_conflict_event(conflict: Dict, *, timestamp_s: float,
+                                   frame_ref_fqn: str,
+                                   source_id: str = "platform-fusion") -> Dict:
+    """
+    A predicted trajectory conflict as a ``spatial::events::SpatialEvent``.
+
+    ``PROXIMITY_ALERT`` is the closest registered EventType, but it is not
+    an exact fit: 1.7's event types all describe something that has already
+    happened or is happening now, and this is a *predicted* conflict some
+    seconds ahead. The lead time is therefore carried as an attribute rather
+    than being implied by the type — see the findings list.
+
+    The conflicting pair has nowhere typed to go. SpatialEvent models one
+    trigger and one secondary, and both slots are det/track ids rather than
+    agent ids; the spec's generic hatch, ``attributes``, is
+    ``MetaKV{namespace, json}`` — a JSON string, which is exactly what this
+    migration exists to get off the bus. So the pair is carried in the
+    event_id and the description, ``attributes`` is left empty, and the
+    missing typed slot is on the findings list.
+    """
+    agents = [str(a) for a in conflict.get("agents", [])]
+    pos = conflict.get("conflict_position") or {}
+    # The detector reports None when the trajectories carry no usable stamp,
+    # i.e. "they conflict, but not at a knowable time".
+    lead = conflict.get("time_to_conflict")
+    lead_s = float(lead) if lead is not None else None
+    return {
+        "schema_version": SCHEMA_EVENTS,
+        "event_id": "conflict:" + "|".join(sorted(agents)),
+        "type": "PROXIMITY_ALERT",
+        "severity": "ALERT",
+        "state": "ACTIVE",
+        "has_zone_id": False,
+        "zone_id": "",
+        "has_position": bool(pos),
+        "position": _vec((pos.get("x", 0.0), pos.get("y", 0.0), pos.get("z", 0.0))),
+        "frame_ref": _frame_ref(frame_ref_fqn),
+        "has_trigger_det_id": False,
+        "trigger_det_id": "",
+        "has_trigger_track_id": False,
+        "trigger_track_id": "",
+        "trigger_class_id": "",
+        "has_secondary_det_id": False,
+        "secondary_det_id": "",
+        "has_measured_speed_mps": False,
+        "measured_speed_mps": 0.0,
+        "has_measured_dwell_sec": False,
+        "measured_dwell_sec": 0.0,
+        "has_measured_distance_m": True,
+        "measured_distance_m": float(conflict.get("min_distance_m", 0.0)),
+        "has_zone_occupancy": False,
+        "zone_occupancy": 0,
+        "confidence": 1.0,
+        "has_evidence": False,
+        "evidence": {"blob_id": "", "role": "", "checksum": ""},
+        "has_description": True,
+        "description": (
+            f"predicted conflict between {' and '.join(sorted(agents))}"
+            + (f" in {lead_s:.1f}s" if lead_s is not None else "")
+        ),
+        # The conflict is predicted for `lead_s` from now; the event itself
+        # starts now, which is when the prediction was made.
+        "event_start": _stamp(timestamp_s),
+        "stamp": _stamp(timestamp_s),
+        "source_id": str(source_id),
+        "attributes": [],
     }

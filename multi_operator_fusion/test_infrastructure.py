@@ -72,8 +72,8 @@ class Detection3DPayload(unittest.TestCase):
             velocity=(1.0, -1.0, 0.0),
         )
         self.assertEqual(payload["source_operator"], SOURCE_OPERATOR)
-        self.assertEqual(len(payload["detections"]), 1)
-        det = _parse_detection(payload["detections"][0], "infrastructure",
+        self.assertEqual(len(payload["dets"]), 1)
+        det = _parse_detection(payload["dets"][0], "infrastructure",
                                "det3d", default_sigma=0.5)
         self.assertIsNotNone(det, "Infra payload must parse through fusion service")
         self.assertAlmostEqual(det.position.x, 12.5)
@@ -86,9 +86,21 @@ class Detection3DPayload(unittest.TestCase):
             east=0.0, north=0.0, up=0.0,
             velocity=(0.0, 0.0, 0.0),
         )
-        _apply_offset(payload["detections"][0], (100.0, 50.0, 0.0))
-        c = payload["detections"][0]["center"]
-        self.assertEqual((c["x"], c["y"], c["z"]), (100.0, 50.0, 0.0))
+        _apply_offset(payload["dets"][0], (100.0, 50.0, 0.0))
+        self.assertEqual(payload["dets"][0]["detection"]["center"],
+                         [100.0, 50.0, 0.0])
+
+    def test_payload_is_a_real_operator_detection_set(self):
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.oarc_demo import OperatorDetectionSet
+
+        payload = make_detection3d_payload(
+            frame_seq=7, stamp=_stamp_from_index(7),
+            east=1.0, north=2.0, up=0.0, velocity=(0.5, 0.0, 0.0),
+        )
+        det_set = from_json(OperatorDetectionSet, payload)
+        self.assertEqual(det_set.source_operator, SOURCE_OPERATOR)
+        self.assertEqual(det_set.dets[0].source_modality, "radar")
 
     def test_stamp_from_index_matches_10hz(self):
         self.assertEqual(_stamp_from_index(0), {"sec": 0, "nanosec": 0})

@@ -8,10 +8,12 @@
 from . import common
 from . import lidar
 from . import rad
+from . import rf_beam
 from . import vision
 __all__ = [
 	"common",
 	"lidar",
 	"rad",
+	"rf_beam",
 	"vision",
 ]

@@ -29,14 +29,18 @@ from spatialdds_types import (  # noqa: E402
 class TestPlannedWaypoint(unittest.TestCase):
     def test_minimal(self):
         wp = make_planned_waypoint(1.0, 2.0, 3.0, timestamp_s=10.5)
-        self.assertEqual(wp["pose"]["t"], {"x": 1.0, "y": 2.0, "z": 3.0})
-        self.assertEqual(wp["pose"]["q"], {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0})
+        # Vec3 is an IDL array, not an {x,y,z} object.
+        self.assertEqual(wp["pose"]["t"], [1.0, 2.0, 3.0])
+        self.assertEqual(wp["pose"]["q"], [0.0, 0.0, 0.0, 1.0])
         self.assertEqual(wp["stamp"], {"sec": 10, "nanosec": 500_000_000})
         self.assertFalse(wp["has_velocity"])
         self.assertFalse(wp["has_uncertainty"])
         self.assertFalse(wp["has_confidence"])
-        self.assertNotIn("velocity", wp)
-        self.assertNotIn("position_uncertainty_m", wp)
+        # Presence-flag pattern: the value field is always on the wire, and the
+        # has_* flag is what says whether to read it. It is never omitted and
+        # never null.
+        self.assertEqual(wp["velocity"], [0.0, 0.0, 0.0])
+        self.assertEqual(wp["position_uncertainty_m"], 0.0)
 
     def test_with_velocity_and_uncertainty(self):
         wp = make_planned_waypoint(
@@ -44,7 +48,7 @@ class TestPlannedWaypoint(unittest.TestCase):
             vx=2.5, vy=-1.0, uncertainty_m=0.7, confidence=0.85,
         )
         self.assertTrue(wp["has_velocity"])
-        self.assertEqual(wp["velocity"], {"x": 2.5, "y": -1.0, "z": 0.0})
+        self.assertEqual(wp["velocity"], [2.5, -1.0, 0.0])
         self.assertEqual(wp["position_uncertainty_m"], 0.7)
         self.assertEqual(wp["confidence"], 0.85)
 
@@ -76,7 +80,11 @@ class TestPlannedTrajectory(unittest.TestCase):
         self.assertEqual(traj["schema_version"], SCHEMA_CORE)
         self.assertEqual(traj["agent_id"], "op_a_ego")
         self.assertEqual(traj["plan_revision"], 7)
-        self.assertEqual(traj["frame_ref"], {
+        # _frame_ref derives a stable UUIDv5 from the fqn when none is given.
+        self.assertEqual(traj["frame_ref"]["fqn"], "op_a/map")
+        self.assertTrue(traj["frame_ref"]["uuid"])
+        self.assertEqual(traj["frame_ref"]["coord_convention"], "ENU")
+        _unused = ({
             "uuid": "", "fqn": "op_a/map",
             "has_coord_convention": True, "coord_convention": "ENU",
         })
@@ -134,19 +142,27 @@ class TestEntityBinding(unittest.TestCase):
         self.assertEqual(b["stamp"]["sec"], 42)
 
     def test_binding_with_pose(self):
-        pose = {"t": {"x": 1, "y": 2, "z": 0},
-                "q": {"x": 0, "y": 0, "z": 0, "w": 1}}
-        b = make_entity_binding("e", "vehicle", [], pose=pose)
+        b = make_entity_binding("e", "vehicle", [], position=(1.0, 2.0, 0.0),
+                                frame_ref_fqn="scene/intersection")
         self.assertTrue(b["has_pose"])
-        self.assertEqual(b["pose"], pose)
+        # A FramedPose: the pose, and the frame it means something in.
+        self.assertEqual(b["pose"]["pose"]["t"], [1.0, 2.0, 0.0])
+        self.assertEqual(b["pose"]["frame_ref"]["fqn"], "scene/intersection")
 
-    def test_serialisable(self):
+    def test_pose_is_present_but_flagged_off_when_omitted(self):
+        b = make_entity_binding("e", "vehicle", [])
+        self.assertFalse(b["has_pose"])
+        self.assertEqual(b["pose"]["pose"]["t"], [0.0, 0.0, 0.0])
+
+    def test_builds_into_the_real_type(self):
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.spatial.core import EntityBinding
+
         b = make_entity_binding("e", "vehicle",
-                                  [make_component_ref("t/v1", "k")],
-                                  pose={"t": {"x": 0, "y": 0, "z": 0},
-                                          "q": {"x": 0, "y": 0, "z": 0, "w": 1}})
-        round_tripped = json.loads(json.dumps(b))
-        self.assertEqual(round_tripped["entity_class"], "vehicle")
+                                [make_component_ref("t/v1", "k")],
+                                position=(0.0, 0.0, 0.0),
+                                frame_ref_fqn="scene/intersection")
+        self.assertEqual(from_json(EntityBinding, b).entity_class, "vehicle")
 
 
 if __name__ == "__main__":

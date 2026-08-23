@@ -35,9 +35,10 @@ from spatialdds_idl.spatial.core import (
 from spatialdds_idl.spatial.disco import Announce, CoverageQuery, CoverageResponse, Depart
 from spatialdds_idl.spatial.events import SpatialEvent
 from spatialdds_idl.spatial.semantics import Detection3DSet
-from spatialdds_idl.spatial.sensing.lidar import LidarFrame
-from spatialdds_idl.spatial.sensing.rad import RadTensorFrame
-from spatialdds_idl.spatial.sensing.vision import VisionFrame
+from spatialdds_idl.spatial.sensing.lidar import LidarFrame, LidarMeta
+from spatialdds_idl.spatial.sensing.rad import RadTensorFrame, RadTensorMeta
+from spatialdds_idl.spatial.sensing.rf_beam import RfBeamFrame, RfBeamMeta
+from spatialdds_idl.spatial.sensing.vision import VisionFrame, VisionMeta
 
 # --- §3.3.2 registered types -----------------------------------------------
 REGISTERED: Dict[str, Type] = {
@@ -50,6 +51,10 @@ REGISTERED: Dict[str, Type] = {
     "radar_tensor": RadTensorFrame,
     "radar_detection": Detection3DSet,
     "vps_query": VpsRequest,
+    # Appendix E provisional: registered in 3.3.2, IDL ships under
+    # idl/v1.7/examples/. Provisional in the spec's sense — the type is
+    # registered and stable enough to announce, its profile is not yet.
+    "rf_beam": RfBeamFrame,
 }
 
 # --- deployment-specific extensions, named per §3.3.2 guidance --------------
@@ -70,6 +75,18 @@ EXTENSIONS: Dict[str, Type] = {
     # vps_query is registered but has no struct; the response has no type name.
     "oarc.vps_response": VpsResponse,
     # Anchor deltas have neither a registered type nor a QoS profile.
+
+    # --- registered-name gaps: the struct exists, the registry name does not.
+    # 3.3.2 registers `radar_tensor` and `video_frame` for the frame types but
+    # nothing for their stream metadata, and nothing at all for lidar — even
+    # though sensing::lidar::LidarFrame/LidarMeta are stable 1.7 types. A
+    # consumer therefore cannot be told "this topic carries a LidarFrame"
+    # through discovery, which is the one thing the registry is for.
+    "oarc.lidar_frame": LidarFrame,
+    "oarc.lidar_meta": LidarMeta,
+    "oarc.radar_tensor_meta": RadTensorMeta,
+    "oarc.video_frame_meta": VisionMeta,
+    "oarc.rf_beam_meta": RfBeamMeta,
 }
 
 ALL: Dict[str, Type] = {**REGISTERED, **EXTENSIONS}
