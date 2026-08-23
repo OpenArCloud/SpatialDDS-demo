@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Benchmark 1: SpatialDDS envelope overhead vs raw DDS round-trip latency."""
+"""Benchmark 1: round-trip latency across three transports.
+
+Three arms, so the comparison says something:
+
+* **spatialdds_envelope** — the old shape. One struct on one topic with the
+  payload as a JSON string inside it. Kept as the baseline; nothing in the
+  demo publishes this way any more.
+* **spatialdds_typed** — what the demo does now. Real IDL types on their own
+  spec-named topics with their §3.3.3 QoS profiles. These are the first
+  honest SpatialDDS numbers this repo has produced: every previous
+  measurement was of the envelope, which is not what the spec describes.
+* **raw_dds** — a minimal hand-written struct with default QoS. The floor:
+  what CycloneDDS costs before any SpatialDDS semantics.
+
+The typed arm is expected to sit between the other two and much closer to
+raw: it pays CDR serialisation of a real struct instead of JSON encoding
+plus a string copy, and it pays whatever the profile's QoS costs.
+"""
 
 import argparse
 import json
@@ -45,6 +62,14 @@ def _idl_uint64(types_module):
     return int
 
 
+# Both SpatialDDS arms poll a reader rather than blocking on it, and each
+# had its own hardcoded interval — 10 ms in the envelope transport, 20 ms in
+# the service clients. Left alone, this benchmark would be comparing two
+# poll loops rather than two transports. Both are set to the same value here,
+# matching the raw arm's, so what is measured is serialisation and delivery.
+POLL_INTERVAL = 0.001
+
+
 class SpatialRoundTrip:
     def __init__(self, domain_id: int) -> None:
         self._responses: "queue.Queue[object]" = queue.Queue()
@@ -52,11 +77,13 @@ class SpatialRoundTrip:
             on_message_callback=self._on_client_message,
             domain_id=domain_id,
             local_sender_id="bench-latency-client",
+            poll_interval=POLL_INTERVAL,
         )
         self._server = DDSTransport(
             on_message_callback=self._on_server_message,
             domain_id=domain_id,
             local_sender_id="bench-latency-server",
+            poll_interval=POLL_INTERVAL,
         )
         self._client.start()
         self._server.start()
@@ -109,6 +136,82 @@ class SpatialRoundTrip:
     def _on_client_message(self, envelope: object) -> None:
         if envelope.msg_type == "LOCALIZE_RESPONSE":
             self._responses.put(envelope)
+
+
+class TypedRoundTrip:
+    """
+    The demo's actual transport: typed samples, spec topics, profile QoS.
+
+    Uses the VPS request/reply pair, which is the spec's own request/response
+    flow — `VPS_REQ` and `VPS_RESP` are registered profiles, and the reply
+    correlates on the `request_id` it mirrors rather than on any envelope
+    field. The payload rides in `VpsRequest.image_blob_id`, a string field
+    the type already has, so the three arms move comparable bytes.
+    """
+
+    def __init__(self, domain_id: int) -> None:
+        from cyclonedds.domain import DomainParticipant
+
+        from spatialdds_demo.service_bus import VpsClient, VpsService
+        from spatialdds_test import SpatialDDSClientV15, SpatialDDSLogger, VPSServiceV15
+
+        self._builder = SpatialDDSClientV15(SpatialDDSLogger())
+        # A prebuilt reply. VPSServiceV15.process_localize_request sleeps
+        # 50-150 ms to simulate localization work, which would swamp the
+        # measurement and make this arm look slow for a reason that has
+        # nothing to do with transport. The envelope arm's responder does no
+        # such work either, so this keeps the three comparable.
+        self._reply_template = VPSServiceV15(
+            SpatialDDSLogger()).create_localize_response_template()
+        self._stop = threading.Event()
+        self._client = VpsClient(DomainParticipant(domain_id))
+        self._service = VpsService(DomainParticipant(domain_id))
+        self._thread = threading.Thread(target=self._server_loop, daemon=True)
+        self._thread.start()
+        # Let request/reply discovery settle before the first timed write.
+        time.sleep(2.0)
+
+    def close(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=2)
+
+    def _request(self, req_id: str, payload: str):
+        """
+        A real `VpsRequest`, built by the demo's own builder.
+
+        The benchmark payload rides in the request's `VisionFrame` blob id —
+        which is where a VPS query image actually goes, by reference. Hand
+        -rolling the struct here would only be benchmarking a shape nothing
+        publishes.
+        """
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.oarc_demo import VpsRequest
+
+        request = self._builder.create_localize_request("bench-vps")
+        request["request_id"] = req_id
+        request["vision_frame"]["hdr"]["blobs"][0]["blob_id"] = payload
+        return from_json(VpsRequest, request)
+
+    def run_once(self, payload: str, iteration: int) -> int:
+        req_id = f"typed-{iteration}-{uuid.uuid4().hex[:8]}"
+        request = self._request(req_id, payload)
+        start_ns = time.perf_counter_ns()
+        response = self._client.request(request, timeout=5.0,
+                                        poll_interval=POLL_INTERVAL)
+        if response is None:
+            raise TimeoutError("Timeout waiting for typed VpsResponse")
+        return time.perf_counter_ns() - start_ns
+
+    def _server_loop(self) -> None:
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.oarc_demo import VpsResponse
+
+        while not self._stop.is_set():
+            for request in self._service.take_requests():
+                reply = dict(self._reply_template)
+                reply["request_id"] = request.request_id
+                self._service.reply(from_json(VpsResponse, reply))
+            time.sleep(0.001)
 
 
 class RawRoundTrip:
@@ -202,48 +305,43 @@ def benchmark(args: argparse.Namespace) -> None:
     payloads: Dict[int, str] = {size: ("x" * size) for size in payload_sizes}
     rows: List[List[object]] = []
 
-    spatial = SpatialRoundTrip(args.domain)
-    raw = RawRoundTrip(args.domain)
+    arms = [
+        ("spatialdds_envelope", SpatialRoundTrip(args.domain)),
+        ("spatialdds_typed", TypedRoundTrip(args.domain)),
+        ("raw_dds", RawRoundTrip(args.domain)),
+    ]
 
     try:
         for size in payload_sizes:
             payload = payloads[size]
-            log(f"[latency] payload={size}B warmup spatial={args.warmup} raw={args.warmup}")
-            warmup(lambda: spatial.run_once(payload, -1), n=args.warmup)
-            warmup(lambda: raw.run_once(payload, -1), n=args.warmup)
+            medians = {}
+            for name, arm in arms:
+                log(f"[latency] payload={size}B arm={name} warmup={args.warmup}")
+                warmup(lambda: arm.run_once(payload, -1), n=args.warmup)
 
-            spatial_samples: List[int] = []
-            raw_samples: List[int] = []
+                log(f"[latency] payload={size}B arm={name} "
+                    f"iterations={args.iterations}")
+                samples: List[int] = []
+                for i in range(1, args.iterations + 1):
+                    latency_ns = arm.run_once(payload, i)
+                    rows.append([name, size, i, latency_ns])
+                    samples.append(latency_ns)
+                medians[name] = Stats.from_values(samples).median
 
-            log(f"[latency] payload={size}B running spatial iterations={args.iterations}")
-            for i in range(1, args.iterations + 1):
-                latency_ns = spatial.run_once(payload, i)
-                rows.append(["spatialdds_envelope", size, i, latency_ns])
-                spatial_samples.append(latency_ns)
-
-            log(f"[latency] payload={size}B running raw iterations={args.iterations}")
-            for i in range(1, args.iterations + 1):
-                latency_ns = raw.run_once(payload, i)
-                rows.append(["raw_dds", size, i, latency_ns])
-                raw_samples.append(latency_ns)
-
-            spatial_stats = Stats.from_values(spatial_samples)
-            raw_stats = Stats.from_values(raw_samples)
-            log(
-                "[latency] summary "
-                f"payload={size}B spatial_median_ms={spatial_stats.median / 1_000_000:.3f} "
-                f"raw_median_ms={raw_stats.median / 1_000_000:.3f}"
-            )
+            log("[latency] summary payload=" + str(size) + "B " + " ".join(
+                f"{name}_median_ms={median / 1_000_000:.3f}"
+                for name, median in medians.items()))
     finally:
-        spatial.close()
-        raw.close()
+        for _name, arm in arms:
+            arm.close()
 
     write_csv(args.output, ["path", "payload_bytes", "iteration", "latency_ns"], rows)
     log(f"[latency] wrote {len(rows)} rows to {args.output}")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Benchmark SpatialDDS envelope latency overhead")
+    parser = argparse.ArgumentParser(
+        description="Round-trip latency: envelope vs typed vs raw DDS")
     parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--warmup", type=int, default=WARMUP_ITERATIONS)
     parser.add_argument("--payload-sizes", default="1024,10240,102400,512000")

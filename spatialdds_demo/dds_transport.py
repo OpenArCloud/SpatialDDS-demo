@@ -36,7 +36,13 @@ class DDSTransport:
         on_message_callback: Callable[[object], None],
         domain_id: int,
         local_sender_id: Optional[str] = None,
+        poll_interval: float = 0.01,
     ):
+        # 10 ms was hardcoded, and it is a latency floor: a sample that
+        # arrives in 2 ms is not seen for up to 10. The benchmark passes
+        # something tighter so its comparison measures serialisation and
+        # transport rather than two different poll loops.
+        self._poll_interval = poll_interval
         try:
             from cyclonedds.domain import DomainParticipant
             from cyclonedds.topic import Topic
@@ -149,7 +155,7 @@ class DDSTransport:
                         self._callback(sample)
                     except Exception as exc:
                         print(f"DDS_RX callback error: {exc}")
-            time.sleep(0.01)
+            time.sleep(self._poll_interval)
 
     def _record_sent(self, envelope: object) -> None:
         if envelope.msg_type:

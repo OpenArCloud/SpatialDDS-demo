@@ -371,9 +371,26 @@ class VPSServiceV15:
         }
         return response
 
-    def process_localize_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        # Simulate processing delay
-        time.sleep(random.uniform(0.05, 0.15))
+    def create_localize_response_template(self) -> Dict[str, Any]:
+        """
+        A complete `VpsResponse` with no simulated work.
+
+        `process_localize_request` sleeps 50-150 ms to make the demo's
+        console output look like real localization. That is right for a demo
+        and wrong for a benchmark, where it would swamp the transport
+        latency being measured — so the benchmark builds its reply from
+        here instead.
+        """
+        return self.process_localize_request(
+            {"request_id": "", "prior_geopose": demo_geo_pose(0.0, 0.0, 0.0)},
+            simulate_work=False,
+        )
+
+    def process_localize_request(self, request: Dict[str, Any],
+                                 simulate_work: bool = True) -> Dict[str, Any]:
+        if simulate_work:
+            # Makes the demo's console output look like real localization.
+            time.sleep(random.uniform(0.05, 0.15))
         self.seq += 1
 
         # Mock pose in local map frame

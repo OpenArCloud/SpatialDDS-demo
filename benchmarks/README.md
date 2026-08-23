@@ -2,15 +2,52 @@
 
 Scripts for measuring SpatialDDS protocol overhead and scalability.
 
-> **What these currently measure.** Every figure here is the demo's **JSON
-> envelope transport** — one unkeyed struct on one topic — not SpatialDDS typed
-> topics with their QoS profiles. Treat them as a baseline for the envelope, not
-> as SpatialDDS performance numbers. A typed arm is planned; see
-> `directions/spatialdds-demo-typed-wire-migration.md`.
+## Three arms
+
+`bench_latency.py` measures three transports so the comparison says something:
+
+| Arm | What it is |
+|---|---|
+| `spatialdds_typed` | What the demo does: real IDL types on spec-named topics with their §3.3.3 QoS profiles. **These are the first honest SpatialDDS numbers this repo has produced** — every earlier figure measured the envelope, which is not what the spec describes. |
+| `spatialdds_envelope` | The old shape. One unkeyed struct on one topic with the payload as a JSON string inside it. Nothing publishes this way any more; it is kept as the baseline. |
+| `raw_dds` | A minimal hand-written struct with default QoS — the floor, before any SpatialDDS semantics. |
+
+### Reading the numbers fairly
+
+Both SpatialDDS arms **poll** a reader rather than blocking on one, and each
+had its own hardcoded interval — 10 ms in the envelope transport, 20 ms in
+the service clients. Left alone, this benchmark compares two poll loops
+rather than two transports: the first typed run came out at 22 ms, which was
+entirely the client's 20 ms poll. Both are now set to the raw arm's 1 ms, so
+what is measured is serialisation and delivery.
+
+Those defaults are a latency floor in the demo itself, and worth knowing: a
+reply that arrives in 2 ms is not seen for up to 20.
+
+The measured VPS responder also skips `VPSServiceV15`'s 50–150 ms simulated
+localization delay, which is right for a demo and would swamp a benchmark.
+
+### Median round-trip, one machine, 60 iterations
+
+| Payload | envelope | typed | raw DDS |
+|---:|---:|---:|---:|
+| 1 KiB | 1.97 ms | **1.68 ms** | 2.02 ms |
+| 10 KiB | 1.98 ms | **1.68 ms** | 1.96 ms |
+| 100 KiB | 3.76 ms | **1.70 ms** | 2.00 ms |
+| 500 KiB | 6.84 ms | **1.85 ms** | 1.99 ms |
+
+The shape is the result, not the absolute numbers. The envelope's cost grows
+with payload — 1.97 ms to 6.84 ms, ~3.5x — because it JSON-encodes the
+payload into a string and copies it. The typed arm is flat (1.68 → 1.85 ms)
+because CDR serialises the struct directly, and it tracks raw DDS throughout.
+
+At small payloads the three are indistinguishable; the envelope's overhead is
+not a constant tax, it is a tax on data volume, which is exactly the regime
+sensor streams live in.
 
 ## Benchmarks
 
-- `bench_latency.py`: Envelope RTT overhead vs raw DDS RTT across payload sizes.
+- `bench_latency.py`: Round-trip latency across all three arms and payload sizes.
 - `bench_discovery.py`: Time from new participant join to first `ANNOUNCE` as service count scales.
 - `bench_multioperator.py`: Per-message latency and aggregate throughput as concurrent operator publishers scale.
 - `bench_coverage_query.py`: Catalog query RTT as number of registered spatial entries scales.

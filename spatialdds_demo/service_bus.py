@@ -44,6 +44,13 @@ from spatialdds_idl.oarc_demo import (
 )
 from spatialdds_idl.spatial.disco import CoverageQuery, CoverageResponse
 
+# How often a waiting client re-checks its reply reader. 20 ms is a fine
+# default for a demo at demo rates, and it is also a hard latency floor: a
+# reply that arrives in 2 ms is still not seen for up to 20. Callers that
+# care — the latency benchmark, chiefly — pass something tighter, which is
+# why it is a parameter rather than a constant in four loops.
+DEFAULT_POLL_INTERVAL = 0.02
+
 # Registered QoS profiles for these lanes (3.3.3).
 VPS_REQ_PROFILE = "VPS_REQ"
 VPS_RESP_PROFILE = "VPS_RESP"
@@ -78,11 +85,16 @@ class VpsClient:
         self._reader = tt.make_reader(
             participant, TOPIC_VPS_RESULT_V1, VpsResponse, VPS_RESP_PROFILE)
 
-    def request(self, request: VpsRequest, timeout: float = 10.0) -> Optional[VpsResponse]:
+    def request(self, request: VpsRequest, timeout: float = 10.0,
+                poll_interval: float = DEFAULT_POLL_INTERVAL
+                ) -> Optional[VpsResponse]:
         self._writer.write(request)
-        return self.await_reply(request.request_id, timeout=timeout)
+        return self.await_reply(request.request_id, timeout=timeout,
+                                poll_interval=poll_interval)
 
-    def await_reply(self, request_id: str, timeout: float = 10.0) -> Optional[VpsResponse]:
+    def await_reply(self, request_id: str, timeout: float = 10.0,
+                    poll_interval: float = DEFAULT_POLL_INTERVAL
+                    ) -> Optional[VpsResponse]:
         """
         Correlation is the request_id the response mirrors — no envelope needed.
 
@@ -95,7 +107,7 @@ class VpsClient:
             for response in tt.take_samples(self._reader):
                 if response.request_id == request_id:
                     return response
-            time.sleep(0.02)
+            time.sleep(poll_interval)
         return None
 
 
@@ -134,14 +146,16 @@ class CatalogClient:
     def reply_topic(self) -> str:
         return self._reply_topic
 
-    def query(self, query: CatalogQuery, timeout: float = 6.0) -> Optional[CatalogResponse]:
+    def query(self, query: CatalogQuery, timeout: float = 6.0,
+              poll_interval: float = DEFAULT_POLL_INTERVAL
+              ) -> Optional[CatalogResponse]:
         self._writer.write(query)
         deadline = time.time() + timeout
         while time.time() < deadline:
             for response in tt.take_samples(self._reader):
                 if response.query_id == query.query_id:
                     return response
-            time.sleep(0.02)
+            time.sleep(poll_interval)
         return None
 
 
@@ -193,15 +207,16 @@ class CoverageClient:
     def reply_topic(self) -> str:
         return self._reply_topic
 
-    def query(self, query: CoverageQuery,
-              timeout: float = 10.0) -> Optional[CoverageResponse]:
+    def query(self, query: CoverageQuery, timeout: float = 10.0,
+              poll_interval: float = DEFAULT_POLL_INTERVAL
+              ) -> Optional[CoverageResponse]:
         self._writer.write(query)
         deadline = time.time() + timeout
         while time.time() < deadline:
             for response in tt.take_samples(self._reader):
                 if response.query_id == query.query_id:
                     return response
-            time.sleep(0.02)
+            time.sleep(poll_interval)
         return None
 
 
@@ -242,7 +257,9 @@ class BootstrapClient:
             BOOTSTRAP_PROFILE)
 
     def request(self, query: BootstrapQuery, timeout: float = 5.0,
-                retry_every: float = 1.0) -> Optional[BootstrapResponse]:
+                retry_every: float = 1.0,
+                poll_interval: float = DEFAULT_POLL_INTERVAL
+                ) -> Optional[BootstrapResponse]:
         """
         Ask until answered or out of time.
 
@@ -260,5 +277,5 @@ class BootstrapClient:
             for response in tt.take_samples(self._reader):
                 if response.client_id == query.client_id:
                     return response
-            time.sleep(0.02)
+            time.sleep(poll_interval)
         return None
