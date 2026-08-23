@@ -8,7 +8,11 @@ import time
 import uuid
 from typing import Any, Dict, Optional
 
+from cyclonedds.domain import DomainParticipant
+
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
+from spatialdds_demo.discovery_bus import AnnounceSubscriber
+from spatialdds_demo.json_mapping import to_json
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
     TOPIC_BOOTSTRAP_QUERY_V1,
@@ -163,27 +167,25 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         local_sender_id=client.client_ref["fqn"],
     )
     transport.start()
-    announce_reader = transport.create_announce_reader(300)
+    # Typed announces on their own keyed topic. TRANSIENT_LOCAL means this
+    # client sees services that announced before it started.
+    announce_participant = DomainParticipant(domain_id)
+    announce_sub = AnnounceSubscriber(announce_participant)
     print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")
-    print(f"announce qos: {transport.announce_qos_summary(300)}")
+    print("announce qos: DISCOVERY_ANNOUNCE "
+          "(RELIABLE + TRANSIENT_LOCAL + KEEP_LAST(1), keyed on service_id)")
 
-    announce_env = None
     announce = None
     deadline = time.time() + 10
-    while time.time() < deadline:
-        samples = announce_reader.take()
-        if samples:
-            for sample in samples:
-                if not sample or sample.msg_type != "ANNOUNCE":
-                    continue
-                candidate = json.loads(sample.payload_json)
+    while time.time() < deadline and announce is None:
+        for event in announce_sub.poll():
+            if event.alive and event.announce is not None:
+                candidate = to_json(event.announce)
                 if _announce_fresh(candidate):
                     announce = candidate
-                    announce_env = sample
                     break
-        if announce:
-            break
-        time.sleep(0.05)
+        if announce is None:
+            time.sleep(0.05)
 
     if not announce:
         print("Client timed out waiting for ANNOUNCE.")
@@ -195,7 +197,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         f"VPS:{announce.get('name', 'unknown')}",
         "Client",
         announce,
-        announce_env.logical_topic,
+        TOPIC_DISCOVERY_ANNOUNCE_V1,
         TOPIC_SOURCE_ANNOUNCE_PREVIEW,
         show_message_content,
     )

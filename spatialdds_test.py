@@ -18,6 +18,7 @@ import sys
 
 from spatialdds_validation import (
     SpatialDDSValidator,
+    complete_coverage_element,
     create_coverage_bbox_earth_fixed,
     demo_geo_pose,
 )
@@ -259,15 +260,12 @@ class VPSServiceV15:
         self.map_id = os.getenv("SPATIALDDS_VPS_MAP_ID", "sf-downtown-map")
         volume_frame_ref = self.map_frame_ref
         # 1.7 deleted CoverageElement.type — has_aabb alone is the volume form.
-        volume_elem = {
-            "has_crs": False,
-            "has_bbox": False,
-            "has_aabb": True,
-            "aabb": {"min_xyz": [-100.0, -100.0, -10.0], "max_xyz": [100.0, 100.0, 40.0]},
-            "global": False,
-            "has_frame_ref": True,
-            "frame_ref": volume_frame_ref,
-        }
+        volume_elem = complete_coverage_element(
+            has_aabb=True,
+            aabb={"min_xyz": [-100.0, -100.0, -10.0], "max_xyz": [100.0, 100.0, 40.0]},
+            has_frame_ref=True,
+            frame_ref=volume_frame_ref,
+        )
         self.coverage = [bbox_elem, volume_elem]
         self.transforms = []
         self.seq = 0
@@ -296,12 +294,18 @@ class VPSServiceV15:
                 "type": "vps_query",
                 "version": "v1",
                 "qos_profile": "VPS_REQ",
+                # Advisory hints. Optional in intent, but real struct members,
+                # so they carry a value like every presence-flagged field.
+                "target_rate_hz": 0.0,
+                "max_chunk_bytes": 0,
             },
             {
                 "name": TOPIC_VPS_RESULT_V1,
                 "type": "geopose",
                 "version": "v1",
                 "qos_profile": "VPS_RESP",
+                "target_rate_hz": 0.0,
+                "max_chunk_bytes": 0,
             },
         ]
 
@@ -319,13 +323,13 @@ class VPSServiceV15:
             "coverage": self.coverage,
             "coverage_frame_ref": self.coverage_frame_ref,
             "has_coverage_eval_time": False,
+            "coverage_eval_time": {"sec": 0, "nanosec": 0},
+            "transforms": self.transforms,
             "manifest_uri": self.manifest_uri,
             "auth_hint": "oauth2:https://auth.example.com",
             "stamp": stamp,
             "ttl_sec": 300,
         }
-        if self.transforms:
-            announce["transforms"] = self.transforms
         SpatialDDSValidator.validate_coverage(self.coverage, self.coverage_frame_ref)
         return announce
 

@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import signal
 import sys
+import threading
 import time
 from typing import Dict
 
+from cyclonedds.domain import DomainParticipant
+
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
+from spatialdds_demo.discovery_bus import AnnouncePublisher
+from spatialdds_demo.json_mapping import from_json
+from spatialdds_idl.spatial.disco import Announce as TypedAnnounce
 from spatialdds_demo.topics import (
     TOPIC_DISCOVERY_ANNOUNCE_V1,
     TOPIC_SOURCE_ANNOUNCE_PREVIEW,
@@ -118,17 +125,15 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     )
     transport.start()
 
-    ttl_sec = int(announce.get("ttl_sec", 300) or 300)
-    announce_writer = transport.create_announce_writer(ttl_sec)
+    # Typed, keyed Announce on its own topic. The instance is disposed on the
+    # way out, so a consumer learns this service left rather than waiting for
+    # its TTL to lapse.
+    participant = DomainParticipant(domain_id)
+    announcer = AnnouncePublisher(participant)
+    announcer.publish(from_json(TypedAnnounce, announce))
     print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")
-    print(f"announce qos: {transport.announce_qos_summary(ttl_sec)}")
-    transport.publish_on(
-        announce_writer,
-        TOPIC_DISCOVERY_ANNOUNCE_V1,
-        "ANNOUNCE",
-        json.dumps(announce),
-        "",
-    )
+    print("announce qos: DISCOVERY_ANNOUNCE "
+          "(RELIABLE + TRANSIENT_LOCAL + KEEP_LAST(1), keyed on service_id)")
     logger.log_message(
         "ANNOUNCE",
         "SEND",
@@ -140,12 +145,27 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
         show_message_content,
     )
 
+    # SIGTERM matters as much as SIGINT here: `docker stop` and most process
+    # supervisors send SIGTERM, and a background process started from a
+    # non-interactive shell ignores SIGINT entirely. Without this the service
+    # would vanish without disposing, and consumers would wait out its TTL.
+    stopping = threading.Event()
+
+    def _stop(signum, _frame):
+        print(f"signal {signum}: departing {service.service_id}")
+        stopping.set()
+
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGINT, _stop)
+
     try:
-        while True:
+        while not stopping.is_set():
             time.sleep(0.1)
     except KeyboardInterrupt:
         pass
 
+    # Graceful shutdown: dispose the instance (spec MUST) and publish Depart.
+    announcer.close()
     transport.stop()
     return 0
 

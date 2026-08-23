@@ -384,6 +384,34 @@ class SpatialDDSValidator:
         return True
 
 
+def complete_coverage_element(**fields: Any) -> Dict[str, Any]:
+    """
+    A fully-populated `CoverageElement`.
+
+    The spec models optionality with an explicit `has_x` flag beside a value
+    rather than a nullable field, so every member carries a value whatever the
+    flag says. Emitting only the fields in use produced dicts that could not be
+    built into the real struct once the wire went typed, so the builders fill
+    the rest in.
+    """
+    element: Dict[str, Any] = {
+        "has_crs": False,
+        "crs": "",
+        "has_bbox": False,
+        "bbox": [0.0, 0.0, 0.0, 0.0],
+        "has_aabb": False,
+        "aabb": {"min_xyz": [0.0, 0.0, 0.0], "max_xyz": [0.0, 0.0, 0.0]},
+        "global": False,
+        "has_frame_ref": False,
+        "frame_ref": SpatialDDSValidator.create_frame_ref("earth-fixed"),
+        "has_coverage_window": False,
+        "coverage_window_start": {"sec": 0, "nanosec": 0},
+        "coverage_window_end": {"sec": 0, "nanosec": 0},
+    }
+    element.update(fields)
+    return element
+
+
 def create_coverage_bbox_earth_fixed(
     west: float,
     south: float,
@@ -396,15 +424,10 @@ def create_coverage_bbox_earth_fixed(
     Returns (coverage_frame_ref, coverage_element).
     """
     frame_ref = frame_ref or SpatialDDSValidator.create_frame_ref("earth-fixed")
-    element = {
-        "has_crs": True,
-        "crs": "EPSG:4979",
-        "has_bbox": True,
-        "bbox": [west, south, east, north],
-        "has_aabb": False,
-        "global": False,
-        "has_frame_ref": False,
-    }
+    element = complete_coverage_element(
+        has_crs=True, crs="EPSG:4979",
+        has_bbox=True, bbox=[west, south, east, north],
+    )
     SpatialDDSValidator.validate_frame_ref(frame_ref)
     SpatialDDSValidator.validate_coverage_element(element, frame_ref)
     return frame_ref, element

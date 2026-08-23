@@ -39,12 +39,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
+from spatialdds_demo.discovery_bus import AnnounceSubscriber
 from spatialdds_demo.discovery_http import (
     DiscoveryError,
     bootstrap_manifest,
     query_from_geohash,
     search as discovery_search,
 )
+from spatialdds_demo.json_mapping import to_json
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
@@ -77,9 +79,9 @@ class SpatialDDSBridge:
     def __init__(self) -> None:
         self._domain_id: Optional[int] = None
         self._transport: Optional[DDSTransport] = None
-        self._announce_reader: Optional[object] = None
         self._inbox: queue.Queue = queue.Queue()
         self._last_announce: Optional[Dict[str, Any]] = None
+        self._announce_sub: Optional[AnnounceSubscriber] = None
         self._announces = AnnounceCache()
         self._client_frame_ref = SpatialDDSValidator.create_frame_ref("client/handset")
         self._stream_ref = SpatialDDSValidator.create_frame_ref("rig/front_cam")
@@ -112,11 +114,6 @@ class SpatialDDSBridge:
         # separate RELIABLE+KEEP_ALL EnvelopeSubscriber (the same one
         # the MCAP / ROS 2 / MQTT bridges use) handles job (2).
         def on_message(envelope: object) -> None:
-            # A departing service must leave the search cache immediately;
-            # waiting for its TTL to lapse would keep serving a dead entry.
-            if getattr(envelope, "msg_type", "") == "DEPART":
-                self._on_depart(envelope)
-                return
             self._inbox.put(envelope)
 
         self._transport = DDSTransport(
@@ -125,7 +122,11 @@ class SpatialDDSBridge:
             local_sender_id=self._client_frame_ref["fqn"],
         )
         self._transport.start()
-        self._announce_reader = self._transport.create_announce_reader(ANNOUNCE_TTL_SEC)
+        # Typed, keyed announces. Per-instance lifecycle means a late joiner
+        # gets every live service and a dispose evicts exactly one.
+        from cyclonedds.domain import DomainParticipant
+        self._announce_participant = DomainParticipant(domain_id)
+        self._announce_sub = AnnounceSubscriber(self._announce_participant)
 
     def _announce_fresh(self, announce: Dict[str, Any]) -> bool:
         ttl_sec = announce.get("ttl_sec")
@@ -138,15 +139,6 @@ class SpatialDDSBridge:
             return True
         return (time.time() - stamp_time) <= float(ttl_sec) * 2.0
 
-    def _on_depart(self, envelope: object) -> None:
-        try:
-            payload = json.loads(getattr(envelope, "payload_json", "") or "{}")
-        except json.JSONDecodeError:
-            return
-        service_id = payload.get("service_id", "") if isinstance(payload, dict) else ""
-        if self._announces.depart(service_id):
-            print(f"DDS_DEPART service_id={service_id} evicted from announce cache")
-
     def drain_announces(self) -> int:
         """
         Pull whatever the announce reader has and fold it into the cache.
@@ -154,22 +146,16 @@ class SpatialDDSBridge:
         Called before every read so the cache reflects the bus at answer time.
         Returns how many samples were admitted.
         """
-        if not self._announce_reader:
+        if not self._announce_sub:
             self.ensure_transport()
-        if not self._announce_reader:
+        if not self._announce_sub:
             return 0
-        admitted = 0
-        for sample in self._announce_reader.take() or []:
-            if not sample or getattr(sample, "msg_type", "") != "ANNOUNCE":
-                continue
-            try:
-                payload = json.loads(sample.payload_json)
-            except json.JSONDecodeError:
-                continue
-            if self._announces.admit(payload):
-                admitted += 1
-                self._last_announce = payload
-        return admitted
+        events = self._announce_sub.poll()
+        changed = self._announces.apply_events(events)
+        for event in events:
+            if event.alive and event.announce is not None:
+                self._last_announce = to_json(event.announce)
+        return changed
 
     def announce_records(self):
         """Live, unexpired announce records for the discovery endpoints."""
@@ -183,7 +169,9 @@ class SpatialDDSBridge:
     def latest_announce(self, timeout: float = 2.0) -> Optional[Dict[str, Any]]:
         if self._last_announce and self._announce_fresh(self._last_announce):
             return self._last_announce
-        if not self._announce_reader:
+        if not self._announce_sub:
+            self.ensure_transport()
+        if not self._announce_sub:
             return None
         deadline = time.time() + timeout
         while time.time() < deadline:

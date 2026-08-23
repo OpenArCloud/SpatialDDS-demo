@@ -11,16 +11,11 @@ Removal paths, and one limitation worth stating plainly:
   * **Depart** — a `DEPART` message for a service_id evicts it.
   * **TTL expiry** — an entry older than ``ttl_sec × TTL_MULTIPLIER`` is swept.
     Swept lazily on read, which is sufficient at demo scale.
-  * **DDS dispose** — not wired up *yet*, and the reason is local, not a spec
-    limitation. ``spatial::disco::Announce`` is properly keyed
-    (``@key string service_id``, ``idl/v1.7/discovery.idl``), so per-service
-    instance lifecycle is exactly what the spec intends. The demo simply does
-    not publish that type: it JSON-encodes announces into the unkeyed
-    ``SpatialDDSEnvelope`` (``spatialdds_demo/dds_transport.py``), which
-    collapses every service onto one instance and leaves NOT_ALIVE_DISPOSED
-    referring to the topic rather than to a service. The typed-wire migration
-    restores dispose as the primary eviction signal; until it lands here,
-    Depart plus TTL are what this cache can see.
+  * **DDS dispose** — the primary signal, now that announces are typed.
+    ``spatial::disco::Announce`` is keyed on ``service_id``, so disposing an
+    instance means "this service is gone" and the cache evicts exactly it.
+    This is what the unkeyed envelope could not express: every announce was a
+    sample on one instance, so NOT_ALIVE_DISPOSED referred to the topic.
 """
 
 from __future__ import annotations
@@ -30,6 +25,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from spatialdds_demo.discovery_http import ServiceRecord, record_from_announce
+from spatialdds_demo.json_mapping import to_json
 
 # Spec backstop: consumers should not use an announce beyond stamp + ttl_sec.
 # Doubling it tolerates modest clock skew between publisher and gateway, and
@@ -76,6 +72,34 @@ class AnnounceCache:
             self._entries[record.service_id] = record
             self.admitted += 1
         return True
+
+    def admit_typed(self, announce) -> bool:
+        """
+        Cache a typed ``Announce`` straight off the bus.
+
+        Flattened to JSON at this boundary so everything above the cache — the
+        shared discovery core and the HTTP responses — is unchanged by the move
+        to typed topics.
+        """
+        try:
+            return self.admit(to_json(announce))
+        except Exception:
+            return False
+
+    def apply_events(self, events) -> int:
+        """
+        Fold a batch of AnnounceEvents in: admit the living, evict the departed.
+
+        Returns how many entries changed.
+        """
+        changed = 0
+        for event in events:
+            if event.alive and event.announce is not None:
+                if self.admit_typed(event.announce):
+                    changed += 1
+            elif event.service_id and self.depart(event.service_id):
+                changed += 1
+        return changed
 
     def depart(self, service_id: str) -> bool:
         """Evict a service that announced its departure. True if it was cached."""
