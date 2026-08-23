@@ -17,20 +17,6 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
-# bridges/ has to be importable for synthetic_publisher's top-level
-# ``from envelope_io import EnvelopePublisher`` — but that import is only
-# reached if cyclonedds is installed. Tier-1 unit tests run on hosts
-# without DDS, so we shim the import.
-import types as _types  # noqa: E402
-
-if "envelope_io" not in sys.modules:
-    stub = _types.ModuleType("envelope_io")
-    class _StubPublisher:  # noqa: D401
-        def __init__(self, *_a, **_kw): ...
-        def publish(self, *_a, **_kw): ...
-        def close(self): ...
-    stub.EnvelopePublisher = _StubPublisher  # type: ignore[attr-defined]
-    sys.modules["envelope_io"] = stub
 
 from synthetic_publisher import (  # noqa: E402
     INFRA_BS_POSITION,

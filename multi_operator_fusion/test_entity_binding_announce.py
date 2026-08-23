@@ -17,16 +17,6 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
-# Tier-1 unit tests don't have cyclonedds — stub envelope_io so importing
-# synthetic_publisher works even on a host without DDS.
-if "envelope_io" not in sys.modules:
-    stub = _types.ModuleType("envelope_io")
-    class _StubPublisher:
-        def __init__(self, *_a, **_kw): ...
-        def publish(self, *_a, **_kw): ...
-        def close(self): ...
-    stub.EnvelopePublisher = _StubPublisher  # type: ignore[attr-defined]
-    sys.modules["envelope_io"] = stub
 
 from fusion import FusedTrack, Position, Velocity  # noqa: E402
 from fusion_service import (  # noqa: E402

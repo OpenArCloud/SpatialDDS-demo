@@ -1,17 +1,19 @@
-"""SpatialDDS 1.7 dict-builder helpers.
+"""SpatialDDS 1.7 dict builders for the multi-operator demo.
 
-The repo's wire format is JSON-on-the-envelope — every demo emits dicts,
-not typed dataclasses (see ``nuscenes/dds_envelope_transport.py``). When
-v1.6 added new core types (``PlannedTrajectory``, ``PlannedWaypoint``,
-``EntityBinding``, ``ComponentRef``) we didn't add native dataclasses
-for them; we have these helpers, which return well-formed JSON-
-serialisable dicts that match the IDL shape.
+Each function returns a dict that ``spatialdds_demo.json_mapping.from_json``
+can build into its IDL type — so these are payload *constructors* for typed
+topics, not a JSON wire format. The dicts exist because the demo's publishers
+have always assembled payloads as dicts and the dashboards still want them
+that way; the conversion to a real sample happens once, at the writer, and a
+dict that is not a complete well-formed sample fails there.
 
-Lives under ``multi_operator_fusion/`` because that's the only consumer
-in v0 (synthetic publisher + fusion service). If a second demo grows a
-need for typed access, promote to a top-level ``spatialdds_types``.
+Two conventions the IDL enforces and these helpers follow:
 
-Pure-Python — no DDS, no FastAPI, easy to unit-test.
+* **Vectors are arrays.** ``Vec3`` is ``double[3]``, so ``t`` is
+  ``[x, y, z]``, not ``{"x":…}``.
+* **Optionals are presence-flagged.** The spec pairs ``has_x`` with a value
+  that is always present, so every field is emitted whatever the flag says
+  and consumers read the flag rather than testing for null.
 """
 
 from __future__ import annotations

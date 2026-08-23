@@ -19,8 +19,8 @@ Two generations of endpoints live in this server:
 The generic side reuses the existing DDS transport: each envelope received
 on the bus is fanned out to BOTH the legacy broadcaster (raw, all clients)
 and the new ClientManager (per-client topic-pattern + msg_type filtering,
-optional rate limiting). Browser-to-DDS publishing goes through the shared
-``bridges/envelope_io.EnvelopePublisher`` (RELIABLE+KEEP_ALL).
+optional rate limiting). Browser-to-DDS publishing resolves the requested
+msg_type through the 3.3.2 registry and writes a real typed sample.
 """
 
 import json
@@ -60,7 +60,7 @@ from spatialdds_demo.topics import (
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 from spatialdds_test import MockSensorData
 
-# Sibling modules (router + client manager) and the shared envelope_io
+# Sibling modules (topic router + client manager)
 _HERE = Path(__file__).resolve().parent
 _BRIDGES = _HERE.parent
 for p in (str(_HERE), str(_BRIDGES)):
