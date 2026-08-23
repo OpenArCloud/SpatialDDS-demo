@@ -40,8 +40,9 @@ container suite covers what you touched.
 | ROS 2 bridge, all tiers | `bash bridges/ros2_bridge/run_docker_tests.sh` | Docker, emulates amd64 on Apple Silicon |
 | MQTT bridge Tier-2 | `cd bridges/mqtt_bridge && docker compose -f docker-compose.test.yaml up --abort-on-container-exit --exit-code-from tests` | Docker + Mosquitto |
 
-On Apple Silicon the published `cyclonedds-python-base` image has no arm64
-manifest, so build it locally first:
+`Dockerfile`'s base image is not in the registry — only the superseded
+`0.10.5-ubuntu22.04` tag was ever pushed, and that one is arm64-only. Build the
+base locally first, on any host:
 
 ```bash
 docker build -t ghcr.io/openarcloud/cyclonedds-python-base:11.0.1-ubuntu22.04 -f Dockerfile.base .

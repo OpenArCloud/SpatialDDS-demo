@@ -1,4 +1,4 @@
 nuscenes-devkit>=1.1.11
 rerun-sdk>=0.22.0
-cyclonedds>=0.10.5
+cyclonedds>=11.0.1
 numpy>=1.24

@@ -58,13 +58,14 @@ echo "[deploy] bootstrapping CDK (idempotent)..."
 
 # Pre-flight: ensure the cyclonedds-python-base image used by
 # Dockerfile.deploy is available locally for linux/amd64 (the platform
-# Fargate runs). The public GHCR mirror has been unreliable, and on an
-# arm64 host the default ``docker build`` produces an arm64-only image
-# which the CDK asset (which forces --platform linux/amd64) can't use.
-# Always build the base for linux/amd64 here so deploy works on either
-# host arch. (Idempotent — Docker reuses the cache when the Dockerfile
-# and the apt/pip layers haven't changed.)
-BASE_TAG="ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04"
+# Fargate runs). On an arm64 host the default ``docker build`` produces an
+# arm64-only image which the CDK asset (which forces --platform
+# linux/amd64) can't use, and the registry copy of this tag may not exist
+# yet — only 0.10.5 has ever been pushed, and it is arm64-only. Always
+# build the base for linux/amd64 here so deploy works on either host arch
+# regardless. (Idempotent — Docker reuses the cache when the Dockerfile and
+# the apt/pip layers haven't changed.)
+BASE_TAG="ghcr.io/openarcloud/cyclonedds-python-base:11.0.1-ubuntu22.04"
 echo "[deploy] ensuring base image ${BASE_TAG} is available for linux/amd64..."
 ( cd ../.. && docker build --platform=linux/amd64 \
     -f Dockerfile.base -t "$BASE_TAG" . )

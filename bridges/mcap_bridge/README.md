@@ -25,7 +25,7 @@ not have this repo.
 python3 -m pip install -r bridges/requirements.txt
 ```
 
-Requires `cyclonedds==0.10.5` (already pinned by the rest of the repo) and
+Requires `cyclonedds==11.0.1` (already pinned by the rest of the repo) and
 `mcap>=1.1.0`. The unit tests don't need cyclonedds — DDS imports are lazy.
 
 ## Record

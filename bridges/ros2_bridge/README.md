@@ -105,7 +105,7 @@ docker run --rm --network host \
 
 You'll need ROS 2 (any of humble/iron/jazzy/rolling) with `sensor_msgs`,
 `geometry_msgs`, `vision_msgs`, plus CycloneDDS Python (the same
-`cyclonedds==0.10.5` the rest of this repo uses).
+`cyclonedds==11.0.1` the rest of this repo uses).
 
 ```bash
 # 1. Verify the mocks match the installed ROS 2 IDL (one-time)

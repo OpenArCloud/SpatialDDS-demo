@@ -5,7 +5,12 @@
 # Base: the same prebuilt CycloneDDS+Python image the rest of the repo
 # uses, so we don't have to rebuild the C library and idlc on every
 # deploy. (python:3.11-slim does not ship the cyclonedds runtime.)
-FROM ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04
+#
+# 11.0.1, not 0.10.5: the typed wire needs an idlc that can emit the spec's
+# `global` and `from` field names as valid Python. deploy.sh builds this tag
+# locally before invoking CDK, so the deploy does not depend on the registry
+# copy; see scripts/publish_base_image.sh for publishing it.
+FROM ghcr.io/openarcloud/cyclonedds-python-base:11.0.1-ubuntu22.04
 
 # ----------------------------------------------------------------------
 # Bridge + demo Python deps. Installed BEFORE the source COPY so dep

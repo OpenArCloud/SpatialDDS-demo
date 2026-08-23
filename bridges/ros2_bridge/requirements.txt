@@ -1,6 +1,8 @@
-# Pin cyclonedds to a release with prebuilt wheels for both x86_64 and arm64
-# (cyclonedds<11 is sdist-only on some platforms and needs the C library +
-# CYCLONEDDS_HOME to compile from source).
-cyclonedds>=0.10.5
+# Pin cyclonedds to a release with prebuilt wheels (cyclonedds<11 is
+# sdist-only on some platforms and needs the C library + CYCLONEDDS_HOME to
+# compile from source). 11.0.1 ships manylinux x86_64 and macOS arm64 wheels
+# but no linux aarch64 one, so an arm64 Linux host still builds from sdist —
+# which is what Dockerfile.base does anyway.
+cyclonedds>=11.0.1
 mcap>=1.1.0
 pyyaml>=6.0

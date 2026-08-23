@@ -76,10 +76,12 @@ class SpatialDDSStack(Stack):
 
         # ── Demo image (built locally from Dockerfile.deploy) ────────────
         # Note: the Dockerfile's FROM is
-        # ``ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04``.
-        # If the upstream tag is unavailable, build it locally first with
-        # ``docker build -f Dockerfile.base -t <same-tag> .`` from the
-        # repo root before running ``cdk deploy``.
+        # ``ghcr.io/openarcloud/cyclonedds-python-base:11.0.1-ubuntu22.04``.
+        # ``deploy.sh`` builds that tag locally for linux/amd64 before
+        # invoking CDK. Running ``cdk deploy`` by hand needs the same step
+        # first — ``docker build --platform=linux/amd64 -f Dockerfile.base
+        # -t <same-tag> .`` from the repo root — because the registry has
+        # only the superseded 0.10.5 tag.
         image_asset = ecr_assets.DockerImageAsset(
             self, "Image",
             directory=str(_REPO_ROOT),

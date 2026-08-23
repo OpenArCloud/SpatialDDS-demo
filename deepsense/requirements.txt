@@ -1,5 +1,5 @@
 rerun-sdk>=0.22.0
-cyclonedds>=0.10.5
+cyclonedds>=11.0.1
 numpy>=1.24
 scipy>=1.10
 matplotlib>=3.7
