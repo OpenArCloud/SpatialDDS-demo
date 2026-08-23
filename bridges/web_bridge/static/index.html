@@ -212,13 +212,18 @@ function onBinding(msg) {
 
 function onAnnounce(msg) {
   const op = ensureOperator(getOperator(msg.logical_topic));
-  const cov = (msg.payload && msg.payload.coverage) || {};
-  if (cov.type !== "circle") return;
-  const c = cov.center || {};
+  // Announce.coverage is a spec CoverageElement list. CoverageElement has no
+  // circle, so a circular area arrives as its bounding aabb in local metres;
+  // centre and half-width give the circle back.
+  const elements = (msg.payload && msg.payload.coverage) || [];
+  const element = elements.find((e) => e && e.has_aabb && e.aabb);
+  if (!element) return;
+  const lo = element.aabb.min_xyz || [0, 0, 0];
+  const hi = element.aabb.max_xyz || [0, 0, 0];
   op.coverage = {
-    cx: +c.x || 0,
-    cy: +c.y || 0,
-    radius: Math.min(+cov.radius_m || 50, COVERAGE_RENDER_MAX_M),
+    cx: (lo[0] + hi[0]) / 2,
+    cy: (lo[1] + hi[1]) / 2,
+    radius: Math.min((hi[0] - lo[0]) / 2 || 50, COVERAGE_RENDER_MAX_M),
   };
 }
 

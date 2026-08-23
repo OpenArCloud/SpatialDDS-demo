@@ -152,7 +152,69 @@ def make_entity_binding(
     return binding
 
 
+def _frame_ref(fqn: str) -> Dict:
+    """A FrameRef with the 2.12 axis convention. Everything here is ENU."""
+    import uuid as _uuid
+
+    return {
+        "uuid": str(_uuid.uuid5(_uuid.NAMESPACE_URL, fqn)),
+        "fqn": fqn,
+        "has_coord_convention": True,
+        "coord_convention": "ENU",
+    }
+
+
 SCHEMA_DISCOVERY = "spatial.discovery/1.7"
+
+# The spec's ServiceKind has no member for a sensor fleet or a roadside unit,
+# so both map to OTHER and the real role travels in `hints`. Worth WG input:
+# an AV-fleet / infrastructure kind would be useful to more than this demo.
+_SERVICE_KIND = {
+    "SENSING": "OTHER",
+    "INFRASTRUCTURE": "OTHER",
+    "AV_FLEET": "OTHER",
+}
+
+
+def topic_meta(name: str, type_: str, qos_profile: str) -> Dict:
+    """One TopicMeta row. type and qos_profile must be registered (3.3.2/3.3.3)."""
+    return {
+        "name": name,
+        "type": type_,
+        "version": "v1",
+        "qos_profile": qos_profile,
+        "target_rate_hz": 0.0,
+        "max_chunk_bytes": 0,
+    }
+
+
+def circle_coverage(center_x: float, center_y: float, radius_m: float,
+                    frame_ref: Optional[Dict] = None) -> Dict:
+    """
+    A circular coverage area as a spec `CoverageElement`.
+
+    `CoverageElement` offers bbox (geographic degrees) and aabb (local metres);
+    there is no circle. The aabb is the circle's bounding box in the local
+    frame, so a consumer that wants the circle back takes the centre and
+    half-width — which is what the canvas dashboard does.
+    """
+    return {
+        "has_crs": False,
+        "crs": "",
+        "has_bbox": False,
+        "bbox": [0.0, 0.0, 0.0, 0.0],
+        "has_aabb": True,
+        "aabb": {
+            "min_xyz": [center_x - radius_m, center_y - radius_m, 0.0],
+            "max_xyz": [center_x + radius_m, center_y + radius_m, 0.0],
+        },
+        "global": False,
+        "has_frame_ref": frame_ref is not None,
+        "frame_ref": frame_ref or _frame_ref("scene/intersection"),
+        "has_coverage_window": False,
+        "coverage_window_start": _stamp(0.0),
+        "coverage_window_end": _stamp(0.0),
+    }
 
 
 def make_announce(
@@ -162,20 +224,46 @@ def make_announce(
     topics: Sequence[Dict],
     coverage: Optional[Dict] = None,
     timestamp_s: float = 0.0,
+    manifest_uri: Optional[str] = None,
 ) -> Dict:
-    """Build an ``Announce`` dict for the discovery topic.
+    """
+    Build a real `spatial::disco::Announce`.
 
-    ``coverage`` is a free-form dict (typically ``{"type": "circle",
-    "center": {"x", "y"}, "radius_m": …}`` or a polygon) — the dashboard
-    just renders whatever shape it gets. ``topics`` is a list of
-    ``{"topic": …, "msg_type": …}`` dicts the operator owns.
+    This used to emit a demo-private shape — `operator`, `service_kind`,
+    `has_coverage`, and topics as `{topic, msg_type}` — which the repo's own
+    `validate_topic_meta` rejected and which `AnnounceCache` dropped for having
+    no `service_id`, so the flagship demo was quietly absent from discovery
+    (findings 5.1, 5.2).
+
+    `topics` rows are TopicMeta: build them with :func:`topic_meta` so the
+    type and QoS profile come from the 3.3.2 / 3.3.3 registries.
     """
     return {
-        "schema_version": SCHEMA_DISCOVERY,
-        "operator": str(operator),
-        "service_kind": str(service_kind),
+        "service_id": f"svc:{operator}",
+        "name": operator,
+        "kind": _SERVICE_KIND.get(service_kind, "OTHER"),
+        "version": "1.7",
+        "org": "OARC demo",
+        "hints": [{"key": "role", "value": str(service_kind)}],
+        "caps": {
+            "supported_profiles": [
+                {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7},
+                {"name": "spatial.discovery", "major": 1, "min_minor": 7, "max_minor": 7},
+            ],
+            "preferred_profiles": ["spatial.discovery/1.7", "spatial.core/1.7"],
+            "features": [],
+        },
         "topics": list(topics),
-        "has_coverage": coverage is not None,
-        **({"coverage": coverage} if coverage is not None else {}),
+        "coverage": [coverage] if coverage is not None else [],
+        "coverage_frame_ref": _frame_ref("scene/intersection"),
+        "has_coverage_eval_time": False,
+        "coverage_eval_time": _stamp(timestamp_s),
+        "transforms": [],
+        "manifest_uri": (
+            manifest_uri
+            or f"spatialdds://oarc.demo/zone:intersection/service:{operator}"
+        ),
+        "auth_hint": "",
         "stamp": _stamp(timestamp_s),
+        "ttl_sec": 300,
     }

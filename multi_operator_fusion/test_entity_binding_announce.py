@@ -36,15 +36,17 @@ from fusion_service import (  # noqa: E402
     FusionService,
     TRACK_TOPIC,
 )
-from spatialdds_types import SCHEMA_DISCOVERY  # noqa: E402
 from synthetic_publisher import (  # noqa: E402
+    COVERAGE_RADIUS_M,
+    INFRA_BS_POSITION,
+    INFRA_COVERAGE_RADIUS_M,
     _build_infra_announce,
     _build_operator_announce,
     _operator_coverage,
-    INFRA_BS_POSITION,
-    INFRA_COVERAGE_RADIUS_M,
-    COVERAGE_RADIUS_M,
 )
+from spatialdds_demo.json_mapping import from_json  # noqa: E402
+from spatialdds_demo.topics import validate_topic_meta  # noqa: E402
+from spatialdds_idl.spatial.disco import Announce, ServiceKind  # noqa: E402
 
 
 class _RecordingTransport:
@@ -151,48 +153,84 @@ class TestEntityBindingPublish(unittest.TestCase):
 
 
 class TestAnnounceBuilder(unittest.TestCase):
+    """
+    The announce is a real spatial::disco::Announce.
 
-    def test_operator_announce_shape(self):
+    It used to be a demo-private shape — `operator`, `service_kind`,
+    `has_coverage`, topics as {topic, msg_type} — which the repo's own
+    validate_topic_meta rejected and which AnnounceCache dropped for having no
+    service_id, so the flagship demo was quietly missing from discovery
+    (findings 5.1, 5.2). These tests now assert the spec shape.
+    """
+
+    def test_operator_announce_is_spec_shaped(self):
         a = _build_operator_announce(op_idx=0, t_wall=42.0)
-        self.assertEqual(a["schema_version"], SCHEMA_DISCOVERY)
-        self.assertEqual(a["operator"], "operator_a")
-        self.assertEqual(a["service_kind"], "SENSING")
+        self.assertEqual(a["service_id"], "svc:operator_a")   # the key
+        self.assertEqual(a["name"], "operator_a")
+        self.assertEqual(a["kind"], "OTHER")
         self.assertEqual(a["stamp"]["sec"], 42)
-        self.assertTrue(a["has_coverage"])
-        self.assertEqual(a["coverage"]["type"], "circle")
-        self.assertEqual(a["coverage"]["radius_m"], COVERAGE_RADIUS_M)
+        self.assertTrue(a["manifest_uri"])
+        # ServiceKind cannot express "sensor fleet", so the role is a hint.
+        self.assertIn({"key": "role", "value": "SENSING"}, a["hints"])
 
-    def test_operator_announce_lists_owned_topics(self):
+    def test_announce_passes_the_repos_own_validator(self):
+        """findings 5.2: this used to fail with three TopicMeta errors."""
+        for op_idx in (0, 1, 2):
+            with self.subTest(op_idx=op_idx):
+                a = _build_operator_announce(op_idx=op_idx, t_wall=0.0)
+                ok, errors = validate_topic_meta(a["topics"])
+                self.assertTrue(ok, errors)
+
+    def test_announce_builds_a_real_typed_announce(self):
+        a = _build_operator_announce(op_idx=0, t_wall=1.0)
+        typed = from_json(Announce, a)
+        self.assertEqual(typed.service_id, "svc:operator_a")
+        self.assertEqual(typed.kind, ServiceKind.OTHER)
+
+    def test_operator_announce_lists_owned_topics_with_registered_types(self):
         a = _build_operator_announce(op_idx=1, t_wall=0.0)
-        topic_names = {t["topic"] for t in a["topics"]}
-        # All three streams the per-operator publisher emits.
-        self.assertEqual(topic_names, {
+        self.assertEqual({t["name"] for t in a["topics"]}, {
             "spatialdds/operator_b/sensing/detection3d/v1",
             "spatialdds/operator_b/ego/pose/v1",
             "spatialdds/operator_b/plan/operator_b_ego/trajectory/v1",
         })
+        by_name = {t["name"]: t for t in a["topics"]}
+        det = by_name["spatialdds/operator_b/sensing/detection3d/v1"]
+        self.assertEqual(det["type"], "radar_detection")
+        self.assertEqual(det["qos_profile"], "RADAR_RT")
+        plan = by_name["spatialdds/operator_b/plan/operator_b_ego/trajectory/v1"]
+        self.assertEqual(plan["type"], "planned_trajectory")
 
-    def test_coverage_centred_on_ego_start(self):
+    def test_coverage_is_a_coverage_element_centred_on_ego_start(self):
+        """
+        CoverageElement has no circle, so a circular area is its bounding aabb
+        in local metres. Centre and half-width give the circle back — which is
+        what the canvas dashboard does.
+        """
         cov = _operator_coverage(op_idx=0)  # operator_a starts at (0, -30)
-        self.assertEqual(cov["center"]["x"], 0.0)
-        self.assertEqual(cov["center"]["y"], -30.0)
+        self.assertTrue(cov["has_aabb"])
+        self.assertFalse(cov["has_bbox"])
+        lo, hi = cov["aabb"]["min_xyz"], cov["aabb"]["max_xyz"]
+        self.assertEqual((lo[0] + hi[0]) / 2, 0.0)
+        self.assertEqual((lo[1] + hi[1]) / 2, -30.0)
+        self.assertEqual((hi[0] - lo[0]) / 2, COVERAGE_RADIUS_M)
 
     def test_infra_announce_uses_bs_position(self):
         a = _build_infra_announce(t_wall=1.0)
-        self.assertEqual(a["operator"], "infrastructure")
-        self.assertEqual(a["service_kind"], "INFRASTRUCTURE")
-        self.assertEqual(a["coverage"]["center"], INFRA_BS_POSITION)
-        self.assertEqual(a["coverage"]["radius_m"], INFRA_COVERAGE_RADIUS_M)
+        self.assertEqual(a["service_id"], "svc:infrastructure")
+        self.assertIn({"key": "role", "value": "INFRASTRUCTURE"}, a["hints"])
+        cov = a["coverage"][0]
+        lo, hi = cov["aabb"]["min_xyz"], cov["aabb"]["max_xyz"]
+        self.assertEqual((lo[0] + hi[0]) / 2, INFRA_BS_POSITION["x"])
+        self.assertEqual((lo[1] + hi[1]) / 2, INFRA_BS_POSITION["y"])
+        self.assertEqual((hi[0] - lo[0]) / 2, INFRA_COVERAGE_RADIUS_M)
         self.assertEqual(len(a["topics"]), 1)
-        self.assertEqual(
-            a["topics"][0]["topic"],
-            "spatialdds/infrastructure/sensing/detection3d/v1",
-        )
+        self.assertEqual(a["topics"][0]["name"],
+                         "spatialdds/infrastructure/sensing/detection3d/v1")
 
     def test_announce_is_json_serialisable(self):
         a = _build_operator_announce(op_idx=2, t_wall=99.5)
-        round_tripped = json.loads(json.dumps(a))
-        self.assertEqual(round_tripped["operator"], "operator_c")
+        self.assertEqual(json.loads(json.dumps(a))["service_id"], "svc:operator_c")
 
 
 if __name__ == "__main__":

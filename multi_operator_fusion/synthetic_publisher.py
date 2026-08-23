@@ -63,7 +63,9 @@ sys.path.insert(0, str(_HERE))
 
 from envelope_io import EnvelopePublisher  # noqa: E402
 from spatialdds_types import (  # noqa: E402
+    circle_coverage,
     make_announce,
+    topic_meta,
     make_planned_trajectory,
     make_planned_waypoint,
 )
@@ -380,22 +382,17 @@ def _operator_coverage(op_idx: int) -> Dict:
         cx, cy = p["x0"], p["y0"]
     else:
         cx, cy = _operator_offset(op_idx)
-    return {
-        "type": "circle",
-        "center": {"x": cx, "y": cy, "z": 0.0},
-        "radius_m": COVERAGE_RADIUS_M,
-    }
+    return circle_coverage(cx, cy, COVERAGE_RADIUS_M)
 
 
 def _build_operator_announce(op_idx: int, t_wall: float) -> Dict:
     operator = _operator_id(op_idx)
+    # Registered types and QoS profiles per 3.3.2 / 3.3.3, so the announce
+    # says something a consumer can act on rather than a demo-private label.
     topics = [
-        {"topic": TOPIC_FMT.format(operator=operator),
-         "msg_type": MSG_TYPE},
-        {"topic": EGO_POSE_TOPIC_FMT.format(operator=operator),
-         "msg_type": EGO_POSE_MSG_TYPE},
-        {"topic": PLAN_TOPIC_FMT.format(operator=operator),
-         "msg_type": PLAN_MSG_TYPE},
+        topic_meta(TOPIC_FMT.format(operator=operator), "radar_detection", "RADAR_RT"),
+        topic_meta(EGO_POSE_TOPIC_FMT.format(operator=operator), "geopose", "POSE_RT"),
+        topic_meta(PLAN_TOPIC_FMT.format(operator=operator), "planned_trajectory", "EVENT_RT"),
     ]
     return make_announce(
         operator=operator, service_kind="SENSING",
@@ -405,12 +402,10 @@ def _build_operator_announce(op_idx: int, t_wall: float) -> Dict:
 
 
 def _build_infra_announce(t_wall: float) -> Dict:
-    coverage = {
-        "type": "circle",
-        "center": INFRA_BS_POSITION,
-        "radius_m": INFRA_COVERAGE_RADIUS_M,
-    }
-    topics = [{"topic": INFRA_TOPIC, "msg_type": INFRA_MSG_TYPE}]
+    coverage = circle_coverage(
+        INFRA_BS_POSITION["x"], INFRA_BS_POSITION["y"], INFRA_COVERAGE_RADIUS_M,
+    )
+    topics = [topic_meta(INFRA_TOPIC, "radar_detection", "RADAR_RT")]
     return make_announce(
         operator=INFRA_OPERATOR, service_kind="INFRASTRUCTURE",
         topics=topics, coverage=coverage, timestamp_s=t_wall,
