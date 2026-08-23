@@ -26,7 +26,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 _HERE = Path(__file__).resolve().parent             # multi_operator_fusion/
 REPO_ROOT = _HERE.parent
@@ -70,6 +70,65 @@ COVERAGE_TOPIC = "spatialdds/platform/fusion/coverage/v1"
 TRAJ_CONFLICT_TOPIC = "spatialdds/platform/events/trajectory_conflict/v1"
 ENTITY_BINDING_TOPIC = "spatialdds/platform/entity/binding/v1"
 SCENE_FRAME_FQN = "scene/intersection"
+
+
+# --- Cross-topic join: rebuild per-operator detections from EntityBinding -----
+# The spec FusedTrack has no per-operator detection map (it was deliberately
+# excluded); the spec directs core::EntityBinding for cross-topic component
+# references. _publish_entity_bindings encodes provenance as ComponentRefs — a
+# self-ref to the fused track plus one per contributing operator pointing at
+# that operator's most-recent detection. These helpers reverse that encoding so
+# a consumer holding FusedTrackSet + EntityBinding rebuilds the demo's old
+# inline `last_det_per_operator` map from the two topics. This is the one place
+# the join lives; keep it here.
+
+def _components(binding):
+    return binding["components"] if isinstance(binding, dict) else binding.components
+
+
+def _ref_topic(c):
+    return c["topic"] if isinstance(c, dict) else c.topic
+
+
+def _ref_key(c):
+    return c["key"] if isinstance(c, dict) else c.key
+
+
+def operator_from_det3d_topic(topic: str) -> Optional[str]:
+    """The operator segment of a DET3D_TOPIC_FMT topic, or None if not one."""
+    prefix, suffix = DET3D_TOPIC_FMT.split("{operator}")
+    if topic.startswith(prefix) and topic.endswith(suffix) \
+            and len(topic) > len(prefix) + len(suffix):
+        return topic[len(prefix):len(topic) - len(suffix)]
+    return None
+
+
+def track_id_from_binding(binding) -> Optional[str]:
+    """The fused track_id a binding is for, from its self-ref to TRACK_TOPIC."""
+    for c in _components(binding):
+        if _ref_topic(c) == TRACK_TOPIC:
+            return _ref_key(c)
+    return None
+
+
+def operator_dets_from_binding(binding) -> Dict[str, str]:
+    """Recover ``{operator: det_id}`` from one EntityBinding (dict or typed)."""
+    out: Dict[str, str] = {}
+    for c in _components(binding):
+        op = operator_from_det3d_topic(_ref_topic(c))
+        if op is not None:
+            out[op] = _ref_key(c)
+    return out
+
+
+def reconstruct_operator_dets(bindings) -> Dict[str, Dict[str, str]]:
+    """``{track_id: {operator: det_id}}`` rebuilt from a set of EntityBindings."""
+    out: Dict[str, Dict[str, str]] = {}
+    for b in bindings:
+        tid = track_id_from_binding(b)
+        if tid is not None:
+            out[tid] = operator_dets_from_binding(b)
+    return out
 
 # (topic, §3.3.2 type, §3.3.3 QoS profile) for each lane the platform owns.
 # The announce and the writers are both built from this, so the two cannot

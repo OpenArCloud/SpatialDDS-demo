@@ -149,6 +149,51 @@ class TestEntityBindingPublish(unittest.TestCase):
         self.assertEqual(binding.entity_id, "entity_fused-1")
         self.assertEqual(binding.components[0].topic, TRACK_TOPIC)
 
+    # --- M.4: the per-operator det map is no longer on the track; a consumer
+    # --- rebuilds it by joining FusedTrackSet with EntityBinding on track_id.
+    def test_probe_reconstructs_operator_map_from_the_two_topics(self):
+        from fusion_service import reconstruct_operator_dets
+
+        original = {
+            "fused-1": {"operator_a": "det_42"},
+            "fused-2": {"operator_a": "det_77", "operator_b": "det_99"},
+        }
+        tracks = [_make_fused_track(tid, dets) for tid, dets in original.items()]
+        self.svc._publish_entity_bindings(tracks, t=10.0)
+        bindings = [c["payload"] for c in self.tx.calls
+                    if c["topic"] == ENTITY_BINDING_TOPIC]
+        self.assertEqual(reconstruct_operator_dets(bindings), original)
+
+    def test_reconstruction_works_on_the_wire_type(self):
+        """The join reverses the encoding on the typed EntityBinding too, not
+        just the builder dict."""
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.spatial.core import EntityBinding
+        from fusion_service import operator_dets_from_binding, track_id_from_binding
+
+        track = _make_fused_track("fused-7",
+                                  {"operator_a": "det_42", "operator_c": "det_18"})
+        self.svc._publish_entity_bindings([track], t=10.0)
+        typed = from_json(EntityBinding, self.tx.calls[0]["payload"])
+        self.assertEqual(track_id_from_binding(typed), "fused-7")
+        self.assertEqual(operator_dets_from_binding(typed),
+                         {"operator_a": "det_42", "operator_c": "det_18"})
+
+    def test_binding_updates_as_detections_refresh(self):
+        from fusion_service import reconstruct_operator_dets
+
+        self.svc._publish_entity_bindings(
+            [_make_fused_track("fused-1", {"operator_a": "det_1"})], t=10.0)
+        self.svc._publish_entity_bindings(
+            [_make_fused_track("fused-1",
+                               {"operator_a": "det_9", "operator_b": "det_5"})],
+            t=10.5)
+        latest = [c["payload"] for c in self.tx.calls
+                  if c["topic"] == ENTITY_BINDING_TOPIC][-1]
+        self.assertEqual(
+            reconstruct_operator_dets([latest]),
+            {"fused-1": {"operator_a": "det_9", "operator_b": "det_5"}})
+
 
 class TestAnnounceBuilder(unittest.TestCase):
     """
