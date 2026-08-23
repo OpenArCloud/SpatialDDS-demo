@@ -5,8 +5,9 @@
 
 """
 
-from ._oarc_demo import BootstrapQuery, BootstrapResponse, CatalogEntry, CatalogFilter, CatalogQuery, CatalogResponse, DetectionWithVelocity, FusedTrack, FusedTrackSet, FusionCoverage, LocalizeQuality, MODULE_ID, OperatorDetectionSet, OperatorTrackCount, QualityRequirements, Time, VpsRequest, VpsResponse
+from ._oarc_demo import BlobChunk, BootstrapQuery, BootstrapResponse, CatalogEntry, CatalogFilter, CatalogQuery, CatalogResponse, DetectionWithVelocity, FusedTrack, FusedTrackSet, FusionCoverage, LocalizeQuality, MODULE_ID, OperatorDetectionSet, OperatorTrackCount, QualityRequirements, Time, VpsRequest, VpsResponse
 __all__ = [
+	"BlobChunk",
 	"BootstrapQuery",
 	"BootstrapResponse",
 	"CatalogEntry",

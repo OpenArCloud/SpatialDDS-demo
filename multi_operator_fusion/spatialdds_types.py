@@ -20,34 +20,20 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence
 
+from spatialdds_demo import payloads
+
 
 SCHEMA_CORE = "spatial.core/1.7"
 SCHEMA_EVENTS = "spatial.events/1.7"
 
 
-def _stamp(timestamp_s: float) -> Dict[str, int]:
-    """Convert a float epoch seconds to a SpatialDDS Time dict."""
-    sec = int(timestamp_s)
-    nsec = int(round((timestamp_s - sec) * 1_000_000_000))
-    if nsec >= 1_000_000_000:
-        sec += 1
-        nsec -= 1_000_000_000
-    elif nsec < 0:
-        sec -= 1
-        nsec += 1_000_000_000
-    return {"sec": sec, "nanosec": nsec}
+# The primitives and the spec-type builders live in spatialdds_demo.payloads
+# so this module and the ROS 2 bridge cannot grow different ideas of what a
+# Detection3D looks like. They did, and both were wrong.
+_stamp = payloads.stamp
 
 
-def _vec(value, keys=("x", "y", "z"), default=0.0) -> List[float]:
-    """
-    Normalise a vector to the IDL array form.
-
-    Vec3 and QuaternionXYZW are IDL arrays, but much of this demo builds them
-    as {"x": .., "y": ..} objects. Accept either so callers need not care.
-    """
-    if isinstance(value, dict):
-        return [float(value.get(k, default)) for k in keys]
-    return [float(v) for v in value]
+_vec = payloads.vec
 
 
 def make_planned_waypoint(
@@ -167,16 +153,7 @@ def make_entity_binding(
 
 
 
-def _frame_ref(fqn: str, uuid: str = "") -> Dict:
-    """A FrameRef with the 2.12 axis convention. Everything here is ENU."""
-    import uuid as _uuid
-
-    return {
-        "uuid": uuid or str(_uuid.uuid5(_uuid.NAMESPACE_URL, fqn)),
-        "fqn": fqn,
-        "has_coord_convention": True,
-        "coord_convention": "ENU",
-    }
+_frame_ref = payloads.frame_ref
 
 
 SCHEMA_DISCOVERY = "spatial.discovery/1.7"
@@ -311,34 +288,9 @@ def make_detection(det_id: str, class_id: str, score: float,
                    q: Sequence[float], frame_ref_fqn: str,
                    timestamp_s: float, source_id: str) -> Dict:
     """One `spatial::semantics::Detection3D`, complete."""
-    zero3 = [0.0, 0.0, 0.0]
-    return {
-        "det_id": str(det_id),
-        "frame_ref": _frame_ref(frame_ref_fqn),
-        "has_tile": False,
-        # spatial::core::TileKey is (x, y, z, level) — no map_id. The map a
-        # tile belongs to is context, not part of the key.
-        "tile_key": {"level": 0, "x": 0, "y": 0, "z": 0},
-        "class_id": str(class_id),
-        "score": float(score),
-        "center": _vec(center),
-        "size": _vec(size),
-        "q": _vec(q, ("x", "y", "z", "w")),
-        "has_covariance": False,
-        "cov_pos": [0.0] * 9,
-        "cov_rot": [0.0] * 9,
-        "has_track_id": False,
-        "track_id": "",
-        "stamp": _stamp(timestamp_s),
-        "source_id": str(source_id),
-        "has_attributes": False,
-        "attributes": [],
-        "has_visibility": False,
-        "visibility": 0.0,
-        "has_num_pts": False,
-        "num_lidar_pts": 0,
-        "num_radar_pts": 0,
-    }
+    return payloads.detection3d(
+        det_id, class_id, score, center, size, q, frame_ref_fqn,
+        timestamp_s, source_id)
 
 
 def make_detection_set(set_id: str, source_operator: str, frame_ref_fqn: str,

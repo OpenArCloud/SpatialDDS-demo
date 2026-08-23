@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from spatialdds_demo import payloads
 from frame_mapping import FrameMapper
 
 
@@ -36,11 +37,22 @@ SCHEMA_SEMANTICS = "spatial.semantics/1.7"
 
 # ---------- Wire-format msg_type strings -------------------------------------
 # Distinct from NUSC_*/DEEPSENSE_* so consumers can filter on origin.
-MSG_TYPE_FRAMED_POSE      = "ROS2_FRAMED_POSE"
-MSG_TYPE_GEO_POSE         = "ROS2_GEO_POSE"
-MSG_TYPE_IMU_SAMPLE       = "ROS2_IMU_SAMPLE"
-MSG_TYPE_VISION_FRAME     = "ROS2_VISION_FRAME"
-MSG_TYPE_DETECTION3D_SET  = "ROS2_DETECTION3D_SET"
+# §3.3.2 registered type names — the same strings the announce advertises
+# and a consumer resolves into a reader. These used to be `ROS2_*` labels
+# this bridge chose for itself, which no registry knew and nothing could
+# resolve; a `ROS2_FRAMED_POSE` on a topic told a consumer nothing it could
+# act on. Where the registry names no type for a stable 1.7 type, the demo's
+# documented `oarc.*` extension name is used.
+MSG_TYPE_FRAMED_POSE      = "oarc.framed_pose"
+MSG_TYPE_GEO_POSE         = "geopose"
+MSG_TYPE_IMU_SAMPLE       = "oarc.imu_sample"
+MSG_TYPE_VISION_FRAME     = "video_frame"
+# Not the registered `radar_detection`. This bridge writes onto the same
+# `…/sensing/detection3d/v1` topic the fusion demo reads, and a topic is one
+# type: publishing a bare Detection3DSet there would be a type collision DDS
+# would refuse. ROS 2's Detection3DArray carries no velocity, so the
+# presence flag is set false — which is exactly what it is for.
+MSG_TYPE_DETECTION3D_SET  = "oarc.detection3d_velocity"
 
 
 # ---------- Primitive helpers ------------------------------------------------
@@ -108,129 +120,227 @@ def topic_for_detection3d(operator: str) -> str:
 # ---------- Converters -------------------------------------------------------
 
 def pose_stamped_to_framed_pose(msg: Any, operator: str,
-                                 frame_mapper: FrameMapper) -> Dict[str, Any]:
-    """``geometry_msgs/PoseStamped`` → SpatialDDS FramedPose payload.
+                                frame_mapper: FrameMapper) -> Dict[str, Any]:
+    """
+    ``geometry_msgs/PoseStamped`` -> ``spatial::core::FramedPose``.
 
-    Output keys
-    -----------
-      ``schema_version``   spec profile literal
-      ``source_operator``  operator namespace (also embedded in topic)
-      ``frame_ref``        FrameRef from header.frame_id
-      ``stamp``            ``{sec, nanosec}``
-      ``pose``             ``{t: Vec3, q: QuaternionXYZW}``
+    FramedPose is exactly `(pose, frame_ref, cov, stamp)`. The old payload
+    also carried `schema_version` and `source_operator`, neither of which the
+    type has: the operator is already in the topic name, which is where DDS
+    expects that kind of identity to live.
+
+    PoseStamped has no covariance, so `cov` is the COV_NONE case rather than
+    a zero matrix pretending to be one.
     """
     h = msg.header
     return {
-        "schema_version": SCHEMA_CORE,
-        "source_operator": operator,
+        "pose": {"t": _as_array(_vec3(msg.pose.position)),
+                 "q": _as_array(_quat(msg.pose.orientation), ("x", "y", "z", "w"))},
         "frame_ref": frame_mapper.frame_id_to_frame_ref(h.frame_id),
+        "cov": {"discriminator": "COV_NONE", "none": 0},
         "stamp": _ros_time_to_sdds(h.stamp),
-        "pose": {"t": _vec3(msg.pose.position), "q": _quat(msg.pose.orientation)},
     }
 
 
 def nav_sat_fix_to_geo_pose(msg: Any, operator: str,
-                             sensor_id: str = "gnss") -> Dict[str, Any]:
-    """``sensor_msgs/NavSatFix`` → SpatialDDS GeoPose payload.
+                            sensor_id: str = "gnss") -> Dict[str, Any]:
+    """
+    ``sensor_msgs/NavSatFix`` -> ``spatial::core::GeoPose``.
 
-    The status (no-fix / fix / SBAS / GBAS) is preserved as ``fix_status``
-    so consumers can drop unfixed samples. Position covariance is forwarded
-    when present.
+    GeoPose is `(lat_deg, lon_deg, alt_m, q, stamp, cov)` and nothing else.
+    The old payload invented `source_operator`, `sensor_id` and `fix_status`;
+    none exist on the type, and the fix status has its own registered
+    companion — see :func:`nav_sat_fix_to_nav_sat_status`, which the spec's
+    own registry describes as the "companion to GeoPose".
 
-    1.7 removed ``GeoPose.frame_kind``: orientation is fixed to the local
-    ENU tangent frame at the encoded position, which is what NavSatFix
-    already implies, so the field (and its parameter) is simply gone.
+    NavSatFix carries no orientation, so `q` is identity. 1.7 fixes GeoPose
+    orientation to the local ENU tangent frame at the encoded position,
+    which is what NavSatFix already implies.
     """
     h = msg.header
     cov_type = int(getattr(msg, "position_covariance_type", 0) or 0)
-    payload: Dict[str, Any] = {
-        "schema_version": SCHEMA_CORE,
-        "source_operator": operator,
-        "sensor_id": sensor_id,
-        "stamp": _ros_time_to_sdds(h.stamp),
+    raw_cov = getattr(msg, "position_covariance", None)
+    cov = list(raw_cov) if raw_cov is not None else []
+    return {
         "lat_deg": float(msg.latitude),
         "lon_deg": float(msg.longitude),
         "alt_m": float(msg.altitude),
-        "fix_status": int(getattr(getattr(msg, "status", None), "status", 0) or 0),
+        "q": [0.0, 0.0, 0.0, 1.0],
+        "stamp": _ros_time_to_sdds(h.stamp),
+        "cov": _cov3(cov if cov_type > 0 else []),
     }
-    raw_cov = getattr(msg, "position_covariance", None)
-    if cov_type > 0 and raw_cov is not None and len(raw_cov) > 0:
-        payload["position_covariance"] = list(raw_cov)
-        payload["position_covariance_type"] = cov_type
-    return payload
+
+
+# sensor_msgs/NavSatStatus.status -> spatial::core::GnssFixType. ROS 2 has
+# four values; the spec's enum is finer, so the mapping is deliberately
+# lossy upward: NO_FIX, and then the coarsest fix each ROS value guarantees.
+_ROS_FIX_TO_SDDS = {
+    -1: "NO_FIX",       # STATUS_NO_FIX
+    0: "FIX_3D",        # STATUS_FIX        — unaugmented
+    1: "SBAS",          # STATUS_SBAS_FIX
+    2: "DGPS",          # STATUS_GBAS_FIX   — ground-based augmentation
+}
+
+
+def nav_sat_fix_to_nav_sat_status(msg: Any, sensor_id: str = "gnss"
+                                  ) -> Dict[str, Any]:
+    """
+    ``sensor_msgs/NavSatFix`` -> ``spatial::core::NavSatStatus``.
+
+    The receiver diagnostics NavSatFix carries but GeoPose has no field for.
+    3.3.2 registers `navsat_status` as GeoPose's companion, so the bridge
+    publishes both rather than bolting a `fix_status` onto the pose.
+
+    ROS 2 gives status, service and nothing else — no DOP, no satellite
+    count, no differential age — so those stay flagged absent.
+    """
+    status = getattr(msg, "status", None)
+    ros_status = int(getattr(status, "status", 0) or 0)
+    return {
+        "gnss_id": str(sensor_id),
+        "fix_type": _ROS_FIX_TO_SDDS.get(ros_status, "NO_FIX"),
+        "service": int(getattr(status, "service", 0) or 0),
+        # NavSatFix reports no satellite count; 0 is "not reported", which is
+        # what the type's own absence of a flag here leaves us.
+        "num_satellites": 0,
+        "has_dop": False,
+        "pdop": 0.0, "hdop": 0.0, "vdop": 0.0,
+        "has_velocity": False,
+        "speed_mps": 0.0, "course_deg": 0.0,
+        "has_diff_age": False,
+        "diff_age_s": 0.0, "diff_station_id": "",
+        "stamp": _ros_time_to_sdds(msg.header.stamp),
+        "schema_version": SCHEMA_CORE,
+    }
+
+
+def _cov3(values: List[float]) -> Dict[str, Any]:
+    """
+    A 3x3 position covariance as a ``CovMatrix``, or COV_NONE if absent.
+
+    The union's position case is ``COV_POS3`` carrying ``pos`` — not the
+    ``COV_FULL_3X3``/``full3x3`` this bridge first guessed at. Getting it
+    wrong used to be silent: cyclonedds built a union with no active case
+    and the covariance vanished. `from_json` refuses an unknown case now.
+    """
+    if len(values) >= 9:
+        return {"discriminator": "COV_POS3", "pos": [float(v) for v in values[:9]]}
+    return {"discriminator": "COV_NONE", "none": 0}
 
 
 def imu_to_imu_sample(msg: Any, operator: str, sensor_id: str,
-                       frame_mapper: FrameMapper) -> Dict[str, Any]:
-    """``sensor_msgs/Imu`` → SpatialDDS ImuSample payload.
-
-    Per ROS REP-145, ``orientation_covariance[0] == -1`` means orientation is
-    not provided. We surface that as ``has_orientation: false`` so consumers
-    don't accidentally trust an identity quaternion as a real estimate.
+                      frame_mapper: FrameMapper) -> Dict[str, Any]:
     """
-    h = msg.header
-    # ROS 2 ships covariance arrays as numpy arrays; ``arr or []`` raises
-    # "truth value of an array is ambiguous". Use an explicit None check.
-    raw_ori_cov = getattr(msg, "orientation_covariance", None)
-    ori_cov = list(raw_ori_cov) if raw_ori_cov is not None else []
-    has_orientation = not (ori_cov and ori_cov[0] == -1.0)
+    ``sensor_msgs/Imu`` -> ``spatial::vio::ImuSample``.
+
+    ImuSample is `(imu_id, accel, gyro, stamp, source_id, seq)`. Three things
+    ROS 2 carries have nowhere to go, and are dropped rather than smuggled:
+
+    * **orientation** and its covariance (REP-145). ImuSample is raw
+      accel + gyro; a fused attitude is a FramedPose, published separately
+      if the platform has one.
+    * **the accel and gyro covariances.**
+    * **frame_ref.** ImuSample names a `source_id`, not a frame — so the
+      mapper is unused here, and kept in the signature only because the
+      bridge calls every encoder the same way.
+
+    Recorded as a finding rather than worked around.
+    """
     return {
-        "schema_version": SCHEMA_CORE,
-        "source_operator": operator,
-        "sensor_id": sensor_id,
-        "frame_ref": frame_mapper.frame_id_to_frame_ref(h.frame_id),
-        "stamp": _ros_time_to_sdds(h.stamp),
-        "linear_acceleration": _vec3(msg.linear_acceleration),
-        "angular_velocity": _vec3(msg.angular_velocity),
-        "has_orientation": has_orientation,
-        "orientation": _quat(msg.orientation) if has_orientation else None,
+        "imu_id": str(sensor_id),
+        "accel": _as_array(_vec3(msg.linear_acceleration)),
+        "gyro": _as_array(_vec3(msg.angular_velocity)),
+        "stamp": _ros_time_to_sdds(msg.header.stamp),
+        "source_id": str(operator),
+        "seq": 0,
     }
+
+
+# sensor_msgs/CompressedImage.format -> spatial::sensing::common::Codec.
+# The enum has JPEG but no PNG, and ROS 2 uses PNG routinely for depth and
+# mask imagery where JPEG's lossiness is unacceptable. CODEC_NONE is the
+# only available answer and it is wrong in a way a consumer cannot detect;
+# on the findings list.
+def _codec_for(fmt: str) -> str:
+    fmt = (fmt or "").lower()
+    if "jpeg" in fmt or "jpg" in fmt:
+        return "JPEG"
+    if "png" in fmt:
+        return "CODEC_NONE"
+    return "CODEC_NONE"
 
 
 def compressed_image_to_vision_frame(msg: Any, operator: str, sensor_id: str,
-                                      frame_mapper: FrameMapper,
-                                      frame_seq: int = 0) -> Dict[str, Any]:
-    """``sensor_msgs/CompressedImage`` → SpatialDDS VisionFrame payload.
+                                     frame_mapper: FrameMapper,
+                                     frame_seq: int = 0) -> Dict[str, Any]:
+    """
+    ``sensor_msgs/CompressedImage`` -> ``spatial::sensing::vision::VisionFrame``.
 
-    The compressed bytes ride on the wire as a hex-encoded string so the
-    payload remains valid JSON. (For larger payloads a follow-on PR will
-    move this to MCAP attachments / external blob storage; for the v0
-    scope we keep it self-contained and inline.)
+    The image bytes are **not** in here, and the spec is explicit that they
+    should not be: a frame message is metadata plus a `BlobRef`, and the
+    bytes travel as blob chunks. The old payload inlined them as a hex string
+    under a `data_hex` key VisionFrame does not have — which is the exact
+    pattern this migration exists to remove, and it silently vanished on the
+    wire.
+
+    Use :func:`compressed_image_blob` for the bytes; the `BlobRef` in
+    `hdr.blobs` is what ties the two together.
     """
     h = msg.header
-    fmt = (getattr(msg, "format", "") or "").lower()
-    if "png" in fmt:
-        codec = "PNG"
-    elif "jpeg" in fmt or "jpg" in fmt:
-        codec = "JPEG"
-    else:
-        codec = "RAW"
     raw: bytes = bytes(getattr(msg, "data", b"") or b"")
     stamp = _ros_time_to_sdds(h.stamp)
     return {
-        "schema_version": SCHEMA_VISION,
-        "source_operator": operator,
-        "sensor_id": sensor_id,
-        "stream_id": sensor_id,
-        "frame_ref": frame_mapper.frame_id_to_frame_ref(h.frame_id),
+        "stream_id": str(sensor_id),
+        "frame_seq": int(frame_seq),
         "hdr": {
-            "stream_id": sensor_id,
+            "stream_id": str(sensor_id),
             "frame_seq": int(frame_seq),
             "t_start": stamp,
             "t_end": stamp,
-            "blobs": [
-                {
-                    "blob_id": f"{sensor_id}_{stamp['sec']}_{stamp['nanosec']}",
-                    "role": "image",
-                    "checksum": "",
-                }
-            ],
+            # CompressedImage carries no sensor pose; the flag says so.
+            "has_sensor_pose": False,
+            "sensor_pose": {"t": [0.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]},
+            "blobs": [_blob_ref_for(sensor_id, stamp, raw)],
         },
-        "stamp": stamp,
-        "codec": codec,
-        "data_hex": raw.hex(),
-        "size_bytes": len(raw),
+        "codec": _codec_for(getattr(msg, "format", "")),
+        # CompressedImage does not say what the encoded pixels were; the
+        # codec's own container does.
+        "pix": "UNKNOWN",
+        "color": "SRGB",
+        "has_line_readout_us": False,
+        "line_readout_us": 0.0,
+        "rectified": False,
+        "is_key_frame": True,
+        "quality": {"has_snr_db": False, "snr_db": 0.0,
+                    "percent_valid": 100.0, "health": "OK", "note": ""},
     }
+
+
+def compressed_image_blob(msg: Any, sensor_id: str, frame_seq: int = 0):
+    """
+    The image bytes as ``oarc_demo::BlobChunk`` samples.
+
+    Published on the shared blob topic alongside the VisionFrame that
+    references them. Yields nothing for an empty image.
+    """
+    from spatialdds_demo import blob
+
+    raw: bytes = bytes(getattr(msg, "data", b"") or b"")
+    if not raw:
+        return
+    stamp = _ros_time_to_sdds(msg.header.stamp)
+    yield from blob.chunk(_blob_id(sensor_id, stamp), raw)
+
+
+def _blob_id(sensor_id: str, stamp: Dict[str, int]) -> str:
+    return f"{sensor_id}_{stamp['sec']}_{stamp['nanosec']}"
+
+
+def _blob_ref_for(sensor_id: str, stamp: Dict[str, int],
+                  raw: bytes) -> Dict[str, str]:
+    from spatialdds_demo import blob
+
+    return blob.blob_ref(_blob_id(sensor_id, stamp), "image", raw)
 
 
 def detection3d_array_to_set(msg: Any, operator: str,
@@ -261,22 +371,41 @@ def detection3d_array_to_set(msg: Any, operator: str,
         center = bbox.center
         size = bbox.size
         det_id = getattr(det, "id", "") or f"det_{i}"
-        detections.append({
-            "det_id": det_id,
-            "center": _vec3(center.position),
-            "size": _vec3(size),
-            "q": _quat(center.orientation),
-            "class_id": class_id,
-            "score": score,
-        })
-    return {
-        "schema_version": SCHEMA_SEMANTICS,
-        "source_operator": operator,
-        "frame_ref": frame_mapper.frame_id_to_frame_ref(h.frame_id),
-        "stamp": _ros_time_to_sdds(h.stamp),
-        "frame_seq": int(getattr(h.stamp, "sec", 0) or 0),
-        "detections": detections,
-    }
+        frame_ref = frame_mapper.frame_id_to_frame_ref(h.frame_id)
+        # The one canonical Detection3D builder, shared with the
+        # multi-operator publishers. Each side used to have its own and both
+        # were wrong; a bridge and a publisher disagreeing about a spec type
+        # is exactly the drift the typed wire is meant to make impossible.
+        detection = payloads.detection3d(
+            det_id=det_id, class_id=class_id, score=score,
+            center=_as_array(_vec3(center.position)),
+            size=_as_array(_vec3(size)),
+            q=_as_array(_quat(center.orientation), ("x", "y", "z", "w")),
+            frame_ref_fqn="", frame_ref_dict=frame_ref,
+            timestamp_s=_stamp_seconds(h.stamp), source_id=operator)
+        # vision_msgs/Detection3DArray has no velocity field, so the flag
+        # says so rather than a zero vector pretending to be a measurement —
+        # the fuser reads the flag before the value.
+        detections.append(payloads.detection_with_velocity(
+            detection, velocity=None, source_modality="det3d"))
+    return payloads.detection_set(
+        set_id=f"{operator}-{int(getattr(h.stamp, 'sec', 0) or 0)}",
+        source_operator=operator, frame_ref_fqn="",
+        frame_ref_dict=frame_mapper.frame_id_to_frame_ref(h.frame_id),
+        dets=detections, frame_seq=int(getattr(h.stamp, "sec", 0) or 0),
+        timestamp_s=_stamp_seconds(h.stamp))
+
+
+def _stamp_seconds(ros_stamp: Any) -> float:
+    return (float(getattr(ros_stamp, "sec", 0) or 0)
+            + float(getattr(ros_stamp, "nanosec", 0) or 0) / 1e9)
+
+
+def _as_array(value: Any, keys=("x", "y", "z")) -> List[float]:
+    """Vec3/Quat are IDL arrays; these converters build {x,y,z} dicts."""
+    if isinstance(value, (list, tuple)):
+        return [float(v) for v in value]
+    return [float((value or {}).get(k, 1.0 if k == "w" else 0.0)) for k in keys]
 
 
 # ---------- Convenience: convert + topic + msg_type --------------------------

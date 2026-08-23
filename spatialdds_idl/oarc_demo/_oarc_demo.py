@@ -223,3 +223,16 @@ class FusionCoverage(idl.IdlStruct, typename="oarc_demo.FusionCoverage"):
     stamp: 'spatialdds_idl.oarc_demo.Time'
 
 
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class BlobChunk(idl.IdlStruct, typename="oarc_demo.BlobChunk"):
+    blob_id: str
+    annotate.key("blob_id")
+    index: types.uint32
+    annotate.key("index")
+    total_chunks: types.uint32
+    crc32: types.uint32
+    data: types.sequence[types.uint8, 65535]
+
+

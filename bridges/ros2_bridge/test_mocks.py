@@ -162,38 +162,49 @@ class Detection3DArray:
 # ---------- Factory helpers --------------------------------------------------
 
 def make_test_pose_stamped(x: float = 10.0, y: float = 20.0, z: float = 0.5,
-                            frame_id: str = "map") -> PoseStamped:
+                           frame_id: str = "map",
+                           qx: float = 0.0, qy: float = 0.0,
+                           qz: float = 0.383, qw: float = 0.924) -> PoseStamped:
     return PoseStamped(
         header=Header(stamp=Time(sec=100, nanosec=500_000_000), frame_id=frame_id),
         pose=Pose(
             position=Point(x=x, y=y, z=z),
-            orientation=Quaternion(x=0.0, y=0.0, z=0.383, w=0.924),
+            orientation=Quaternion(x=qx, y=qy, z=qz, w=qw),
         ),
     )
 
 
 def make_test_nav_sat_fix(lat: float = 30.267, lon: float = -97.743,
-                           alt: float = 150.0, frame_id: str = "gnss") -> NavSatFix:
+                          alt: float = 150.0, frame_id: str = "gnss",
+                          status: int = 0) -> NavSatFix:
     return NavSatFix(
         header=Header(stamp=Time(sec=100, nanosec=0), frame_id=frame_id),
-        status=NavSatStatus(status=0, service=1),
+        status=NavSatStatus(status=status, service=1),
         latitude=lat, longitude=lon, altitude=alt,
         position_covariance=[1.0, 0, 0, 0, 1.0, 0, 0, 0, 4.0],
         position_covariance_type=2,
     )
 
 
-def make_test_imu(frame_id: str = "imu_link") -> Imu:
+def make_test_imu(frame_id: str = "imu_link",
+                  ax: float = 0.1, ay: float = -0.05, az: float = 9.78,
+                  gx: float = 0.001, gy: float = -0.002, gz: float = 0.05) -> Imu:
     return Imu(
         header=Header(stamp=Time(sec=100, nanosec=250_000_000), frame_id=frame_id),
         orientation=Quaternion(x=0.0, y=0.0, z=0.01, w=0.9999),
-        angular_velocity=Vector3(x=0.001, y=-0.002, z=0.05),
-        linear_acceleration=Vector3(x=0.1, y=-0.05, z=9.78),
+        angular_velocity=Vector3(x=gx, y=gy, z=gz),
+        linear_acceleration=Vector3(x=ax, y=ay, z=az),
     )
 
 
 def make_test_compressed_image(frame_id: str = "camera_optical",
-                                fmt: str = "jpeg") -> CompressedImage:
+                               fmt: str = "jpeg",
+                               data: bytes = None) -> CompressedImage:
+    if data is not None:
+        return CompressedImage(
+            header=Header(stamp=Time(sec=100, nanosec=750_000_000),
+                          frame_id=frame_id),
+            format=fmt, data=data)
     return CompressedImage(
         header=Header(stamp=Time(sec=100, nanosec=750_000_000), frame_id=frame_id),
         format=fmt,

@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Dict, Optional, Type
 
 from spatialdds_idl.oarc_demo import (
+    BlobChunk,
     CatalogQuery,
     CatalogResponse,
     FusedTrackSet,
@@ -35,6 +36,7 @@ from spatialdds_idl.spatial.core import (
 from spatialdds_idl.spatial.disco import Announce, CoverageQuery, CoverageResponse, Depart
 from spatialdds_idl.spatial.events import SpatialEvent
 from spatialdds_idl.spatial.semantics import Detection3DSet
+from spatialdds_idl.spatial.vio import ImuSample
 from spatialdds_idl.spatial.sensing.lidar import LidarFrame, LidarMeta
 from spatialdds_idl.spatial.sensing.rad import RadTensorFrame, RadTensorMeta
 from spatialdds_idl.spatial.sensing.rf_beam import RfBeamFrame, RfBeamMeta
@@ -87,6 +89,14 @@ EXTENSIONS: Dict[str, Type] = {
     "oarc.radar_tensor_meta": RadTensorMeta,
     "oarc.video_frame_meta": VisionMeta,
     "oarc.rf_beam_meta": RfBeamMeta,
+    # spatial::vio::ImuSample is a stable 1.7 type with no registered name
+    # either — the ROS 2 bridge publishes one per sensor_msgs/Imu.
+    "oarc.imu_sample": ImuSample,
+    # spatial::core::BlobChunk is unusable from cyclonedds-python (its
+    # 262144 sequence bound exceeds the binding's 65535 ceiling), and it is
+    # the only type in 1.7 that carries bytes. Same semantics, smaller
+    # chunks. See idl/demo/oarc_demo.idl.
+    "oarc.blob_chunk": BlobChunk,
 }
 
 ALL: Dict[str, Type] = {**REGISTERED, **EXTENSIONS}

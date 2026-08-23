@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """ROS 2 bridge node — the only file in this package that imports rclpy.
 
-Wires real ROS 2 subscribers and publishers to ``EnvelopePublisher`` /
-``EnvelopeSubscriber``. Designed to be the **only** ROS 2-coupled file: the
+Wires real ROS 2 subscribers and publishers to typed SpatialDDS topics.
+Designed to be the **only** ROS 2-coupled file: the
 conversion layer (``ros2_to_spatialdds``, ``spatialdds_to_ros2``,
 ``frame_mapping``) stays duck-typed so 80% of the bridge keeps working
 unit-tests-only.
@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import fnmatch
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -69,9 +70,11 @@ if str(_BRIDGES) not in sys.path:
     # for the shared envelope_io
     sys.path.insert(0, str(_BRIDGES))
 
-from envelope_io import EnvelopePublisher, EnvelopeSubscriber  # noqa: E402
+from spatialdds_demo import blob, topic_types, typed_transport as tt  # noqa: E402
+from spatialdds_demo.stream import StreamSubscriber  # noqa: E402
 from frame_mapping import FrameMapper  # noqa: E402
 from ros2_to_spatialdds import (  # noqa: E402
+    compressed_image_blob,
     encode_compressed_image,
     encode_detection3d_array,
     encode_imu,
@@ -80,6 +83,7 @@ from ros2_to_spatialdds import (  # noqa: E402
 )
 from spatialdds_to_ros2 import (  # noqa: E402
     detection3d_set_to_array,
+    vision_frame_blob_id,
     framed_pose_to_pose_stamped,
     geo_pose_to_nav_sat_fix,
     imu_sample_to_imu,
@@ -247,12 +251,45 @@ def _make_detection3d_array(payload, fm):
 
 
 # Each decoder produces an instance of the matching ROS 2 message class.
-_OUTBOUND_FACTORIES: Dict[str, Callable[[dict, FrameMapper], Any]] = {
+def _make_imu(payload, fm):
+    from sensor_msgs.msg import Imu  # type: ignore
+
+    src = imu_sample_to_imu(payload, fm)
+    out = Imu()
+    out.header.stamp.sec = src.header.stamp.sec
+    out.header.stamp.nanosec = src.header.stamp.nanosec
+    out.header.frame_id = src.header.frame_id
+    out.linear_acceleration.x = src.linear_acceleration.x
+    out.linear_acceleration.y = src.linear_acceleration.y
+    out.linear_acceleration.z = src.linear_acceleration.z
+    out.angular_velocity.x = src.angular_velocity.x
+    out.angular_velocity.y = src.angular_velocity.y
+    out.angular_velocity.z = src.angular_velocity.z
+    # vio::ImuSample carries no orientation, so REP-145's "not provided"
+    # sentinel is the truth here rather than a fallback.
+    out.orientation_covariance = list(src.orientation_covariance)
+    return out
+
+
+def _make_compressed_image(payload, fm, data: bytes = b""):
+    from sensor_msgs.msg import CompressedImage  # type: ignore
+
+    src = vision_frame_to_compressed_image(payload, fm, data=data)
+    out = CompressedImage()
+    out.header.stamp.sec = src.header.stamp.sec
+    out.header.stamp.nanosec = src.header.stamp.nanosec
+    out.header.frame_id = src.header.frame_id
+    out.format = src.format
+    out.data = list(src.data)
+    return out
+
+
+_OUTBOUND_FACTORIES: Dict[str, Callable[..., Any]] = {
     "PoseStamped": _make_pose_stamped,
     "NavSatFix": _make_nav_sat_fix,
     "Detection3DArray": _make_detection3d_array,
-    # Imu and CompressedImage TODO: wire up when needed; the encoder
-    # direction is already done.
+    "Imu": _make_imu,
+    "CompressedImage": _make_compressed_image,
 }
 
 
@@ -364,7 +401,13 @@ def main():  # pragma: no cover - Tier-3 only
     operator = str(config["operator"])
     domain_id = int(config.get("domain_id", 1))
     fm = FrameMapper(operator)
-    publisher = EnvelopePublisher(domain_id)
+
+    from cyclonedds.domain import DomainParticipant
+
+    # One participant for both directions, so the SpatialDDS-side readers can
+    # use IGNORE_LOCAL_PARTICIPANT and never see this bridge's own writes.
+    participant = DomainParticipant(domain_id)
+    writers = _TypedWriters(participant)
 
     # ROS 2 → SpatialDDS subscriptions
     for mapping in config.get("ros2_to_spatialdds", []) or []:
@@ -375,7 +418,20 @@ def main():  # pragma: no cover - Tier-3 only
         def make_callback(_encoder=encoder, _mapping=mapping):
             def cb(msg):
                 topic, msg_type, payload = _encoder(msg, operator, fm, _mapping)
-                publisher.publish(topic, msg_type, payload)
+                try:
+                    writers.write(topic, msg_type, payload)
+                except Exception as exc:
+                    # An unresolvable type, or a payload that is not a
+                    # well-formed sample of it. Reported here rather than
+                    # left for some later consumer to discover.
+                    node.get_logger().error(
+                        f"ros2->sdds {topic} ({msg_type}): {exc}")
+                    return
+                # Image bytes do not ride in the frame message: a VisionFrame
+                # is metadata plus a BlobRef, and the bytes travel as blob
+                # chunks on the shared blob topic.
+                for chunk in _image_chunks(_encoder, msg, _mapping):
+                    writers.write(blob.BLOB_TOPIC, blob.BLOB_TYPE, chunk)
             return cb
 
         node.create_subscription(ros2_cls, ros2_topic, make_callback(), 10)
@@ -392,7 +448,14 @@ def main():  # pragma: no cover - Tier-3 only
                 return entry
         return None
 
-    def envelope_callback(msg_type: str, logical_topic: str, payload: dict, _stamp_ns: int):
+    reassembler = blob.Reassembler()
+    pending_images: Dict[str, tuple] = {}
+
+    def sample_callback(msg_type: str, logical_topic: str, payload: dict,
+                        _stamp_ns: int):
+        if msg_type == blob.BLOB_TYPE:
+            _on_blob_chunk(payload)
+            return
         decoder = msg_type_to_decoder(msg_type)
         if decoder is None:
             return
@@ -438,13 +501,50 @@ def main():  # pragma: no cover - Tier-3 only
             node.get_logger().info(f"sdds→ros2  {logical_topic} → {out_topic} ({ros2_name})")
 
         try:
-            ros2_msg = factory(payload, fm)
-            ros2_pubs[pub_key].publish(ros2_msg)
+            if ros2_name == "CompressedImage":
+                # Hold the frame until its blob arrives. Publishing metadata
+                # with an empty image would look like a working bridge —
+                # which is what the old inline `data_hex` path did once the
+                # field stopped surviving the wire.
+                blob_id = vision_frame_blob_id(payload)
+                if blob_id:
+                    pending_images[blob_id] = (pub_key, payload)
+                    return
+            ros2_pubs[pub_key].publish(factory(payload, fm))
         except Exception as exc:
             node.get_logger().error(f"failed to publish {out_topic}: {exc}")
 
-    subscriber = EnvelopeSubscriber(domain_id, envelope_callback)
-    subscriber.start()
+    def _on_blob_chunk(payload: dict) -> None:
+        """Reassemble image bytes and release the frame that was waiting."""
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.oarc_demo import BlobChunk
+
+        try:
+            data = reassembler.feed(from_json(BlobChunk, payload))
+        except blob.CorruptChunk as exc:
+            node.get_logger().warning(str(exc))
+            return
+        if data is None:
+            return
+        blob_id = str(payload.get("blob_id") or "")
+        waiting = pending_images.pop(blob_id, None)
+        if waiting is None:
+            return
+        pub_key, frame = waiting
+        try:
+            ros2_pubs[pub_key].publish(_make_compressed_image(frame, fm, data))
+        except Exception as exc:
+            node.get_logger().error(f"failed to publish image {blob_id}: {exc}")
+
+    subscriber = StreamSubscriber(participant, sample_callback,
+                                  ignore_local=True)
+
+    def _poll_sdds() -> None:
+        subscriber.poll(stamp_ns=time.time_ns())
+
+    # Polled on the rclpy executor rather than a thread, so every ROS 2
+    # publish happens on the node's own thread.
+    node.create_timer(0.02, _poll_sdds)
 
     node.get_logger().info(
         f"bridge ready  operator={operator}  spatialdds_domain={domain_id}"
@@ -452,8 +552,6 @@ def main():  # pragma: no cover - Tier-3 only
     try:
         rclpy.spin(node)
     finally:
-        subscriber.stop()
-        publisher.close()
         node.destroy_node()
         rclpy.shutdown()
 

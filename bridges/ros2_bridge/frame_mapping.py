@@ -31,9 +31,27 @@ def deterministic_uuid(operator: str, frame_id: str) -> str:
     return str(uuid.uuid5(_FRAMEREF_NAMESPACE, name))
 
 
-def frame_ref_dict(uuid_str: str, fqn: str) -> Dict[str, str]:
-    """Build a SpatialDDS FrameRef as a JSON-serializable dict."""
-    return {"uuid": uuid_str, "fqn": fqn}
+# ROS 2's REP-103 body and world frames are ENU (x east / forward, y north /
+# left, z up), which is 1.7's default convention — so every FrameRef this
+# bridge mints states ENU rather than leaving it unsaid.
+COORD_CONVENTION = "ENU"
+
+
+def frame_ref_dict(uuid_str: str, fqn: str) -> Dict[str, object]:
+    """
+    Build a complete SpatialDDS ``FrameRef``.
+
+    Complete matters: `coord_convention` is presence-flagged, so the value is
+    always on the wire and the flag says whether to read it. Omitting the
+    pair produced a dict that looked like a FrameRef and was not one — which
+    nothing caught while payloads were JSON strings.
+    """
+    return {
+        "uuid": uuid_str,
+        "fqn": fqn,
+        "has_coord_convention": True,
+        "coord_convention": COORD_CONVENTION,
+    }
 
 
 class FrameMapper:
@@ -47,10 +65,10 @@ class FrameMapper:
 
     def __init__(self, operator: str):
         self.operator = operator
-        self._fwd: Dict[str, Dict[str, str]] = {}  # frame_id → {uuid, fqn}
+        self._fwd: Dict[str, Dict[str, object]] = {}   # frame_id -> FrameRef
         self._rev: Dict[str, str] = {}             # uuid → frame_id
 
-    def frame_id_to_frame_ref(self, frame_id: str) -> Dict[str, str]:
+    def frame_id_to_frame_ref(self, frame_id: str) -> Dict[str, object]:
         cached = self._fwd.get(frame_id)
         if cached is not None:
             return cached
@@ -60,16 +78,16 @@ class FrameMapper:
         self._rev[u] = frame_id
         return ref
 
-    def frame_ref_to_frame_id(self, ref: Dict[str, str]) -> str:
+    def frame_ref_to_frame_id(self, ref: Dict[str, object]) -> str:
         if not isinstance(ref, dict):
             return ""
-        u = ref.get("uuid", "")
+        u = str(ref.get("uuid", "") or "")
         cached = self._rev.get(u)
         if cached is not None:
             return cached
         # Fallback: split the FQN. Strip the leading "{operator}/" if present;
         # otherwise return the whole FQN (foreign frames keep their full name).
-        fqn = ref.get("fqn", "") or ""
+        fqn = str(ref.get("fqn", "") or "")
         prefix = f"{self.operator}/"
         if fqn.startswith(prefix):
             return fqn[len(prefix):]

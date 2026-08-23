@@ -169,11 +169,30 @@ def _is_union_type(target: Any) -> bool:
 
 
 def _union_from_json(cls: Type[T], data: Dict[str, Any]) -> T:
-    """Rebuild a union from {"discriminator": name, "<case>": value}."""
+    """
+    Rebuild a union from ``{"discriminator": name, "<case>": value}``.
+
+    An unrecognised case name is refused. cyclonedds accepts one silently and
+    yields a union with no active case, which serialises to
+    ``{"discriminator": None}`` — a sample that is not valid and that nothing
+    downstream can tell from a legitimately-empty one. That cost a real bug:
+    the ROS 2 bridge wrote a covariance under an invented case name and the
+    value simply disappeared.
+    """
+    hints = _resolved_hints(cls)
     case = next((k for k in data if k != "discriminator"), None)
     if case is None:
+        # Discriminator alone: an empty case (COV_NONE and friends) is a
+        # legitimate way to write one.
+        label = data.get("discriminator")
+        if isinstance(label, str):
+            return _union_from_discriminator(cls, label)
         raise ValueError(f"{_typename(cls)}: union JSON names no active case")
-    hints = _resolved_hints(cls)
+    if case not in hints:
+        raise ValueError(
+            f"{_typename(cls)}: {case!r} is not one of its cases "
+            f"({', '.join(sorted(hints))})"
+        )
     return cls(**{case: _coerce(_case_type(hints.get(case)), data[case])})
 
 
@@ -192,6 +211,11 @@ def from_json(cls: Type[T], data: Dict[str, Any]) -> T:
     """
     if not isinstance(data, dict):
         raise TypeError(f"{cls.__name__} expects an object, got {type(data).__name__}")
+    if _is_union_type(cls):
+        # A union is not a dataclass, so it cannot go through the field walk
+        # below. Handling it here means a caller need not know which of the
+        # two a given generated class is.
+        return _union_from_json(cls, data)
 
     typename = _typename(cls)
     hints = getattr(cls, "__annotations__", {}) or {}

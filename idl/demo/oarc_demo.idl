@@ -193,6 +193,27 @@ module oarc_demo {
     Time   stamp;
   };
 
+  // --- Blob transfer -------------------------------------------------------
+  // spatial::core::BlobChunk is the spec's mechanism for moving bytes, and it
+  // is unusable from cyclonedds-python: its `sequence<uint8, 262144>` exceeds
+  // the binding's hard 65535 sequence bound, so building a Topic for it
+  // raises before a single byte is written. Since BlobChunk is the only type
+  // in 1.7 that carries bytes at all, the reference Python binding cannot
+  // move sensor data on the bus.
+  //
+  // This is byte-identical in semantics — same composite key, same crc32,
+  // same chunking contract — at a bound the binding can encode. It is a
+  // toolchain workaround, not a disagreement with the spec: if either the
+  // spec's bound or the binding's limit moves, this type goes away and
+  // spatial::core::BlobChunk is used directly.
+  @extensibility(APPENDABLE) struct BlobChunk {
+    @key string blob_id;                 // which blob
+    @key uint32 index;                   // chunk index (0..total_chunks-1)
+    uint32 total_chunks;
+    uint32 crc32;                        // CRC32 over `data`
+    sequence<uint8, 65535> data;         // <=64 KiB, the binding's ceiling
+  };
+
 };
 
 #endif // OARC_DEMO_INCLUDED
