@@ -9,14 +9,18 @@ from typing import Dict
 
 from cyclonedds.domain import DomainParticipant
 
-from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
+from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.discovery_bus import AnnouncePublisher
 from spatialdds_demo.json_mapping import from_json, to_json
-from spatialdds_demo.service_bus import VpsService
+from spatialdds_demo.service_bus import CoverageService, VpsService
 from spatialdds_idl.oarc_demo import VpsRequest, VpsResponse
-from spatialdds_idl.spatial.disco import Announce as TypedAnnounce
+from spatialdds_idl.spatial.disco import (
+    Announce as TypedAnnounce,
+    CoverageResponse as TypedCoverageResponse,
+)
 from spatialdds_demo.topics import (
     TOPIC_DISCOVERY_ANNOUNCE_V1,
+    TOPIC_DISCOVERY_QUERY_V1,
     TOPIC_SOURCE_ANNOUNCE_PREVIEW,
     TOPIC_SOURCE_FALLBACK,
     TOPIC_SOURCE_MANIFEST,
@@ -52,47 +56,24 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     manifest, _ = _load_manifest(announce)
     manifest_topics = _index_manifest_topics(manifest) if manifest else {}
 
-    def on_message(envelope: object) -> None:
-        msg_type = envelope.msg_type
-        logical_topic = envelope.logical_topic
-        data = json.loads(envelope.payload_json)
-        request_id = envelope.request_id
-
-        if msg_type == "COVERAGE_QUERY":
+    def serve_coverage(coverage: CoverageService) -> None:
+        """Typed CoverageQuery -> CoverageResponse, replying where asked."""
+        for query in coverage.take_queries():
+            data = to_json(query)
             logger.log_message(
-                "COVERAGE_QUERY",
-                "RECV",
-                "Client",
-                f"VPS:{service.service_name}",
-                data,
-                logical_topic,
-                TOPIC_SOURCE_SPEC,
+                "COVERAGE_QUERY", "RECV", "Client",
+                f"VPS:{service.service_name}", data,
+                TOPIC_DISCOVERY_QUERY_V1, TOPIC_SOURCE_SPEC,
                 show_message_content,
             )
             response = service.handle_coverage_query(data)
-            transport.publish(
-                data.get("reply_topic", ""),
-                "COVERAGE_RESPONSE",
-                json.dumps(response),
-                request_id,
-            )
+            coverage.reply(query.reply_topic,
+                           from_json(TypedCoverageResponse, response))
             logger.log_message(
-                "COVERAGE_RESPONSE",
-                "SEND",
-                f"VPS:{service.service_name}",
-                "Client",
-                response,
-                data.get("reply_topic"),
-                TOPIC_SOURCE_REQUEST,
-                show_message_content,
+                "COVERAGE_RESPONSE", "SEND", f"VPS:{service.service_name}",
+                "Client", response, query.reply_topic,
+                TOPIC_SOURCE_REQUEST, show_message_content,
             )
-
-    transport = DDSTransport(
-        on_message_callback=on_message,
-        domain_id=domain_id,
-        local_sender_id=service.service_id,
-    )
-    transport.start()
 
     def serve_localize(vps: VpsService) -> None:
         """Typed VpsRequest -> VpsResponse on the registered vps topics."""
@@ -119,6 +100,7 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     participant = DomainParticipant(domain_id)
     announcer = AnnouncePublisher(participant)
     vps = VpsService(participant)
+    coverage = CoverageService(participant)
     announcer.publish(from_json(TypedAnnounce, announce))
     print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")
     print("announce qos: DISCOVERY_ANNOUNCE "
@@ -150,13 +132,13 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     try:
         while not stopping.is_set():
             serve_localize(vps)
+            serve_coverage(coverage)
             time.sleep(0.05)
     except KeyboardInterrupt:
         pass
 
     # Graceful shutdown: dispose the instance (spec MUST) and publish Depart.
     announcer.close()
-    transport.stop()
     return 0
 
 

@@ -449,6 +449,10 @@ class SpatialDDSClientV15:
             "coverage": [coverage_elem],
             "coverage_frame_ref": coverage_frame_ref,
             "has_coverage_eval_time": False,
+            # Presence-flagged: the value is always on the wire and the flag
+            # says whether to read it. Omitting it made a dict that looked
+            # like a CoverageQuery and was not one.
+            "coverage_eval_time": SpatialDDSValidator.now_time(),
             # 1.7 deleted CoverageQuery.expr — `filter` is the only query form.
             "has_filter": True,
             "filter": {"type_in": [], "qos_profile_in": [], "module_id_in": []},

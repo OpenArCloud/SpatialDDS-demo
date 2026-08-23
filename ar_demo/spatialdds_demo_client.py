@@ -2,7 +2,6 @@
 import argparse
 import json
 import os
-import queue
 import sys
 import time
 import uuid
@@ -10,7 +9,11 @@ from typing import Any, Dict, Optional
 
 from cyclonedds.domain import DomainParticipant
 
-from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
+from spatialdds_demo import topic_types, typed_transport as tt
+from spatialdds_demo.dds_transport import require_dds_env
+from spatialdds_demo.service_bus import BootstrapClient, CoverageClient
+from spatialdds_idl.oarc_demo import BootstrapQuery as TypedBootstrapQuery
+from spatialdds_idl.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.discovery_bus import AnnounceSubscriber
 from spatialdds_demo.json_mapping import from_json, to_json
 from spatialdds_demo.service_bus import CatalogClient, VpsClient
@@ -50,19 +53,6 @@ def _topic_source_for(manifest_topics: Dict[str, str], role: str, logical_topic:
     return TOPIC_SOURCE_SPEC
 
 
-def _wait_for(queue_obj: queue.Queue, msg_type: str, timeout: float) -> Optional[object]:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        remaining = max(0.1, deadline - time.time())
-        try:
-            envelope = queue_obj.get(timeout=remaining)
-        except queue.Empty:
-            continue
-        if envelope.msg_type == msg_type:
-            return envelope
-    return None
-
-
 def _bootstrap_domain(logger: SpatialDDSLogger, show_message_content: bool) -> Optional[int]:
     client_id = f"client-{uuid.uuid4().hex[:6]}"
     client_kind = os.getenv("SPATIALDDS_BOOTSTRAP_KIND", "robot")
@@ -80,47 +70,32 @@ def _bootstrap_domain(logger: SpatialDDSLogger, show_message_content: bool) -> O
         "stamp": SpatialDDSValidator.now_time(),
     }
 
-    inbox: queue.Queue = queue.Queue()
-
-    def on_message(envelope: object) -> None:
-        inbox.put(envelope)
-
-    transport = DDSTransport(
-        on_message_callback=on_message, domain_id=0, local_sender_id=client_id
+    # Bootstrap runs on domain 0 by convention: it is what a participant
+    # does before it knows which domain it belongs on.
+    bootstrap = BootstrapClient(DomainParticipant(0))
+    logger.log_message(
+        "BOOTSTRAP_QUERY",
+        "SEND",
+        client_id,
+        "BootstrapService",
+        query,
+        TOPIC_BOOTSTRAP_QUERY_V1,
+        TOPIC_SOURCE_SPEC,
+        show_message_content,
     )
-    transport.start()
-
-    deadline = time.time() + 5
-    response_env = None
-    while time.time() < deadline and not response_env:
-        transport.publish(
-            TOPIC_BOOTSTRAP_QUERY_V1, "BOOTSTRAP_QUERY", json.dumps(query), client_id
-        )
-        logger.log_message(
-            "BOOTSTRAP_QUERY",
-            "SEND",
-            client_id,
-            "BootstrapService",
-            query,
-            TOPIC_BOOTSTRAP_QUERY_V1,
-            TOPIC_SOURCE_SPEC,
-            show_message_content,
-        )
-        response_env = _wait_for(inbox, "BOOTSTRAP_RESPONSE", timeout=1)
-
-    transport.stop()
-    if not response_env:
+    typed = bootstrap.request(from_json(TypedBootstrapQuery, query), timeout=8.0)
+    if typed is None:
         print("Client timed out waiting for BOOTSTRAP_RESPONSE.")
         return None
 
-    response = json.loads(response_env.payload_json)
+    response = to_json(typed)
     logger.log_message(
         "BOOTSTRAP_RESPONSE",
         "RECV",
         "BootstrapService",
         client_id,
         response,
-        response_env.logical_topic,
+        TOPIC_BOOTSTRAP_RESPONSE_V1,
         TOPIC_SOURCE_REQUEST,
         show_message_content,
     )
@@ -159,17 +134,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         return 1
 
     client = SpatialDDSClientV15(logger)
-    inbox: queue.Queue = queue.Queue()
 
-    def on_message(envelope: object) -> None:
-        inbox.put(envelope)
-
-    transport = DDSTransport(
-        on_message_callback=on_message,
-        domain_id=domain_id,
-        local_sender_id=client.client_ref["fqn"],
-    )
-    transport.start()
     # Typed announces on their own keyed topic. TRANSIENT_LOCAL means this
     # client sees services that announced before it started.
     announce_participant = DomainParticipant(domain_id)
@@ -192,7 +157,6 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
 
     if not announce:
         print("Client timed out waiting for ANNOUNCE.")
-        transport.stop()
         return 1
     logger.log_message(
         "ANNOUNCE",
@@ -208,13 +172,14 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     manifest, _ = _load_manifest(announce)
     manifest_topics = _index_manifest_topics(manifest) if manifest else {}
 
+    # C.5: the query goes on the well-known topic and names the topic the
+    # reply should come back on, so a reply reaches one asker rather than
+    # every client on the bus.
+    client_id = client.client_ref["fqn"].replace("/", "-")
+    coverage_reply_topic = f"spatialdds/discovery/replies/{client_id}/v1"
+    coverage_client = CoverageClient(announce_participant, coverage_reply_topic)
     coverage_query = client.create_coverage_query()
-    transport.publish(
-        TOPIC_DISCOVERY_QUERY_V1,
-        "COVERAGE_QUERY",
-        json.dumps(coverage_query),
-        coverage_query.get("query_id", ""),
-    )
+    coverage_query["reply_topic"] = coverage_reply_topic
     logger.log_message(
         "COVERAGE_QUERY",
         "SEND",
@@ -226,20 +191,20 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         show_message_content,
     )
 
-    response_env = _wait_for(inbox, "COVERAGE_RESPONSE", timeout=10)
-    if not response_env:
+    typed_coverage = coverage_client.query(
+        from_json(TypedCoverageQuery, coverage_query), timeout=10.0)
+    if typed_coverage is None:
         print("Client timed out waiting for COVERAGE_RESPONSE.")
-        transport.stop()
         return 1
 
-    coverage_response = json.loads(response_env.payload_json)
+    coverage_response = to_json(typed_coverage)
     logger.log_message(
         "COVERAGE_RESPONSE",
         "RECV",
         f"VPS:{announce.get('name', 'unknown')}",
         "Client",
         coverage_response,
-        response_env.logical_topic,
+        coverage_reply_topic,
         TOPIC_SOURCE_REQUEST,
         show_message_content,
     )
@@ -287,7 +252,6 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     typed_response = vps.request(from_json(TypedVpsRequest, loc_request), timeout=10)
     if typed_response is None:
         print("Client timed out waiting for LOCALIZE_RESPONSE.")
-        transport.stop()
         return 1
 
     loc_response = to_json(typed_response)
@@ -358,12 +322,14 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         if anchor_delta.get("set_id")
         else TOPIC_ANCHORS_DELTA("unknown")
     )
-    transport.publish(
-        anchor_topic,
-        "ANCHOR_DELTA",
-        json.dumps(anchor_delta),
-        "",
-    )
+    # AnchorDelta is a stable 1.7 type that 3.3.2 gives no registered name
+    # and 3.3.3 no profile, so the demo names it `oarc.anchor_delta` and puts
+    # it on the latched map-metadata lane — an anchor set is state, not an
+    # event, and a late joiner needs the current one.
+    anchor_writer = tt.TypedDictWriter(
+        announce_participant, anchor_topic,
+        topic_types.resolve("oarc.anchor_delta"), "MAP_META")
+    anchor_writer.write(anchor_delta)
     logger.log_message(
         "ANCHOR_DELTA",
         "SEND",
@@ -376,7 +342,6 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     )
 
     time.sleep(0.2)
-    transport.stop()
     logger.print_summary()
     return 0
 

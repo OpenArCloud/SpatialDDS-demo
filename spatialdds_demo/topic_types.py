@@ -26,6 +26,7 @@ from spatialdds_idl.oarc_demo import (
     VpsRequest,
     VpsResponse,
 )
+from spatialdds_idl.spatial.anchors import AnchorDelta
 from spatialdds_idl.spatial.core import (
     EntityBinding,
     FramedPose,
@@ -76,7 +77,10 @@ EXTENSIONS: Dict[str, Type] = {
     "oarc.catalog_response": CatalogResponse,
     # vps_query is registered but has no struct; the response has no type name.
     "oarc.vps_response": VpsResponse,
-    # Anchor deltas have neither a registered type nor a QoS profile.
+    # Anchor deltas have neither a registered type name nor a QoS profile,
+    # though spatial::anchors::AnchorDelta is a stable 1.7 type — the same
+    # registry gap as lidar and the sensor metadata types below.
+    "oarc.anchor_delta": AnchorDelta,
 
     # --- registered-name gaps: the struct exists, the registry name does not.
     # 3.3.2 registers `radar_tensor` and `video_frame` for the frame types but

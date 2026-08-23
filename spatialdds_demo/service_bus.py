@@ -27,16 +27,22 @@ from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.topics import (
+    TOPIC_BOOTSTRAP_QUERY_V1,
+    TOPIC_BOOTSTRAP_RESPONSE_V1,
     TOPIC_CATALOG_QUERY_V1,
+    TOPIC_DISCOVERY_QUERY_V1,
     TOPIC_VPS_QUERY_V1,
     TOPIC_VPS_RESULT_V1,
 )
 from spatialdds_idl.oarc_demo import (
+    BootstrapQuery,
+    BootstrapResponse,
     CatalogQuery,
     CatalogResponse,
     VpsRequest,
     VpsResponse,
 )
+from spatialdds_idl.spatial.disco import CoverageQuery, CoverageResponse
 
 # Registered QoS profiles for these lanes (3.3.3).
 VPS_REQ_PROFILE = "VPS_REQ"
@@ -134,6 +140,125 @@ class CatalogClient:
         while time.time() < deadline:
             for response in tt.take_samples(self._reader):
                 if response.query_id == query.query_id:
+                    return response
+            time.sleep(0.02)
+        return None
+
+
+# --- Coverage query: "who covers this area?" --------------------------------
+# A spec flow, unlike VPS and catalogue: `CoverageQuery` and `CoverageResponse`
+# are disco types, and C.5 puts the query on a well-known topic with the reply
+# going to a topic the query names. Results are compact `ServiceSummary` rows —
+# a consumer selects on the summary and takes detail from the retained
+# Announce it already holds, or by resolving `manifest_uri`.
+COVERAGE_QUERY_PROFILE = "ZONE_META"
+COVERAGE_RESP_PROFILE = "ZONE_META"
+
+
+class CoverageService:
+    """Server side: read queries on the well-known topic, reply where asked."""
+
+    def __init__(self, participant: DomainParticipant):
+        self._participant = participant
+        self._reader = tt.make_reader(
+            participant, TOPIC_DISCOVERY_QUERY_V1, CoverageQuery,
+            COVERAGE_QUERY_PROFILE)
+        self._reply_writers: Dict[str, object] = {}
+
+    def take_queries(self) -> List[CoverageQuery]:
+        return tt.take_samples(self._reader)
+
+    def reply(self, reply_topic: str, response: CoverageResponse) -> None:
+        writer = self._reply_writers.get(reply_topic)
+        if writer is None:
+            writer = tt.make_writer(
+                self._participant, reply_topic, CoverageResponse,
+                COVERAGE_RESP_PROFILE)
+            self._reply_writers[reply_topic] = writer
+        writer.write(response)
+
+
+class CoverageClient:
+    """Client side: ask on the well-known topic, listen on a private reply topic."""
+
+    def __init__(self, participant: DomainParticipant, reply_topic: str):
+        self._reply_topic = reply_topic
+        self._writer = tt.make_writer(
+            participant, TOPIC_DISCOVERY_QUERY_V1, CoverageQuery,
+            COVERAGE_QUERY_PROFILE)
+        self._reader = tt.make_reader(
+            participant, reply_topic, CoverageResponse, COVERAGE_RESP_PROFILE)
+
+    @property
+    def reply_topic(self) -> str:
+        return self._reply_topic
+
+    def query(self, query: CoverageQuery,
+              timeout: float = 10.0) -> Optional[CoverageResponse]:
+        self._writer.write(query)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            for response in tt.take_samples(self._reader):
+                if response.query_id == query.query_id:
+                    return response
+            time.sleep(0.02)
+        return None
+
+
+# --- Bootstrap: "which domain and which manifests?" -------------------------
+# Demo-owned. 1.7 has no bootstrap exchange — a participant is assumed to
+# already know its domain id and QoS profile, which is exactly what a fresh
+# device does not. Catalogued in ar_demo/SPEC_COMPLIANCE.md.
+BOOTSTRAP_PROFILE = "MAP_META"
+
+
+class BootstrapService:
+    """Server side: answer a client asking how to join."""
+
+    def __init__(self, participant: DomainParticipant):
+        self._reader = tt.make_reader(
+            participant, TOPIC_BOOTSTRAP_QUERY_V1, BootstrapQuery,
+            BOOTSTRAP_PROFILE)
+        self._writer = tt.make_writer(
+            participant, TOPIC_BOOTSTRAP_RESPONSE_V1, BootstrapResponse,
+            BOOTSTRAP_PROFILE)
+
+    def take_queries(self) -> List[BootstrapQuery]:
+        return tt.take_samples(self._reader)
+
+    def reply(self, response: BootstrapResponse) -> None:
+        self._writer.write(response)
+
+
+class BootstrapClient:
+    """Client side: ask, and wait for the answer addressed to us."""
+
+    def __init__(self, participant: DomainParticipant):
+        self._writer = tt.make_writer(
+            participant, TOPIC_BOOTSTRAP_QUERY_V1, BootstrapQuery,
+            BOOTSTRAP_PROFILE)
+        self._reader = tt.make_reader(
+            participant, TOPIC_BOOTSTRAP_RESPONSE_V1, BootstrapResponse,
+            BOOTSTRAP_PROFILE)
+
+    def request(self, query: BootstrapQuery, timeout: float = 5.0,
+                retry_every: float = 1.0) -> Optional[BootstrapResponse]:
+        """
+        Ask until answered or out of time.
+
+        Retried because bootstrap is the one exchange that cannot assume
+        discovery has settled: it is what a participant does *before* it
+        knows anything about the deployment.
+        """
+        deadline = time.time() + timeout
+        next_send = 0.0
+        while time.time() < deadline:
+            now = time.time()
+            if now >= next_send:
+                self._writer.write(query)
+                next_send = now + retry_every
+            for response in tt.take_samples(self._reader):
+                if response.client_id == query.client_id:
                     return response
             time.sleep(0.02)
         return None

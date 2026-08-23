@@ -2,11 +2,18 @@
 import argparse
 import json
 import os
+import signal
 import sys
+import threading
 import time
 from typing import Any, Dict, List
 
-from spatialdds_demo.dds_transport import DDSTransport, require_dds_env
+from cyclonedds.domain import DomainParticipant
+
+from spatialdds_demo.dds_transport import require_dds_env
+from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds_demo.service_bus import BootstrapService
+from spatialdds_idl.oarc_demo import BootstrapResponse as TypedBootstrapResponse
 from spatialdds_demo.topics import (
     TOPIC_BOOTSTRAP_QUERY_V1,
     TOPIC_BOOTSTRAP_RESPONSE_V1,
@@ -49,62 +56,57 @@ def run_server(
         print(f"- manifest_uris: {', '.join(mapping['manifest_uris'])}")
     print("")
 
-    def on_message(envelope: object) -> None:
-        if envelope.msg_type != "BOOTSTRAP_QUERY":
-            return
-        logical_topic = envelope.logical_topic
-        data = json.loads(envelope.payload_json)
+    def serve(bootstrap: BootstrapService) -> None:
+        for query in bootstrap.take_queries():
+            data = to_json(query)
+            logger.log_message(
+                "BOOTSTRAP_QUERY",
+                "RECV",
+                data.get("client_id", "Client"),
+                "BootstrapService",
+                data,
+                TOPIC_BOOTSTRAP_QUERY_V1,
+                TOPIC_SOURCE_SPEC,
+                show_message_content,
+            )
 
-        logger.log_message(
-            "BOOTSTRAP_QUERY",
-            "RECV",
-            data.get("client_id", "Client"),
-            "BootstrapService",
-            data,
-            logical_topic,
-            TOPIC_SOURCE_SPEC,
-            show_message_content,
-        )
+            response = {
+                # Demo-local bootstrap topic pair, but tagged with the 1.7
+                # bootstrap schema version so it matches the manifest served
+                # at /.well-known/spatialdds/bootstrap.
+                "spatialdds_bootstrap": "1.7",
+                "client_id": query.client_id,
+                "dds_domain": mapping["dds_domain"],
+                "cyclonedds_profile": os.getenv("SPATIALDDS_BOOTSTRAP_PROFILE", ""),
+                "manifest_uris": mapping["manifest_uris"],
+                "ttl_sec": ttl_sec,
+                "stamp": SpatialDDSValidator.now_time(),
+            }
 
-        response = {
-            # Demo-local bootstrap topic pair, but tagged with the 1.7
-            # bootstrap schema version so it matches the manifest served at
-            # /.well-known/spatialdds/bootstrap.
-            "spatialdds_bootstrap": "1.7",
-            "client_id": data.get("client_id", ""),
-            "dds_domain": mapping["dds_domain"],
-            "cyclonedds_profile": os.getenv("SPATIALDDS_BOOTSTRAP_PROFILE", ""),
-            "manifest_uris": mapping["manifest_uris"],
-            "ttl_sec": ttl_sec,
-            "stamp": SpatialDDSValidator.now_time(),
-        }
+            bootstrap.reply(from_json(TypedBootstrapResponse, response))
+            logger.log_message(
+                "BOOTSTRAP_RESPONSE",
+                "SEND",
+                "BootstrapService",
+                query.client_id or "Client",
+                response,
+                TOPIC_BOOTSTRAP_RESPONSE_V1,
+                TOPIC_SOURCE_REQUEST,
+                show_message_content,
+            )
 
-        transport.publish(TOPIC_BOOTSTRAP_RESPONSE_V1, "BOOTSTRAP_RESPONSE", json.dumps(response))
-        logger.log_message(
-            "BOOTSTRAP_RESPONSE",
-            "SEND",
-            "BootstrapService",
-            data.get("client_id", "Client"),
-            response,
-            TOPIC_BOOTSTRAP_RESPONSE_V1,
-            TOPIC_SOURCE_REQUEST,
-            show_message_content,
-        )
+    bootstrap = BootstrapService(DomainParticipant(0))
 
-    transport = DDSTransport(
-        on_message_callback=on_message,
-        domain_id=0,
-        local_sender_id="BootstrapService",
-    )
-    transport.start()
+    # SIGTERM as well as SIGINT: `docker stop` and most supervisors send
+    # SIGTERM, and a background process from a non-interactive shell ignores
+    # SIGINT entirely.
+    stopping = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stopping.set())
+    signal.signal(signal.SIGINT, lambda *_: stopping.set())
 
-    try:
-        while True:
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        pass
-
-    transport.stop()
+    while not stopping.is_set():
+        serve(bootstrap)
+        time.sleep(0.05)
     return 0
 
 
