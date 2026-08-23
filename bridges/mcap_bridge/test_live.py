@@ -37,15 +37,15 @@ import recorder as recorder_mod  # noqa: E402
 import replayer as replayer_mod  # noqa: E402
 
 SCENE = "scene/intersection"
-DET_TYPE = "oarc.detection3d_velocity"
-POSE_TYPE = "oarc.framed_pose"
+DET_TYPE = "detection3d"
+POSE_TYPE = "framed_pose"
 TRACK_TYPE = "oarc.fused_track"
 
 
 def _samples() -> List[Tuple[str, str, dict]]:
     """A mix over three service namespaces and three types, built for real."""
     from spatialdds_types import (
-        make_detection, make_detection_set, make_detection_with_velocity,
+        make_detection, make_detection_set,
         make_framed_pose, make_fused_track_set,
     )
     from fusion import FusedTrack, Position, Velocity
@@ -59,8 +59,7 @@ def _samples() -> List[Tuple[str, str, dict]]:
         return make_detection_set(
             set_id=f"{operator}-{seq}", source_operator=operator,
             frame_ref_fqn=SCENE,
-            dets=[make_detection_with_velocity(det, velocity=(1.0, 0.0, 0.0),
-                                               source_modality="det3d")],
+            dets=[det],
             frame_seq=seq, timestamp_s=1700000000.0 + seq)
 
     def pose(operator, seq):

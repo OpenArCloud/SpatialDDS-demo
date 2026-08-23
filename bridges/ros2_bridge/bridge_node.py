@@ -516,7 +516,7 @@ def main():  # pragma: no cover - Tier-3 only
     def _on_blob_chunk(payload: dict) -> None:
         """Reassemble image bytes and release the frame that was waiting."""
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.oarc_demo import BlobChunk
+        from spatialdds_idl.spatial.core import BlobChunk
 
         try:
             data = reassembler.feed(from_json(BlobChunk, payload))

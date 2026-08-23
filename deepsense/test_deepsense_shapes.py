@@ -37,14 +37,14 @@ ROW = {
 # (§3.3.2 type name, §3.3.3 QoS profile) per lane the infrastructure
 # publisher owns. Mirrors multi_operator_fusion/infrastructure_publisher.py.
 LANES = {
-    "beam_meta": ("oarc.rf_beam_meta", "MAP_META"),
+    "beam_meta": ("rf_beam_meta", "MAP_META"),
     "beam_frame": ("rf_beam", "RF_BEAM_RT"),
-    "radar_meta": ("oarc.radar_tensor_meta", "MAP_META"),
+    "radar_meta": ("radar_tensor_meta", "MAP_META"),
     "radar_tensor": ("radar_tensor", "RADAR_RT"),
-    "vision_meta": ("oarc.video_frame_meta", "MAP_META"),
+    "vision_meta": ("video_meta", "MAP_META"),
     "vision_frame": ("video_frame", "VIDEO_LIVE"),
     "geopose": ("geopose", "POSE_RT"),
-    "detection2d": ("oarc.detection2d_set", "RADAR_RT"),
+    "detection2d": ("detection2d", "DET_RT"),
 }
 
 
@@ -126,7 +126,7 @@ class ConverterShapes(unittest.TestCase):
             with self.subTest(unit=label):
                 self._check("geopose", d2s.to_dict(pose))
 
-    def test_detection2d_set_is_demo_owned(self):
+    def test_detection2d_set_is_a_spec_type(self):
         """
         1.7 has Detection3D for 3D boxes and nothing for 2D ones —
         VisionDetections carries keypoints and 2D tracks, not labelled boxes.
@@ -135,7 +135,7 @@ class ConverterShapes(unittest.TestCase):
         """
         det_set = self.d2s.row_to_detection2d(ROW, Path("/nonexistent"))
         self._check("detection2d", self.d2s.to_dict(det_set))
-        self.assertEqual(det_set.stream_id, "unit1_cam")
+        self.assertEqual(det_set.camera_id, "unit1_cam")
 
     def test_lanes_name_resolvable_types_and_real_profiles(self):
         from spatialdds_demo import qos_profiles, topic_types
@@ -206,7 +206,7 @@ class PublisherLanes(unittest.TestCase):
 
         from spatialdds_demo import blob
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.oarc_demo import BlobChunk
+        from spatialdds_idl.spatial.core import BlobChunk
         from spatialdds_idl.spatial.sensing.lidar import LidarFrame
 
         points = np.arange(4 * 512, dtype=np.float32).reshape(512, 4)

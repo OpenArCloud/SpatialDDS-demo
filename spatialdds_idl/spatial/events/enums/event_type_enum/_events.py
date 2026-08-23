@@ -32,4 +32,5 @@ class EventType(idl.IdlEnum, typename="spatial.events.enums.event_type_enum.Even
     LOITERING = 10
     TAILGATING = 11
     OTHER = 12
+    PREDICTED_CONFLICT = 13
 

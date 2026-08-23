@@ -97,14 +97,14 @@ def _iter_scene_samples(nusc: NuScenes, scene_name: str):
 # Each lane: (§3.3.2 type name, §3.3.3 QoS profile). The announce and the
 # writers are built from this, so a lane cannot be announced under one type
 # and published as another.
-TYPE_EGO_POSE   = ("oarc.framed_pose", "POSE_RT")
+TYPE_EGO_POSE   = ("framed_pose", "POSE_RT")
 TYPE_GEO_POSE   = ("geopose", "POSE_RT")
-TYPE_VISION_META = ("oarc.video_frame_meta", "MAP_META")
+TYPE_VISION_META = ("video_meta", "MAP_META")
 TYPE_VISION      = ("video_frame", "VIDEO_LIVE")
-TYPE_LIDAR_META  = ("oarc.lidar_meta", "MAP_META")
-TYPE_LIDAR       = ("oarc.lidar_frame", "GEOM_TILE")
+TYPE_LIDAR_META  = ("lidar_meta", "MAP_META")
+TYPE_LIDAR       = ("lidar_frame", "GEOM_TILE")
 TYPE_RAD_DET     = ("radar_detection", "RADAR_RT")
-TYPE_DET3D       = ("oarc.detection3d_set", "RADAR_RT")
+TYPE_DET3D       = ("detection3d", "RADAR_RT")
 
 
 def run(args: argparse.Namespace) -> int:

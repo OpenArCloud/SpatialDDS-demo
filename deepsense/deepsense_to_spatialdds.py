@@ -12,7 +12,7 @@ import numpy as np
 import scipy.io
 
 from deepsense_types import (
-    BBox2D, Detection2D, Detection2DSet, RadTensorFrame, RadTensorMeta,
+    Detection2D, Detection2DSet, RadTensorFrame, RadTensorMeta,
     RfBeamFrame, RfBeamMeta,
 )
 from sensor_types import (
@@ -277,17 +277,25 @@ def row_to_detection2d(row: Dict[str, str], dataroot: Path) -> Detection2DSet:
             x_px = (x_center * IMAGE_WIDTH) - w_px / 2.0
             y_px = (y_center * IMAGE_HEIGHT) - h_px / 2.0
             class_id = "Tx" if int(cls) == 0 else "Distractor"
-            detections.append(
-                Detection2D(
-                    det_id=f"{image_name}_{i}",
-                    bbox=BBox2D(x=x_px, y=y_px, w=w_px, h=h_px),
-                    class_id=class_id,
-                    score=1.0,
-                )
-            )
+            detections.append(Detection2D(
+                det_id=f"{image_name}_{i}",
+                node_id="",
+                camera_id="unit1_cam",
+                class_id=class_id,
+                score=1.0,
+                # spatial::common::BBox2D is double[4] as
+                # [u_min, v_min, u_max, v_max] in pixels — corners, not the
+                # x/y/w/h the demo's own type used.
+                bbox=[x_px, y_px, x_px + w_px, y_px + h_px],
+                has_mask=False,
+                mask_blob_id="",
+                stamp=_time_from_row(row),
+                source_id="deepsense",
+            ))
     return Detection2DSet(
-        stream_id="unit1_cam",
-        frame_seq=int(row["index"]),
+        set_id=f"unit1_cam-{row['index']}",
+        node_id="",
+        camera_id="unit1_cam",
         dets=detections,
         stamp=_time_from_row(row),
         source_id="deepsense",

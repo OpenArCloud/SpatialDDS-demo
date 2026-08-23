@@ -26,7 +26,7 @@
       },
       {
         "name": "spatialdds/anchors/sf-downtown/delta/v1",
-        "type": "oarc.anchor_delta",
+        "type": "anchor_delta",
         "version": "v1",
         "qos_profile": "ANCHOR_DELTA"
       }

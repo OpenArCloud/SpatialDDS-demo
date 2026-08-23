@@ -5,25 +5,19 @@
 
 """
 
-from ._oarc_demo import BBox2D, BlobChunk, BootstrapQuery, BootstrapResponse, CatalogEntry, CatalogFilter, CatalogQuery, CatalogResponse, Detection2D, Detection2DSet, DetectionWithVelocity, FusedTrack, FusedTrackSet, FusionCoverage, LocalizeQuality, MODULE_ID, OperatorDetectionSet, OperatorTrackCount, QualityRequirements, Time, VpsRequest, VpsResponse
+from ._oarc_demo import BootstrapQuery, BootstrapResponse, CatalogEntry, CatalogFilter, CatalogQuery, CatalogResponse, FusedTrack, FusedTrackSet, FusionCoverage, LocalizeQuality, MODULE_ID, OperatorTrackCount, QualityRequirements, Time, VpsRequest, VpsResponse
 __all__ = [
-	"BBox2D",
-	"BlobChunk",
 	"BootstrapQuery",
 	"BootstrapResponse",
 	"CatalogEntry",
 	"CatalogFilter",
 	"CatalogQuery",
 	"CatalogResponse",
-	"Detection2D",
-	"Detection2DSet",
-	"DetectionWithVelocity",
 	"FusedTrack",
 	"FusedTrackSet",
 	"FusionCoverage",
 	"LocalizeQuality",
 	"MODULE_ID",
-	"OperatorDetectionSet",
 	"OperatorTrackCount",
 	"QualityRequirements",
 	"Time",

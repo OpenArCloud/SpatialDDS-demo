@@ -328,7 +328,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     # event, and a late joiner needs the current one.
     anchor_writer = tt.TypedDictWriter(
         announce_participant, anchor_topic,
-        topic_types.resolve("oarc.anchor_delta"), "MAP_META")
+        topic_types.resolve("anchor_delta"), "MAP_META")
     anchor_writer.write(anchor_delta)
     logger.log_message(
         "ANCHOR_DELTA",

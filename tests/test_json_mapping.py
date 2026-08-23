@@ -33,6 +33,9 @@ COVERAGE = CoverageElement(
     bbox=[-122.52, 37.70, -122.35, 37.85], has_aabb=False, aabb=ZERO,
     _global=False, has_frame_ref=False, frame_ref=FRAME,
     has_coverage_window=False, coverage_window_start=STAMP, coverage_window_end=STAMP,
+    # Added in 1.7's findings-batch-2 revision: a circular footprint is a
+    # circle now rather than its bounding aabb.
+    has_circle=False, circle_center=[0.0, 0.0, 0.0], circle_radius_m=0.0,
 )
 ANNOUNCE = Announce(
     service_id="svc:vps:demo/sf", name="MockVPS", kind=ServiceKind.VPS, version="1.7",
@@ -45,6 +48,7 @@ ANNOUNCE = Announce(
     coverage=[COVERAGE], coverage_frame_ref=FRAME, has_coverage_eval_time=False,
     coverage_eval_time=STAMP, transforms=[],
     manifest_uri="spatialdds://x/zone:z/manifest:m", auth_hint="", stamp=STAMP, ttl_sec=300,
+    coverage_source_ids=[],
 )
 
 CASES = {

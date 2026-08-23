@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     import spatial.common
     import spatial.core
     import spatial.disco
-    import spatial.semantics
     import spatial.sensing.vision
 
 
@@ -150,29 +149,6 @@ class CatalogResponse(idl.IdlStruct, typename="oarc_demo.CatalogResponse"):
 @dataclass
 @annotate.appendable
 @annotate.autoid("sequential")
-class DetectionWithVelocity(idl.IdlStruct, typename="oarc_demo.DetectionWithVelocity"):
-    detection: 'spatialdds_idl.spatial.semantics.Detection3D'
-    has_velocity: bool
-    velocity: 'spatialdds_idl.spatial.common.Vec3'
-    source_modality: str
-
-
-@dataclass
-@annotate.appendable
-@annotate.autoid("sequential")
-class OperatorDetectionSet(idl.IdlStruct, typename="oarc_demo.OperatorDetectionSet"):
-    set_id: str
-    annotate.key("set_id")
-    source_operator: str
-    frame_ref: 'spatialdds_idl.spatial.common.FrameRef'
-    dets: types.sequence['spatialdds_idl.oarc_demo.DetectionWithVelocity', 256]
-    frame_seq: types.uint64
-    stamp: 'spatialdds_idl.oarc_demo.Time'
-
-
-@dataclass
-@annotate.appendable
-@annotate.autoid("sequential")
 class FusedTrack(idl.IdlStruct, typename="oarc_demo.FusedTrack"):
     track_id: str
     annotate.key("track_id")
@@ -221,50 +197,5 @@ class FusionCoverage(idl.IdlStruct, typename="oarc_demo.FusionCoverage"):
     coverage_improvement_excl_infra: types.float64
     per_operator_track_count: types.sequence['spatialdds_idl.oarc_demo.OperatorTrackCount', 16]
     stamp: 'spatialdds_idl.oarc_demo.Time'
-
-
-@dataclass
-@annotate.appendable
-@annotate.autoid("sequential")
-class BBox2D(idl.IdlStruct, typename="oarc_demo.BBox2D"):
-    x: types.float32
-    y: types.float32
-    w: types.float32
-    h: types.float32
-
-
-@dataclass
-@annotate.appendable
-@annotate.autoid("sequential")
-class Detection2D(idl.IdlStruct, typename="oarc_demo.Detection2D"):
-    det_id: str
-    bbox: 'spatialdds_idl.oarc_demo.BBox2D'
-    class_id: str
-    score: types.float32
-
-
-@dataclass
-@annotate.appendable
-@annotate.autoid("sequential")
-class Detection2DSet(idl.IdlStruct, typename="oarc_demo.Detection2DSet"):
-    stream_id: str
-    annotate.key("stream_id")
-    frame_seq: types.uint64
-    dets: types.sequence['spatialdds_idl.oarc_demo.Detection2D', 256]
-    stamp: 'spatialdds_idl.oarc_demo.Time'
-    source_id: str
-
-
-@dataclass
-@annotate.appendable
-@annotate.autoid("sequential")
-class BlobChunk(idl.IdlStruct, typename="oarc_demo.BlobChunk"):
-    blob_id: str
-    annotate.key("blob_id")
-    index: types.uint32
-    annotate.key("index")
-    total_chunks: types.uint32
-    crc32: types.uint32
-    data: types.sequence[types.uint8, 65535]
 
 

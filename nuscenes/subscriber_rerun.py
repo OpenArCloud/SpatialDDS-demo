@@ -210,9 +210,7 @@ class RerunSubscriber:
             return
         centers, sizes, quats, labels = [], [], [], []
         for row in dets:
-            # OperatorDetectionSet composes the spec Detection3D; a bare
-            # Detection3DSet is flat.
-            d = row.get("detection", row) if isinstance(row, dict) else row
+            d = row
             centers.append(_xyz(d.get("center")))
             sx, sy, sz = _xyz(d.get("size"))
             sizes.append([sx, sz, sy])

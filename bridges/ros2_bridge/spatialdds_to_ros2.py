@@ -49,11 +49,11 @@ from test_mocks import (  # noqa: E402
 # range/azimuth/doppler/rcs — not a 3D box set, so it does not decode into a
 # vision_msgs/Detection3DArray. 3.3.2 registers no name for the semantic
 # Detection3DSet, which is why the demo has to use an oarc.* one.
-SDDS_MSG_TYPES_DETECTION3D = ("oarc.detection3d_velocity", "oarc.detection3d_set")
+SDDS_MSG_TYPES_DETECTION3D = ("detection3d", "detection3d")
 SDDS_MSG_TYPES_FUSED_TRACK = ("oarc.fused_track",)
-SDDS_MSG_TYPES_FRAMED_POSE = ("oarc.framed_pose",)
+SDDS_MSG_TYPES_FRAMED_POSE = ("framed_pose",)
 SDDS_MSG_TYPES_GEO_POSE = ("geopose",)
-SDDS_MSG_TYPES_IMU = ("oarc.imu_sample",)
+SDDS_MSG_TYPES_IMU = ("imu_sample",)
 SDDS_MSG_TYPES_VISION = ("video_frame",)
 
 
@@ -250,7 +250,7 @@ def detection3d_set_to_array(payload: Dict[str, Any],
     when multiple bridges feed the same ``/fused/detections_3d`` topic.
     """
     header = _header(payload, frame_mapper)
-    src = str(payload.get("source_operator") or "")
+    src = str(payload.get("source_id") or payload.get("source_operator") or "")
     raw_items = (payload.get("dets") or payload.get("detections")
                  or payload.get("tracks") or [])
 
@@ -258,10 +258,6 @@ def detection3d_set_to_array(payload: Dict[str, Any],
     for i, item in enumerate(raw_items):
         if not isinstance(item, dict):
             continue
-        # OperatorDetectionSet composes the spec Detection3D under
-        # `detection`; a FusedTrack is flat.
-        if isinstance(item.get("detection"), dict):
-            item = item["detection"]
         det_id = (
             item.get("det_id")
             or item.get("track_id")

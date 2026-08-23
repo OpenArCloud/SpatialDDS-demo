@@ -56,6 +56,9 @@ COVERAGE = CoverageElement(
     bbox=[-122.52, 37.70, -122.35, 37.85], has_aabb=False, aabb=ZERO_AABB,
     _global=False, has_frame_ref=False, frame_ref=FRAME,
     has_coverage_window=False, coverage_window_start=STAMP, coverage_window_end=STAMP,
+    # Added in 1.7's findings-batch-2 revision: a circular footprint is a
+    # circle now rather than its bounding aabb.
+    has_circle=False, circle_center=[0.0, 0.0, 0.0], circle_radius_m=0.0,
 )
 TOPIC = TopicMeta(name="spatialdds/vps/query/v1", type="vps_query", version="v1",
                   qos_profile="VPS_REQ", target_rate_hz=0.0, max_chunk_bytes=0)
@@ -70,6 +73,10 @@ ANNOUNCE = Announce(
     coverage_eval_time=STAMP, transforms=[],
     manifest_uri="spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
     auth_hint="", stamp=STAMP, ttl_sec=300,
+    # Empty = self-asserted coverage. Added in 1.7's findings-batch-2
+    # revision so a fusion service can name the services its coverage is
+    # composed from.
+    coverage_source_ids=[],
 )
 SUMMARY = ServiceSummary(
     service_id="svc:vps:demo/sf-downtown", kind=ServiceKind.VPS, name="MockVPS",

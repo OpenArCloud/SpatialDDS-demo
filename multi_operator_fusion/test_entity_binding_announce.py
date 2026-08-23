@@ -165,7 +165,10 @@ class TestAnnounceBuilder(unittest.TestCase):
         a = _build_operator_announce(op_idx=0, t_wall=42.0)
         self.assertEqual(a["service_id"], "svc:operator_a")   # the key
         self.assertEqual(a["name"], "operator_a")
-        self.assertEqual(a["kind"], "OTHER")
+        # ServiceKind gained SENSING/INFRASTRUCTURE/FUSION in 1.7's
+        # findings-batch-2 revision; these used to map to OTHER with the
+        # real role hidden in a hint.
+        self.assertEqual(a["kind"], "SENSING")
         self.assertEqual(a["stamp"]["sec"], 42)
         self.assertTrue(a["manifest_uri"])
         # ServiceKind cannot express "sensor fleet", so the role is a hint.
@@ -183,7 +186,7 @@ class TestAnnounceBuilder(unittest.TestCase):
         a = _build_operator_announce(op_idx=0, t_wall=1.0)
         typed = from_json(Announce, a)
         self.assertEqual(typed.service_id, "svc:operator_a")
-        self.assertEqual(typed.kind, ServiceKind.OTHER)
+        self.assertEqual(typed.kind, ServiceKind.SENSING)
 
     def test_operator_announce_lists_owned_topics_with_registered_types(self):
         a = _build_operator_announce(op_idx=1, t_wall=0.0)
@@ -198,7 +201,7 @@ class TestAnnounceBuilder(unittest.TestCase):
         # velocity and semantics::Detection3D carries none, so this lane is a
         # documented extension that composes the spec type. Announcing it under
         # the registered name would misdescribe what is on the topic.
-        self.assertEqual(det["type"], "oarc.detection3d_velocity")
+        self.assertEqual(det["type"], "detection3d")
         self.assertEqual(det["qos_profile"], "RADAR_RT")
         plan = by_name["spatialdds/operator_b/plan/operator_b_ego/trajectory/v1"]
         self.assertEqual(plan["type"], "planned_trajectory")

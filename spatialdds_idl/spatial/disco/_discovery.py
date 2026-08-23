@@ -72,6 +72,9 @@ class ServiceKind(idl.IdlEnum, typename="spatial.disco.ServiceKind", default="VP
     CONTENT = 5
     ANCHOR_REGISTRY = 6
     OTHER = 7
+    SENSING = 8
+    INFRASTRUCTURE = 9
+    FUSION = 10
 
 @dataclass
 @annotate.appendable
@@ -97,6 +100,9 @@ class CoverageElement(idl.IdlStruct, typename="spatial.disco.CoverageElement"):
     has_coverage_window: bool
     coverage_window_start: 'spatialdds_idl.spatial.disco.Time'
     coverage_window_end: 'spatialdds_idl.spatial.disco.Time'
+    has_circle: bool
+    circle_center: types.array[types.float64, 3]
+    circle_radius_m: types.float64
 
 
 @dataclass
@@ -141,6 +147,7 @@ class Announce(idl.IdlStruct, typename="spatial.disco.Announce"):
     auth_hint: str
     stamp: 'spatialdds_idl.spatial.disco.Time'
     ttl_sec: types.uint32
+    coverage_source_ids: types.sequence[str, 16]
 
 
 @dataclass

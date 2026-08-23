@@ -6,22 +6,26 @@ table is what makes that advertisement true on the wire rather than
 decorative: every endpoint the demo creates goes through
 ``spatialdds_demo.typed_transport``, which resolves the profile name here.
 
-Spec §3.3.3 defines each profile as a reliability / ordering / deadline
-combination, and §3.3.2 marks some types as latched. Durability therefore
-comes from the type table rather than the QoS table, and is folded in below
-for the profiles whose types are described as "Latched; TRANSIENT_LOCAL".
+Every column of §3.3.3 is now explicit — reliability, ordering, durability,
+history and deadline — so this table is a transcription rather than an
+interpretation. It did not used to be: durability had to be inferred from
+"Latched; TRANSIENT_LOCAL" notes in the *type* table, and the deadline
+column was headed "Typical", which reads as advisory.
 
-Two places where the spec and DDS do not line up exactly, both flagged rather
-than quietly resolved:
+**The deadline is not advisory.** Deadline is a request/offered QoS in DDS,
+so a reader requesting 33 ms does not match a writer offering none — and the
+failure is silent. An independently-built probe hit exactly this against
+this demo: it transcribed the old table, took "Typical" at its word, omitted
+the deadlines, and exchanged nothing. `tests/test_interop.py::
+DeadlineIsLoadBearing` pins the behaviour. A dash in the spec's column means
+no deadline, which is different from an unstated one.
 
-* **RADAR_RT reliability is "Partial".** DDS offers only BEST_EFFORT and
-  RELIABLE; there is no partial-reliability kind in DDS-RTPS. Mapped to
-  BEST_EFFORT, which is the behaviour "partial" describes for a real-time
-  sensor lane that must not apply backpressure. Worth raising with the WG:
-  either name a DDS kind or describe the intended mechanism.
+One place where the spec and DDS still do not line up exactly, flagged
+rather than quietly resolved:
+
 * **Ordering is "Ordered" for every profile.** DDS orders per instance by
   default (DestinationOrder BY_RECEPTION_TIMESTAMP), so no policy is set for
-  it; the spec's column is describing the default rather than requesting
+  it; the spec's column describes the default rather than requesting
   BY_SOURCE_TIMESTAMP.
 """
 
@@ -35,7 +39,7 @@ from cyclonedds import qos, util
 
 @dataclass(frozen=True)
 class QosProfile:
-    """One row of spec §3.3.3, plus the durability §3.3.2 implies."""
+    """One row of spec §3.3.3, transcribed field for field."""
 
     name: str
     reliable: bool
@@ -70,34 +74,40 @@ class QosProfile:
         return qos.Qos(*policies)
 
 
-# --- spec §3.3.3 ------------------------------------------------------------
+# --- spec §3.3.3, transcribed --------------------------------------------
+# Columns: Reliability | Ordering | Durability | History | Deadline.
+# A dash in the spec's deadline column means no deadline, which is a
+# different statement from an unstated one — see the module docstring.
 PROFILES: Dict[str, QosProfile] = {
     p.name: p for p in (
-        QosProfile("GEOM_TILE",     reliable=True,  deadline_ms=200),
+        QosProfile("GEOM_TILE",     reliable=True,  deadline_ms=None,
+                   latched=True, keep_last=1),
         QosProfile("VIDEO_LIVE",    reliable=False, deadline_ms=33, keep_last=1),
-        QosProfile("VIDEO_ARCHIVE", reliable=True,  deadline_ms=200),
-        QosProfile("RADAR_RT",      reliable=False, deadline_ms=20, keep_last=1,
-                   note="spec says 'Partial'; DDS has no partial reliability"),
+        QosProfile("VIDEO_ARCHIVE", reliable=True,  deadline_ms=None),
+        QosProfile("RADAR_RT",      reliable=False, deadline_ms=100, keep_last=1),
         QosProfile("RF_BEAM_RT",    reliable=False, deadline_ms=20, keep_last=1),
-        QosProfile("RADIO_SCAN_RT", reliable=False, deadline_ms=500, keep_last=1),
+        QosProfile("RADIO_SCAN_RT", reliable=False, deadline_ms=None, keep_last=1),
         QosProfile("SEG_MASK_RT",   reliable=False, deadline_ms=33, keep_last=1),
-        QosProfile("DESC_BATCH",    reliable=True,  deadline_ms=100),
-        QosProfile("MAP_META",      reliable=True,  deadline_ms=1000, latched=True, keep_last=1),
-        QosProfile("ZONE_META",     reliable=True,  deadline_ms=1000, latched=True, keep_last=1),
-        QosProfile("EVENT_RT",      reliable=True,  deadline_ms=100),
+        QosProfile("DESC_BATCH",    reliable=True,  deadline_ms=None),
+        QosProfile("MAP_META",      reliable=True,  deadline_ms=None,
+                   latched=True, keep_last=1),
+        QosProfile("ZONE_META",     reliable=True,  deadline_ms=None,
+                   latched=True, keep_last=1),
+        QosProfile("EVENT_RT",      reliable=True,  deadline_ms=None, keep_last=64),
         QosProfile("POSE_RT",       reliable=False, deadline_ms=33, keep_last=1),
-        QosProfile("VPS_REQ",       reliable=True,  deadline_ms=500),
-        QosProfile("VPS_RESP",      reliable=True,  deadline_ms=500),
+        QosProfile("VPS_REQ",       reliable=True,  deadline_ms=None),
+        QosProfile("VPS_RESP",      reliable=True,  deadline_ms=None),
+        # Added alongside the registry rows they serve, so every registered
+        # type now names a registered profile. The demo previously had to
+        # invent ANCHOR_DELTA and borrow MAP_META for sensor metadata.
+        QosProfile("DET_RT",        reliable=False, deadline_ms=100, keep_last=1),
+        QosProfile("LIDAR_RT",      reliable=False, deadline_ms=100, keep_last=1),
+        QosProfile("IMU_RT",        reliable=False, deadline_ms=10, keep_last=1),
+        QosProfile("SENSOR_META",   reliable=True,  deadline_ms=None,
+                   latched=True, keep_last=1),
+        QosProfile("ANCHOR_DELTA",  reliable=True,  deadline_ms=None),
     )
 }
-
-# --- deployment-specific extensions (§3.3.2 allows these, documented) -------
-# Anchor deltas have no registered type or QoS profile in 1.7. Reliable and
-# latched so a late joiner sees the current anchor set.
-PROFILES["ANCHOR_DELTA"] = QosProfile(
-    "ANCHOR_DELTA", reliable=True, deadline_ms=1000, latched=True, keep_last=1,
-    note="deployment-specific extension; no registered profile for anchors in 1.7",
-)
 
 # --- discovery ---------------------------------------------------------------
 # Announce is keyed on service_id, so KEEP_LAST(1) is per service: a late

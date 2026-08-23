@@ -42,7 +42,7 @@ class Registry(unittest.TestCase):
         """
         self.assertEqual(topic_types.resolve("radar_detection").__name__,
                          "RadDetectionSet")
-        self.assertEqual(topic_types.resolve("oarc.detection3d_set").__name__,
+        self.assertEqual(topic_types.resolve("detection3d").__name__,
                          "Detection3DSet")
 
     def test_unknown_type_is_skippable_not_fatal(self):

@@ -5,7 +5,7 @@
 
 """
 
-from ._rf_beam_example import BeamSweepType, BlobRef, Codec, FrameHeader, FrameQuality, FrameRef, MODULE_ID, PoseSE3, PowerUnit, RfBeamArraySet, RfBeamFrame, RfBeamMeta, SampleType, StreamMeta, Time
+from ._rf_beam import BeamSweepType, BlobRef, Codec, FrameHeader, FrameQuality, FrameRef, MODULE_ID, PoseSE3, PowerUnit, RfBeamArraySet, RfBeamFrame, RfBeamMeta, SampleType, StreamMeta, Time
 __all__ = [
 	"BeamSweepType",
 	"BlobRef",

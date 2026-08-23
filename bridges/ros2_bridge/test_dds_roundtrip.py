@@ -62,13 +62,13 @@ from test_mocks import (  # noqa: E402
 
 # Each type on its own lane with its own 3.3.3 profile, as the bridge does.
 PROFILES = {
-    "oarc.framed_pose": "POSE_RT",
+    "framed_pose": "POSE_RT",
     "geopose": "POSE_RT",
     "navsat_status": "POSE_RT",
-    "oarc.imu_sample": "POSE_RT",
+    "imu_sample": "IMU_RT",
     "video_frame": "VIDEO_LIVE",
-    "oarc.detection3d_velocity": "RADAR_RT",
-    "oarc.blob_chunk": "GEOM_TILE",
+    "detection3d": "DET_RT",
+    "blob_chunk": "GEOM_TILE",
 }
 
 
@@ -248,7 +248,7 @@ class TestEnvelopeRoundtrip(unittest.TestCase):
         self._wait_for(blob.BLOB_TYPE, before + len(chunks), timeout_s=10.0)
 
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.oarc_demo import BlobChunk
+        from spatialdds_idl.spatial.core import BlobChunk
 
         reassembler = blob.Reassembler()
         data = None
@@ -328,7 +328,7 @@ class TestEnvelopeRoundtrip(unittest.TestCase):
         is not.
         """
         mapper = FrameMapper("op_lossy")
-        det_type = "oarc.detection3d_velocity"
+        det_type = "detection3d"
         topic = "spatialdds/op_lossy/sensing/detection3d/v1"
         self.endpoints.publish(topic, det_type, encode_detection3d_array(
             make_test_detection3d_array(n=1), "op_lossy", mapper)[2])
@@ -348,7 +348,7 @@ class TestEnvelopeRoundtrip(unittest.TestCase):
         # well-formed one — dropping is allowed, corruption is not.
         self.assertGreater(len(burst), 0)
         for payload in burst:
-            self.assertTrue(payload["dets"][0]["detection"]["det_id"]
+            self.assertTrue(payload["dets"][0]["det_id"]
                             .startswith("burst_"))
 
 

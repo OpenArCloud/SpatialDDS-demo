@@ -70,7 +70,7 @@ def make_detection3d_payload(
     score: float = 0.9,
 ) -> Dict:
     """
-    One ``OperatorDetectionSet`` per frame — the Tx vehicle's GPS-derived
+    One ``Detection3DSet`` per frame — the Tx vehicle's GPS-derived
     position, observed from the base station.
 
     Built with the same helpers the synthetic publisher uses, so the two
@@ -78,7 +78,7 @@ def make_detection3d_payload(
     drift is exactly what the round-trip test used to catch after the fact.
     """
     from multi_operator_fusion.spatialdds_types import (
-        make_detection, make_detection_set, make_detection_with_velocity,
+        make_detection, make_detection_set,
     )
 
     timestamp_s = stamp["sec"] + stamp["nanosec"] / 1e9
@@ -88,13 +88,11 @@ def make_detection3d_payload(
         size=(2.0, 1.6, 4.5),                       # generic car bbox
         q=(0.0, 0.0, 0.0, 1.0),
         frame_ref_fqn=SCENE_FRAME_FQN, timestamp_s=timestamp_s,
-        source_id=SOURCE_OPERATOR,
+        source_id=SOURCE_OPERATOR, velocity=velocity,
     )
     return make_detection_set(
         set_id=f"infra-{frame_seq}", source_operator=SOURCE_OPERATOR,
-        frame_ref_fqn=SCENE_FRAME_FQN,
-        dets=[make_detection_with_velocity(det, velocity=velocity,
-                                           source_modality="radar")],
+        frame_ref_fqn=SCENE_FRAME_FQN, dets=[det],
         frame_seq=frame_seq, timestamp_s=timestamp_s,
     )
 
@@ -116,9 +114,8 @@ def _velocity_from_history(
 
 
 def _apply_offset(det: Dict, offset: Tuple[float, float, float]) -> None:
-    """Shift one DetectionWithVelocity's centre. Vec3 is an array, not {x,y,z}."""
-    centre = det["detection"]["center"]
-    det["detection"]["center"] = [c + o for c, o in zip(centre, offset)]
+    """Shift one Detection3D's centre. Vec3 is an array, not {x,y,z}."""
+    det["center"] = [c + o for c, o in zip(det["center"], offset)]
 
 
 def _stamp_from_index(idx: int) -> Dict[str, int]:
@@ -128,16 +125,16 @@ def _stamp_from_index(idx: int) -> Dict[str, int]:
 # (topic suffix, §3.3.2 type, §3.3.3 QoS profile) per raw sensor lane. The
 # announce and the writers are both built from this.
 RAW_LANES = {
-    "beam_meta":    ("rf_beam/unit1_60ghz/meta/v1", "oarc.rf_beam_meta", "MAP_META"),
+    "beam_meta":    ("rf_beam/unit1_60ghz/meta/v1", "rf_beam_meta", "MAP_META"),
     "beam_frame":   ("rf_beam/unit1_60ghz/frame/v1", "rf_beam", "RF_BEAM_RT"),
-    "radar_meta":   ("rad/unit1_radar/meta/v1", "oarc.radar_tensor_meta", "MAP_META"),
+    "radar_meta":   ("rad/unit1_radar/meta/v1", "radar_tensor_meta", "MAP_META"),
     "radar_tensor": ("rad/unit1_radar/tensor/v1", "radar_tensor", "RADAR_RT"),
-    "vision_meta":  ("vision/unit1_cam/meta/v1", "oarc.video_frame_meta", "MAP_META"),
+    "vision_meta":  ("vision/unit1_cam/meta/v1", "video_meta", "MAP_META"),
     "vision_frame": ("vision/unit1_cam/frame/v1", "video_frame", "VIDEO_LIVE"),
-    "lidar_frame":  ("lidar/unit1_lidar/frame/v1", "oarc.lidar_frame", "GEOM_TILE"),
+    "lidar_frame":  ("lidar/unit1_lidar/frame/v1", "lidar_frame", "GEOM_TILE"),
     "unit1_geo":    ("geo/unit1/pose/v1", "geopose", "POSE_RT"),
     "unit2_geo":    ("geo/unit2/pose/v1", "geopose", "POSE_RT"),
-    "detection3d":  ("sensing/detection3d/v1", "oarc.detection3d_velocity", "RADAR_RT"),
+    "detection3d":  ("sensing/detection3d/v1", "detection3d", "RADAR_RT"),
 }
 
 

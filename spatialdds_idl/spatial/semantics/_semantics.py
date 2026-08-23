@@ -86,6 +86,8 @@ class Detection3D(idl.IdlStruct, typename="spatial.semantics.Detection3D"):
     has_num_pts: bool
     num_lidar_pts: types.uint32
     num_radar_pts: types.uint32
+    has_velocity: bool
+    velocity: 'spatialdds_idl.spatial.common.Vec3'
 
 
 @dataclass

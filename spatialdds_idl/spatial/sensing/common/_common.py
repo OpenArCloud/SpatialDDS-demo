@@ -100,6 +100,7 @@ class Codec(idl.IdlEnum, typename="spatial.sensing.common.Codec", default="CODEC
     FP8Q = 40
     FP4Q = 41
     AE_V1 = 42
+    PNG = 43
 @annotate.final
 class PayloadKind(idl.IdlEnum, typename="spatial.sensing.common.PayloadKind", default="DENSE_TILES"):
     DENSE_TILES = 0

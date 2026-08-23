@@ -175,7 +175,7 @@ class ConverterShapes(unittest.TestCase):
         pub = self.pub
 
         self.assertNotEqual(pub.TYPE_EGO_POSE, pub.TYPE_GEO_POSE)
-        self.assertEqual(pub.TYPE_EGO_POSE[0], "oarc.framed_pose")
+        self.assertEqual(pub.TYPE_EGO_POSE[0], "framed_pose")
         self.assertEqual(pub.TYPE_GEO_POSE[0], "geopose")
 
     def test_lanes_name_registered_or_documented_types(self):

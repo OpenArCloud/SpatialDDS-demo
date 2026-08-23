@@ -71,7 +71,7 @@ class Detection3DPayload(unittest.TestCase):
             east=12.5, north=-3.0, up=0.5,
             velocity=(1.0, -1.0, 0.0),
         )
-        self.assertEqual(payload["source_operator"], SOURCE_OPERATOR)
+        self.assertEqual(payload["source_id"], SOURCE_OPERATOR)
         self.assertEqual(len(payload["dets"]), 1)
         det = _parse_detection(payload["dets"][0], "infrastructure",
                                "det3d", default_sigma=0.5)
@@ -87,20 +87,23 @@ class Detection3DPayload(unittest.TestCase):
             velocity=(0.0, 0.0, 0.0),
         )
         _apply_offset(payload["dets"][0], (100.0, 50.0, 0.0))
-        self.assertEqual(payload["dets"][0]["detection"]["center"],
+        self.assertEqual(payload["dets"][0]["center"],
                          [100.0, 50.0, 0.0])
 
-    def test_payload_is_a_real_operator_detection_set(self):
+    def test_payload_is_a_real_detection_set(self):
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.oarc_demo import OperatorDetectionSet
+        from spatialdds_idl.spatial.semantics import Detection3DSet
 
         payload = make_detection3d_payload(
             frame_seq=7, stamp=_stamp_from_index(7),
             east=1.0, north=2.0, up=0.0, velocity=(0.5, 0.0, 0.0),
         )
-        det_set = from_json(OperatorDetectionSet, payload)
-        self.assertEqual(det_set.source_operator, SOURCE_OPERATOR)
-        self.assertEqual(det_set.dets[0].source_modality, "radar")
+        det_set = from_json(Detection3DSet, payload)
+        self.assertEqual(det_set.source_id, SOURCE_OPERATOR)
+        # `source_modality` was a field on the demo's composed row type.
+        # Detection3D has no equivalent, and does not need one here: the
+        # modality is a property of the topic the set arrived on.
+        self.assertTrue(det_set.dets[0].has_velocity)
 
     def test_stamp_from_index_matches_10hz(self):
         self.assertEqual(_stamp_from_index(0), {"sec": 0, "nanosec": 0})

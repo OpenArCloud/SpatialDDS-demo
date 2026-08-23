@@ -5,7 +5,7 @@
 
 """
 
-from ._types import Aabb3D, AssetRef, BBox2D, CoordConvention, CovarianceType, FrameRef, Mat12x12, Mat3x3, Mat6x6, MetaKV, QuaternionXYZW, Vec3
+from ._types import Aabb3D, AssetRef, BBox2D, CoordConvention, CovarianceType, FrameRef, KV, Mat12x12, Mat3x3, Mat6x6, MetaKV, QuaternionXYZW, Vec3
 __all__ = [
 	"Aabb3D",
 	"AssetRef",
@@ -13,6 +13,7 @@ __all__ = [
 	"CoordConvention",
 	"CovarianceType",
 	"FrameRef",
+	"KV",
 	"Mat12x12",
 	"Mat3x3",
 	"Mat6x6",

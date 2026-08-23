@@ -107,6 +107,7 @@ class SpatialEvent(idl.IdlStruct, typename="spatial.events.SpatialEvent"):
     source_id: str
     attributes: types.sequence['spatialdds_idl.spatial.events.MetaKV', 8]
     schema_version: str
+    participant_ids: types.sequence[str, 8]
 
 
 @dataclass

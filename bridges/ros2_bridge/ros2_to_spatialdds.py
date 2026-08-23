@@ -43,16 +43,16 @@ SCHEMA_SEMANTICS = "spatial.semantics/1.7"
 # resolve; a `ROS2_FRAMED_POSE` on a topic told a consumer nothing it could
 # act on. Where the registry names no type for a stable 1.7 type, the demo's
 # documented `oarc.*` extension name is used.
-MSG_TYPE_FRAMED_POSE      = "oarc.framed_pose"
+MSG_TYPE_FRAMED_POSE      = "framed_pose"
 MSG_TYPE_GEO_POSE         = "geopose"
-MSG_TYPE_IMU_SAMPLE       = "oarc.imu_sample"
+MSG_TYPE_IMU_SAMPLE       = "imu_sample"
 MSG_TYPE_VISION_FRAME     = "video_frame"
 # Not the registered `radar_detection`. This bridge writes onto the same
 # `…/sensing/detection3d/v1` topic the fusion demo reads, and a topic is one
 # type: publishing a bare Detection3DSet there would be a type collision DDS
 # would refuse. ROS 2's Detection3DArray carries no velocity, so the
 # presence flag is set false — which is exactly what it is for.
-MSG_TYPE_DETECTION3D_SET  = "oarc.detection3d_velocity"
+MSG_TYPE_DETECTION3D_SET  = "detection3d"
 
 
 # ---------- Primitive helpers ------------------------------------------------
@@ -233,18 +233,15 @@ def imu_to_imu_sample(msg: Any, operator: str, sensor_id: str,
     """
     ``sensor_msgs/Imu`` -> ``spatial::vio::ImuSample``.
 
-    ImuSample is `(imu_id, accel, gyro, stamp, source_id, seq)`. Three things
-    ROS 2 carries have nowhere to go, and are dropped rather than smuggled:
+    ImuSample gained accel and gyro covariances in 1.7's findings-batch-2
+    revision, so the only thing ROS 2 carries that still has nowhere to go
+    is **orientation** and its covariance (REP-145) — and that is arguably
+    right: ImuSample is raw accel + gyro, and a fused attitude is a
+    FramedPose, published separately if the platform has one.
 
-    * **orientation** and its covariance (REP-145). ImuSample is raw
-      accel + gyro; a fused attitude is a FramedPose, published separately
-      if the platform has one.
-    * **the accel and gyro covariances.**
-    * **frame_ref.** ImuSample names a `source_id`, not a frame — so the
-      mapper is unused here, and kept in the signature only because the
-      bridge calls every encoder the same way.
-
-    Recorded as a finding rather than worked around.
+    `frame_ref` has no home either: ImuSample names a `source_id`, not a
+    frame, so the mapper is unused and kept in the signature only because
+    the bridge calls every encoder the same way.
     """
     return {
         "imu_id": str(sensor_id),
@@ -253,20 +250,30 @@ def imu_to_imu_sample(msg: Any, operator: str, sensor_id: str,
         "stamp": _ros_time_to_sdds(msg.header.stamp),
         "source_id": str(operator),
         "seq": 0,
+        "has_accel_cov": True,
+        "accel_cov": _cov3(_cov_list(msg, "linear_acceleration_covariance")),
+        "has_gyro_cov": True,
+        "gyro_cov": _cov3(_cov_list(msg, "angular_velocity_covariance")),
     }
 
 
+def _cov_list(msg: Any, field: str) -> List[float]:
+    """A ROS 2 covariance array as a list. They arrive as numpy arrays."""
+    raw = getattr(msg, field, None)
+    return list(raw) if raw is not None else []
+
+
 # sensor_msgs/CompressedImage.format -> spatial::sensing::common::Codec.
-# The enum has JPEG but no PNG, and ROS 2 uses PNG routinely for depth and
-# mask imagery where JPEG's lossiness is unacceptable. CODEC_NONE is the
-# only available answer and it is wrong in a way a consumer cannot detect;
-# on the findings list.
+# PNG was added to the enum in 1.7's findings-batch-2 revision; before that
+# a PNG had to be announced as CODEC_NONE, which is wrong in a way a
+# consumer cannot detect. ROS 2 uses PNG routinely for depth and mask
+# imagery, where JPEG's lossiness is unacceptable.
 def _codec_for(fmt: str) -> str:
     fmt = (fmt or "").lower()
     if "jpeg" in fmt or "jpg" in fmt:
         return "JPEG"
     if "png" in fmt:
-        return "CODEC_NONE"
+        return "PNG"
     return "CODEC_NONE"
 
 
@@ -383,11 +390,10 @@ def detection3d_array_to_set(msg: Any, operator: str,
             q=_as_array(_quat(center.orientation), ("x", "y", "z", "w")),
             frame_ref_fqn="", frame_ref_dict=frame_ref,
             timestamp_s=_stamp_seconds(h.stamp), source_id=operator)
-        # vision_msgs/Detection3DArray has no velocity field, so the flag
-        # says so rather than a zero vector pretending to be a measurement —
-        # the fuser reads the flag before the value.
-        detections.append(payloads.detection_with_velocity(
-            detection, velocity=None, source_modality="det3d"))
+        # vision_msgs/Detection3DArray has no velocity, so `velocity=None`
+        # above leaves Detection3D's has_velocity false — the flag says so
+        # rather than a zero vector pretending to be a measurement.
+        detections.append(detection)
     return payloads.detection_set(
         set_id=f"{operator}-{int(getattr(h.stamp, 'sec', 0) or 0)}",
         source_operator=operator, frame_ref_fqn="",

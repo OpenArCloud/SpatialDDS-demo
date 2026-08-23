@@ -126,35 +126,17 @@ module oarc_demo {
   };
 
   // --- Multi-operator fusion ----------------------------------------------
-  // spatial::semantics::Detection3D is the right type for a 3D detection, and
-  // it is used verbatim below. It carries no **velocity**, though, and this
-  // demo's fuser gates association on position *and* velocity and fuses both.
-  // rad::RadDetection has velocity and PlannedWaypoint has velocity, but the
-  // semantic detection does not.
+  // The detection types that used to live here are gone: 1.7's findings-
+  // batch-2 revision added `has_velocity`/`velocity` to
+  // spatial::semantics::Detection3D, which is what `DetectionWithVelocity`
+  // existed to add, and `Detection3DSet.source_id` carries the operator that
+  // `OperatorDetectionSet.source_operator` did. The demo publishes the spec
+  // types directly.
   //
-  // The spec's extension hatch is MetaKV{namespace, json} — a JSON string —
-  // and putting JSON back on the bus is the thing this migration exists to
-  // stop. So the spec type is composed rather than replaced or smuggled into:
-  // a conformant consumer can lift `detection` out untouched.
-  @extensibility(APPENDABLE) struct DetectionWithVelocity {
-    spatial::semantics::Detection3D detection;   // the spec type, verbatim
-    boolean has_velocity;
-    spatial::common::Vec3 velocity;              // m/s, the gap
-    string source_modality;                      // "det3d", "radar", ...
-  };
+  // What remains here is the fusion *output*, which 1.7 still has no type
+  // for: semantics::Tracklet is feature-level and vision::Track2D is
+  // per-image, so a cross-operator fused track has nowhere to go.
 
-  @extensibility(APPENDABLE) struct OperatorDetectionSet {
-    @key string set_id;
-    string source_operator;                      // the interoperability contract
-    spatial::common::FrameRef frame_ref;
-    sequence<DetectionWithVelocity, 256> dets;
-    uint64 frame_seq;
-    Time   stamp;
-  };
-
-  // Fused output. 1.7 has no fused-track type: slam_frontend::Tracklet is
-  // feature-level and vision::Track2D is per-image, neither is a
-  // multi-operator object track.
   @extensibility(APPENDABLE) struct FusedTrack {
     @key string track_id;
     spatial::common::Vec3 position;
@@ -191,56 +173,6 @@ module oarc_demo {
     double coverage_improvement_excl_infra;
     sequence<OperatorTrackCount, 16> per_operator_track_count;
     Time   stamp;
-  };
-
-  // --- 2D detections -------------------------------------------------------
-  // 1.7 has semantics::Detection3D for 3D boxes and nothing for 2D ones.
-  // vision::VisionDetections carries keypoints and 2D *tracks*, not labelled
-  // boxes, and `seg_mask` is masks — so the most common camera perception
-  // output in the world, a box with a class and a score, has no type.
-  //
-  // Mirrors Detection3D's field naming so the two read alike.
-  @extensibility(APPENDABLE) struct BBox2D {
-    float x;                             // top-left, pixels
-    float y;
-    float w;
-    float h;
-  };
-
-  @extensibility(APPENDABLE) struct Detection2D {
-    string  det_id;
-    BBox2D  bbox;
-    string  class_id;
-    float   score;
-  };
-
-  @extensibility(APPENDABLE) struct Detection2DSet {
-    @key string stream_id;               // which camera
-    uint64      frame_seq;
-    sequence<Detection2D, 256> dets;
-    Time        stamp;
-    string      source_id;
-  };
-
-  // --- Blob transfer -------------------------------------------------------
-  // spatial::core::BlobChunk is the spec's mechanism for moving bytes, and it
-  // is unusable from cyclonedds-python: its `sequence<uint8, 262144>` exceeds
-  // the binding's hard 65535 sequence bound, so building a Topic for it
-  // raises before a single byte is written. Since BlobChunk is the only type
-  // in 1.7 that carries bytes at all, the reference Python binding cannot
-  // move sensor data on the bus.
-  //
-  // This is byte-identical in semantics — same composite key, same crc32,
-  // same chunking contract — at a bound the binding can encode. It is a
-  // toolchain workaround, not a disagreement with the spec: if either the
-  // spec's bound or the binding's limit moves, this type goes away and
-  // spatial::core::BlobChunk is used directly.
-  @extensibility(APPENDABLE) struct BlobChunk {
-    @key string blob_id;                 // which blob
-    @key uint32 index;                   // chunk index (0..total_chunks-1)
-    uint32 total_chunks;
-    uint32 crc32;                        // CRC32 over `data`
-    sequence<uint8, 65535> data;         // <=64 KiB, the binding's ceiling
   };
 
 };

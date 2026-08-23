@@ -49,13 +49,14 @@ def _wire(cls, payload):
 
 def _samples():
     """``[(type_name, topic, payload, stamp_ns)]`` — real payloads."""
-    from spatialdds_idl.oarc_demo import FusedTrackSet, OperatorDetectionSet
+    from spatialdds_idl.oarc_demo import FusedTrackSet
+    from spatialdds_idl.spatial.semantics import Detection3DSet
     from spatialdds_idl.spatial.core import FramedPose
     from spatialdds_idl.spatial.disco import Announce
     from fusion import FusedTrack, Position, Velocity
     from spatialdds_types import (
         circle_coverage, make_announce, make_detection, make_detection_set,
-        make_detection_with_velocity, make_framed_pose, make_fused_track_set,
+        make_framed_pose, make_fused_track_set,
         topic_meta,
     )
 
@@ -71,15 +72,14 @@ def _samples():
         source_count=1, timestamp=102.0, track_age=1.0)
 
     return [
-        ("oarc.detection3d_velocity",
+        ("detection3d",
          "spatialdds/operator_a/sensing/detection3d/v1",
-         _wire(OperatorDetectionSet, make_detection_set(
+         _wire(Detection3DSet, make_detection_set(
              set_id="s1", source_operator="operator_a", frame_ref_fqn=SCENE,
-             dets=[make_detection_with_velocity(det, velocity=(0.0, 0.0, 0.0),
-                                                source_modality="det3d")],
+             dets=[det],
              frame_seq=7, timestamp_s=100.0)),
          100_000_000_000),
-        ("oarc.framed_pose", "spatialdds/operator_a/ego/pose/v1",
+        ("framed_pose", "spatialdds/operator_a/ego/pose/v1",
          _wire(FramedPose, make_framed_pose(
              1.0, 2.0, 0.0, q=(0.0, 0.0, 0.0, 1.0),
              frame_ref_fqn="operator_a/map", timestamp_s=100.5)),
@@ -92,7 +92,7 @@ def _samples():
          _wire(Announce, make_announce(
              operator="operator_a", service_kind="SENSING",
              topics=[topic_meta("spatialdds/operator_a/ego/pose/v1",
-                                "oarc.framed_pose", "POSE_RT")],
+                                "framed_pose", "POSE_RT")],
              coverage=circle_coverage(0.0, 0.0, 80.0), timestamp_s=99.0)),
          99_000_000_000),
     ]
@@ -153,8 +153,8 @@ class RoundTripTests(unittest.TestCase):
         its messages, not just what they are called. Under the envelope every
         schema was `{"type": "object", "additionalProperties": true}`.
         """
-        schema = schema_for("oarc.framed_pose")
-        self.assertNotEqual(schema, default_schema("oarc.framed_pose"))
+        schema = schema_for("framed_pose")
+        self.assertNotEqual(schema, default_schema("framed_pose"))
         self.assertFalse(schema["additionalProperties"])
         self.assertEqual(sorted(schema["properties"]),
                          ["cov", "frame_ref", "pose", "stamp"])
@@ -182,10 +182,10 @@ class RoundTripTests(unittest.TestCase):
                 jsonschema.validate(payload, schema_for(type_name))
 
     def test_overrides_replace_generated_schema(self) -> None:
-        custom = {"oarc.framed_pose": {"type": "object", "title": "custom"}}
+        custom = {"framed_pose": {"type": "object", "title": "custom"}}
         table = build_schema_table(custom)
-        self.assertEqual(table["oarc.framed_pose"]["title"], "custom")
-        self.assertIn("oarc.detection3d_velocity", table)
+        self.assertEqual(table["framed_pose"]["title"], "custom")
+        self.assertIn("detection3d", table)
 
     def test_writes_one_channel_per_topic(self) -> None:
         _write(self.samples, self.path)

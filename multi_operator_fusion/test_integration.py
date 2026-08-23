@@ -33,12 +33,13 @@ from infrastructure_publisher import (  # noqa: E402
     _stamp_from_index,
     make_detection3d_payload,
 )
-from spatialdds_demo.json_mapping import from_json  # noqa: E402
+from spatialdds_demo.json_mapping import from_json
+from spatialdds_idl.spatial.semantics import Detection3DSet  # noqa: E402
 from spatialdds_idl.oarc_demo import (  # noqa: E402
-    FusedTrackSet, FusionCoverage, OperatorDetectionSet,
+    FusedTrackSet, FusionCoverage,
 )
 from spatialdds_types import (  # noqa: E402
-    make_detection, make_detection_set, make_detection_with_velocity,
+    make_detection, make_detection_set,
 )
 
 SCENE = "scene/intersection"
@@ -65,8 +66,7 @@ def _operator_det3d(operator: str, x: float, y: float, z: float = 0.0,
     )
     return make_detection_set(
         set_id=f"{operator}-1", source_operator=operator, frame_ref_fqn=SCENE,
-        dets=[make_detection_with_velocity(det, velocity=(vx, vy, 0.0),
-                                           source_modality="det3d")],
+        dets=[det],
         frame_seq=1, timestamp_s=0.0,
     )
 
@@ -86,7 +86,7 @@ def _feed(svc, operator: str, payload: dict) -> None:
     publisher helper drifts out of the IDL, `from_json` raises before the
     fuser is ever reached.
     """
-    from_json(OperatorDetectionSet, payload)
+    from_json(Detection3DSet, payload)
     svc.on_message(DET3D_TYPE,
                    f"spatialdds/{operator}/sensing/detection3d/v1", payload, 0)
 

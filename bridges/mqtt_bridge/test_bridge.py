@@ -74,18 +74,18 @@ def _prewarm_idl():
     from cyclonedds.domain import DomainParticipant
 
     from spatialdds_demo import typed_transport as tt
-    from spatialdds_idl.oarc_demo import OperatorDetectionSet
+    from spatialdds_idl.spatial.semantics import Detection3DSet
 
     tt.make_writer(DomainParticipant(DDS_DOMAIN), "spatialdds/prewarm/v1",
-                   OperatorDetectionSet, "RADAR_RT")
+                   Detection3DSet, "DET_RT")
     time.sleep(0.2)
 
 
 def _det_set(operator: str, det_id: str = "d1") -> dict:
-    """A real OperatorDetectionSet payload, built as the publishers build it."""
+    """A real Detection3DSet payload, built as the publishers build it."""
     sys.path.insert(0, str(_REPO_ROOT / "multi_operator_fusion"))
     from spatialdds_types import (
-        make_detection, make_detection_set, make_detection_with_velocity,
+        make_detection, make_detection_set,
     )
     det = make_detection(
         det_id=det_id, class_id="vehicle.car", score=0.9,
@@ -95,8 +95,7 @@ def _det_set(operator: str, det_id: str = "d1") -> dict:
     return make_detection_set(
         set_id="s1", source_operator=operator,
         frame_ref_fqn="scene/intersection",
-        dets=[make_detection_with_velocity(det, velocity=(0.0, 0.0, 0.0),
-                                           source_modality="det3d")],
+        dets=[det],
         frame_seq=1, timestamp_s=1.0)
 
 
@@ -242,7 +241,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         bridge.start(block=False)
         time.sleep(2.0)                       # MQTT connect + DDS discovery
 
-        observer = _DdsObserver(topic, "oarc.detection3d_velocity", "RADAR_RT")
+        observer = _DdsObserver(topic, "detection3d", "RADAR_RT")
         time.sleep(2.0)
         try:
             _publish_mqtt("test-pub-inbound", topic, _det_set("operator_test"))
@@ -253,10 +252,10 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         self.assertGreaterEqual(len(observer.samples), 1,
                                 "DDS side saw no sample")
         sample = observer.samples[0]
-        # It arrived as a real OperatorDetectionSet — the reader would not
+        # It arrived as a real Detection3DSet — the reader would not
         # have deserialised anything else onto this typed topic.
-        self.assertEqual(sample["source_operator"], "operator_test")
-        self.assertEqual(sample["dets"][0]["detection"]["det_id"], "d1")
+        self.assertEqual(sample["source_id"], "operator_test")
+        self.assertEqual(sample["dets"][0]["det_id"], "d1")
 
     def test_malformed_payload_is_refused_at_the_bridge(self):
         """
@@ -273,7 +272,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         bridge.start(block=False)
         time.sleep(2.0)
 
-        observer = _DdsObserver(topic, "oarc.detection3d_velocity", "RADAR_RT")
+        observer = _DdsObserver(topic, "detection3d", "RADAR_RT")
         time.sleep(1.5)
         try:
             _publish_mqtt("test-pub-bad", topic,
@@ -354,7 +353,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         bridge.start(block=False)
         time.sleep(2.0)
 
-        observer = _DdsObserver(topic, "oarc.detection3d_velocity", "RADAR_RT")
+        observer = _DdsObserver(topic, "detection3d", "RADAR_RT")
         time.sleep(2.0)
         try:
             _publish_mqtt("test-pub-loop", topic, _det_set("operator_loop"),
@@ -381,7 +380,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         cfg.inbound_topics = [topic]
         cfg.outbound_topics = [topic]        # deliberately overlapping
         bridge = MqttDdsBridge(cfg)
-        _announce_lane(topic, "oarc.detection3d_velocity", "RADAR_RT",
+        _announce_lane(topic, "detection3d", "RADAR_RT",
                        "infrastructure")
         bridge.start(block=False)
         time.sleep(3.0)
@@ -418,13 +417,13 @@ class TestMqttBridgeIntegration(unittest.TestCase):
 
         from bridge import MqttDdsBridge
         from spatialdds_demo import typed_transport as tt
-        from spatialdds_idl.oarc_demo import OperatorDetectionSet
+        from spatialdds_idl.spatial.semantics import Detection3DSet
 
         topic = "spatialdds/operator_a/sensing/detection3d/v1"   # not outbound
         cfg = _make_config("outbound_only", bridge_id="bridge-filter",
                            client_id="bridge-filter-mqtt")
         bridge = MqttDdsBridge(cfg)
-        _announce_lane(topic, "oarc.detection3d_velocity", "RADAR_RT",
+        _announce_lane(topic, "detection3d", "RADAR_RT",
                        "operator_a")
         bridge.start(block=False)
         time.sleep(3.0)
@@ -439,7 +438,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
 
         try:
             writer = tt.TypedDictWriter(DomainParticipant(DDS_DOMAIN), topic,
-                                        OperatorDetectionSet, "RADAR_RT")
+                                        Detection3DSet, "DET_RT")
             time.sleep(2.0)
             writer.write(_det_set("operator_a"))
             time.sleep(2.0)

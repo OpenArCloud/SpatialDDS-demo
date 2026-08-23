@@ -10,7 +10,7 @@ nothing pre-staged.
 What goes on the wire, per operator:
 
     spatialdds/{operator}/sensing/detection3d/v1
-        oarc.detection3d_velocity   (OperatorDetectionSet)      RADAR_RT
+        oarc.detection3d_velocity   (Detection3DSet)      RADAR_RT
     spatialdds/{operator}/ego/pose/v1
         oarc.framed_pose            (spatial::core::FramedPose)  POSE_RT
     spatialdds/{operator}/plan/{operator}_ego/trajectory/v1
@@ -70,7 +70,6 @@ from spatialdds_types import (  # noqa: E402
     make_announce,
     make_detection,
     make_detection_set,
-    make_detection_with_velocity,
     make_framed_pose,
     topic_meta,
     make_planned_trajectory,
@@ -81,10 +80,10 @@ from spatialdds_types import (  # noqa: E402
 # Each lane is (topic, §3.3.2 type name, §3.3.3 QoS profile). The announce
 # and the writers are both built from these, so a lane cannot be announced
 # under one type and published as another.
-DET_TYPE, DET_QOS = "oarc.detection3d_velocity", "RADAR_RT"
+DET_TYPE, DET_QOS = "detection3d", "RADAR_RT"
 TOPIC_FMT = "spatialdds/{operator}/sensing/detection3d/v1"
 
-EGO_POSE_TYPE, EGO_POSE_QOS = "oarc.framed_pose", "POSE_RT"
+EGO_POSE_TYPE, EGO_POSE_QOS = "framed_pose", "POSE_RT"
 EGO_POSE_TOPIC_FMT = "spatialdds/{operator}/ego/pose/v1"
 
 PLAN_TYPE, PLAN_QOS = "planned_trajectory", "EVENT_RT"
@@ -282,9 +281,9 @@ def _build_detection(op_idx: int, obj_idx: int, t: float) -> Dict:
         frame_ref_fqn=SCENE_FRAME_FQN,
         timestamp_s=t,
         source_id=operator,
+        velocity=(p["vx"], p["vy"], p["vz"]),
     )
-    return make_detection_with_velocity(
-        detection, (p["vx"], p["vy"], p["vz"]), source_modality="det3d")
+    return detection
 
 
 def _radar_observe(target_xyz: Tuple[float, float, float],
@@ -374,13 +373,11 @@ def _build_infra_set(t: float, frame_seq: int, n_operators: int,
     # The base station reports no velocity: its radar model here yields
     # position only, so has_velocity is false on every row.
     dets = [
-        make_detection_with_velocity(
-            make_detection(
-                det_id=d["det_id"], class_id=d["class_id"], score=d["score"],
-                center=d["center"], size=d["size"], q=d["q"],
-                frame_ref_fqn=SCENE_FRAME_FQN, timestamp_s=t,
-                source_id=INFRA_OPERATOR),
-            velocity=None, source_modality="radar")
+        make_detection(
+            det_id=d["det_id"], class_id=d["class_id"], score=d["score"],
+            center=d["center"], size=d["size"], q=d["q"],
+            frame_ref_fqn=SCENE_FRAME_FQN, timestamp_s=t,
+            source_id=INFRA_OPERATOR, velocity=None)
         for d in detections
     ]
     return make_detection_set(

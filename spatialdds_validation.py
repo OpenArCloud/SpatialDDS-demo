@@ -407,6 +407,12 @@ def complete_coverage_element(**fields: Any) -> Dict[str, Any]:
         "has_coverage_window": False,
         "coverage_window_start": {"sec": 0, "nanosec": 0},
         "coverage_window_end": {"sec": 0, "nanosec": 0},
+        # Added in 1.7's findings-batch-2 revision: a circular footprint is
+        # a circle now, rather than its bounding aabb reconstructed by every
+        # consumer as centre + half-width.
+        "has_circle": False,
+        "circle_center": [0.0, 0.0, 0.0],
+        "circle_radius_m": 0.0,
     }
     element.update(fields)
     return element

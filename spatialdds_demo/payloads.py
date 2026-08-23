@@ -101,12 +101,17 @@ def detection3d(det_id: str, class_id: str, score: float,
                 center: Sequence[float], size: Sequence[float],
                 q: Sequence[float], frame_ref_fqn: str,
                 timestamp_s: float, source_id: str,
-                frame_ref_dict: Dict = None) -> Dict:
+                frame_ref_dict: Dict = None,
+                velocity: Sequence[float] = None) -> Dict:
     """
     One complete ``spatial::semantics::Detection3D``.
 
     ``frame_ref_dict`` lets a caller that already has a FrameRef — the ROS 2
     bridge, which maps tf2 frame_ids — pass it instead of an FQN.
+
+    ``velocity=None`` sets the presence flag false rather than passing a zero
+    vector off as a measurement. A source that genuinely has no velocity —
+    ROS 2's Detection3DArray, for one — says so.
     """
     return {
         "det_id": str(det_id),
@@ -128,45 +133,40 @@ def detection3d(det_id: str, class_id: str, score: float,
         "stamp": stamp(timestamp_s),
         "source_id": str(source_id),
         "has_attributes": False,
-        # MetaKV is {namespace, json} — a JSON string. Putting JSON back on
-        # the bus is what this migration exists to stop, so the spec's
-        # generic extension hatch stays empty here. See the findings list.
+        # MetaKV carries typed `entries` (a sequence of common::KV) as well
+        # as its JSON string now, so the extension hatch no longer forces
+        # JSON back onto the bus. Nothing here needs it, so it stays empty.
         "attributes": [],
         "has_visibility": False,
         "visibility": 0.0,
         "has_num_pts": False,
         "num_lidar_pts": 0,
         "num_radar_pts": 0,
-    }
-
-
-def detection_with_velocity(detection: Dict, velocity=None,
-                            source_modality: str = "det3d") -> Dict:
-    """
-    One ``oarc_demo::DetectionWithVelocity``.
-
-    Composes the spec ``Detection3D`` verbatim and adds the velocity it has
-    no field for, so a conformant consumer can lift the spec type straight
-    out. ``velocity=None`` sets the presence flag false rather than passing
-    a zero vector off as a measurement.
-    """
-    return {
-        "detection": detection,
+        # Added to Detection3D in 1.7's findings-batch-2 revision. The demo
+        # used to compose `oarc_demo::DetectionWithVelocity` around this type
+        # purely to add these two fields.
         "has_velocity": velocity is not None,
         "velocity": vec(velocity if velocity is not None else (0.0, 0.0, 0.0)),
-        "source_modality": str(source_modality),
     }
 
 
 def detection_set(set_id: str, source_operator: str, frame_ref_fqn: str,
                   dets: Sequence[Dict], frame_seq: int,
                   timestamp_s: float, frame_ref_dict: Dict = None) -> Dict:
-    """An ``oarc_demo::OperatorDetectionSet``, mirroring Detection3DSet."""
+    """
+    A complete ``spatial::semantics::Detection3DSet``.
+
+    The operator is `source_id`, which is the type's own field for it — the
+    demo used to wrap this in `Detection3DSet` to add a
+    `source_operator`. `frame_seq` has no home on the type and is dropped:
+    the set is identified by `set_id` and ordered by `stamp`.
+    """
     return {
         "set_id": str(set_id),
-        "source_operator": str(source_operator),
         "frame_ref": frame_ref_dict or frame_ref(frame_ref_fqn),
+        "has_tile": False,
+        "tile_key": {"level": 0, "x": 0, "y": 0, "z": 0},
         "dets": list(dets),
-        "frame_seq": int(frame_seq),
         "stamp": stamp(timestamp_s),
+        "source_id": str(source_operator),
     }

@@ -17,18 +17,18 @@ from __future__ import annotations
 from typing import Dict, Optional, Type
 
 from spatialdds_idl.oarc_demo import (
-    BlobChunk,
+    BootstrapQuery,
+    BootstrapResponse,
     CatalogQuery,
-    Detection2DSet,
     CatalogResponse,
     FusedTrackSet,
     FusionCoverage,
-    OperatorDetectionSet,
     VpsRequest,
     VpsResponse,
 )
 from spatialdds_idl.spatial.anchors import AnchorDelta
 from spatialdds_idl.spatial.core import (
+    BlobChunk,
     EntityBinding,
     FramedPose,
     GeoPose,
@@ -37,7 +37,7 @@ from spatialdds_idl.spatial.core import (
 )
 from spatialdds_idl.spatial.disco import Announce, CoverageQuery, CoverageResponse, Depart
 from spatialdds_idl.spatial.events import SpatialEvent
-from spatialdds_idl.spatial.semantics import Detection3DSet
+from spatialdds_idl.spatial.semantics import Detection2DSet, Detection3DSet
 from spatialdds_idl.spatial.vio import ImuSample
 from spatialdds_idl.spatial.sensing.lidar import LidarFrame, LidarMeta
 from spatialdds_idl.spatial.sensing.rad import (
@@ -49,73 +49,56 @@ from spatialdds_idl.spatial.sensing.vision import VisionFrame, VisionMeta
 # --- §3.3.2 registered types -----------------------------------------------
 REGISTERED: Dict[str, Type] = {
     "geopose": GeoPose,
+    "framed_pose": FramedPose,
     "navsat_status": NavSatStatus,
     "planned_trajectory": PlannedTrajectory,
     "entity_binding": EntityBinding,
     "spatial_event": SpatialEvent,
     "video_frame": VisionFrame,
+    "video_meta": VisionMeta,
     "radar_tensor": RadTensorFrame,
-    # "Per-frame detection set | Structured radar detections" — the
-    # radar-specific type, not the semantic one. See the extension below.
+    "radar_tensor_meta": RadTensorMeta,
     "radar_detection": RadDetectionSet,
+    "detection3d": Detection3DSet,
+    "detection2d": Detection2DSet,
+    "lidar_frame": LidarFrame,
+    "lidar_meta": LidarMeta,
+    "imu_sample": ImuSample,
+    "anchor_delta": AnchorDelta,
     "vps_query": VpsRequest,
-    # Appendix E provisional: registered in 3.3.2, IDL ships under
-    # idl/v1.7/examples/. Provisional in the spec's sense — the type is
+    # Appendix E provisional: registered in 3.3.2, IDL under
+    # idl/v1.7/provisional/. Provisional in the spec's sense — the type is
     # registered and stable enough to announce, its profile is not yet.
     "rf_beam": RfBeamFrame,
+    "rf_beam_meta": RfBeamMeta,
+    # Not in the 3.3.2 table — blob transfer is its own mechanism rather
+    # than a topic type — but every consumer needs to resolve it, so it
+    # lives with the registered names rather than as an extension.
+    "blob_chunk": BlobChunk,
 }
 
 # --- deployment-specific extensions, named per §3.3.2 guidance --------------
-# Each of these exists because the spec has no type for what the demo means;
-# they are catalogued in ar_demo/SPEC_COMPLIANCE.md.
+# What is left after 1.7's findings-batch-2 revision. Each of these is a
+# thing the spec still has no type for; everything else the demo used to
+# carry an `oarc.*` name for now has a registered one.
 EXTENSIONS: Dict[str, Type] = {
-    # semantics::Detection3D carries no velocity, and the fuser gates on it.
-    # Composes the spec type rather than replacing it.
-    "oarc.detection3d_velocity": OperatorDetectionSet,
-    # No fused-track type in 1.7: Tracklet is feature-level, Track2D per-image.
+    # No fused-track type: semantics::Tracklet is feature-level and
+    # vision::Track2D is per-image, so a cross-operator fused track — the
+    # output of the flagship demo — has nowhere to go.
     "oarc.fused_track": FusedTrackSet,
+    # No type for fusion coverage metrics either.
     "oarc.fusion_coverage": FusionCoverage,
-    # A local ego pose is a FramedPose; `geopose` is the geographic one.
-    "oarc.framed_pose": FramedPose,
-    # No catalogue query/response pair in 1.7.
+    # `vps_query` is registered but 1.7 defines no struct for it, and names
+    # no type at all for the response.
+    "oarc.vps_response": VpsResponse,
+    # No catalogue query/response pair in 1.7; ContentAnnounce advertises
+    # content but nothing asks a catalogue what is in an area.
     "oarc.catalog_query": CatalogQuery,
     "oarc.catalog_response": CatalogResponse,
-    # vps_query is registered but has no struct; the response has no type name.
-    "oarc.vps_response": VpsResponse,
-    # Anchor deltas have neither a registered type name nor a QoS profile,
-    # though spatial::anchors::AnchorDelta is a stable 1.7 type — the same
-    # registry gap as lidar and the sensor metadata types below.
-    "oarc.anchor_delta": AnchorDelta,
-    # 3.3.2 registers no name for semantics::Detection3DSet — the answer to
-    # the spec's own "what objects exist and where?" question, and the type
-    # every perception consumer wants. `radar_detection` is radar's
-    # RadDetectionSet; there is nothing for the semantic set.
-    "oarc.detection3d_set": Detection3DSet,
-    # No 2D box detection type in 1.7 at all: vision::VisionDetections
-    # carries keypoints and 2D tracks, `seg_mask` is masks, and Detection3D
-    # is 3D. A labelled 2D box — the most common camera perception output
-    # there is — has nowhere to go.
-    "oarc.detection2d_set": Detection2DSet,
-
-    # --- registered-name gaps: the struct exists, the registry name does not.
-    # 3.3.2 registers `radar_tensor` and `video_frame` for the frame types but
-    # nothing for their stream metadata, and nothing at all for lidar — even
-    # though sensing::lidar::LidarFrame/LidarMeta are stable 1.7 types. A
-    # consumer therefore cannot be told "this topic carries a LidarFrame"
-    # through discovery, which is the one thing the registry is for.
-    "oarc.lidar_frame": LidarFrame,
-    "oarc.lidar_meta": LidarMeta,
-    "oarc.radar_tensor_meta": RadTensorMeta,
-    "oarc.video_frame_meta": VisionMeta,
-    "oarc.rf_beam_meta": RfBeamMeta,
-    # spatial::vio::ImuSample is a stable 1.7 type with no registered name
-    # either — the ROS 2 bridge publishes one per sensor_msgs/Imu.
-    "oarc.imu_sample": ImuSample,
-    # spatial::core::BlobChunk is unusable from cyclonedds-python (its
-    # 262144 sequence bound exceeds the binding's 65535 ceiling), and it is
-    # the only type in 1.7 that carries bytes. Same semantics, smaller
-    # chunks. See idl/demo/oarc_demo.idl.
-    "oarc.blob_chunk": BlobChunk,
+    # No bootstrap exchange: a participant is assumed to already know its
+    # domain id and QoS profile, which is what a fresh device does not.
+    "oarc.bootstrap_query": BootstrapQuery,
+    "oarc.bootstrap_response": BootstrapResponse,
 }
 
 ALL: Dict[str, Type] = {**REGISTERED, **EXTENSIONS}

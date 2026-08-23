@@ -113,7 +113,7 @@ class LaneTable(unittest.TestCase):
         velocity. nuScenes has it (box_velocity) and semantics::Detection3D
         has no field for it, so the lane carries the composed type.
         """
-        self.assertEqual(LANES["detection3d"][1], "oarc.detection3d_velocity")
+        self.assertEqual(LANES["detection3d"][1], "detection3d")
 
 
 class SensorFilterSpec(unittest.TestCase):

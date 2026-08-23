@@ -20,6 +20,7 @@ from spatialdds_idl import spatial
 if TYPE_CHECKING:
     import builtin
     import spatial.common
+    import spatial.core
 
 
 MODULE_ID = "spatial.vio/1.7"
@@ -51,6 +52,10 @@ class ImuSample(idl.IdlStruct, typename="spatial.vio.ImuSample"):
     stamp: 'spatialdds_idl.spatial.vio.Time'
     source_id: str
     seq: types.uint64
+    has_accel_cov: bool
+    accel_cov: 'spatialdds_idl.spatial.core.CovMatrix'
+    has_gyro_cov: bool
+    gyro_cov: 'spatialdds_idl.spatial.core.CovMatrix'
 
 
 @dataclass

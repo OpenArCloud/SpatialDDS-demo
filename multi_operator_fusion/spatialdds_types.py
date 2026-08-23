@@ -158,17 +158,17 @@ _frame_ref = payloads.frame_ref
 
 SCHEMA_DISCOVERY = "spatial.discovery/1.7"
 
-# ServiceKind has no member for a sensor fleet, a roadside unit or a fusion
-# service, so all of them map to OTHER and the real role travels in `hints`.
-# That works, but it means the enum cannot discriminate the three service
-# classes this demo is actually built out of — a consumer filtering "show me
-# the fusion services" has to know the demo's hint convention. Worth WG
-# input; on the findings list.
+# ServiceKind gained SENSING, INFRASTRUCTURE and FUSION in 1.7's
+# findings-batch-2 revision, so these are the enum's own values now. They
+# used to map to OTHER with the real role in a `hints` KV, which meant a
+# consumer filtering "show me the fusion services" had to know a private
+# convention. The hint is still emitted, harmlessly, for anything reading
+# the older shape.
 _SERVICE_KIND = {
-    "SENSING": "OTHER",
-    "INFRASTRUCTURE": "OTHER",
-    "AV_FLEET": "OTHER",
-    "FUSION": "OTHER",
+    "SENSING": "SENSING",
+    "INFRASTRUCTURE": "INFRASTRUCTURE",
+    "FUSION": "FUSION",
+    "AV_FLEET": "SENSING",
 }
 
 
@@ -187,12 +187,17 @@ def topic_meta(name: str, type_: str, qos_profile: str) -> Dict:
 def circle_coverage(center_x: float, center_y: float, radius_m: float,
                     frame_ref: Optional[Dict] = None) -> Dict:
     """
-    A circular coverage area as a spec `CoverageElement`.
+    A circular coverage area, as a circle.
 
-    `CoverageElement` offers bbox (geographic degrees) and aabb (local metres);
-    there is no circle. The aabb is the circle's bounding box in the local
-    frame, so a consumer that wants the circle back takes the centre and
-    half-width — which is what the canvas dashboard does.
+    `CoverageElement` gained `has_circle` / `circle_center` /
+    `circle_radius_m` in 1.7's findings-batch-2 revision. Before that a
+    circular footprint — the obvious shape for a radar or a roadside unit —
+    had to be published as its bounding aabb and reconstructed by consumers
+    as centre + half-width, which both of this demo's dashboards did.
+
+    The aabb is still filled in, as the bounding box of the circle: a
+    consumer that only understands aabb gets a usable answer, and one that
+    reads `has_circle` gets the exact shape.
     """
     return {
         "has_crs": False,
@@ -210,6 +215,9 @@ def circle_coverage(center_x: float, center_y: float, radius_m: float,
         "has_coverage_window": False,
         "coverage_window_start": _stamp(0.0),
         "coverage_window_end": _stamp(0.0),
+        "has_circle": True,
+        "circle_center": [float(center_x), float(center_y), 0.0],
+        "circle_radius_m": float(radius_m),
     }
 
 
@@ -221,6 +229,7 @@ def make_announce(
     coverage: Optional[Dict] = None,
     timestamp_s: float = 0.0,
     manifest_uri: Optional[str] = None,
+    coverage_source_ids: Optional[Sequence[str]] = None,
 ) -> Dict:
     """
     Build a real `spatial::disco::Announce`.
@@ -262,6 +271,12 @@ def make_announce(
         "auth_hint": "",
         "stamp": _stamp(timestamp_s),
         "ttl_sec": 300,
+        # Empty means self-asserted coverage. A fusion service names the
+        # services its coverage is composed from — added in 1.7's
+        # findings-batch-2 revision, because before it there was no way to
+        # say "I cover whatever my inputs cover" and the demo had to
+        # announce a generous circle and hope.
+        "coverage_source_ids": [str(sid) for sid in (coverage_source_ids or [])],
     }
 
 
@@ -286,48 +301,33 @@ def make_framed_pose(x: float, y: float, z: float, q: Sequence[float],
 def make_detection(det_id: str, class_id: str, score: float,
                    center: Sequence[float], size: Sequence[float],
                    q: Sequence[float], frame_ref_fqn: str,
-                   timestamp_s: float, source_id: str) -> Dict:
-    """One `spatial::semantics::Detection3D`, complete."""
+                   timestamp_s: float, source_id: str,
+                   velocity: Sequence[float] = None) -> Dict:
+    """
+    One `spatial::semantics::Detection3D`, complete.
+
+    `velocity` is a field on the type now; the demo used to compose
+    `DetectionWithVelocity` around it to add one.
+    """
     return payloads.detection3d(
         det_id, class_id, score, center, size, q, frame_ref_fqn,
-        timestamp_s, source_id)
+        timestamp_s, source_id, velocity=velocity)
 
 
 def make_detection_set(set_id: str, source_operator: str, frame_ref_fqn: str,
                        dets: Sequence[Dict], frame_seq: int,
                        timestamp_s: float) -> Dict:
     """
-    An `oarc_demo::OperatorDetectionSet`.
+    A complete `spatial::semantics::Detection3DSet`.
 
-    Each row composes the spec `Detection3D` verbatim and adds the velocity
-    the fuser gates on, which `Detection3D` has no member for. See
-    idl/demo/oarc_demo.idl for why that is a composed struct rather than a
-    MetaKV attribute.
+    This used to be `oarc_demo::OperatorDetectionSet`, whose rows composed
+    the spec `Detection3D` to add the velocity the fuser gates on and whose
+    header added a `source_operator`. 1.7's findings-batch-2 revision put
+    `has_velocity`/`velocity` on `Detection3D`, and `Detection3DSet` already
+    had `source_id`, so both wrappers are gone.
     """
-    return {
-        "set_id": str(set_id),
-        "source_operator": str(source_operator),
-        "frame_ref": _frame_ref(frame_ref_fqn),
-        "dets": list(dets),
-        "frame_seq": int(frame_seq),
-        "stamp": _stamp(timestamp_s),
-    }
-
-
-def make_detection_with_velocity(detection: Dict, velocity: Optional[Sequence[float]],
-                                 source_modality: str = "det3d") -> Dict:
-    return {
-        "detection": detection,
-        "has_velocity": velocity is not None,
-        "velocity": _vec(velocity if velocity is not None else (0.0, 0.0, 0.0)),
-        "source_modality": str(source_modality),
-    }
-
-
-# ── Platform fusion outputs ───────────────────────────────────────────
-# The fusion service's three published streams. Each is a real struct on
-# its own typed topic; under the envelope all three were JSON blobs whose
-# shape lived only in the subscriber's parser.
+    return payloads.detection_set(
+        set_id, source_operator, frame_ref_fqn, dets, frame_seq, timestamp_s)
 
 
 def make_fused_track(track, timestamp_s: float) -> Dict:
@@ -404,13 +404,10 @@ def make_trajectory_conflict_event(conflict: Dict, *, timestamp_s: float,
     now — which also makes an already-started event and a predicted one
     distinguishable by comparing the two, without a new field.
 
-    The conflicting pair has nowhere typed to go. SpatialEvent models one
-    trigger and one secondary, and both slots are det/track ids rather than
-    agent ids; the spec's generic hatch, ``attributes``, is
-    ``MetaKV{namespace, json}`` — a JSON string, which is exactly what this
-    migration exists to get off the bus. So the pair is carried in the
-    event_id and the description, ``attributes`` is left empty, and the
-    missing typed slot is on the findings list.
+    The conflicting pair goes in ``participant_ids``, a symmetric list added
+    in the same revision. SpatialEvent used to offer only ``trigger_track_id``
+    and ``secondary_det_id`` — a track id and a det id, asymmetric, neither
+    an agent id — so the pair had to ride in the event_id and description.
     """
     agents = [str(a) for a in conflict.get("agents", [])]
     pos = conflict.get("conflict_position") or {}
@@ -421,7 +418,7 @@ def make_trajectory_conflict_event(conflict: Dict, *, timestamp_s: float,
     return {
         "schema_version": SCHEMA_EVENTS,
         "event_id": "conflict:" + "|".join(sorted(agents)),
-        "type": "PROXIMITY_ALERT",
+        "type": "PREDICTED_CONFLICT",
         "severity": "ALERT",
         "state": "ACTIVE",
         "has_zone_id": False,
@@ -458,4 +455,5 @@ def make_trajectory_conflict_event(conflict: Dict, *, timestamp_s: float,
         "stamp": _stamp(timestamp_s),
         "source_id": str(source_id),
         "attributes": [],
+        "participant_ids": sorted(agents),
     }

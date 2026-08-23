@@ -329,6 +329,10 @@ class VPSServiceV15:
             "auth_hint": "oauth2:https://auth.example.com",
             "stamp": stamp,
             "ttl_sec": 300,
+            # Empty = self-asserted coverage. Added in 1.7's
+            # findings-batch-2 revision so a service whose coverage is the
+            # union of its inputs can say which inputs.
+            "coverage_source_ids": [],
         }
         SpatialDDSValidator.validate_coverage(self.coverage, self.coverage_frame_ref)
         return announce
@@ -350,6 +354,10 @@ class VPSServiceV15:
             "coverage_frame_ref": self.coverage_frame_ref,
             "stamp": SpatialDDSValidator.now_time(),
             "ttl_sec": 300,
+            # Empty = self-asserted coverage. Added in 1.7's
+            # findings-batch-2 revision so a service whose coverage is the
+            # union of its inputs can say which inputs.
+            "coverage_source_ids": [],
         }
 
     def handle_coverage_query(self, query: Dict[str, Any]) -> Dict[str, Any]:

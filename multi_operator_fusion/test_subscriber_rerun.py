@@ -24,8 +24,9 @@ if str(_HERE) not in sys.path:
 import rerun as rr  # noqa: E402
 
 from spatialdds_demo.json_mapping import from_json, to_json  # noqa: E402
+from spatialdds_idl.spatial.semantics import Detection3DSet  # noqa: E402
 from spatialdds_idl.oarc_demo import (  # noqa: E402
-    FusedTrackSet, FusionCoverage, OperatorDetectionSet,
+    FusedTrackSet, FusionCoverage,
 )
 from spatialdds_idl.spatial.core import (  # noqa: E402
     EntityBinding, FramedPose, PlannedTrajectory,
@@ -34,7 +35,7 @@ from spatialdds_idl.spatial.disco import Announce  # noqa: E402
 from spatialdds_idl.spatial.events import SpatialEvent  # noqa: E402
 from spatialdds_types import (  # noqa: E402
     circle_coverage, make_announce, make_detection, make_detection_set,
-    make_detection_with_velocity, make_entity_binding, make_framed_pose,
+    make_entity_binding, make_framed_pose,
     make_fusion_coverage, make_planned_trajectory, make_planned_waypoint,
     make_trajectory_conflict_event, make_component_ref, topic_meta,
 )
@@ -62,10 +63,9 @@ def _det_payload(operator: str):
         center=(1.0, 2.0, 0.5), size=(4.5, 1.8, 1.6), q=(0.0, 0.0, 0.0, 1.0),
         frame_ref_fqn=SCENE, timestamp_s=1.0, source_id=operator,
     )
-    return _wire(OperatorDetectionSet, make_detection_set(
+    return _wire(Detection3DSet, make_detection_set(
         set_id="set-1", source_operator=operator, frame_ref_fqn=SCENE,
-        dets=[make_detection_with_velocity(det, velocity=(1.0, 0.0, 0.0),
-                                           source_modality="det3d")],
+        dets=[det],
         frame_seq=1, timestamp_s=1.0))
 
 
@@ -116,7 +116,7 @@ def _announce_payload(operator: str):
     return _wire(Announce, make_announce(
         operator=operator, service_kind="SENSING",
         topics=[topic_meta(f"spatialdds/{operator}/ego/pose/v1",
-                           "oarc.framed_pose", "POSE_RT")],
+                           "framed_pose", "POSE_RT")],
         coverage=circle_coverage(0.0, 0.0, 50.0), timestamp_s=1.0))
 
 
@@ -157,17 +157,17 @@ class TestSubscriberRerun(unittest.TestCase):
         import subscriber_rerun  # noqa: F401
 
     def test_ego_pose(self):
-        self._drive("oarc.framed_pose",
+        self._drive("framed_pose",
                      "spatialdds/operator_a/ego/pose/v1",
                      _ego_payload("operator_a"))
 
     def test_detection3d_set(self):
-        self._drive("oarc.detection3d_velocity",
+        self._drive("detection3d",
                      "spatialdds/operator_a/sensing/detection3d/v1",
                      _det_payload("operator_a"))
 
     def test_infrastructure_detection_set(self):
-        self._drive("oarc.detection3d_velocity",
+        self._drive("detection3d",
                      "spatialdds/infrastructure/sensing/detection3d/v1",
                      _det_payload("infrastructure"),
                      operator="infrastructure")
@@ -222,7 +222,7 @@ class TestSubscriberRerun(unittest.TestCase):
         """
         from subscriber_rerun import _HANDLERS
 
-        for type_name in ("oarc.framed_pose", "oarc.detection3d_velocity",
+        for type_name in ("framed_pose", "detection3d",
                           "planned_trajectory", "oarc.fused_track",
                           "oarc.fusion_coverage", "spatial_event",
                           "entity_binding"):
@@ -240,7 +240,7 @@ class TestSubscriberRerun(unittest.TestCase):
         # Sanity check on the trail buffer cap.
         self.sub._trail_max = 5
         for i in range(20):
-            self._drive("oarc.framed_pose",
+            self._drive("framed_pose",
                          "spatialdds/operator_a/ego/pose/v1",
                          _ego_payload("operator_a", x=float(i), y=0.0))
         self.assertLessEqual(len(self.sub._trails["operator_a"]), 5)

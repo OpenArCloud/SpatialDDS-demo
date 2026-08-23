@@ -29,11 +29,11 @@ class TestMsgTypeInference(unittest.TestCase):
     """
 
     CASES = [
-        ("spatialdds/op_a/sensing/detection3d/v1", "oarc.detection3d_velocity"),
-        ("spatialdds/op_a/ego/pose/v1",            "oarc.framed_pose"),
+        ("spatialdds/op_a/sensing/detection3d/v1", "detection3d"),
+        ("spatialdds/op_a/ego/pose/v1",            "framed_pose"),
         ("spatialdds/op_a/geo/gnss_0/pose/v1",     "geopose"),
         ("spatialdds/infra/vision/cam_0/frame/v1", "video_frame"),
-        ("spatialdds/infra/vision/cam_0/meta/v1",  "oarc.video_frame_meta"),
+        ("spatialdds/infra/vision/cam_0/meta/v1",  "video_meta"),
         ("spatialdds/infra/rf_beam/unit1/frame/v1", "rf_beam"),
         ("spatialdds/op/plan/robot_1/trajectory/v1", "planned_trajectory"),
         ("spatialdds/platform/fusion/track/v1",    "oarc.fused_track"),

@@ -117,7 +117,7 @@ class BlobChunk(idl.IdlStruct, typename="spatial.core.BlobChunk"):
     annotate.key("index")
     total_chunks: types.uint32
     crc32: types.uint32
-    data: types.sequence[types.uint8, 262144]
+    data: types.sequence[types.uint8, 65535]
 
 @annotate.final
 class EdgeTypeCore(idl.IdlEnum, typename="spatial.core.EdgeTypeCore", default="ODOM"):

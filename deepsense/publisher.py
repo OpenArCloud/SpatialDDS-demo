@@ -30,15 +30,15 @@ from spatialdds_demo import blob, topic_types, typed_transport as tt
 # (topic, §3.3.2 type, §3.3.3 QoS profile) for every lane this publisher owns.
 LANES = {
     "beam_meta":    ("spatialdds/deepsense/rf_beam/unit1_60ghz/meta/v1",
-                     "oarc.rf_beam_meta", "MAP_META"),
+                     "rf_beam_meta", "MAP_META"),
     "beam_frame":   ("spatialdds/deepsense/rf_beam/unit1_60ghz/frame/v1",
                      "rf_beam", "RF_BEAM_RT"),
     "radar_meta":   ("spatialdds/deepsense/rad/unit1_radar/meta/v1",
-                     "oarc.radar_tensor_meta", "MAP_META"),
+                     "radar_tensor_meta", "MAP_META"),
     "radar_tensor": ("spatialdds/deepsense/rad/unit1_radar/tensor/v1",
                      "radar_tensor", "RADAR_RT"),
     "vision_meta":  ("spatialdds/deepsense/vision/unit1_cam/meta/v1",
-                     "oarc.video_frame_meta", "MAP_META"),
+                     "video_meta", "MAP_META"),
     "vision_frame": ("spatialdds/deepsense/vision/unit1_cam/frame/v1",
                      "video_frame", "VIDEO_LIVE"),
     "unit1_geo":    ("spatialdds/deepsense/geo/unit1/pose/v1",
@@ -46,9 +46,9 @@ LANES = {
     "unit2_geo":    ("spatialdds/deepsense/geo/unit2/pose/v1",
                      "geopose", "POSE_RT"),
     "lidar_frame":  ("spatialdds/deepsense/lidar/unit1_lidar/frame/v1",
-                     "oarc.lidar_frame", "GEOM_TILE"),
+                     "lidar_frame", "GEOM_TILE"),
     "detection2d":  ("spatialdds/deepsense/semantics/det2d/v1",
-                     "oarc.detection2d_set", "RADAR_RT"),
+                     "detection2d", "RADAR_RT"),
     "blob":         (blob.BLOB_TOPIC, blob.BLOB_TYPE, blob.BLOB_PROFILE),
 }
 

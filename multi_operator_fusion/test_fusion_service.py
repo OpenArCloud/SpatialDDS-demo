@@ -85,10 +85,14 @@ class MessageRouting(unittest.TestCase):
 
     @staticmethod
     def _det(x, y, cls="vehicle.car", score=0.9):
-        return {"detection": {"det_id": "d", "class_id": cls, "score": score,
-                              "center": [x, y, 0.0]},
-                "has_velocity": True, "velocity": [0.0, 0.0, 0.0],
-                "source_modality": "det3d"}
+        """One Detection3D, built rather than hand-written."""
+        from spatialdds_demo import payloads
+
+        return payloads.detection3d(
+            det_id="d", class_id=cls, score=score, center=(x, y, 0.0),
+            size=(4.5, 1.8, 1.6), q=(0.0, 0.0, 0.0, 1.0),
+            frame_ref_fqn="scene/intersection", timestamp_s=0.0,
+            source_id="op", velocity=(0.0, 0.0, 0.0))
 
     def test_ignores_a_type_it_does_not_fuse(self):
         """

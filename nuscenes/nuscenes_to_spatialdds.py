@@ -290,7 +290,8 @@ def annotation_to_detection3d(nusc: NuScenes, ann_token: str) -> Detection3D:
     q = quaternion_wxyz_to_xyzw(ann["rotation"])
     velocity = nusc.box_velocity(ann_token)
     vx, vy, vz = velocity if velocity is not None else (0.0, 0.0, 0.0)
-    if np.isnan(vx):
+    has_velocity = velocity is not None and not np.isnan(vx)
+    if not has_velocity:
         vx, vy, vz = 0.0, 0.0, 0.0
 
     visibility_level = 0.0
@@ -301,10 +302,12 @@ def annotation_to_detection3d(nusc: NuScenes, ann_token: str) -> Detection3D:
         except Exception:
             visibility_level = 0.0
 
-    # semantics::Detection3D has no velocity field, so the box velocity
-    # nuScenes provides has nowhere to go here. The multi-operator demo needs
-    # it and composes `oarc_demo::DetectionWithVelocity` around this type for
-    # exactly that reason; on the findings list.
+    # `has_velocity`/`velocity` were added to Detection3D in 1.7's
+    # findings-batch-2 revision. nuScenes has had the box velocity all along
+    # (box_velocity); before the revision it had nowhere to go, and the
+    # multi-operator demo composed a wrapper type around Detection3D purely
+    # to carry it. NaN means "not determinable from adjacent frames", which
+    # is the presence flag's job rather than a zero vector's.
     return Detection3D(
         det_id=ann["token"],
         frame_ref=FrameRef(uuid="", fqn="nuscenes/map",
@@ -334,6 +337,8 @@ def annotation_to_detection3d(nusc: NuScenes, ann_token: str) -> Detection3D:
         has_num_pts=True,
         num_lidar_pts=int(ann.get("num_lidar_pts", 0)),
         num_radar_pts=int(ann.get("num_radar_pts", 0)),
+        has_velocity=has_velocity,
+        velocity=[vx, vy, vz],
     )
 
 

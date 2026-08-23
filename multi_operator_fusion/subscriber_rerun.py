@@ -252,7 +252,7 @@ class RerunMultiOpSubscriber:
                           file=sys.stderr)
             operator = operator_from_topic(topic) or "unknown"
             handle_sample(self, msg_type, topic, operator, payload, frame_num)
-            if msg_type in {"oarc.framed_pose", "oarc.detection3d_velocity",
+            if msg_type in {"framed_pose", "detection3d",
                             "oarc.fused_track"}:
                 seen += 1
             if max_frames > 0 and seen >= max_frames:
@@ -381,9 +381,8 @@ class RerunMultiOpSubscriber:
     def _handle_det3d(self, operator: str, payload: Dict[str, Any],
                         frame_num: int) -> None:
         _set_time(payload.get("stamp", {}), frame_num)
-        # OperatorDetectionSet composes the spec Detection3D, so lift it out.
-        dets = [d.get("detection", d) if isinstance(d, dict) else d
-                for d in (payload.get("dets") or payload.get("detections") or [])]
+        # Detection3DSet composes the spec Detection3D, so lift it out.
+        dets = payload.get("dets") or payload.get("detections") or []
         if self.debug:
             print(f"RENDER detections: {operator}, {len(dets)} dets frame={frame_num}",
                   file=sys.stderr)
@@ -713,13 +712,13 @@ def handle_sample(sub: "RerunMultiOpSubscriber", type_name: str,
 
 
 _HANDLERS = {
-    "oarc.framed_pose": lambda s, op, p, n: s._handle_ego(op, p, n),
+    "framed_pose": lambda s, op, p, n: s._handle_ego(op, p, n),
     "geopose": lambda s, op, p, n: s._handle_ego(op, p, n),
-    "oarc.video_frame_meta": lambda s, op, p, n: s._handle_vision_meta(op, p, n),
+    "video_meta": lambda s, op, p, n: s._handle_vision_meta(op, p, n),
     "video_frame": lambda s, op, p, n: s._handle_vision_frame(op, p, n),
-    "oarc.lidar_frame": lambda s, op, p, n: s._handle_lidar(op, p, n),
+    "lidar_frame": lambda s, op, p, n: s._handle_lidar(op, p, n),
     "radar_detection": lambda s, op, p, n: s._handle_radar(op, p, n),
-    "oarc.detection3d_velocity": lambda s, op, p, n: s._handle_det3d(op, p, n),
+    "detection3d": lambda s, op, p, n: s._handle_det3d(op, p, n),
     "oarc.fused_track": lambda s, op, p, n: s._handle_fused_tracks(p, n),
     "oarc.fusion_coverage": lambda s, op, p, n: s._handle_coverage(p, n),
     "planned_trajectory": lambda s, op, p, n: s._handle_planned_trajectory(op, p, n),

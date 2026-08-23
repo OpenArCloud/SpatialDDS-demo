@@ -60,7 +60,7 @@ from spatialdds_types import (  # noqa: E402
     topic_meta,
 )
 
-DET3D_TYPE = "oarc.detection3d_velocity"
+DET3D_TYPE = "detection3d"
 PLAN_TYPE = "planned_trajectory"
 DET3D_TOPIC_SUFFIX = "sensing/detection3d/v1"
 DET3D_TOPIC_FMT = "spatialdds/{operator}/sensing/detection3d/v1"
@@ -109,7 +109,7 @@ def _parse_detection(raw: dict, source_operator: str, modality: str,
     with the velocity this fuser gates on. `source_modality` comes from the
     row when present, since the base station and the AV operators differ.
     """
-    detection = raw.get("detection") if isinstance(raw.get("detection"), dict) else raw
+    detection = raw
     center = _vec3(detection.get("center"))
     if center is None:
         return None
@@ -256,7 +256,10 @@ class FusionService:
             self._conflict_detector.update(payload, time.time())
 
     def _on_detection_set(self, topic: str, payload: dict) -> None:
-        operator = payload.get("source_operator")
+        # Detection3DSet names the producer `source_id`. The demo used to
+        # wrap it in OperatorDetectionSet to add a `source_operator`, which
+        # the spec type already had under a different name.
+        operator = payload.get("source_id") or payload.get("source_operator")
         if not operator:
             return
         modality = _infer_modality_from_topic(topic)

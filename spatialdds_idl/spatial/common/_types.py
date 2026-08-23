@@ -53,9 +53,18 @@ class FrameRef(idl.IdlStruct, typename="spatial.common.FrameRef"):
 @dataclass
 @annotate.appendable
 @annotate.autoid("sequential")
+class KV(idl.IdlStruct, typename="spatial.common.KV"):
+    key: str
+    value: str
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
 class MetaKV(idl.IdlStruct, typename="spatial.common.MetaKV"):
     namespace: str
     json: str
+    entries: types.sequence['spatialdds_idl.spatial.common.KV', 64]
 
 
 @dataclass

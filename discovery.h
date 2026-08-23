@@ -6,8 +6,8 @@
   Cyclone DDS: V0.11.0
 
 *****************************************************************/
-#ifndef DDSC_DISCOVERY_H_C5F82BFF28C9568CB9C59C94E9C56659
-#define DDSC_DISCOVERY_H_C5F82BFF28C9568CB9C59C94E9C56659
+#ifndef DDSC_DISCOVERY_H_6F1DCE0900DAECB31FA4144ACD71A135
+#define DDSC_DISCOVERY_H_6F1DCE0900DAECB31FA4144ACD71A135
 
 #include "core.h"
 
@@ -162,7 +162,10 @@ typedef enum spatial_disco_ServiceKind
   spatial_disco_STORAGE,
   spatial_disco_CONTENT,
   spatial_disco_ANCHOR_REGISTRY,
-  spatial_disco_OTHER
+  spatial_disco_OTHER,
+  spatial_disco_SENSING,
+  spatial_disco_INFRASTRUCTURE,
+  spatial_disco_FUSION
 } spatial_disco_ServiceKind;
 
 #define spatial_disco_ServiceKind__alloc() \
@@ -196,6 +199,9 @@ typedef struct spatial_disco_CoverageElement
   bool has_coverage_window;
   spatial_disco_Time coverage_window_start;
   spatial_disco_Time coverage_window_end;
+  bool has_circle;
+  double circle_center[3];
+  double circle_radius_m;
 } spatial_disco_CoverageElement;
 
 extern const dds_topic_descriptor_t spatial_disco_CoverageElement_desc;
@@ -306,6 +312,23 @@ typedef struct dds_sequence_spatial_disco_Transform
 ((struct spatial_disco_Transform *) dds_alloc ((l) * sizeof (struct spatial_disco_Transform)))
 #endif /* DDS_SEQUENCE_SPATIAL_DISCO_TRANSFORM_DEFINED */
 
+#ifndef DDS_SEQUENCE_STRING_DEFINED
+#define DDS_SEQUENCE_STRING_DEFINED
+typedef struct dds_sequence_string
+{
+  uint32_t _maximum;
+  uint32_t _length;
+  char **_buffer;
+  bool _release;
+} dds_sequence_string;
+
+#define dds_sequence_string__alloc() \
+((dds_sequence_string*) dds_alloc (sizeof (dds_sequence_string)));
+
+#define dds_sequence_string_allocbuf(l) \
+((char **) dds_alloc ((l) * sizeof (char*)))
+#endif /* DDS_SEQUENCE_STRING_DEFINED */
+
 typedef struct spatial_disco_Announce
 {
   char * service_id;
@@ -325,6 +348,7 @@ typedef struct spatial_disco_Announce
   char * auth_hint;
   spatial_disco_Time stamp;
   uint32_t ttl_sec;
+  dds_sequence_string coverage_source_ids;
 } spatial_disco_Announce;
 
 extern const dds_topic_descriptor_t spatial_disco_Announce_desc;
@@ -660,4 +684,4 @@ dds_sample_free ((d), &spatial_disco_Depart_desc, (o))
 }
 #endif
 
-#endif /* DDSC_DISCOVERY_H_C5F82BFF28C9568CB9C59C94E9C56659 */
+#endif /* DDSC_DISCOVERY_H_6F1DCE0900DAECB31FA4144ACD71A135 */

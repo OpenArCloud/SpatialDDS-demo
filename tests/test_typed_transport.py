@@ -38,6 +38,9 @@ COVERAGE = CoverageElement(
     has_crs=True, crs="EPSG:4979", has_bbox=True, bbox=[-1.0, -1.0, 1.0, 1.0],
     has_aabb=False, aabb=ZERO, _global=False, has_frame_ref=False, frame_ref=FRAME,
     has_coverage_window=False, coverage_window_start=STAMP, coverage_window_end=STAMP,
+    # Added in 1.7's findings-batch-2 revision: a circular footprint is a
+    # circle now rather than its bounding aabb.
+    has_circle=False, circle_center=[0.0, 0.0, 0.0], circle_radius_m=0.0,
 )
 
 
@@ -50,6 +53,10 @@ def announce(service_id: str) -> Announce:
         has_coverage_eval_time=False, coverage_eval_time=STAMP, transforms=[],
         manifest_uri="spatialdds://x/zone:z/manifest:m", auth_hint="",
         stamp=STAMP, ttl_sec=300,
+        # Empty = self-asserted coverage. Added in 1.7's findings-batch-2
+        # revision so a fusion service can name the services its coverage is
+        # composed from.
+        coverage_source_ids=[],
     )
 
 
@@ -71,7 +78,10 @@ class QosTable(unittest.TestCase):
         for name in ("GEOM_TILE", "VIDEO_LIVE", "VIDEO_ARCHIVE", "RADAR_RT",
                      "RF_BEAM_RT", "RADIO_SCAN_RT", "SEG_MASK_RT", "DESC_BATCH",
                      "MAP_META", "ZONE_META", "EVENT_RT", "POSE_RT",
-                     "VPS_REQ", "VPS_RESP"):
+                     "VPS_REQ", "VPS_RESP",
+                     # added in the findings-batch-2 revision
+                     "DET_RT", "LIDAR_RT", "IMU_RT", "SENSOR_META",
+                     "ANCHOR_DELTA"):
             with self.subTest(profile=name):
                 self.assertIn(name, qos_profiles.PROFILES)
 
@@ -88,11 +98,28 @@ class QosTable(unittest.TestCase):
         self.assertTrue(map_meta.reliable)
         self.assertTrue(map_meta.latched)
 
-    def test_partial_reliability_is_documented_not_silently_dropped(self):
-        """Spec says RADAR_RT is 'Partial'; DDS has no such kind."""
+    def test_radar_rt_is_best_effort(self):
+        """
+        §3.3.3 used to give RADAR_RT reliability "Partial", which DDS has no
+        kind for — every implementation had to pick one and none would
+        document which. The findings-batch-2 revision says Best-effort.
+        """
         radar = qos_profiles.get("RADAR_RT")
         self.assertFalse(radar.reliable)
-        self.assertIn("Partial", radar.note)
+        self.assertEqual(radar.deadline_ms, 100)
+
+    def test_every_profile_states_its_durability_and_history(self):
+        """
+        The table is fully explicit now — reliability, ordering, durability,
+        history and deadline. Durability used to have to be inferred from
+        "Latched; TRANSIENT_LOCAL" notes in the *type* table.
+        """
+        for name in ("SENSOR_META", "MAP_META", "ZONE_META", "GEOM_TILE"):
+            with self.subTest(profile=name):
+                self.assertTrue(qos_profiles.get(name).latched)
+        for name in ("POSE_RT", "DET_RT", "IMU_RT", "LIDAR_RT", "VIDEO_LIVE"):
+            with self.subTest(profile=name):
+                self.assertFalse(qos_profiles.get(name).latched)
 
     def test_qos_objects_build(self):
         for name in qos_profiles.PROFILES:

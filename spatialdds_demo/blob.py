@@ -25,14 +25,14 @@ import zlib
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Optional
 
-from spatialdds_idl.oarc_demo import BlobChunk
+from spatialdds_idl.spatial.core import BlobChunk
 
 # cyclonedds-python's ceiling, not a choice. Keeping the constant here means
 # the one place that has to change if the binding's limit moves is here.
 MAX_CHUNK_BYTES = 65535
 
 BLOB_TOPIC = "spatialdds/blob/chunk/v1"
-BLOB_TYPE = "oarc.blob_chunk"
+BLOB_TYPE = "blob_chunk"
 # Reliable and ordered: a blob with a hole in it is not a blob.
 BLOB_PROFILE = "GEOM_TILE"
 

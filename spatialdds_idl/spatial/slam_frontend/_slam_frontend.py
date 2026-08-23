@@ -72,7 +72,7 @@ class KeyframeFeatures(idl.IdlStruct, typename="spatial.slam_frontend.KeyframeFe
     desc_len: types.uint32
     row_major: bool
     keypoints: types.sequence['spatialdds_idl.spatial.slam_frontend.Feature2D', 4096]
-    descriptors: types.sequence[types.uint8, 1048576]
+    descriptors: types.sequence[types.uint8, 65535]
     stamp: 'spatialdds_idl.spatial.slam_frontend.Time'
     source_id: str
     seq: types.uint64

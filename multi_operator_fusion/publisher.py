@@ -74,18 +74,18 @@ def _offset_vec(payload: Dict, path: Iterable[str],
 # the old payloads stamped a `source_operator` field onto every message,
 # including spec types that have no such field.
 LANES = {
-    "ego_pose":    (("ego", "pose", "v1"), "oarc.framed_pose", "POSE_RT"),
+    "ego_pose":    (("ego", "pose", "v1"), "framed_pose", "POSE_RT"),
     "geo_pose":    (("geo", "ego", "pose", "v1"), "geopose", "POSE_RT"),
     "vision_meta": None,   # per-camera, built below
     "vision_frame": None,
     "lidar_meta":  (("lidar", LIDAR_CHANNEL, "meta", "v1"),
-                    "oarc.lidar_meta", "MAP_META"),
+                    "lidar_meta", "MAP_META"),
     "lidar_frame": (("lidar", LIDAR_CHANNEL, "frame", "v1"),
-                    "oarc.lidar_frame", "GEOM_TILE"),
+                    "lidar_frame", "GEOM_TILE"),
     "detection3d": (("sensing", "detection3d", "v1"),
-                    "oarc.detection3d_velocity", "RADAR_RT"),
+                    "detection3d", "RADAR_RT"),
 }
-VISION_META_TYPE = ("oarc.video_frame_meta", "MAP_META")
+VISION_META_TYPE = ("video_meta", "MAP_META")
 VISION_FRAME_TYPE = ("video_frame", "VIDEO_LIVE")
 RADAR_TYPE = ("radar_detection", "RADAR_RT")
 
@@ -93,7 +93,7 @@ RADAR_TYPE = ("radar_detection", "RADAR_RT")
 def _detections_with_velocity(nusc, sample, frame_seq: int, operator: str,
                               offset: Tuple[float, float, float]) -> Dict:
     """
-    nuScenes annotations as an ``oarc_demo::OperatorDetectionSet``.
+    nuScenes annotations as an ``oarc_demo::Detection3DSet``.
 
     The velocity comes from ``nusc.box_velocity``; NaN means "not
     determinable from adjacent frames", which is the presence flag's job
@@ -110,11 +110,12 @@ def _detections_with_velocity(nusc, sample, frame_seq: int, operator: str,
         detection = to_dict(annotation_to_detection3d(nusc, token))
         _offset_vec(detection, ("center",), offset)
         raw = nusc.box_velocity(token)
-        velocity = None
+        # NaN means "not determinable from adjacent frames", which is the
+        # presence flag's job rather than a zero vector's.
         if raw is not None and not any(math.isnan(float(v)) for v in raw):
-            velocity = tuple(float(v) for v in raw)
-        dets.append(payloads.detection_with_velocity(
-            detection, velocity=velocity, source_modality="det3d"))
+            detection["has_velocity"] = True
+            detection["velocity"] = [float(v) for v in raw]
+        dets.append(detection)
     return payloads.detection_set(
         set_id=f"{operator}-{frame_seq}", source_operator=operator,
         frame_ref_fqn=f"{operator}/map", dets=dets, frame_seq=frame_seq,

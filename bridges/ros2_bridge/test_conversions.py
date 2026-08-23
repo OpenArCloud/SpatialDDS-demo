@@ -192,8 +192,13 @@ class TestImu(unittest.TestCase):
         # ImuSample is (imu_id, accel, gyro, stamp, source_id, seq). The old
         # payload used ROS 2's field names — linear_acceleration,
         # angular_velocity, orientation — none of which the type has.
+        # accel/gyro covariances were added to ImuSample in 1.7's
+        # findings-batch-2 revision; before that the only home for a ROS 2
+        # IMU's noise characteristics was nowhere.
         self.assertEqual(sorted(payload),
-                         ["accel", "gyro", "imu_id", "seq", "source_id", "stamp"])
+                         ["accel", "accel_cov", "gyro", "gyro_cov",
+                          "has_accel_cov", "has_gyro_cov", "imu_id", "seq",
+                          "source_id", "stamp"])
         self.assertEqual(payload["accel"], [0.1, 0.2, 9.81])
         self.assertEqual(payload["gyro"], [0.01, 0.02, 0.03])
         self.assertEqual(payload["imu_id"], "imu0")
@@ -207,7 +212,7 @@ class TestImu(unittest.TestCase):
         _t, _mt, payload = encode_imu(make_test_imu(), "op", "imu0",
                                       FrameMapper("op"))
         for absent in ("orientation", "has_orientation",
-                       "orientation_covariance", "linear_acceleration_covariance"):
+                       "orientation_covariance"):
             self.assertNotIn(absent, payload)
 
     def test_roundtrip(self):
@@ -255,16 +260,16 @@ class TestCompressedImage(unittest.TestCase):
         self.assertEqual(rebuilt, raw)
         self.assertEqual(blobs[0]["blob_id"], chunks[0].blob_id)
 
-    def test_png_has_no_codec_and_says_so(self):
+    def test_png_is_announced_as_png(self):
         """
-        `Codec` has JPEG but no PNG, and ROS 2 uses PNG routinely for depth
-        and mask imagery. CODEC_NONE is the only available answer and it is
-        wrong in a way a consumer cannot detect. On the findings list.
+        `Codec` gained PNG in 1.7's findings-batch-2 revision. Before that a
+        PNG had to go out as CODEC_NONE — wrong in a way a consumer cannot
+        detect, and ROS 2 uses PNG routinely for depth and mask imagery.
         """
         msg = make_test_compressed_image(fmt="png", data=b"\x89PNG")
         _t, _mt, payload = encode_compressed_image(msg, "op", "cam0",
                                                    FrameMapper("op"))
-        self.assertEqual(payload["codec"], "CODEC_NONE")
+        self.assertEqual(payload["codec"], "PNG")
 
     def test_roundtrip_bytes_preserved(self):
         mapper = FrameMapper("op_a")
@@ -287,10 +292,10 @@ class TestDetection3DArray(unittest.TestCase):
         self.assertEqual(topic, "spatialdds/op_a/sensing/detection3d/v1")
         # Not the registered `radar_detection`: this writes onto the same
         # topic the fusion demo reads, and a topic is one type.
-        self.assertEqual(msg_type, "oarc.detection3d_velocity")
-        self.assertEqual(payload["source_operator"], "op_a")
+        self.assertEqual(msg_type, "detection3d")
+        self.assertEqual(payload["source_id"], "op_a")
         self.assertEqual(len(payload["dets"]), 3)
-        first = payload["dets"][0]["detection"]
+        first = payload["dets"][0]
         self.assertEqual(first["center"], [0.0, 5.0, 1.0])
         self.assertEqual(first["size"], [4.5, 1.8, 1.6])
         self.assertEqual(first["det_id"], "det_0")
@@ -315,7 +320,7 @@ class TestDetection3DArray(unittest.TestCase):
         )
         _t, _mt, payload = encode_detection3d_array(
             Detection3DArray(detections=[det]), "op", FrameMapper("op"))
-        first = payload["dets"][0]["detection"]
+        first = payload["dets"][0]
         self.assertEqual(first["class_id"], "car")
         self.assertAlmostEqual(first["score"], 0.8)
 
@@ -324,7 +329,7 @@ class TestDetection3DArray(unittest.TestCase):
                           bbox=BoundingBox3D())
         _t, _mt, payload = encode_detection3d_array(
             Detection3DArray(detections=[det]), "op", FrameMapper("op"))
-        first = payload["dets"][0]["detection"]
+        first = payload["dets"][0]
         self.assertEqual(first["class_id"], "unknown")
         self.assertEqual(first["score"], 0.0)
 
@@ -417,12 +422,12 @@ class TestFusedTrackSetReverse(unittest.TestCase):
 class TestDispatch(unittest.TestCase):
     def test_registered_types_route_to_a_decoder(self):
         for type_name, decoder in (
-            ("oarc.detection3d_velocity", detection3d_set_to_array),
-            ("oarc.detection3d_set", detection3d_set_to_array),
+            ("detection3d", detection3d_set_to_array),
+            ("detection3d", detection3d_set_to_array),
             ("oarc.fused_track", detection3d_set_to_array),
-            ("oarc.framed_pose", framed_pose_to_pose_stamped),
+            ("framed_pose", framed_pose_to_pose_stamped),
             ("geopose", geo_pose_to_nav_sat_fix),
-            ("oarc.imu_sample", imu_sample_to_imu),
+            ("imu_sample", imu_sample_to_imu),
             ("video_frame", vision_frame_to_compressed_image),
         ):
             with self.subTest(type=type_name):

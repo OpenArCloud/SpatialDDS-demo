@@ -86,18 +86,20 @@ class TestInfraSet(unittest.TestCase):
         s = _build_infra_set(t=1.0, frame_seq=10, n_operators=3,
                               n_objects_per_operator=5,
                               bs=INFRA_BS_POSITION, rng=rng)
-        self.assertEqual(s["source_operator"], "infrastructure")
-        self.assertEqual(s["frame_seq"], 10)
+        self.assertEqual(s["source_id"], "infrastructure")
+        # Detection3DSet has no frame_seq: a set is identified by `set_id`
+        # and ordered by `stamp`. The demo's wrapper type used to add one.
+        self.assertTrue(s["set_id"])
         self.assertEqual(s["stamp"], {"sec": 1, "nanosec": 0})
-        # OperatorDetectionSet mirrors semantics::Detection3DSet: the sequence
+        # Detection3DSet mirrors semantics::Detection3DSet: the sequence
         # is `dets`, and each element composes the spec Detection3D rather than
         # flattening it, so the spec fields stay exactly where the spec puts
         # them and the demo's velocity sits alongside.
         self.assertIn("dets", s)
         for det in s["dets"]:
-            self.assertIn("det_id", det["detection"])
-            self.assertIn("center", det["detection"])
-            self.assertIn("score", det["detection"])
+            self.assertIn("det_id", det)
+            self.assertIn("center", det)
+            self.assertIn("score", det)
             self.assertIn("has_velocity", det)
 
     def test_false_alarms_have_low_score(self):
@@ -111,9 +113,9 @@ class TestInfraSet(unittest.TestCase):
                                   n_objects_per_operator=5,
                                   bs=INFRA_BS_POSITION, rng=rng)
             for det in s["dets"]:
-                if det["detection"]["det_id"].startswith("infra_fa_"):
+                if det["det_id"].startswith("infra_fa_"):
                     det_count += 1
-                    self.assertLess(det["detection"]["score"], 0.4)
+                    self.assertLess(det["score"], 0.4)
         self.assertGreater(det_count, 5)  # at least some FAs over 50 frames
 
     def test_false_alarm_count_bounded(self):
@@ -124,7 +126,7 @@ class TestInfraSet(unittest.TestCase):
                                   n_objects_per_operator=1,
                                   bs=INFRA_BS_POSITION, rng=rng)
             fa = [d for d in s["dets"]
-                  if d["detection"]["det_id"].startswith("infra_fa_")]
+                  if d["det_id"].startswith("infra_fa_")]
             self.assertLessEqual(len(fa), 2)
 
     def test_seed_makes_run_deterministic(self):

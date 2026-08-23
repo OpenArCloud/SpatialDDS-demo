@@ -51,6 +51,25 @@ REGISTERED_TOPIC_TYPES = {
     "entity_binding",
     "geopose",
     "vps_query",
+    # Added in 1.7's findings-batch-2 revision, closing the gap between the
+    # registry and the IDL. Every one of these is a stable type the demo had
+    # to invent an `oarc.*` name for because discovery could not describe it.
+    "framed_pose",
+    "detection3d",
+    "detection2d",
+    "lidar_frame",
+    "lidar_meta",
+    "radar_tensor_meta",
+    "video_meta",
+    "rf_beam_meta",
+    "imu_sample",
+    "anchor_delta",
+    "tile_meta",
+    "rad_sensor_meta",
+    "radio_sensor_meta",
+    # Blob transfer is its own mechanism rather than a topic type, but a
+    # lane carrying chunks still has to name something.
+    "blob_chunk",
 }
 
 REGISTERED_QOS_PROFILES = {
@@ -68,6 +87,14 @@ REGISTERED_QOS_PROFILES = {
     "POSE_RT",
     "VPS_REQ",
     "VPS_RESP",
+    # Added alongside the registry rows they serve, so every registered type
+    # now names a registered profile. The demo used to invent ANCHOR_DELTA
+    # and borrow MAP_META for sensor metadata.
+    "DET_RT",
+    "LIDAR_RT",
+    "IMU_RT",
+    "SENSOR_META",
+    "ANCHOR_DELTA",
 }
 
 def _deployment_topic_types() -> set:
@@ -81,7 +108,7 @@ def _deployment_topic_types() -> set:
     Imported lazily: topic_types imports the generated bindings, and this
     module is imported by code that has no need of them.
     """
-    names = {"oarc.anchor_delta"}   # anchors have no registered type or profile
+    names = {"anchor_delta"}   # anchors have no registered type or profile
     try:
         from spatialdds_demo.topic_types import EXTENSIONS
         names |= set(EXTENSIONS)
@@ -90,7 +117,9 @@ def _deployment_topic_types() -> set:
     return names
 
 
-DEPLOYMENT_QOS_PROFILES = {"ANCHOR_DELTA"}
+# Every profile the demo uses is registered now; ANCHOR_DELTA was the last
+# invented one and 1.7 adopted it.
+DEPLOYMENT_QOS_PROFILES: set = set()
 
 
 TOPIC_SOURCE_SPEC = "spec"

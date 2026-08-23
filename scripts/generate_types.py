@@ -71,21 +71,19 @@ def find_idlc() -> str | None:
     return None
 
 
-# Appendix E provisional profiles the demo actually publishes. Their IDL is
-# normative enough to be registered in the 3.3.2 topic-type table
-# (`rf_beam`), but it ships under `examples/` rather than beside the stable
-# modules, so the top-level glob misses it. Named explicitly rather than
-# globbing `examples/` because the other files there (agent, neural) are
-# labelled informative design sketches, not profiles to build against.
-PROVISIONAL_IDL = ("examples/rf_beam_example.idl",)
+# Appendix E provisional profiles. They now live in `provisional/` rather
+# than `examples/`, which is the distinction that matters: `examples/` holds
+# informative design sketches (agent, neural), `provisional/` holds profiles
+# with registered 3.3.2 type names that a deployment can build against.
+# Globbed rather than named, so a new provisional profile is picked up.
+PROVISIONAL_DIR = "provisional"
 
 
 def idl_files() -> list[Path]:
     files = sorted(SPEC_IDL.glob("*.idl"))
-    for rel in PROVISIONAL_IDL:
-        path = SPEC_IDL / rel
-        if path.is_file():
-            files.append(path)
+    provisional = SPEC_IDL / PROVISIONAL_DIR
+    if provisional.is_dir():
+        files += sorted(provisional.glob("*.idl"))
     if DEMO_IDL.is_dir():
         files += sorted(DEMO_IDL.glob("*.idl"))
     if not files:
@@ -96,7 +94,7 @@ def idl_files() -> list[Path]:
 def run_idlc(idlc: str, out_dir: Path) -> None:
     """idlc's Python backend ignores -o and writes into cwd, so we chdir."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    includes = ["-I", str(SPEC_IDL), "-I", str(SPEC_IDL / "examples")]
+    includes = ["-I", str(SPEC_IDL), "-I", str(SPEC_IDL / PROVISIONAL_DIR)]
     if DEMO_IDL.is_dir():
         includes += ["-I", str(DEMO_IDL)]
     for path in idl_files():

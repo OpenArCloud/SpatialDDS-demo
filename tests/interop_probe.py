@@ -68,83 +68,57 @@ from spatialdds_idl.spatial.disco import (
 TOPIC_ANNOUNCE = "spatialdds/discovery/announce/v1"
 TOPIC_DEPART = "spatialdds/discovery/depart/v1"
 
-# §3.3.3, transcribed from the spec table. Only the profiles this probe uses.
+# §3.3.3, transcribed from the spec table.
 #
-# The deadlines are load-bearing, and the spec does not say so. Its column is
-# headed "**Typical** Deadline" and the notes add "implementations may tune
-# low-level DDS settings, but the profile name is canonical" — which reads as
-# advisory. It is not: Deadline is a request/offered QoS in DDS, so a reader
-# requesting 33 ms does not match a writer that offers none. This probe first
-# omitted them and silently exchanged nothing with the demo. See the findings
-# list.
+# The table is fully explicit now — reliability, ordering, durability,
+# history and deadline — so this is a transcription rather than an
+# interpretation. It was not: durability had to be inferred from "Latched;
+# TRANSIENT_LOCAL" notes in the *type* table, and the deadline column was
+# headed "Typical", which reads as advisory.
+#
+# It is not advisory. Deadline is a request/offered QoS, so a reader
+# requesting 33 ms does not match a writer offering none — silently. This
+# probe first omitted them and exchanged nothing with the demo, which is
+# what got the column renamed. A dash means no deadline, which is a
+# different statement from an unstated one.
 DEADLINES_MS = {
-    "GEOM_TILE": 200, "VIDEO_LIVE": 33, "VIDEO_ARCHIVE": 200,
-    "RADAR_RT": 20, "RF_BEAM_RT": 20, "RADIO_SCAN_RT": 500,
-    "SEG_MASK_RT": 33, "DESC_BATCH": 100, "MAP_META": 1000,
-    "ZONE_META": 1000, "EVENT_RT": 100, "POSE_RT": 33,
-    "VPS_REQ": 500, "VPS_RESP": 500,
+    "VIDEO_LIVE": 33, "RADAR_RT": 100, "RF_BEAM_RT": 20, "SEG_MASK_RT": 33,
+    "POSE_RT": 33, "DET_RT": 100, "LIDAR_RT": 100, "IMU_RT": 10,
 }
-
-
-def _profile(*policies: Any, deadline_ms: Optional[int] = None) -> Qos:
-    if deadline_ms is None:
-        return Qos(*policies)
-    return Qos(*policies, Policy.Deadline(deadline_ms * 1_000_000))
-
-
-PROFILES: Dict[str, Qos] = {
-    # Discovery: latched per key, so a late joiner gets every live service.
-    # C.5 gives no deadline for it.
-    "DISCOVERY_ANNOUNCE": _profile(
-        Policy.Reliability.Reliable(1_000_000_000),
-        Policy.Durability.TransientLocal,
-        Policy.History.KeepLast(1),
-    ),
-    "POSE_RT": _profile(
-        Policy.Reliability.BestEffort,
-        Policy.Durability.Volatile,
-        Policy.History.KeepLast(1),
-        deadline_ms=DEADLINES_MS["POSE_RT"],
-    ),
-    # "Partial" in the table; DDS has no such reliability kind, so
-    # BEST_EFFORT is the only mapping available.
-    "RADAR_RT": _profile(
-        Policy.Reliability.BestEffort,
-        Policy.Durability.Volatile,
-        Policy.History.KeepLast(1),
-        deadline_ms=DEADLINES_MS["RADAR_RT"],
-    ),
-    "EVENT_RT": _profile(
-        Policy.Reliability.Reliable(1_000_000_000),
-        Policy.Durability.Volatile,
-        Policy.History.KeepAll,
-        deadline_ms=DEADLINES_MS["EVENT_RT"],
-    ),
-    "MAP_META": _profile(
-        Policy.Reliability.Reliable(1_000_000_000),
-        Policy.Durability.TransientLocal,
-        Policy.History.KeepLast(1),
-        deadline_ms=DEADLINES_MS["MAP_META"],
-    ),
-    "VIDEO_LIVE": _profile(
-        Policy.Reliability.BestEffort,
-        Policy.Durability.Volatile,
-        Policy.History.KeepLast(1),
-        deadline_ms=DEADLINES_MS["VIDEO_LIVE"],
-    ),
-    "GEOM_TILE": _profile(
-        Policy.Reliability.Reliable(1_000_000_000),
-        Policy.Durability.Volatile,
-        Policy.History.KeepAll,
-        deadline_ms=DEADLINES_MS["GEOM_TILE"],
-    ),
-    "RF_BEAM_RT": _profile(
-        Policy.Reliability.BestEffort,
-        Policy.Durability.Volatile,
-        Policy.History.KeepLast(1),
-        deadline_ms=DEADLINES_MS["RF_BEAM_RT"],
-    ),
+LATCHED = {"GEOM_TILE", "MAP_META", "ZONE_META", "SENSOR_META",
+           "DISCOVERY_ANNOUNCE"}
+RELIABLE = {"GEOM_TILE", "VIDEO_ARCHIVE", "DESC_BATCH", "MAP_META",
+            "ZONE_META", "EVENT_RT", "VPS_REQ", "VPS_RESP", "SENSOR_META",
+            "ANCHOR_DELTA", "DISCOVERY_ANNOUNCE"}
+KEEP_LAST = {
+    "GEOM_TILE": 1, "VIDEO_LIVE": 1, "RADAR_RT": 1, "RF_BEAM_RT": 1,
+    "RADIO_SCAN_RT": 1, "SEG_MASK_RT": 1, "MAP_META": 1, "ZONE_META": 1,
+    "EVENT_RT": 64, "POSE_RT": 1, "DET_RT": 1, "LIDAR_RT": 1, "IMU_RT": 1,
+    "SENSOR_META": 1, "DISCOVERY_ANNOUNCE": 1,
 }
+PROFILE_NAMES = (
+    "GEOM_TILE", "VIDEO_LIVE", "VIDEO_ARCHIVE", "RADAR_RT", "RF_BEAM_RT",
+    "RADIO_SCAN_RT", "SEG_MASK_RT", "DESC_BATCH", "MAP_META", "ZONE_META",
+    "EVENT_RT", "POSE_RT", "VPS_REQ", "VPS_RESP", "DET_RT", "LIDAR_RT",
+    "IMU_RT", "SENSOR_META", "ANCHOR_DELTA", "DISCOVERY_ANNOUNCE",
+)
+
+
+def _build_profile(name: str) -> Qos:
+    policies = [
+        Policy.Reliability.Reliable(1_000_000_000) if name in RELIABLE
+        else Policy.Reliability.BestEffort,
+        Policy.Durability.TransientLocal if name in LATCHED
+        else Policy.Durability.Volatile,
+        Policy.History.KeepLast(KEEP_LAST[name]) if name in KEEP_LAST
+        else Policy.History.KeepAll,
+    ]
+    if name in DEADLINES_MS:
+        policies.append(Policy.Deadline(DEADLINES_MS[name] * 1_000_000))
+    return Qos(*policies)
+
+
+PROFILES: Dict[str, Qos] = {n: _build_profile(n) for n in PROFILE_NAMES}
 
 PROBE_SERVICE_ID = "svc:interop-probe"
 PROBE_GEO_TOPIC = "spatialdds/interop_probe/geo/ego/pose/v1"
@@ -193,34 +167,64 @@ def resolve_type(type_name: str):
     """
     A §3.3.2 type name to a class, the way a third party would.
 
-    Registered names map onto spec types. Anything else is an extension the
-    spec says to treat as an unknown value rather than an error — this probe
-    reports which ones it could not resolve, because that is exactly what a
-    real consumer would experience meeting this demo.
+    The registry gained thirteen rows in 1.7's findings-batch-2 revision,
+    closing the gap between it and the IDL. Before that a spec-only consumer
+    meeting this demo could read its geographic poses and not its local ones,
+    purely because `framed_pose` had no registry row — measured by an earlier
+    run of this probe.
+
+    Anything unregistered is an extension the spec says to treat as an
+    unknown value rather than an error; this probe reports which ones it
+    could not resolve, because that is what a real consumer experiences.
     """
+    from spatialdds_idl.spatial.anchors import AnchorDelta
     from spatialdds_idl.spatial.core import (
-        EntityBinding, FramedPose, NavSatStatus, PlannedTrajectory,
+        BlobChunk, EntityBinding, FramedPose, NavSatStatus, PlannedTrajectory,
+        TileMeta,
     )
     from spatialdds_idl.spatial.events import SpatialEvent
-    from spatialdds_idl.spatial.sensing.rad import RadDetectionSet, RadTensorFrame
-    from spatialdds_idl.spatial.sensing.vision import VisionFrame
+    from spatialdds_idl.spatial.semantics import Detection2DSet, Detection3DSet
+    from spatialdds_idl.spatial.sensing.lidar import LidarFrame, LidarMeta
+    from spatialdds_idl.spatial.sensing.rad import (
+        RadDetectionSet, RadSensorMeta, RadTensorFrame, RadTensorMeta,
+    )
+    from spatialdds_idl.spatial.sensing.vision import VisionFrame, VisionMeta
+    from spatialdds_idl.spatial.vio import ImuSample
 
     registered = {
         "geopose": GeoPose,
+        "framed_pose": FramedPose,
         "navsat_status": NavSatStatus,
         "planned_trajectory": PlannedTrajectory,
         "entity_binding": EntityBinding,
         "spatial_event": SpatialEvent,
         "video_frame": VisionFrame,
+        "video_meta": VisionMeta,
         "radar_tensor": RadTensorFrame,
+        "radar_tensor_meta": RadTensorMeta,
         "radar_detection": RadDetectionSet,
+        "rad_sensor_meta": RadSensorMeta,
+        "detection3d": Detection3DSet,
+        "detection2d": Detection2DSet,
+        "lidar_frame": LidarFrame,
+        "lidar_meta": LidarMeta,
+        "imu_sample": ImuSample,
+        "anchor_delta": AnchorDelta,
+        "tile_meta": TileMeta,
+        "blob_chunk": BlobChunk,
     }
-    try:
-        from spatialdds_idl.spatial.sensing.rf_beam import RfBeamFrame
-
-        registered["rf_beam"] = RfBeamFrame
-    except ImportError:
-        pass
+    for module, names in (
+        ("spatialdds_idl.spatial.sensing.rf_beam",
+         {"rf_beam": "RfBeamFrame", "rf_beam_meta": "RfBeamMeta"}),
+        ("spatialdds_idl.spatial.sensing.radio",
+         {"radio_scan": "RadioScan", "radio_sensor_meta": "RadioSensorMeta"}),
+    ):
+        try:
+            mod = __import__(module, fromlist=list(names.values()))
+            for key, attr in names.items():
+                registered[key] = getattr(mod, attr)
+        except Exception:
+            pass          # a provisional profile this build did not generate
     return registered.get(type_name)
 
 
@@ -277,6 +281,7 @@ def _probe_announce() -> Announce:
         has_frame_ref=False, frame_ref=frame,
         has_coverage_window=False,
         coverage_window_start=_now(), coverage_window_end=_now(),
+        has_circle=False, circle_center=[0.0, 0.0, 0.0], circle_radius_m=0.0,
     )
     return Announce(
         service_id=PROBE_SERVICE_ID,
@@ -307,6 +312,7 @@ def _probe_announce() -> Announce:
         auth_hint="",
         stamp=_now(),
         ttl_sec=300,
+        coverage_source_ids=[],
     )
 
 
