@@ -5,7 +5,7 @@
 
 """
 
-from ._argeo import CovMatrix, FrameRef, FramedPose, GeoPose, MODULE_ID, NodeGeo, PoseSE3, Time
+from ._argeo import CovMatrix, FrameRef, FramedPose, GeoPose, MODULE_ID, NodeGeo, PoseSE3, QualityRequirements, Time, VpsRequest, VpsResponse, VpsStatus
 __all__ = [
 	"CovMatrix",
 	"FrameRef",
@@ -14,5 +14,9 @@ __all__ = [
 	"MODULE_ID",
 	"NodeGeo",
 	"PoseSE3",
+	"QualityRequirements",
 	"Time",
+	"VpsRequest",
+	"VpsResponse",
+	"VpsStatus",
 ]

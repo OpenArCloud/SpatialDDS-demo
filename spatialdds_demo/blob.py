@@ -6,13 +6,12 @@ messages carry a `BlobRef` (id + checksum) and the bytes travel as blob
 chunks. That is the right design, and it is the reason `VisionFrame`,
 `LidarFrame` and `RadTensorFrame` are all metadata plus a reference.
 
-The demo cannot use `spatial::core::BlobChunk` for it. Its
-`sequence<uint8, 262144>` exceeds cyclonedds-python's hard 65535 sequence
-bound, so constructing a Topic for that type raises before a byte is
-written — and since it is the only type in 1.7 that carries bytes at all,
-the reference Python binding cannot move sensor data. `oarc_demo::BlobChunk`
-is the same contract at a bound the binding can encode; see the findings
-list, and `idl/demo/oarc_demo.idl` for why it exists.
+The demo uses `spatial::core::BlobChunk` directly. Finding 2 (spec batch 2)
+reduced its `data` bound from `sequence<uint8, 262144>` to
+`sequence<uint8, 65535>` — within cyclonedds-python's hard 65535 sequence
+bound — so a Topic for that type now constructs and the reference Python
+binding can move sensor data. The earlier demo-owned `oarc_demo::BlobChunk`
+workaround is retired.
 
 Chunks are keyed `(blob_id, index)`, so each is its own DDS instance: a
 reassembler can tell a missing chunk from a late one, and a re-sent chunk

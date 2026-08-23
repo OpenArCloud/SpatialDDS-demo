@@ -18,7 +18,7 @@ from spatialdds_demo.discovery_bus import AnnounceSubscriber
 from spatialdds_demo.json_mapping import from_json, to_json
 from spatialdds_demo.service_bus import CatalogClient, VpsClient
 from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
-from spatialdds_idl.oarc_demo import VpsRequest as TypedVpsRequest
+from spatialdds_idl.spatial.argeo import VpsRequest as TypedVpsRequest
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
     TOPIC_BOOTSTRAP_QUERY_V1,
@@ -248,7 +248,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         loc_request_source,
         show_message_content,
     )
-    # Correlated by request_id on the typed reply, not by an envelope field.
+    # Correlated by query_id on the typed reply, not by an envelope field.
     typed_response = vps.request(from_json(TypedVpsRequest, loc_request), timeout=10)
     if typed_response is None:
         print("Client timed out waiting for LOCALIZE_RESPONSE.")
@@ -266,7 +266,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         show_message_content,
     )
 
-    if loc_response.get("quality", {}).get("success"):
+    if loc_response.get("status") != "VPS_FAILED":
         print("🔎 Phase 5: Content Discovery (catalog.CatalogQuery → CatalogResponse)")
         print("-" * 40)
         client_id = f"client-{uuid.uuid4().hex[:6]}"
@@ -315,7 +315,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
             )
 
     anchor_delta = client.create_anchor_delta(
-        loc_response["node_geo"], loc_response["quality"]["confidence"]
+        loc_response["node_geo"], loc_response["confidence"]
     )
     anchor_topic = (
         TOPIC_ANCHORS_DELTA(anchor_delta.get("set_id"))

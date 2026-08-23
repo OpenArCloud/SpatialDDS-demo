@@ -1,21 +1,21 @@
 """
 Typed request/reply for the demo's service flows: VPS localization and catalogue.
 
-Both are request/reply over DDS, correlated by a key the request carries
-(`request_id`, `query_id`) rather than by the envelope's old `request_id`
-string. Server, client and web bridge all go through here, so the three cannot
-drift in topic name, QoS profile or correlation rule.
+Both are request/reply over DDS, correlated by the `query_id` the request
+carries and the response mirrors, rather than by the envelope's old
+`request_id` string. Server, client and web bridge all go through here, so the
+three cannot drift in topic name, QoS profile or correlation rule.
 
-Why these payloads are demo-owned:
+Type ownership:
 
-* **VPS request** — 3.3.2 registers the topic type `vps_query` but the IDL
-  defines no struct for it. The *response pose* is a spec type
-  (`argeo::NodeGeo`); only the request, the correlation and the quality
-  reporting around it are demo-shaped.
-* **Catalogue** — 1.7 has `ContentAnnounce` for advertising content but no
-  query/response pair for asking a catalogue what is in an area.
+* **VPS** — now fully spec types. `argeo::VpsRequest` / `VpsResponse`
+  (registered as `vps_query` / `vps_response`, §3.3.2) carry the query imagery
+  by `BlobRef` reference and the result in `argeo::NodeGeo`. The `oarc_demo`
+  VPS copies are retired.
+* **Catalogue** — still demo-owned: 1.7 has `ContentAnnounce` for advertising
+  content but no query/response pair for asking a catalogue what is in an area.
 
-Both are catalogued as spec gaps in ar_demo/SPEC_COMPLIANCE.md.
+The catalogue gap is catalogued in ar_demo/SPEC_COMPLIANCE.md.
 """
 
 from __future__ import annotations
@@ -39,9 +39,8 @@ from spatialdds_idl.oarc_demo import (
     BootstrapResponse,
     CatalogQuery,
     CatalogResponse,
-    VpsRequest,
-    VpsResponse,
 )
+from spatialdds_idl.spatial.argeo import VpsRequest, VpsResponse
 from spatialdds_idl.spatial.disco import CoverageQuery, CoverageResponse
 
 # How often a waiting client re-checks its reply reader. 20 ms is a fine
@@ -89,14 +88,14 @@ class VpsClient:
                 poll_interval: float = DEFAULT_POLL_INTERVAL
                 ) -> Optional[VpsResponse]:
         self._writer.write(request)
-        return self.await_reply(request.request_id, timeout=timeout,
+        return self.await_reply(request.query_id, timeout=timeout,
                                 poll_interval=poll_interval)
 
-    def await_reply(self, request_id: str, timeout: float = 10.0,
+    def await_reply(self, query_id: str, timeout: float = 10.0,
                     poll_interval: float = DEFAULT_POLL_INTERVAL
                     ) -> Optional[VpsResponse]:
         """
-        Correlation is the request_id the response mirrors — no envelope needed.
+        Correlation is the query_id the response mirrors — no envelope needed.
 
         Replies for other requests are ignored rather than consumed-and-dropped
         where possible; at demo concurrency a single in-flight request is the
@@ -105,7 +104,7 @@ class VpsClient:
         deadline = time.time() + timeout
         while time.time() < deadline:
             for response in tt.take_samples(self._reader):
-                if response.request_id == request_id:
+                if response.query_id == query_id:
                     return response
             time.sleep(poll_interval)
         return None

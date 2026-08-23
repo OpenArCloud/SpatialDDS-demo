@@ -104,3 +104,37 @@ class Detection3DSet(idl.IdlStruct, typename="spatial.semantics.Detection3DSet")
     source_id: str
 
 
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class FusedTrack(idl.IdlStruct, typename="spatial.semantics.FusedTrack"):
+    track_id: str
+    object_class: str
+    confidence: types.float32
+    position: 'spatialdds_idl.spatial.common.Vec3'
+    has_position_cov: bool
+    position_cov: 'spatialdds_idl.spatial.common.Mat3x3'
+    has_velocity: bool
+    velocity: 'spatialdds_idl.spatial.common.Vec3'
+    has_velocity_cov: bool
+    velocity_cov: 'spatialdds_idl.spatial.common.Mat3x3'
+    source_operators: types.sequence[str, 16]
+    source_modalities: types.sequence[str, 16]
+    source_count: types.uint32
+    track_age_s: types.float64
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class FusedTrackSet(idl.IdlStruct, typename="spatial.semantics.FusedTrackSet"):
+    stream_id: str
+    annotate.key("stream_id")
+    schema_version: str
+    frame_ref: 'spatialdds_idl.spatial.semantics.FrameRef'
+    tracks: types.sequence['spatialdds_idl.spatial.semantics.FusedTrack', 256]
+    stamp: 'spatialdds_idl.spatial.semantics.Time'
+    source_id: str
+    seq: types.uint64
+
+

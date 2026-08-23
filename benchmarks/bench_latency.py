@@ -144,8 +144,8 @@ class TypedRoundTrip:
 
     Uses the VPS request/reply pair, which is the spec's own request/response
     flow — `VPS_REQ` and `VPS_RESP` are registered profiles, and the reply
-    correlates on the `request_id` it mirrors rather than on any envelope
-    field. The payload rides in `VpsRequest.image_blob_id`, a string field
+    correlates on the `query_id` it mirrors rather than on any envelope
+    field. The payload rides in a `VpsRequest.query_blobs` BlobRef id, a field
     the type already has, so the three arms move comparable bytes.
     """
 
@@ -179,17 +179,17 @@ class TypedRoundTrip:
         """
         A real `VpsRequest`, built by the demo's own builder.
 
-        The benchmark payload rides in the request's `VisionFrame` blob id —
+        The benchmark payload rides in the request's `query_blobs` BlobRef id —
         which is where a VPS query image actually goes, by reference. Hand
         -rolling the struct here would only be benchmarking a shape nothing
         publishes.
         """
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.oarc_demo import VpsRequest
+        from spatialdds_idl.spatial.argeo import VpsRequest
 
         request = self._builder.create_localize_request("bench-vps")
-        request["request_id"] = req_id
-        request["vision_frame"]["hdr"]["blobs"][0]["blob_id"] = payload
+        request["query_id"] = req_id
+        request["query_blobs"][0]["blob_id"] = payload
         return from_json(VpsRequest, request)
 
     def run_once(self, payload: str, iteration: int) -> int:
@@ -204,12 +204,12 @@ class TypedRoundTrip:
 
     def _server_loop(self) -> None:
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.oarc_demo import VpsResponse
+        from spatialdds_idl.spatial.argeo import VpsResponse
 
         while not self._stop.is_set():
             for request in self._service.take_requests():
                 reply = dict(self._reply_template)
-                reply["request_id"] = request.request_id
+                reply["query_id"] = request.query_id
                 self._service.reply(from_json(VpsResponse, reply))
             time.sleep(0.001)
 

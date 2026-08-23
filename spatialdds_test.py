@@ -100,10 +100,10 @@ class SpatialDDSLogger:
         print(f"  Size: {log_entry['size_bytes']} bytes")
 
         if msg_type in ["LOCALIZE_REQUEST", "LOCALIZE_RESPONSE"]:
-            if "request_id" in data:
-                print(f"  ID:   {data['request_id']}")
-            if "quality" in data and "confidence" in data["quality"]:
-                print(f"  Confidence: {data['quality']['confidence']:.3f}")
+            if "query_id" in data:
+                print(f"  ID:   {data['query_id']}")
+            if "confidence" in data:
+                print(f"  Confidence: {data['confidence']:.3f}")
 
         if self.slide_mode:
             self._print_slide_fields(msg_type, data)
@@ -133,13 +133,14 @@ class SpatialDDSLogger:
             if coverage:
                 fields.append(("coverage_bbox", coverage[0].get("bbox")))
         elif msg_type in ["LOCALIZE_REQUEST", "LOCALIZE_RESPONSE"]:
-            fields.append(("request_id", data.get("request_id")))
+            fields.append(("query_id", data.get("query_id")))
             if msg_type == "LOCALIZE_RESPONSE":
-                quality = data.get("quality", {})
-                if "confidence" in quality:
-                    fields.append(("confidence", f"{quality['confidence']:.3f}"))
-                if "rmse_m" in quality:
-                    fields.append(("rmse_m", f"{quality['rmse_m']:.3f}"))
+                if "status" in data:
+                    fields.append(("status", data.get("status")))
+                if "confidence" in data:
+                    fields.append(("confidence", f"{data['confidence']:.3f}"))
+                if data.get("has_rmse_m") and "rmse_m" in data:
+                    fields.append(("rmse_m", f"{data['rmse_m']:.3f}"))
                 node_geo = data.get("node_geo", {})
                 geopose = node_geo.get("geopose", {})
                 if {"lat_deg", "lon_deg", "alt_m"} <= geopose.keys():
@@ -165,10 +166,8 @@ class SpatialDDSLogger:
 
         # Trim blobs/descriptors unless detailed mode is enabled
         if not self.detailed_content:
-            if "vision_frame" in display_data:
-                hdr = display_data["vision_frame"].get("hdr", {})
-                blobs = hdr.get("blobs", [])
-                for blob in blobs:
+            if "query_blobs" in display_data:
+                for blob in display_data.get("query_blobs", []):
                     if blob.get("checksum"):
                         blob["checksum"] = blob["checksum"][:12] + "..."
 
@@ -390,7 +389,7 @@ class VPSServiceV15:
         here instead.
         """
         return self.process_localize_request(
-            {"request_id": "", "prior_geopose": demo_geo_pose(0.0, 0.0, 0.0)},
+            {"query_id": "", "prior_geopose": demo_geo_pose(0.0, 0.0, 0.0)},
             simulate_work=False,
         )
 
@@ -440,15 +439,21 @@ class VPSServiceV15:
 
         confidence = random.uniform(0.7, 0.95)
         accuracy = random.uniform(0.05, 0.15)
+        # Demo LocalizeQuality {success, confidence, rmse_m} maps onto the spec
+        # VpsStatus enum: success + within the caller's requirements -> VPS_SUCCESS;
+        # success but below requirements -> VPS_DEGRADED; no fix -> VPS_FAILED.
+        # The mock always produces a good fix, so status is VPS_SUCCESS; the
+        # scalar rmse rides has_rmse_m/rmse_m, and position covariance rides
+        # NodeGeo's FramedPose entries.
         response = {
-            "request_id": request["request_id"],
+            "query_id": request["query_id"],
             "service_id": self.service_id,
+            "status": "VPS_SUCCESS",
+            "has_node_geo": True,
             "node_geo": node_geo,
-            "quality": {
-                "success": True,
-                "confidence": confidence,
-                "rmse_m": accuracy,
-            },
+            "confidence": confidence,
+            "has_rmse_m": True,
+            "rmse_m": accuracy,
             "stamp": SpatialDDSValidator.now_time(),
         }
         return response
@@ -538,20 +543,29 @@ class SpatialDDSClientV15:
         }
 
     def create_localize_request(self, service_id: str) -> Dict[str, Any]:
-        request_id = str(uuid.uuid4())
+        query_id = str(uuid.uuid4())
         prior = demo_geo_pose(
             37.7749 + random.uniform(-0.001, 0.001),
             -122.4194 + random.uniform(-0.001, 0.001),
             15.0 + random.uniform(-2, 2),
         )
+        # Query imagery rides by reference (spec argeo::VpsRequest.query_blobs,
+        # a sequence<core::BlobRef,8>) — never inline bytes. BlobRef.role marks
+        # the payload; the bytes travel out-of-band as BlobChunk (§3.2).
+        payload = f"MOCK_IMAGE_{self.frame_seq}".encode("utf-8")
+        query_image = MockSensorData.blob_ref("vps/query-image", payload)
         request = {
-            "request_id": request_id,
-            "client_frame_ref": self.client_ref,
+            "query_id": query_id,
             "service_id": service_id,
+            "client_frame_ref": self.client_ref,
+            "has_prior_geopose": True,
             "prior_geopose": prior,
-            "vision_frame": self._vision_frame(),
-            "stamp": SpatialDDSValidator.now_time(),
+            "query_blobs": [query_image],
+            # Links to the camera stream whose VisionMeta carries intrinsics.
+            "query_stream_id": self.stream_ref["fqn"],
+            "has_quality_requirements": True,
             "quality_requirements": {"max_rmse_m": 0.2, "min_confidence": 0.6},
+            "stamp": SpatialDDSValidator.now_time(),
         }
         self.frame_seq += 1
         return request
@@ -975,7 +989,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         show_message_content,
     )
 
-    if loc_response["quality"]["success"]:
+    if loc_response["status"] != "VPS_FAILED":
         geopose = loc_response["node_geo"]["geopose"]
         print("✅ Localization successful!")
         print(
@@ -983,8 +997,10 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
             f"lon={geopose['lon_deg']:.7f}°, h={geopose['alt_m']:.2f}m"
         )
         print(f"   Quaternion (x,y,z,w): {geopose['q']}")
-        print(f"   Confidence: {loc_response['quality']['confidence']:.3f}")
-        print(f"   RMSE: {loc_response['quality']['rmse_m']:.3f} m")
+        print(f"   Status: {loc_response['status']}")
+        print(f"   Confidence: {loc_response['confidence']:.3f}")
+        if loc_response.get("has_rmse_m"):
+            print(f"   RMSE: {loc_response['rmse_m']:.3f} m")
     else:
         print("❌ Localization failed")
 
@@ -1045,7 +1061,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
     print("🔗 Phase 6: Anchor Delta (anchors.AnchorDelta)")
     print("-" * 40)
     anchor_delta = client.create_anchor_delta(
-        loc_response["node_geo"], loc_response["quality"]["confidence"]
+        loc_response["node_geo"], loc_response["confidence"]
     )
     anchor_topic = (
         TOPIC_ANCHORS_DELTA(anchor_delta.get("set_id"))

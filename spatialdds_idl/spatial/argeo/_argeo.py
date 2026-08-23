@@ -46,3 +46,49 @@ class NodeGeo(idl.IdlStruct, typename="spatial.argeo.NodeGeo"):
     graph_epoch: types.uint64
 
 
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class QualityRequirements(idl.IdlStruct, typename="spatial.argeo.QualityRequirements"):
+    max_rmse_m: types.float64
+    min_confidence: types.float64
+
+@annotate.final
+class VpsStatus(idl.IdlEnum, typename="spatial.argeo.VpsStatus", default="VPS_SUCCESS"):
+    VPS_SUCCESS = 0
+    VPS_DEGRADED = 1
+    VPS_FAILED = 2
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class VpsRequest(idl.IdlStruct, typename="spatial.argeo.VpsRequest"):
+    query_id: str
+    annotate.key("query_id")
+    service_id: str
+    client_frame_ref: 'spatialdds_idl.spatial.argeo.FrameRef'
+    has_prior_geopose: bool
+    prior_geopose: 'spatialdds_idl.spatial.argeo.GeoPose'
+    query_blobs: types.sequence['spatialdds_idl.spatial.core.BlobRef', 8]
+    query_stream_id: str
+    has_quality_requirements: bool
+    quality_requirements: 'spatialdds_idl.spatial.argeo.QualityRequirements'
+    stamp: 'spatialdds_idl.spatial.argeo.Time'
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class VpsResponse(idl.IdlStruct, typename="spatial.argeo.VpsResponse"):
+    query_id: str
+    annotate.key("query_id")
+    service_id: str
+    status: 'spatialdds_idl.spatial.argeo.VpsStatus'
+    has_node_geo: bool
+    node_geo: 'spatialdds_idl.spatial.argeo.NodeGeo'
+    confidence: types.float64
+    has_rmse_m: bool
+    rmse_m: types.float64
+    stamp: 'spatialdds_idl.spatial.argeo.Time'
+
+

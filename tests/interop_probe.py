@@ -178,6 +178,7 @@ def resolve_type(type_name: str):
     could not resolve, because that is what a real consumer experiences.
     """
     from spatialdds_idl.spatial.anchors import AnchorDelta
+    from spatialdds_idl.spatial.argeo import VpsRequest, VpsResponse
     from spatialdds_idl.spatial.core import (
         BlobChunk, EntityBinding, FramedPose, NavSatStatus, PlannedTrajectory,
         TileMeta,
@@ -210,7 +211,9 @@ def resolve_type(type_name: str):
         "lidar_meta": LidarMeta,
         "imu_sample": ImuSample,
         "anchor_delta": AnchorDelta,
-        "tile_meta": TileMeta,
+        "geometry_tile": TileMeta,
+        "vps_query": VpsRequest,
+        "vps_response": VpsResponse,
         "blob_chunk": BlobChunk,
     }
     for module, names in (

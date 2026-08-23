@@ -50,7 +50,7 @@ from spatialdds_demo.discovery_http import (
 from spatialdds_demo.json_mapping import from_json, to_json
 from spatialdds_demo.service_bus import CatalogClient, VpsClient
 from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
-from spatialdds_idl.oarc_demo import VpsRequest as TypedVpsRequest
+from spatialdds_idl.spatial.argeo import VpsRequest as TypedVpsRequest
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
@@ -192,7 +192,7 @@ class SpatialDDSBridge:
                     "domain": self._domain_id,
                     "msg_type": "LOCALIZE_REQUEST",
                     "logical_topic": TOPIC_VPS_QUERY_V1,
-                    "request_id": request.get("request_id", ""),
+                    "request_id": request.get("query_id", ""),
                     "payload": request,
                 }
             )
@@ -243,16 +243,23 @@ class SpatialDDSBridge:
     def _create_localize_request(
         self, service_id: str, prior_geopose: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        request_id = str(uuid.uuid4())
+        query_id = str(uuid.uuid4())
         prior = prior_geopose or _default_prior_geopose()
+        # Query imagery by reference (argeo::VpsRequest.query_blobs), never
+        # inline bytes; the bytes travel out-of-band as BlobChunk (§3.2).
+        payload = f"MOCK_IMAGE_{self._frame_seq}".encode("utf-8")
+        query_image = MockSensorData.blob_ref("vps/query-image", payload)
         request = {
-            "request_id": request_id,
-            "client_frame_ref": self._client_frame_ref,
+            "query_id": query_id,
             "service_id": service_id,
+            "client_frame_ref": self._client_frame_ref,
+            "has_prior_geopose": True,
             "prior_geopose": prior,
-            "vision_frame": self._vision_frame(),
-            "stamp": SpatialDDSValidator.now_time(),
+            "query_blobs": [query_image],
+            "query_stream_id": self._stream_ref["fqn"],
+            "has_quality_requirements": True,
             "quality_requirements": {"max_rmse_m": 0.2, "min_confidence": 0.6},
+            "stamp": SpatialDDSValidator.now_time(),
         }
         self._frame_seq += 1
         return request
@@ -532,11 +539,11 @@ class _BrowserPublisher:
         "detection3d": "DET_RT",
         "rf_beam": "RF_BEAM_RT",
         "vps_query": "VPS_REQ",
+        "vps_response": "VPS_RESP",
         "detection3d": "DET_RT",
         "framed_pose": "POSE_RT",
         "oarc.fused_track": "POSE_RT",
         "oarc.fusion_coverage": "MAP_META",
-        "oarc.vps_response": "VPS_RESP",
         "oarc.catalog_query": "VPS_REQ",
         "oarc.catalog_response": "VPS_RESP",
     }

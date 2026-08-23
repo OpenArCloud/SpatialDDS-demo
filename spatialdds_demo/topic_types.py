@@ -23,10 +23,9 @@ from spatialdds_idl.oarc_demo import (
     CatalogResponse,
     FusedTrackSet,
     FusionCoverage,
-    VpsRequest,
-    VpsResponse,
 )
 from spatialdds_idl.spatial.anchors import AnchorDelta
+from spatialdds_idl.spatial.argeo import VpsRequest, VpsResponse
 from spatialdds_idl.spatial.core import (
     BlobChunk,
     EntityBinding,
@@ -66,6 +65,7 @@ REGISTERED: Dict[str, Type] = {
     "imu_sample": ImuSample,
     "anchor_delta": AnchorDelta,
     "vps_query": VpsRequest,
+    "vps_response": VpsResponse,
     # Appendix E provisional: registered in 3.3.2, IDL under
     # idl/v1.7/provisional/. Provisional in the spec's sense — the type is
     # registered and stable enough to announce, its profile is not yet.
@@ -88,9 +88,6 @@ EXTENSIONS: Dict[str, Type] = {
     "oarc.fused_track": FusedTrackSet,
     # No type for fusion coverage metrics either.
     "oarc.fusion_coverage": FusionCoverage,
-    # `vps_query` is registered but 1.7 defines no struct for it, and names
-    # no type at all for the response.
-    "oarc.vps_response": VpsResponse,
     # No catalogue query/response pair in 1.7; ContentAnnounce advertises
     # content but nothing asks a catalogue what is in an area.
     "oarc.catalog_query": CatalogQuery,

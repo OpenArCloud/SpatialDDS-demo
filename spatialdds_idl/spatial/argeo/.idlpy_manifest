@@ -7,4 +7,8 @@ GeoPose
 MODULE_ID
 NodeGeo
 PoseSE3
+QualityRequirements
 Time
+VpsRequest
+VpsResponse
+VpsStatus

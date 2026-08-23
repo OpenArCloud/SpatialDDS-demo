@@ -5,13 +5,15 @@
 
 """
 
-from ._semantics import Detection2D, Detection2DSet, Detection3D, Detection3DSet, FrameRef, MODULE_ID, TileKey, Time
+from ._semantics import Detection2D, Detection2DSet, Detection3D, Detection3DSet, FrameRef, FusedTrack, FusedTrackSet, MODULE_ID, TileKey, Time
 __all__ = [
 	"Detection2D",
 	"Detection2DSet",
 	"Detection3D",
 	"Detection3DSet",
 	"FrameRef",
+	"FusedTrack",
+	"FusedTrackSet",
 	"MODULE_ID",
 	"TileKey",
 	"Time",

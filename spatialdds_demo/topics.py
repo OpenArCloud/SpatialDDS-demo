@@ -43,6 +43,9 @@ REGISTERED_TOPIC_TYPES = {
     "spatial_zone",
     "spatial_event",
     "zone_state",
+    # Informative example registrations (Appendix E): types defined only in the
+    # example IDL, outside the normative conformance surface (spec batch-3
+    # follow-up Q.3). The demo does not use them; kept here as valid names.
     "agent_status",
     "task_offer",
     "task_assignment",
@@ -64,9 +67,12 @@ REGISTERED_TOPIC_TYPES = {
     "rf_beam_meta",
     "imu_sample",
     "anchor_delta",
-    "tile_meta",
     "rad_sensor_meta",
     "radio_sensor_meta",
+    # Added in 1.7 batch 3: the VPS request/response pair now has spec types
+    # (argeo). `tile_meta` was dropped in the batch-3 follow-up —
+    # `geometry_tile` is the canonical registry name for TileMeta.
+    "vps_response",
     # Blob transfer is its own mechanism rather than a topic type, but a
     # lane carrying chunks still has to name something.
     "blob_chunk",
