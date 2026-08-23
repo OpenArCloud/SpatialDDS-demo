@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Publish DeepSense Scenario 9 data over SpatialDDS envelope DDS."""
+"""Publish DeepSense Scenario 9 data on typed SpatialDDS topics.
+
+Each stream gets its own topic, its own §3.3.2 type and its own §3.3.3 QoS
+lane. Metadata is latched (MAP_META) so a late joiner gets the calibration
+without waiting for a republish; frames are not.
+
+The lidar sweep travels as blob chunks with a `LidarFrame` referencing them,
+which is what the spec asks for — the old payload inlined the point array
+under a `points` key no type has.
+"""
 
 from __future__ import annotations
 
@@ -14,11 +23,34 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from deepsense.deepsense_to_spatialdds import iter_sequence, load_rows, make_beam_meta, make_radar_meta, make_vision_meta, row_to_beam_frame, row_to_detection2d, row_to_geoposes, row_to_lidar_points, row_to_radar_tensor, row_to_vision_frame, to_dict
-from nuscenes.dds_envelope_transport import EnvelopeTransport
+from cyclonedds.domain import DomainParticipant
 
+from spatialdds_demo import blob, topic_types, typed_transport as tt
 
-def publish_json(transport: EnvelopeTransport, topic: str, msg_type: str, payload: dict) -> None:
-    transport.publish(topic, msg_type, json.dumps(payload), str(payload.get("frame_seq", "")))
+# (topic, §3.3.2 type, §3.3.3 QoS profile) for every lane this publisher owns.
+LANES = {
+    "beam_meta":    ("spatialdds/deepsense/rf_beam/unit1_60ghz/meta/v1",
+                     "oarc.rf_beam_meta", "MAP_META"),
+    "beam_frame":   ("spatialdds/deepsense/rf_beam/unit1_60ghz/frame/v1",
+                     "rf_beam", "RF_BEAM_RT"),
+    "radar_meta":   ("spatialdds/deepsense/rad/unit1_radar/meta/v1",
+                     "oarc.radar_tensor_meta", "MAP_META"),
+    "radar_tensor": ("spatialdds/deepsense/rad/unit1_radar/tensor/v1",
+                     "radar_tensor", "RADAR_RT"),
+    "vision_meta":  ("spatialdds/deepsense/vision/unit1_cam/meta/v1",
+                     "oarc.video_frame_meta", "MAP_META"),
+    "vision_frame": ("spatialdds/deepsense/vision/unit1_cam/frame/v1",
+                     "video_frame", "VIDEO_LIVE"),
+    "unit1_geo":    ("spatialdds/deepsense/geo/unit1/pose/v1",
+                     "geopose", "POSE_RT"),
+    "unit2_geo":    ("spatialdds/deepsense/geo/unit2/pose/v1",
+                     "geopose", "POSE_RT"),
+    "lidar_frame":  ("spatialdds/deepsense/lidar/unit1_lidar/frame/v1",
+                     "oarc.lidar_frame", "GEOM_TILE"),
+    "detection2d":  ("spatialdds/deepsense/semantics/det2d/v1",
+                     "oarc.detection2d_set", "RADAR_RT"),
+    "blob":         (blob.BLOB_TOPIC, blob.BLOB_TYPE, blob.BLOB_PROFILE),
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,50 +67,91 @@ def main() -> int:
     args = parse_args()
     dataroot = Path(args.dataroot)
     rows = list(iter_sequence(load_rows(dataroot / "scenario9.csv"), args.sequence))
-    transport = EnvelopeTransport(lambda _env: None, args.domain, "deepsense-publisher")
-    transport.start()
+    participant = DomainParticipant(args.domain)
+    writers = {
+        key: tt.TypedDictWriter(participant, topic,
+                                topic_types.resolve(type_name), profile)
+        for key, (topic, type_name, profile) in LANES.items()
+    }
+
+    def publish(key: str, payload) -> None:
+        writers[key].write(payload)
+
     sent_meta = False
     delay = 0.1 / max(args.speed, 0.01)
 
     try:
         for idx, row in enumerate(rows, start=1):
             if not sent_meta:
-                publish_json(transport, "spatialdds/deepsense/rf_beam/unit1_60ghz/meta/v1", "DEEPSENSE_RF_BEAM_META", to_dict(make_beam_meta()))
-                publish_json(transport, "spatialdds/deepsense/rad/unit1_radar/meta/v1", "DEEPSENSE_RAD_TENSOR_META", to_dict(make_radar_meta()))
-                publish_json(transport, "spatialdds/deepsense/vision/unit1_cam/meta/v1", "DEEPSENSE_VISION_META", to_dict(make_vision_meta()))
+                publish("beam_meta", to_dict(make_beam_meta()))
+                publish("radar_meta", to_dict(make_radar_meta()))
+                publish("vision_meta", to_dict(make_vision_meta()))
                 sent_meta = True
 
-            beam = row_to_beam_frame(row, dataroot)
-            publish_json(transport, "spatialdds/deepsense/rf_beam/unit1_60ghz/frame/v1", "DEEPSENSE_RF_BEAM_FRAME", to_dict(beam))
+            publish("beam_frame", to_dict(row_to_beam_frame(row, dataroot)))
 
             radar_frame, _cube = row_to_radar_tensor(row, dataroot)
-            publish_json(transport, "spatialdds/deepsense/rad/unit1_radar/tensor/v1", "DEEPSENSE_RAD_TENSOR_FRAME", to_dict(radar_frame))
+            publish("radar_tensor", to_dict(radar_frame))
 
-            vision = row_to_vision_frame(row)
-            publish_json(transport, "spatialdds/deepsense/vision/unit1_cam/frame/v1", "DEEPSENSE_VISION_FRAME", to_dict(vision))
+            publish("vision_frame", to_dict(row_to_vision_frame(row)))
 
             bs_geo, veh_geo = row_to_geoposes(row, dataroot)
-            publish_json(transport, "spatialdds/deepsense/geo/unit1/pose/v1", "DEEPSENSE_UNIT1_GEOPOSE", to_dict(bs_geo))
-            publish_json(transport, "spatialdds/deepsense/geo/unit2/pose/v1", "DEEPSENSE_UNIT2_GEOPOSE", to_dict(veh_geo))
+            publish("unit1_geo", to_dict(bs_geo))
+            publish("unit2_geo", to_dict(veh_geo))
 
+            # The sweep itself goes as blob chunks with a LidarFrame naming
+            # the blob. The old payload inlined the point array under a
+            # `points` key LidarFrame does not have, so it never reached a
+            # consumer as anything typed.
             lidar_points = row_to_lidar_points(row, dataroot)
-            publish_json(
-                transport,
-                "spatialdds/deepsense/lidar/unit1_lidar/frame/v1",
-                "DEEPSENSE_LIDAR2D_FRAME",
-                {"frame_seq": int(row["index"]), "stamp": {"sec": int(row["index"]) // 10, "nanosec": (int(row["index"]) % 10) * 100_000_000}, "points": lidar_points.tolist()},
-            )
+            frame, chunks = _lidar_frame_and_blob(row, lidar_points)
+            publish("lidar_frame", to_dict(frame))
+            for chunk in chunks:
+                publish("blob", chunk)
 
-            det2d = row_to_detection2d(row, dataroot)
-            publish_json(transport, "spatialdds/deepsense/semantics/det2d/v1", "DEEPSENSE_DET2D_SET", to_dict(det2d))
+            publish("detection2d", to_dict(row_to_detection2d(row, dataroot)))
 
             print(f"[deepsense-publisher] frame_seq={row['index']} seq={row['seq_index']}", file=sys.stderr)
             if args.max_samples > 0 and idx >= args.max_samples:
                 break
             time.sleep(delay)
     finally:
-        transport.stop()
+        pass
     return 0
+
+
+def _lidar_frame_and_blob(row, points):
+    """A LidarFrame plus the chunks carrying its sweep."""
+    from deepsense_to_spatialdds import _frame_header, _frame_quality
+    from sensor_types import BlobRef, LidarFrame
+
+    index = int(row["index"])
+    stamp = {"sec": index // 10, "nanosec": (index % 10) * 100_000_000}
+    raw = points.astype("float32").tobytes()
+    blob_id = f"unit1_lidar_{index}"
+    frame = LidarFrame(
+        stream_id="unit1_lidar",
+        frame_seq=index,
+        hdr=_frame_header("unit1_lidar", index, _time(stamp),
+                          [BlobRef(**blob.blob_ref(blob_id, "lidar", raw))]),
+        encoding="BIN_INTERLEAVED",
+        codec="CODEC_NONE",
+        layout="XYZ_I",
+        has_per_point_timestamps=False,
+        has_average_range_m=False,
+        average_range_m=0.0,
+        has_percent_valid=False,
+        percent_valid=0.0,
+        has_quality=False,
+        quality=_frame_quality(),
+    )
+    return frame, list(blob.chunk(blob_id, raw))
+
+
+def _time(stamp):
+    from sensor_types import Time
+
+    return Time(sec=stamp["sec"], nanosec=stamp["nanosec"])
 
 
 if __name__ == "__main__":

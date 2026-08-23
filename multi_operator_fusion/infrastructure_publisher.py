@@ -125,9 +125,27 @@ def _stamp_from_index(idx: int) -> Dict[str, int]:
     return {"sec": idx // 10, "nanosec": (idx % 10) * 100_000_000}
 
 
+# (topic suffix, §3.3.2 type, §3.3.3 QoS profile) per raw sensor lane. The
+# announce and the writers are both built from this.
+RAW_LANES = {
+    "beam_meta":    ("rf_beam/unit1_60ghz/meta/v1", "oarc.rf_beam_meta", "MAP_META"),
+    "beam_frame":   ("rf_beam/unit1_60ghz/frame/v1", "rf_beam", "RF_BEAM_RT"),
+    "radar_meta":   ("rad/unit1_radar/meta/v1", "oarc.radar_tensor_meta", "MAP_META"),
+    "radar_tensor": ("rad/unit1_radar/tensor/v1", "radar_tensor", "RADAR_RT"),
+    "vision_meta":  ("vision/unit1_cam/meta/v1", "oarc.video_frame_meta", "MAP_META"),
+    "vision_frame": ("vision/unit1_cam/frame/v1", "video_frame", "VIDEO_LIVE"),
+    "lidar_frame":  ("lidar/unit1_lidar/frame/v1", "oarc.lidar_frame", "GEOM_TILE"),
+    "unit1_geo":    ("geo/unit1/pose/v1", "geopose", "POSE_RT"),
+    "unit2_geo":    ("geo/unit2/pose/v1", "geopose", "POSE_RT"),
+    "detection3d":  ("sensing/detection3d/v1", "oarc.detection3d_velocity", "RADAR_RT"),
+}
+
+
 def run(args: argparse.Namespace) -> int:
-    from dds_envelope_transport import EnvelopeTransport  # noqa: E402
-    from spatialdds_types import to_dict  # noqa: E402
+    from cyclonedds.domain import DomainParticipant  # noqa: E402
+
+    from spatialdds_demo import blob, topic_types, typed_transport as tt  # noqa: E402
+    from sensor_types import to_dict  # noqa: E402
     from deepsense.deepsense_to_spatialdds import (  # noqa: E402
         iter_sequence, load_rows,
         make_beam_meta, make_radar_meta, make_vision_meta,
@@ -137,18 +155,24 @@ def run(args: argparse.Namespace) -> int:
 
     dataroot = Path(args.dataroot)
     rows = list(iter_sequence(load_rows(dataroot / "scenario9.csv"), args.sequence))
-    transport = EnvelopeTransport(lambda _env: None, args.domain, "multi-op-infra-publisher")
-    transport.start()
+    participant = DomainParticipant(args.domain)
+    writers = {
+        key: tt.TypedDictWriter(
+            participant, f"{TOPIC_PREFIX}/{suffix}",
+            topic_types.resolve(type_name), profile)
+        for key, (suffix, type_name, profile) in RAW_LANES.items()
+    }
+    writers["blob"] = tt.TypedDictWriter(
+        participant, blob.BLOB_TOPIC, topic_types.resolve(blob.BLOB_TYPE),
+        blob.BLOB_PROFILE)
 
     offset = (args.offset_x, args.offset_y, args.offset_z)
     delay = 0.1 / max(args.speed, 0.01)
     sent_meta = False
     prev_enu: Optional[Tuple[float, float, int]] = None
 
-    def publish(topic: str, msg_type: str, payload: Dict) -> None:
-        payload.setdefault("source_operator", SOURCE_OPERATOR)
-        transport.publish(topic, msg_type, json.dumps(payload),
-                          str(payload.get("frame_seq", "")))
+    def publish(lane: str, payload) -> None:
+        writers[lane].write(payload)
 
     # Track which optional raw streams have already warned, so a missing
     # subset doesn't spam every frame.
@@ -173,40 +197,37 @@ def run(args: argparse.Namespace) -> int:
             stamp = _stamp_from_index(frame_seq)
 
             if not sent_meta:
-                publish(f"{TOPIC_PREFIX}/rf_beam/unit1_60ghz/meta/v1",
-                        "DEEPSENSE_RF_BEAM_META", to_dict(make_beam_meta()))
-                publish(f"{TOPIC_PREFIX}/rad/unit1_radar/meta/v1",
-                        "DEEPSENSE_RAD_TENSOR_META", to_dict(make_radar_meta()))
-                publish(f"{TOPIC_PREFIX}/vision/unit1_cam/meta/v1",
-                        "DEEPSENSE_VISION_META", to_dict(make_vision_meta()))
+                publish("beam_meta", to_dict(make_beam_meta()))
+                publish("radar_meta", to_dict(make_radar_meta()))
+                publish("vision_meta", to_dict(make_vision_meta()))
                 sent_meta = True
 
             beam = _try("rf_beam", lambda: row_to_beam_frame(row, dataroot))
             if beam is not None:
-                publish(f"{TOPIC_PREFIX}/rf_beam/unit1_60ghz/frame/v1",
-                        "DEEPSENSE_RF_BEAM_FRAME", to_dict(beam))
+                publish("beam_frame", to_dict(beam))
 
             radar = _try("rad_tensor", lambda: row_to_radar_tensor(row, dataroot))
             if radar is not None:
                 radar_frame, _ = radar
-                publish(f"{TOPIC_PREFIX}/rad/unit1_radar/tensor/v1",
-                        "DEEPSENSE_RAD_TENSOR_FRAME", to_dict(radar_frame))
+                publish("radar_tensor", to_dict(radar_frame))
 
             # Vision frame is just metadata + blob_id; subscriber skips the
             # image load if the blob doesn't exist.
-            publish(f"{TOPIC_PREFIX}/vision/unit1_cam/frame/v1",
-                    "DEEPSENSE_VISION_FRAME", to_dict(row_to_vision_frame(row)))
+            publish("vision_frame", to_dict(row_to_vision_frame(row)))
 
             lidar_points = _try("lidar", lambda: row_to_lidar_points(row, dataroot))
             if lidar_points is not None:
-                publish(f"{TOPIC_PREFIX}/lidar/unit1_lidar/frame/v1",
-                        "DEEPSENSE_LIDAR2D_FRAME",
-                        {"frame_seq": frame_seq, "stamp": stamp,
-                         "points": lidar_points.tolist()})
+                # The sweep goes as blob chunks with a LidarFrame naming
+                # them; the old payload inlined the array under a `points`
+                # key LidarFrame does not have.
+                frame, chunks = _lidar_frame_and_blob(frame_seq, lidar_points)
+                publish("lidar_frame", to_dict(frame))
+                for chunk in chunks:
+                    publish("blob", chunk)
 
             bs_geo, veh_geo = row_to_geoposes(row, dataroot)
-            publish(f"{TOPIC_PREFIX}/geo/unit1/pose/v1", "DEEPSENSE_UNIT1_GEOPOSE", to_dict(bs_geo))
-            publish(f"{TOPIC_PREFIX}/geo/unit2/pose/v1", "DEEPSENSE_UNIT2_GEOPOSE", to_dict(veh_geo))
+            publish("unit1_geo", to_dict(bs_geo))
+            publish("unit2_geo", to_dict(veh_geo))
 
             east, north = gps_to_enu(bs_geo.lat_deg, bs_geo.lon_deg,
                                      veh_geo.lat_deg, veh_geo.lon_deg)
@@ -220,8 +241,7 @@ def run(args: argparse.Namespace) -> int:
             )
             for det in det_payload["detections"]:
                 _apply_offset(det, offset)
-            publish(f"{TOPIC_PREFIX}/sensing/detection3d/v1",
-                    "INFRA_DET3D_SET", det_payload)
+            publish("detection3d", det_payload)
 
             if not args.quiet:
                 print(f"[infrastructure] frame_seq={frame_seq} "
@@ -232,8 +252,38 @@ def run(args: argparse.Namespace) -> int:
                 break
             time.sleep(delay)
     finally:
-        transport.stop()
+        pass
     return 0
+
+
+def _lidar_frame_and_blob(frame_seq: int, points):
+    """A LidarFrame plus the chunks carrying its sweep."""
+    from spatialdds_demo import blob
+    from deepsense.deepsense_to_spatialdds import _frame_header, _frame_quality
+    from sensor_types import BlobRef, LidarFrame, Time
+
+    stamp = _stamp_from_index(frame_seq)
+    raw = points.astype("float32").tobytes()
+    blob_id = f"infra_lidar_{frame_seq}"
+    frame = LidarFrame(
+        stream_id="unit1_lidar",
+        frame_seq=frame_seq,
+        hdr=_frame_header(
+            "unit1_lidar", frame_seq,
+            Time(sec=stamp["sec"], nanosec=stamp["nanosec"]),
+            [BlobRef(**blob.blob_ref(blob_id, "lidar", raw))]),
+        encoding="BIN_INTERLEAVED",
+        codec="CODEC_NONE",
+        layout="XYZ_I",
+        has_per_point_timestamps=False,
+        has_average_range_m=False,
+        average_range_m=0.0,
+        has_percent_valid=False,
+        percent_valid=0.0,
+        has_quality=False,
+        quality=_frame_quality(),
+    )
+    return frame, list(blob.chunk(blob_id, raw))
 
 
 def parse_args() -> argparse.Namespace:

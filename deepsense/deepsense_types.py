@@ -1,93 +1,54 @@
 #!/usr/bin/env python3
-"""DeepSense-specific SpatialDDS-like dataclasses."""
+"""
+The types the DeepSense converters build.
+
+These used to be hand-written dataclasses mirroring the spec's provisional
+`rf_beam` and `rad` profiles. They are the generated types now — the same
+drift that made the nuScenes types not-quite-SpatialDDS applies here, and
+there is no reason for a second definition of a type the IDL already has.
+
+`rf_beam`'s IDL ships under `idl/v1.7/examples/` rather than beside the
+stable modules, so the generator names it explicitly; see the findings list.
+
+`Detection2DSet` is demo-owned, and has to be: 1.7 has `Detection3D` for 3D
+boxes and nothing at all for 2D ones. `vision::VisionDetections` carries
+keypoints and 2D *tracks*, not labelled boxes, and `seg_mask` is masks — so
+the most common camera perception output there is has no spec type. Defined
+in `idl/demo/oarc_demo.idl`.
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List
+import sys
+from pathlib import Path
 
-from sensor_types import FrameHeader, StreamMeta, Time
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
+from spatialdds_idl.oarc_demo import (  # noqa: E402
+    BBox2D,
+    Detection2D,
+    Detection2DSet,
+)
+from spatialdds_idl.spatial.sensing.common import (  # noqa: E402
+    AxisSpec,
+    FrameHeader,
+    FrameQuality,
+    StreamMeta,
+)
+from spatialdds_idl.spatial.sensing.rad import (  # noqa: E402
+    RadTensorFrame,
+    RadTensorMeta,
+)
+from spatialdds_idl.spatial.sensing.rf_beam import (  # noqa: E402
+    RfBeamFrame,
+    RfBeamMeta,
+)
+from spatialdds_idl.builtin import Time  # noqa: E402
 
-@dataclass
-class TensorAxis:
-    name: str
-    size: int
-
-
-@dataclass
-class RfBeamMeta:
-    stream_id: str
-    base: StreamMeta
-    center_freq_ghz: float
-    n_elements: int
-    n_beams: int
-    fov_az_deg: float
-    codebook_type: str
-    power_unit: str
-    schema_version: str
-
-
-@dataclass
-class RfBeamFrame:
-    stream_id: str
-    frame_seq: int
-    sweep_type: str
-    power: List[float]
-    has_best_beam: bool
-    best_beam_idx: int
-    best_beam_power: float
-    has_blockage_state: bool
-    is_blocked: bool
-    blockage_confidence: float
-    has_quality: bool
-    schema_version: str
-    stamp: Time
-
-
-@dataclass
-class RadTensorMeta:
-    stream_id: str
-    base: StreamMeta
-    axes: List[TensorAxis]
-    voxel_type: str
-    layout: str
-    center_freq_hz: float
-    bandwidth_hz: float
-    samples_per_chirp: int
-    chirps_per_frame: int
-    num_tx: int
-    num_rx: int
-    schema_version: str
-
-
-@dataclass
-class RadTensorFrame:
-    stream_id: str
-    hdr: FrameHeader
-    shape: List[int]
-    dtype: str
-    schema_version: str
-
-
-@dataclass
-class BBox2D:
-    x: float
-    y: float
-    w: float
-    h: float
-
-
-@dataclass
-class Detection2D:
-    det_id: str
-    bbox: BBox2D
-    class_id: str
-    score: float
-
-
-@dataclass
-class Detection2DSet:
-    frame_seq: int
-    stamp: Time
-    detections: List[Detection2D] = field(default_factory=list)
+__all__ = [
+    "AxisSpec", "BBox2D", "Detection2D", "Detection2DSet", "FrameHeader",
+    "FrameQuality", "RadTensorFrame", "RadTensorMeta", "RfBeamFrame",
+    "RfBeamMeta", "StreamMeta", "Time",
+]

@@ -19,6 +19,7 @@ from typing import Dict, Optional, Type
 from spatialdds_idl.oarc_demo import (
     BlobChunk,
     CatalogQuery,
+    Detection2DSet,
     CatalogResponse,
     FusedTrackSet,
     FusionCoverage,
@@ -90,6 +91,11 @@ EXTENSIONS: Dict[str, Type] = {
     # every perception consumer wants. `radar_detection` is radar's
     # RadDetectionSet; there is nothing for the semantic set.
     "oarc.detection3d_set": Detection3DSet,
+    # No 2D box detection type in 1.7 at all: vision::VisionDetections
+    # carries keypoints and 2D tracks, `seg_mask` is masks, and Detection3D
+    # is 3D. A labelled 2D box — the most common camera perception output
+    # there is — has nowhere to go.
+    "oarc.detection2d_set": Detection2DSet,
 
     # --- registered-name gaps: the struct exists, the registry name does not.
     # 3.3.2 registers `radar_tensor` and `video_frame` for the frame types but

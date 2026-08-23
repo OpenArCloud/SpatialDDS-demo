@@ -1,5 +1,6 @@
 oarc_demo
 
+BBox2D
 BlobChunk
 BootstrapQuery
 BootstrapResponse
@@ -7,6 +8,8 @@ CatalogEntry
 CatalogFilter
 CatalogQuery
 CatalogResponse
+Detection2D
+Detection2DSet
 DetectionWithVelocity
 FusedTrack
 FusedTrackSet

@@ -226,6 +226,38 @@ class FusionCoverage(idl.IdlStruct, typename="oarc_demo.FusionCoverage"):
 @dataclass
 @annotate.appendable
 @annotate.autoid("sequential")
+class BBox2D(idl.IdlStruct, typename="oarc_demo.BBox2D"):
+    x: types.float32
+    y: types.float32
+    w: types.float32
+    h: types.float32
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class Detection2D(idl.IdlStruct, typename="oarc_demo.Detection2D"):
+    det_id: str
+    bbox: 'spatialdds_idl.oarc_demo.BBox2D'
+    class_id: str
+    score: types.float32
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class Detection2DSet(idl.IdlStruct, typename="oarc_demo.Detection2DSet"):
+    stream_id: str
+    annotate.key("stream_id")
+    frame_seq: types.uint64
+    dets: types.sequence['spatialdds_idl.oarc_demo.Detection2D', 256]
+    stamp: 'spatialdds_idl.oarc_demo.Time'
+    source_id: str
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
 class BlobChunk(idl.IdlStruct, typename="oarc_demo.BlobChunk"):
     blob_id: str
     annotate.key("blob_id")

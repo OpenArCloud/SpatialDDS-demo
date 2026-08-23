@@ -193,6 +193,35 @@ module oarc_demo {
     Time   stamp;
   };
 
+  // --- 2D detections -------------------------------------------------------
+  // 1.7 has semantics::Detection3D for 3D boxes and nothing for 2D ones.
+  // vision::VisionDetections carries keypoints and 2D *tracks*, not labelled
+  // boxes, and `seg_mask` is masks — so the most common camera perception
+  // output in the world, a box with a class and a score, has no type.
+  //
+  // Mirrors Detection3D's field naming so the two read alike.
+  @extensibility(APPENDABLE) struct BBox2D {
+    float x;                             // top-left, pixels
+    float y;
+    float w;
+    float h;
+  };
+
+  @extensibility(APPENDABLE) struct Detection2D {
+    string  det_id;
+    BBox2D  bbox;
+    string  class_id;
+    float   score;
+  };
+
+  @extensibility(APPENDABLE) struct Detection2DSet {
+    @key string stream_id;               // which camera
+    uint64      frame_seq;
+    sequence<Detection2D, 256> dets;
+    Time        stamp;
+    string      source_id;
+  };
+
   // --- Blob transfer -------------------------------------------------------
   // spatial::core::BlobChunk is the spec's mechanism for moving bytes, and it
   // is unusable from cyclonedds-python: its `sequence<uint8, 262144>` exceeds

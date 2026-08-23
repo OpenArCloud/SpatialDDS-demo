@@ -6,9 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import queue
+import threading
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Optional, List
 
 import matplotlib
 
@@ -23,7 +24,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from deepsense.radar_processing import radar_cube_to_range_angle, radar_cube_to_range_doppler, render_beam_polar
-from nuscenes.dds_envelope_transport import EnvelopeTransport
+from cyclonedds.domain import DomainParticipant
+
+from spatialdds_demo import blob as blob_transfer, topic_types, typed_transport as tt
+from spatialdds_demo.json_mapping import to_json
 
 
 def set_time(stamp: Dict[str, Any]) -> None:
@@ -31,50 +35,85 @@ def set_time(stamp: Dict[str, Any]) -> None:
 
 
 class Subscriber:
+    """
+    A typed reader per lane the DeepSense publisher owns.
+
+    Named rather than discovery-driven: this demo is one publisher and one
+    subscriber that ship together, so the lane table is shared directly. The
+    multi-operator demo, where services come and go, reads announces.
+
+    Routing is on the topic rather than the announced type because two lanes
+    here carry the same type — unit1 and unit2 are both `geopose`, and which
+    entity they belong to is the topic's business.
+    """
+
     def __init__(self, dataroot: Path, domain: int) -> None:
         self.dataroot = dataroot
-        self.inbox: "queue.Queue[object]" = queue.Queue()
-        self.transport = EnvelopeTransport(self.on_envelope, domain, "deepsense-rerun-subscriber")
+        self.inbox: "queue.Queue[tuple]" = queue.Queue()
+        self._participant = DomainParticipant(domain)
+        self._readers = {}
+        self._blobs = blob_transfer.Reassembler()
+        self._lidar_blobs: Dict[str, Dict[str, Any]] = {}
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
 
-    def on_envelope(self, envelope: object) -> None:
-        if envelope.logical_topic.startswith("spatialdds/deepsense/"):
-            self.inbox.put(envelope)
+        from publisher import LANES  # the publisher's own lane table
+
+        self.lanes = dict(LANES)
+        for key, (topic, type_name, profile) in self.lanes.items():
+            self._readers[key] = (
+                tt.make_reader(self._participant, topic,
+                               topic_types.resolve(type_name), profile),
+                topic,
+            )
 
     def start(self) -> None:
-        self.transport.start()
+        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._thread.start()
 
     def stop(self) -> None:
-        self.transport.stop()
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+
+    def _poll(self) -> None:
+        while not self._stop.is_set():
+            for key, (reader, _topic) in self._readers.items():
+                for sample in tt.take_samples(reader):
+                    self.inbox.put((key, to_json(sample)))
+            self._stop.wait(0.02)
 
     def spin(self, max_frames: int = 0) -> None:
         seen = 0
         while True:
-            env = self.inbox.get()
-            payload = json.loads(env.payload_json)
-            self.handle(env.msg_type, payload)
-            if env.msg_type == "DEEPSENSE_RF_BEAM_FRAME":
+            key, payload = self.inbox.get()
+            self.handle(key, payload)
+            if key == "beam_frame":
                 seen += 1
             if max_frames > 0 and seen >= max_frames:
                 return
 
-    def handle(self, msg_type: str, payload: Dict[str, Any]) -> None:
-        if msg_type == "DEEPSENSE_RF_BEAM_FRAME":
+    def handle(self, lane: str, payload: Dict[str, Any]) -> None:
+        if lane == "beam_frame":
             self.handle_beam(payload)
-        elif msg_type == "DEEPSENSE_RAD_TENSOR_FRAME":
+        elif lane == "radar_tensor":
             self.handle_radar(payload)
-        elif msg_type == "DEEPSENSE_VISION_FRAME":
+        elif lane == "vision_frame":
             self.handle_vision(payload)
-        elif msg_type == "DEEPSENSE_UNIT1_GEOPOSE":
+        elif lane == "unit1_geo":
             self.handle_geo("world/unit1", payload)
-        elif msg_type == "DEEPSENSE_UNIT2_GEOPOSE":
+        elif lane == "unit2_geo":
             self.handle_geo("world/unit2", payload)
-        elif msg_type == "DEEPSENSE_LIDAR2D_FRAME":
+        elif lane == "lidar_frame":
             self.handle_lidar(payload)
-        elif msg_type == "DEEPSENSE_DET2D_SET":
+        elif lane == "blob":
+            self.handle_blob(payload)
+        elif lane == "detection2d":
             self.handle_det2d(payload)
 
     def handle_beam(self, payload: Dict[str, Any]) -> None:
-        set_time(payload["stamp"])
+        # RfBeamFrame has no top-level stamp; the frame header carries it.
+        set_time(payload["hdr"]["t_start"])
         power = np.asarray(payload["power"], dtype=np.float32)
         best_idx = int(payload["best_beam_idx"])
         polar = render_beam_polar(power, best_idx)
@@ -103,13 +142,51 @@ class Subscriber:
         rr.log(entity, rr.GeoPoints(lat_lon=[(float(payload["lat_deg"]), float(payload["lon_deg"]))]))
 
     def handle_lidar(self, payload: Dict[str, Any]) -> None:
-        set_time(payload["stamp"])
-        points = np.asarray(payload["points"], dtype=np.float32)
+        """
+        A LidarFrame names its blob; the points arrive as chunks.
+
+        The frame usually lands before the last chunk, so it is held until
+        the blob completes rather than rendered empty.
+        """
+        set_time(payload["hdr"]["t_start"])
+        blobs = payload["hdr"]["blobs"]
+        if not blobs:
+            return
+        blob_id = blobs[0]["blob_id"]
+        pending = self._lidar_blobs.pop(blob_id, None)
+        if pending is None:
+            self._lidar_blobs[blob_id] = payload
+            return
+        self._render_lidar(pending)
+
+    def handle_blob(self, payload: Dict[str, Any]) -> None:
+        from spatialdds_demo.json_mapping import from_json
+        from spatialdds_idl.oarc_demo import BlobChunk
+
+        try:
+            data = self._blobs.feed(from_json(BlobChunk, payload))
+        except blob_transfer.CorruptChunk as exc:
+            print(f"[deepsense-subscriber] {exc}", file=sys.stderr)
+            return
+        if data is None:
+            return
+        blob_id = str(payload.get("blob_id") or "")
+        frame = self._lidar_blobs.pop(blob_id, None)
+        if frame is None:
+            # Chunks arrived first; hold the bytes for the frame.
+            self._lidar_blobs[blob_id] = data
+            return
+        self._render_lidar(data)
+
+    def _render_lidar(self, data) -> None:
+        if not isinstance(data, (bytes, bytearray)):
+            return
+        points = np.frombuffer(data, dtype=np.float32).reshape(-1, 4)
         rr.log("world/unit1/lidar", rr.Points2D(points[:, :2]))
 
     def handle_det2d(self, payload: Dict[str, Any]) -> None:
         set_time(payload["stamp"])
-        dets = payload.get("detections", [])
+        dets = payload.get("dets") or payload.get("detections") or []
         if not dets:
             return
         mins = []
