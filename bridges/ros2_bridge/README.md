@@ -10,17 +10,26 @@ fusion service) gets republished as ROS 2 messages.
 Five message types end-to-end (encoder + decoder + tests), plus the
 multi-operator fusion service's reverse-direction case:
 
-| Direction | ROS 2 type | SpatialDDS msg_type | SpatialDDS topic |
-|---|---|---|---|
-| ROS 2 → SpatialDDS | `geometry_msgs/PoseStamped` | `ROS2_FRAMED_POSE` | `spatialdds/{op}/ego/pose/v1` |
-| ROS 2 → SpatialDDS | `sensor_msgs/NavSatFix` | `ROS2_GEO_POSE` | `spatialdds/{op}/geo/{sensor}/pose/v1` |
-| ROS 2 → SpatialDDS | `sensor_msgs/Imu` | `ROS2_IMU_SAMPLE` | `spatialdds/{op}/imu/{sensor}/sample/v1` |
-| ROS 2 → SpatialDDS | `sensor_msgs/CompressedImage` | `ROS2_VISION_FRAME` | `spatialdds/{op}/vision/{sensor}/frame/v1` |
-| ROS 2 → SpatialDDS | `vision_msgs/Detection3DArray` | `ROS2_DETECTION3D_SET` | `spatialdds/{op}/sensing/detection3d/v1` |
-| SpatialDDS → ROS 2 | `NUSC_FUSED_TRACK_SET` | (decoded) | → `vision_msgs/Detection3DArray` |
-| SpatialDDS → ROS 2 | `NUSC_DET3D_SET` | (decoded) | → `vision_msgs/Detection3DArray` |
-| SpatialDDS → ROS 2 | `NUSC_EGO_POSE` | (decoded) | → `geometry_msgs/PoseStamped` |
-| SpatialDDS → ROS 2 | `DEEPSENSE_UNIT*_GEOPOSE` | (decoded) | → `sensor_msgs/NavSatFix` |
+| Direction | ROS 2 type | SpatialDDS type | QoS | SpatialDDS topic |
+|---|---|---|---|---|
+| ROS 2 → SpatialDDS | `geometry_msgs/PoseStamped` | `framed_pose` | `POSE_RT` | `spatialdds/{op}/ego/pose/v1` |
+| ROS 2 → SpatialDDS | `sensor_msgs/NavSatFix` | `geopose` + `navsat_status` | `POSE_RT` | `spatialdds/{op}/geo/{sensor}/pose/v1` |
+| ROS 2 → SpatialDDS | `sensor_msgs/Imu` | `imu_sample` | `IMU_RT` | `spatialdds/{op}/imu/{sensor}/sample/v1` |
+| ROS 2 → SpatialDDS | `sensor_msgs/CompressedImage` | `video_frame` + `blob_chunk` | `VIDEO_LIVE` | `spatialdds/{op}/vision/{sensor}/frame/v1` |
+| ROS 2 → SpatialDDS | `vision_msgs/Detection3DArray` | `detection3d` | `DET_RT` | `spatialdds/{op}/sensing/detection3d/v1` |
+| SpatialDDS → ROS 2 | `detection3d` / `oarc.fused_track` | (decoded) | | → `vision_msgs/Detection3DArray` |
+| SpatialDDS → ROS 2 | `framed_pose` | (decoded) | | → `geometry_msgs/PoseStamped` |
+| SpatialDDS → ROS 2 | `geopose` | (decoded) | | → `sensor_msgs/NavSatFix` |
+| SpatialDDS → ROS 2 | `imu_sample` | (decoded) | | → `sensor_msgs/Imu` |
+| SpatialDDS → ROS 2 | `video_frame` + its blob | (decoded) | | → `sensor_msgs/CompressedImage` |
+
+Two rows are worth reading twice. **NavSatFix becomes two samples**: `GeoPose`
+has no fix-status field, and §3.3.2 registers `navsat_status` as its
+"companion to GeoPose", so the bridge publishes both rather than inventing a
+field. **CompressedImage becomes a frame plus blob chunks**: a `VisionFrame`
+is metadata and a `BlobRef`, and the bytes travel on
+`spatialdds/blob/chunk/v1` — the spec is explicit that heavy content is never
+inlined.
 
 Deferred to follow-up PRs (each is its own story): `PointCloud2`/`LidarFrame`
 with binary blob handling, `CameraInfo` with latched-meta semantics,
@@ -29,9 +38,12 @@ reverse direction.
 
 ## Why it's small
 
-The bridge sits on top of the existing envelope transport
-(`spatialdds/envelope/v1` carries `msg_type` + `logical_topic` +
-`payload_json`). It produces and consumes JSON dicts — no per-type DDS
+The bridge is a **typed adapter**: it resolves each ROS 2 message onto a
+§3.3.2 type, builds the payload into that type, and writes it on the topic's
+§3.3.3 profile. A payload that is not a well-formed sample fails at the
+bridge, attributed to the topic it arrived on.
+
+The conversion layer itself produces and consumes plain dicts — no DDS
 topic creation, no IDL generation, no new dataclasses in the shared
 `nuscenes/spatialdds_types.py`. When a real consumer needs typed access to
 a new SpatialDDS type (`FramedPose`, `ImuSample`), promoting the dict to
@@ -51,12 +63,12 @@ bridges/ros2_bridge/
 ├── frame_mapping.py            # tf2 frame_id ↔ FrameRef (deterministic UUIDv5)
 ├── ros2_to_spatialdds.py       # encoders: 5 ROS 2 types → payload dicts (NO ros2 imports)
 ├── spatialdds_to_ros2.py       # decoders: payload dicts → mock ROS 2 dataclasses (NO ros2 imports)
-├── envelope_io.py              # EnvelopePublisher / EnvelopeSubscriber
+├── ../../spatialdds_demo/       # typed_transport, payloads, blob, qos_profiles
 │                               # (RELIABLE+KEEP_ALL, reuses MCAP bridge factories)
 ├── bridge_node.py              # rclpy node — only file with ROS 2 imports
 ├── test_mocks.py               # Mock ROS 2 message classes (no ros2 imports)
 ├── test_conversions.py         # Tier-1 pytest, no ROS 2, no DDS  →  31 tests
-├── test_envelope_roundtrip.py  # Tier-2 pytest + cyclonedds, no ROS 2  →  6 tests
+├── test_dds_roundtrip.py       # Tier-2 pytest + cyclonedds, no ROS 2  →  7 tests
 ├── verify_mocks.py             # One-time mock-vs-real-ROS-2 fidelity check
 └── README.md                   # this file
 ```
@@ -66,7 +78,7 @@ bridges/ros2_bridge/
 | Tier | Dependencies | What it tests | Status |
 |------|-------------|--------------|--------|
 | **1** | `pytest` only | Every encoder + decoder + frame mapping. JSON-schema shape, quaternion convention, field extraction, top-hypothesis selection, REP-145 sentinels. | ✅ 31/31 passing |
-| **2** | `pytest` + `cyclonedds` | Real DDS wire round-trip: encode → publish → DDS → subscribe → decode. Includes a 50-envelope burst test that verifies RELIABLE+KEEP_ALL avoids loss. | ✅ 6/6 passing |
+| **2** | `pytest` + `cyclonedds` | Real DDS round-trip across five typed topics: encode → publish → DDS → subscribe → decode, including image bytes reassembled from blob chunks. Burst tests assert the contract both ways — a reliable lane loses nothing, a real-time lane may drop but never corrupts. | ✅ 7/7 passing |
 | **3** | full ROS 2 workspace (`rclpy`, `sensor_msgs`, `geometry_msgs`, `vision_msgs`) | Bridge node wiring, real `ros2 topic pub` / `ros2 topic echo` end-to-end. | 🟡 stub provided — run instructions below |
 | **3b** | one-time, ROS 2 workspace | `verify_mocks.py` — confirms the mocks in `test_mocks.py` match real ROS 2 IDL field names. | 🟡 run when bridge first deploys |
 
@@ -86,7 +98,7 @@ docker run --rm --network host \
   -e PYTHONPATH=/app \
   cyclonedds-python bash -lc "
     python3 -m pip install --quiet mcap pytest && \
-    python3 -m pytest -q bridges/ros2_bridge/test_envelope_roundtrip.py"
+    python3 -m pytest -q bridges/ros2_bridge/test_dds_roundtrip.py"
 ```
 
 ### Run Tier 3 (manual — requires a ROS 2 workspace)
@@ -135,7 +147,7 @@ docker run --rm --network host \
 ```
 
 The reverse direction: run any SpatialDDS publisher (e.g. the multi-op
-fusion demo) — the bridge will republish `NUSC_FUSED_TRACK_SET` envelopes
+fusion demo) — the bridge will republish `oarc.fused_track` samples
 as `vision_msgs/Detection3DArray` on `/fused/detections_3d`.
 
 ## Two-domain design
@@ -149,7 +161,7 @@ The bridge sits between two DDS domains:
   subscribers / the MCAP bridge / the web bridge live here.
 
 Keeping them split prevents type pollution: ROS 2 nodes don't see
-`SpatialDDSEnvelope` discovery noise, and SpatialDDS subscribers don't
+SpatialDDS discovery noise, and SpatialDDS subscribers don't
 see ROS 2 message types they can't parse.
 
 ## What the bridge adds that ROS 2 doesn't have

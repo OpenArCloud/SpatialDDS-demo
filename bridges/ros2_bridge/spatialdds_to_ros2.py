@@ -1,7 +1,7 @@
 """SpatialDDS payload-dict → ROS 2 message converters.
 
-Reverse direction of ``ros2_to_spatialdds``. Inputs are JSON-decoded payload
-dicts pulled out of the envelope's ``payload_json`` field; outputs are the
+Reverse direction of ``ros2_to_spatialdds``. Inputs are typed SpatialDDS
+samples serialised to dicts by ``json_mapping.to_json``; outputs are the
 mock dataclasses from ``test_mocks`` (which have the same field shapes as
 the real ``rclpy`` message classes — see ``verify_mocks.py``).
 

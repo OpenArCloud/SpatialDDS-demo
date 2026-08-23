@@ -6,12 +6,18 @@ it back onto a CycloneDDS domain. Works with every demo in this repo
 
 ## Why it's small
 
-The repo's envelope transport (`nuscenes/dds_envelope_transport.py`) already
-ships every payload as JSON inside a single DDS topic
-(`spatialdds/envelope/v1`). The bridge is therefore **transport-level**: it
-records envelopes verbatim and replays them verbatim — no per-dataclass
-serialization, no IDL knowledge, no schema generation. New `msg_type`s the
-demos add later just register a permissive default schema automatically.
+The bridge is **discovery-driven and typed**: it reads announces, resolves
+each announced §3.3.2 type, and opens a reader per lane. Samples are written
+as JSON — MCAP tooling (`mcap cat`, Foxglove) reads it without a plugin, and
+that is worth more here than byte-for-byte CDR fidelity — under a schema
+**generated from the IDL**.
+
+That schema is the point. There used to be nothing to derive one from, so
+every channel got a permissive `{"type": "object"}` and a recording said what
+its messages were called and nothing about what was in them. Now each channel
+carries the real shape: field types, array lengths, integer widths and
+bounds, enum identifier values. A recording is readable by someone who does
+not have this repo.
 
 ## Install
 
@@ -56,7 +62,7 @@ python3 -m bridges.mcap_bridge.replayer out.mcap --domain 1 --loop
 ```
 
 The replayer reads in log-time order, sleeps to preserve relative spacing,
-and republishes via the same `EnvelopeTransport` the publishers use — so
+and republishes a rebuilt typed sample on each topic's own QoS profile — so
 existing subscribers (Rerun viz, fusion service, web bridge) consume the
 replay identically to a live publisher.
 
@@ -85,7 +91,7 @@ JSON with original field names. No custom decoder needed.
 
 ## Custom message types
 
-If you add a new SpatialDDS dataclass / msg_type, the bridge will record it
+If you add a new SpatialDDS type, the bridge will record it
 under a permissive default schema with no code changes. To advertise a
 stricter JSON schema (better Foxglove docs / validation), pass
 `schema_overrides` to `recorder.record()`:
@@ -125,9 +131,9 @@ bridges/
 ├── requirements.txt
 └── mcap_bridge/
     ├── __init__.py
-    ├── schema_registry.py   # 21 known msg_types, permissive default schema, override hook
-    ├── recorder.py          # DDS envelope subscriber → MCAP writer
-    ├── replayer.py          # MCAP reader → DDS envelope publisher
+    ├── schema_registry.py   # JSON schemas generated from the IDL, override hook
+    ├── recorder.py          # discovery-driven typed readers → MCAP writer
+    ├── replayer.py          # MCAP reader → typed writers (announces first)
     ├── test_roundtrip.py    # MCAP-only round-trip tests
     └── README.md            # this file
 ```
@@ -136,5 +142,5 @@ bridges/
 
 The HTTP-to-DDS bridge that powers the Cesium web UI lives at
 [`bridges/web_bridge/`](../web_bridge/README.md). Both bridges live under
-`bridges/` and translate SpatialDDS envelopes to and from another protocol
+`bridges/` and translate SpatialDDS samples to and from another protocol
 (HTTP/WebSocket for the web bridge; MCAP files for this one).

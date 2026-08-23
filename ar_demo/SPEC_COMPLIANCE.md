@@ -3,32 +3,52 @@
 **Status:** ✅ Aligned with v1.7 draft profiles
 **Date:** 2026-08-22
 
-## Interim: the wire is not yet conformant
+## The wire
 
-**The payload shapes in this document are 1.7-correct. The DDS transport
-carrying them is not.**
+**Types on the bus, JSON only at the edges.** Every demo flow publishes a
+generated `idl/v1.7` type on a spec-named topic with its §3.3.3 QoS profile.
+Nothing serialises a payload into a string any more; the JSON envelope that
+used to carry everything on one unkeyed topic is deleted.
 
-Every demo flow serialises to JSON and rides a single hand-written, unkeyed
-`SpatialDDSEnvelope` struct on one topic (`spatialdds/envelope/v1`), with
-`logical_topic` and `msg_type` as string fields inside it. Consequences:
+| Spec requirement | Status |
+|---|---|
+| §3.3.2 typed topics | **Met.** One DDS topic per logical topic, carrying the registered type the announce names |
+| §3.3.3 QoS profiles | **Met.** `spatialdds_demo/qos_profiles.py` transcribes the table; every endpoint is created through `typed_transport`, which refuses an unregistered profile name |
+| §2.6 keys and instance lifecycle | **Met.** `Announce` is `@key service_id`, so a late joiner gets the current announce of every live service and a dispose evicts exactly one |
+| C.5 departure | **Met.** Instance disposed (MUST) and `Depart` published (SHOULD) — the demo does both, because it bridges to MQTT and WebSocket where DDS instance state does not cross |
 
-- **§3.3.2 typed topics** — not met on the wire. A conformant participant built
-  from `idl/v1.7` cannot exchange samples with this demo today, because the demo
-  publishes its envelope type rather than `Announce`, `GeoPose`, `VisionFrame`
-  and friends.
-- **§3.3.3 QoS profiles** — advertised in `TopicMeta` but not applied. Endpoints
-  are created with ad-hoc QoS, and two different transports
-  (`nuscenes/dds_envelope_transport.py`, `bridges/envelope_io.py`) disagree on
-  it.
-- **§2.6 keys and instance lifecycle** — not exercised. The spec keys
-  `Announce`, `CoverageQuery`, `Depart` and others; the envelope has no key, so
-  every sample lands on one instance. Per-service dispose and per-key
-  late-join backfill are unavailable as a result.
+### Evidence, not assertion
 
-So this document describes conformance at the *payload* level. Typed-wire
-migration is planned in `directions/spatialdds-demo-typed-wire-migration.md`;
-this section comes out when it lands and the interop probe proves the exchange
-in both directions.
+`tests/interop_probe.py` is a participant built from three things — the
+types generated from `idl/v1.7`, the spec's topic names, and the §3.3.3
+profile table — and from **no demo transport code at all**. If it can talk
+to the demo, the spec is what the two have in common.
+
+Both directions pass (`tests/test_interop.py`):
+
+* the probe reads the demo's announces off the well-known keyed topic,
+  follows one announce's own `TopicMeta` to a data lane, and reads from it;
+* the demo discovers the probe, resolves the type it announces, opens a
+  reader, reads its `GeoPose` samples and sees it depart.
+
+The probe also reports any announced type name it cannot resolve. It reports
+none: a spec-only implementation can consume every lane this demo publishes.
+
+### What is still not implemented
+
+Honestly, and the distinction matters — these are now *testable* rather than
+merely absent:
+
+* **DDS Security binding.** Not configured. Per-topic access control is
+  expressible now that there are per-topic endpoints, which it was not
+  before; nobody has written the permissions files.
+* **XCDR2 cross-vendor.** Untested. The demo is CycloneDDS on both ends. The
+  types are XTypes-annotated `@extensibility(APPENDABLE)` and the wire is
+  real CDR, so a second vendor is a matter of running one, not of changing
+  anything here.
+* **Large-blob transport at scale.** `spatial::core::BlobChunk` works and is
+  verified moving 200 KiB in 4 chunks with per-chunk CRC, but nothing has
+  pushed a real point cloud through it at rate.
 
 ## What changed from v1.6
 
@@ -61,11 +81,12 @@ with `<minor>` ≥ 7.
 | `ProfileSupport.preferred` removed; `name` carries the module family | `{"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7}` |
 | `Time.sec` widened to int64 | No change needed — JSON integers carry int64, and nothing here clamps to 32 bits |
 
-Also in 1.7, but not exercised here: compound `@key` on `core::Node`/`Edge` and
-`mapping::Edge`, `TileMeta`'s single `Aabb3 aabb` in place of
-`min_xyz`/`max_xyz`/`lod`, and the removal of `BlobChunk.last`. The envelope
-transport ships JSON payloads rather than spec-typed DDS instances, so nothing
-here relies on keyed-instance semantics.
+Also in 1.7, but not exercised here: compound `@key` on `core::Node`/`Edge`
+and `mapping::Edge`, `TileMeta`'s single `Aabb3 aabb` in place of
+`min_xyz`/`max_xyz`/`lod`, and the removal of `BlobChunk.last`. This demo
+publishes no `Node`, `Edge` or `TileMeta`, so those keys are unexercised —
+not unavailable. `Announce`'s key *is* exercised, and is what discovery
+depends on.
 
 ## Discovery flow
 
@@ -112,11 +133,11 @@ override that must not be hoisted onto the canonical frame.
 is `geopose` / `VPS_RESP` (it was the unregistered `node_geo` before).
 `spatialdds_demo/topics.py` carries the full §3.3.2 and §3.3.3 registries.
 
-Anchor deltas have no registered type or QoS profile in 1.7, so
-`spatialdds/anchors/<zone>/delta/v1` uses deployment-specific extensions —
-type `oarc.anchor_delta`, QoS profile `ANCHOR_DELTA` — following the
-`myorg.depth_frame` / `DEPTH_LIVE` naming pattern §3.3.2 recommends. Force-fitting
-them onto `map_event` / `MAP_META` would have misrepresented what they are.
+Anchor deltas are `anchor_delta` / `ANCHOR_DELTA`, both registered. They used
+to be deployment-specific extensions (`oarc.anchor_delta`) because 1.7 named
+neither; the findings-batch-2 revision added both, along with twelve other
+registry rows and four other QoS profiles that this demo had been working
+around. See "Extensions" below for what is left.
 
 Demo topic *names* are unchanged: 1.7 exempts well-known and profile-defined
 topics from the application-topic pattern, and reply topics are consumer-chosen.
@@ -207,3 +228,49 @@ metadata when an authority publishes it, but neither server publishes its own.
   checks: `/1.5`, `/1.6` and every `@` form are rejected.
 - `spatialdds_demo/topics.py::validate_topic_meta()` checks TopicMeta rows
   against the 1.7 registries plus the documented extensions above.
+
+## Extensions: what 1.7 still has no type for
+
+§3.3.2 allows deployment-specific type names and asks that they be
+documented. This is that documentation, and it is deliberately short:
+everything the demo used to carry an `oarc.*` name for because the *type
+system* had a gap now has a registered name. What is left is application
+protocol — flows this demo needs and the spec does not describe.
+
+| Extension | Type | Why it exists |
+|---|---|---|
+| `oarc.fused_track` | `oarc_demo::FusedTrackSet` | No fused-track type. `semantics::Tracklet` is feature-level and `vision::Track2D` is per-image; a cross-operator fused track — the output of the flagship demo — has nowhere to go |
+| `oarc.fusion_coverage` | `oarc_demo::FusionCoverage` | No type for fusion coverage metrics |
+| `oarc.vps_response` | `oarc_demo::VpsResponse` | `vps_query` is a registered *topic type* but 1.7 defines no struct for the request, and names no type at all for the response |
+| `oarc.catalog_query` | `oarc_demo::CatalogQuery` | No catalogue query/response pair. `ContentAnnounce` advertises content; nothing asks a catalogue what is in an area |
+| `oarc.catalog_response` | `oarc_demo::CatalogResponse` | as above |
+| `oarc.bootstrap_query` | `oarc_demo::BootstrapQuery` | No bootstrap exchange. A participant is assumed to know its domain id and QoS profile already, which is exactly what a fresh device does not |
+| `oarc.bootstrap_response` | `oarc_demo::BootstrapResponse` | as above |
+
+Seven, down from twelve. The five that went away, and what replaced them:
+
+| Was | Now | Added by |
+|---|---|---|
+| `oarc.detection3d_velocity` (`DetectionWithVelocity` wrapping `Detection3D`) | `detection3d` — `Detection3D` has `has_velocity`/`velocity` | findings batch 2 |
+| `oarc.framed_pose` | `framed_pose` | findings batch 2 |
+| `oarc.detection2d_set` (demo-local `Detection2D`/`BBox2D`) | `detection2d` — `semantics::Detection2DSet` | findings batch 2 |
+| `oarc.lidar_frame`, `oarc.lidar_meta`, `oarc.radar_tensor_meta`, `oarc.video_frame_meta`, `oarc.rf_beam_meta`, `oarc.imu_sample`, `oarc.anchor_delta` | the same names without the prefix | findings batch 2 |
+| `oarc.blob_chunk` (demo-local `BlobChunk` at a 65535 bound) | `spatial::core::BlobChunk` — the spec's bound is 65535 now | findings batch 2 |
+
+Each of those was raised as a finding from building this demo; see
+`directions/spatialdds-1.7-review-submission.md` for the full list and how
+each was resolved.
+
+## Where the spec and DDS still do not line up
+
+Two, both flagged rather than quietly resolved:
+
+* **Ordering is "Ordered" for every profile.** DDS orders per instance by
+  default (`DestinationOrder` BY_RECEPTION_TIMESTAMP), so no policy is set;
+  the spec's column describes the default rather than requesting
+  BY_SOURCE_TIMESTAMP.
+* **Deadline is request/offered, and silently so.** A reader requesting
+  33 ms does not match a writer offering none — no error, no warning, no
+  data. The §3.3.3 table's deadline column is normative for that reason, and
+  `tests/test_interop.py::DeadlineIsLoadBearing` pins the behaviour so it
+  cannot be rediscovered the hard way.

@@ -1,9 +1,11 @@
-"""Unit tests for the v1.6 dict-builder helpers.
+"""Unit tests for the payload builders.
 
-Pure-Python — no DDS, no FastAPI. Verifies shape + presence flags +
-JSON-serialisability so the synthetic publisher and fusion service can
-rely on these dicts riding cleanly through the envelope's
-``payload_json``.
+Pure-Python — no DDS, no FastAPI. Verifies that each builder produces a dict
+that ``json_mapping.from_json`` can build into its IDL type: complete, with
+every presence flag beside its value. That check is what JSON-
+serialisability used to stand in for, and it is strictly stronger — a
+payload that is not a well-formed sample fails here rather than at some
+consumer three processes away.
 """
 
 from __future__ import annotations

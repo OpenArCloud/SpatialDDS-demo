@@ -22,4 +22,4 @@ This demo maps the real DeepSense Scenario 9 files on disk to SpatialDDS-like ty
 
 ## Notes
 
-- implementation uses the same working DDS envelope + Rerun launch pattern as `nuscenes/`
+- implementation uses the same typed-topic + Rerun launch pattern as `nuscenes/`

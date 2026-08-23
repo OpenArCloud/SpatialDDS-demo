@@ -28,8 +28,11 @@ container suite covers what you touched.
 
 | Suite | How to run | Needs |
 |---|---|---|
-| Unit + bridge logic | `python3 -m pytest multi_operator_fusion bridges/ros2_bridge/test_conversions.py bridges/mqtt_bridge bridges/web_bridge/test_router.py bridges/web_bridge/test_client.py bridges/web_bridge/test_dashboard_routes.py bridges/mcap_bridge` | host |
-| ROS 2 envelope round-trip | `python3 -m pytest bridges/ros2_bridge/test_envelope_roundtrip.py` | host, run on its own |
+| Unit + bridge logic | `python3 -m pytest multi_operator_fusion bridges/ros2_bridge/test_conversions.py bridges/mqtt_bridge bridges/web_bridge/test_router.py bridges/web_bridge/test_client.py bridges/web_bridge/test_dashboard_routes.py bridges/mcap_bridge tests/ nuscenes/test_nuscenes_shapes.py deepsense/test_deepsense_shapes.py` | host — **266 passed, 11 skipped** |
+| Interop probe, both directions | `python3 -m unittest tests.test_interop` | Docker (needs `CYCLONEDDS_URI`) |
+| Head-of-line isolation | `python3 -m unittest tests.test_head_of_line` | Docker (needs `CYCLONEDDS_URI`) |
+| ROS 2 DDS round-trip | `python3 -m unittest bridges.ros2_bridge.test_dds_roundtrip` | Docker |
+| MCAP record → replay | `python3 bridges/mcap_bridge/test_live.py` | Docker + `pip install mcap` |
 | AR-demo protocol | `cd ar_demo && ./run_all_tests.sh` | host |
 | Cesium web UI | `cd web && npm test` | host + Playwright browsers |
 | Web bridge HTTP | `bash run_bridge_http_tests_docker.sh` | Docker |
@@ -41,20 +44,46 @@ On Apple Silicon the published `cyclonedds-python-base` image has no arm64
 manifest, so build it locally first:
 
 ```bash
-docker build -t ghcr.io/openarcloud/cyclonedds-python-base:0.10.5-ubuntu22.04 -f Dockerfile.base .
+docker build -t ghcr.io/openarcloud/cyclonedds-python-base:11.0.1-ubuntu22.04 -f Dockerfile.base .
 docker build -t cyclonedds-python .
+```
+
+The container suites all take the same shape:
+
+```bash
+docker run --rm -v "$PWD:/app" -w /app -e PYTHONPATH=/app \
+  -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml cyclonedds-python \
+  python3 -m unittest tests.test_interop
 ```
 
 ### Things that look like failures but aren't
 
 - **Don't run `pytest bridges` wholesale.** `test_integration.py` exists under
-  both `multi_operator_fusion/` and `bridges/web_bridge/`, and
-  `test_envelope_roundtrip.py` imports a shadowed `envelope_io`. Both pass when
-  run individually.
+  both `multi_operator_fusion/` and `bridges/web_bridge/`. Both pass when run
+  individually.
+- **Duplicate module basenames are a live hazard.** `publisher.py` exists three
+  times. `spatialdds_types.py` existed twice until a `sys.path` collision
+  silently turned a whole test file into a no-op — it reported "converters
+  unavailable" and *skipped*, while having imported the wrong module. The
+  nuScenes/DeepSense one is `sensor_types.py` now, and tests that must not be
+  shadowed import by file path. A skip that hides a failing test is worse than
+  the failure.
+- **`ar_demo` scripts are cwd-sensitive.** Run `spatialdds_demo_tests.py` from
+  `ar_demo/` (it opens `catalog_seed.json` relatively) and
+  `comprehensive_test.py` from the repo root (it compiles `idl/v1.7/*.idl`).
+  Wrong directory looks like a failure and isn't.
+- **The DDS suites skip loudly without `CYCLONEDDS_URI`.** cyclonedds will
+  build a participant on a host with no usable networking config, so the gate
+  is the environment variable rather than the import — otherwise they fail
+  late and confusingly instead of skipping.
 - Three `test_`-prefixed files aren't pytest modules, so "no tests ran" is
   correct: `ros2_bridge/test_mocks.py` is a mock library, and
   `mcap_bridge/test_live.py` and `test_with_deepsense.py` are scripts needing
   live DDS and the DeepSense dataset.
+- **Real-time lanes drop samples on purpose.** `DET_RT`, `POSE_RT`,
+  `LIDAR_RT`, `IMU_RT` and `RADAR_RT` are BEST_EFFORT per §3.3.3, so a burst
+  loses some. A test asserting zero loss on one of those is asserting the
+  wrong thing; assert it on a reliable lane.
 - The two web specs skip each other by design; see `web/README.md`.
 - `run_bridge_http_tests_docker.sh` can report `COVERAGE_RESPONSE timeout`. Its
   discovery query is sent once with no retry. Re-run it, or use the pytest

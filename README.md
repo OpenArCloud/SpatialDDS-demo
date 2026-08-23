@@ -2,8 +2,18 @@
 
 Reference demos for the SpatialDDS 1.7 draft spec (https://spatialdds.org), running
 on CycloneDDS. The repo bundles the upstream IDL under `idl/v1.7`, mirrors the
-manifest examples in `manifests/v1.7`, and ships four runnable demos that build on
-top of a shared `spatialdds/envelope/v1` transport.
+manifest examples in `manifests/v1.7`, and ships four runnable demos.
+
+**The demos publish spec IDL types on spec-named topics with spec QoS
+profiles.** One DDS topic per logical topic, carrying the §3.3.2 type its
+announce names; keyed `Announce` on the well-known discovery topic, so a late
+joiner gets every live service and a dispose evicts one. JSON exists only at
+the edges — WebSocket clients, MQTT payloads, MCAP records.
+
+That is verifiable rather than asserted: [`tests/interop_probe.py`](tests/interop_probe.py)
+is a participant built from the generated types, the spec's topic names and the
+§3.3.3 profile table, with **no demo transport code**, and it exchanges samples
+with the demo in both directions.
 
 1.7 broke the wire format (the spec allows this pre-adoption), so there are no
 compatibility shims here: `CoverageResponse` returns compact `ServiceSummary`
@@ -22,13 +32,14 @@ directories are kept for reference only; nothing loads them. Details in
 | Demo | Path | What it shows |
 |---|---|---|
 | Multi-operator fusion *(flagship)* | [`multi_operator_fusion/`](multi_operator_fusion/README.md) | Three AV fleet operators and a 6G base station share `Detection3D` observations; a platform fuser publishes unified `FusedTrack`s. Rerun or a browser dashboard. |
-| nuScenes → Rerun | [`nuscenes/`](nuscenes/README.md) | nuScenes v1.0-mini over DDS envelopes: ego pose, 6 cameras, LiDAR, 5 radars, 3D annotations. |
+| nuScenes → Rerun | [`nuscenes/`](nuscenes/README.md) | nuScenes v1.0-mini as typed samples: ego pose, 6 cameras, LiDAR, 5 radars, 3D annotations. |
 | DeepSense 6G → Rerun | [`deepsense/`](deepsense/README.md) | DeepSense Scenario 9 V2I: 60 GHz beam, FMCW radar, camera, GPS, 2D lidar. |
 | AR demo | [`ar_demo/`](ar_demo/README.md) | Bootstrap → discovery → coverage query → localization → catalog → anchor, plus a Cesium web UI. |
 | Benchmarks | [`benchmarks/`](benchmarks/README.md) | Latency, discovery, multi-operator and coverage-query scripts, with plotting. |
 
-New here? Start with multi-operator fusion: it exercises the whole envelope
-transport against real datasets.
+New here? Start with multi-operator fusion: it is the one that exercises
+discovery, per-type QoS and keyed instances together, and it runs with no
+dataset to download.
 
 ## Bridges
 
@@ -38,9 +49,9 @@ per-demo wiring.
 | Bridge | Path | What it does |
 |---|---|---|
 | Web (HTTP/WebSocket) | [`bridges/web_bridge/`](bridges/web_bridge/README.md) | FastAPI server. REST endpoints for the Cesium demo, plus subscribe-by-pattern `/ws`, `/api/topics`, `/api/stats`. Serves the fusion canvas dashboard at `/`. |
-| MCAP record / replay | [`bridges/mcap_bridge/`](bridges/mcap_bridge/README.md) | Records `spatialdds/envelope/v1` to an [MCAP](https://mcap.dev) file and replays it. Lossless, Foxglove-compatible. |
+| MCAP record / replay | [`bridges/mcap_bridge/`](bridges/mcap_bridge/README.md) | Discovers lanes from announces and records typed samples to an [MCAP](https://mcap.dev) file with schemas **generated from the IDL**, so a recording is readable without this repo. Replay rebuilds the typed sample. Foxglove-compatible. |
 | ROS 2 | [`bridges/ros2_bridge/`](bridges/ros2_bridge/README.md) | Bidirectional. Covers `PoseStamped`, `NavSatFix`, `Imu`, `CompressedImage`, `Detection3DArray`, and `FusedTrackSet` in reverse. The conversion layer is duck-typed, so most of it tests without ROS 2 installed. |
-| MQTT | [`bridges/mqtt_bridge/`](bridges/mqtt_bridge/README.md) | Bidirectional, against Mosquitto or AWS IoT Core. MQTT topic = `logical_topic`, same JSON payload. QoS and retain are inferred from the topic suffix. |
+| MQTT | [`bridges/mqtt_bridge/`](bridges/mqtt_bridge/README.md) | Bidirectional, against Mosquitto or AWS IoT Core. MQTT topic = DDS topic. Inbound JSON is built into its announced type before it reaches the bus, so a malformed payload fails at the bridge. |
 
 ## Two HTTP servers — which one do I want?
 

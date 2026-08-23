@@ -14,13 +14,18 @@ a browser canvas dashboard for the live "look at the intersection" view.
 |---|---|---|
 | operator_a / b / c publisher | nuScenes scene (different sensor mixes) | `spatialdds/operator_{a,b,c}/…` |
 | infrastructure publisher | DeepSense Scenario 9 (60 GHz beam + radar + cam + lidar) | `spatialdds/infrastructure/…` |
-| fusion service | — | subscribes `*/sensing/detection3d/v1`, publishes `platform/fusion/{track,coverage}/v1` |
-| Rerun subscriber / web bridge | — | subscribes the lot |
+| fusion service | — | discovers detection lanes from announces; announces and publishes `platform/fusion/{track,coverage}/v1` |
+| Rerun subscriber / web bridge | — | subscribe to every announced lane |
 
-Every payload carries `source_operator` at the top level — that's the
-interoperability contract. The fuser runs NN-association (5 m / 5 m·s⁻¹
-gate), uncertainty-weighted position fusion (1/σ²), confidence boost
-via `1 − ∏(1 − cᵢ)`, and 2-hits-confirms / 6-misses-drops lifecycle.
+Every process finds the others through discovery: read the announces on
+`spatialdds/discovery/announce/v1`, resolve each announced §3.3.2 type, open
+a reader. The producer is `source_id` on the sample and the operator is in
+the topic name, which is where DDS expects that kind of identity.
+
+The fuser runs NN-association (5 m / 5 m·s⁻¹ gate), uncertainty-weighted
+position fusion (1/σ²), confidence boost via `1 − ∏(1 − cᵢ)`, and
+2-hits-confirms / 6-misses-drops lifecycle. It gates on velocity, which
+`semantics::Detection3D` carries directly.
 
 ## Quick start
 
@@ -100,22 +105,50 @@ python -m pytest multi_operator_fusion/ -q
 
 ## Wire topics (cheat sheet)
 
+One DDS topic per logical topic, carrying the §3.3.2 type its announce names,
+on that type's §3.3.3 QoS profile.
+
 ```
 # Per-operator (each publisher → fuser + viewer)
-spatialdds/{operator}/sensing/detection3d/v1   NUSC_DET3D_SET | INFRA_DET3D_SET
-spatialdds/{operator}/ego/pose/v1              NUSC_EGO_POSE
-spatialdds/{operator}/plan/{agent}/trajectory/v1   PlannedTrajectory
-spatialdds/{operator}/discovery/announce/v1    Announce
+spatialdds/{operator}/sensing/detection3d/v1         detection3d         DET_RT
+spatialdds/{operator}/ego/pose/v1                    framed_pose         POSE_RT
+spatialdds/{operator}/plan/{agent}/trajectory/v1     planned_trajectory  EVENT_RT
 
 # Platform (fuser → viewer)
-spatialdds/platform/fusion/track/v1            NUSC_FUSED_TRACK_SET
-spatialdds/platform/fusion/coverage/v1         NUSC_FUSION_COVERAGE
-spatialdds/platform/events/trajectory_conflict/v1   SpatialEvent
-spatialdds/platform/entity/binding/v1          EntityBinding
+spatialdds/platform/fusion/track/v1                  oarc.fused_track      POSE_RT
+spatialdds/platform/fusion/coverage/v1               oarc.fusion_coverage  MAP_META
+spatialdds/platform/events/trajectory_conflict/v1    spatial_event         EVENT_RT
+spatialdds/platform/entity/binding/v1                entity_binding        MAP_META
+
+# Discovery — one well-known topic, keyed on service_id
+spatialdds/discovery/announce/v1                     Announce  DISCOVERY_ANNOUNCE
+spatialdds/discovery/depart/v1                       Depart    DISCOVERY_ANNOUNCE
 ```
 
-Infrastructure also adds `rf_beam`, `rad/.../tensor`,
-`vision/.../frame`, `lidar/.../frame`, and `geo/unit[12]/pose`.
+Infrastructure also adds `rf_beam`, `rad/.../tensor`, `vision/.../frame`,
+`lidar/.../frame`, and `geo/unit[12]/pose`. Image and lidar bytes ride
+`spatialdds/blob/chunk/v1` as `blob_chunk`, keyed `(blob_id, index)`; a frame
+message names its blob by `BlobRef` and never inlines it.
+
+**Nothing hardcodes that list.** Each service announces its lanes with their
+type and profile, and consumers open a reader per announced lane — so a
+service that starts mid-run is picked up, and one whose type a consumer
+cannot resolve is skipped rather than fatal (§3.3.2 treats unregistered names
+as extension points).
+
+The two `oarc.*` names are the demo's own: 1.7 has no fused-track type
+(`semantics::Tracklet` is feature-level, `vision::Track2D` per-image) and none
+for fusion coverage metrics. See
+[`ar_demo/SPEC_COMPLIANCE.md`](../ar_demo/SPEC_COMPLIANCE.md#extensions-what-17-still-has-no-type-for).
+
+### Expect drops on the real-time lanes
+
+`DET_RT` and `POSE_RT` are BEST_EFFORT per §3.3.3, so a burst will lose
+samples — that is the profile working, not a fault. The reliable lanes
+(`EVENT_RT`, `MAP_META`) lose nothing. Every stream used to share one
+RELIABLE + KEEP_ALL topic, which is why nothing ever dropped before and why
+one slow consumer could stall every publisher; `tests/test_head_of_line.py`
+measures both shapes.
 
 ## Troubleshooting
 

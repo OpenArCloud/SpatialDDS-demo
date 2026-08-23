@@ -352,11 +352,11 @@ def _env_domain_id() -> Optional[int]:
         return None
 
 
-def _safe_json(payload_json: str) -> Any:
+def _safe_json(raw: str) -> Any:
     try:
-        return json.loads(payload_json or "{}")
+        return json.loads(raw or "{}")
     except json.JSONDecodeError:
-        return payload_json
+        return raw
 
 
 class DDSEventBroadcaster:
@@ -439,33 +439,9 @@ ALLOW_PUBLISH = os.getenv("SPATIALDDS_BRIDGE_ALLOW_PUBLISH", "1") not in ("0", "
 STATIC_DIR = os.getenv("SPATIALDDS_BRIDGE_STATIC_DIR", str(_HERE / "static"))
 
 
-def _dispatch_to_clients(envelope) -> None:
-    """Schedule ClientManager.dispatch on the event loop. Called from the
-    sync DDS poll thread, so we hop threads via ``call_soon_threadsafe``."""
-    global _event_loop, _total_dispatched
-    if _event_loop is None:
-        return
-    try:
-        payload = json.loads(envelope.payload_json or "{}")
-    except (json.JSONDecodeError, AttributeError):
-        return
-    msg_type = getattr(envelope, "msg_type", "") or ""
-    topic = getattr(envelope, "logical_topic", "") or ""
-    stamp_ns = int(getattr(envelope, "stamp_ns", time.time_ns()) or 0)
-
-    async def _go():
-        global _total_dispatched
-        sent = await client_mgr.dispatch(topic, msg_type, payload, stamp_ns)
-        _total_dispatched += sent
-
-    _event_loop.call_soon_threadsafe(asyncio.ensure_future, _go())
-
-
-# Hook the new dispatcher into the same global ``_emit_dds_event`` the
-# legacy broadcaster already uses. The lossless envelope subscriber set
-# up in ``on_startup`` calls this for every received envelope; we fan
-# out to BOTH the legacy /v1/stream broadcaster AND the per-client
-# ``ClientManager.dispatch`` for /ws subscribers.
+# The stream pump calls ``_emit_dds_event`` for every typed sample, and this
+# fans out to BOTH the /v1/stream broadcaster (raw, all clients) and the
+# per-client ``ClientManager.dispatch`` for /ws subscribers.
 _legacy_emit = _emit_dds_event
 
 

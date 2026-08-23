@@ -76,10 +76,12 @@ Environment overrides (handy for one-off runs / Docker):
 
 ```
 MQTT  topic:    spatialdds/<operator>/<family>/<sensor?>/<kind>/v1
-MQTT  payload:  the same JSON that rides in envelope.payload_json on DDS
+MQTT  payload:  the sample as JSON (json_mapping.to_json / from_json)
 
-DDS   logical_topic = MQTT topic, verbatim
-DDS   msg_type      = derived from topic by topic_mapping.infer_msg_type
+DDS   topic        = MQTT topic, verbatim
+DDS   type         = derived from topic by topic_mapping.infer_msg_type,
+                     or from a `spatialdds_msg_type` MQTT v5 user property
+DDS   QoS profile  = whatever 3.3.3 assigns that type
                        (or supplied via the MQTT v5 user property
                        `spatialdds_msg_type` on inbound messages)
 ```
@@ -146,8 +148,9 @@ docker compose -f docker-compose.test.yaml down
 Brings up Mosquitto and runs `test_bridge.py` inside the
 `cyclonedds-python` image. Verifies:
 
-- inbound: MQTT publish → bridge → DDS subscriber sees envelope with
-  the right `msg_type` + `_bridge_id`
+- inbound: MQTT publish → bridge → a typed DDS reader sees a real sample of
+  the announced type — and a malformed payload is refused at the bridge
+  rather than reaching the bus
 - outbound: DDS publish → bridge → MQTT subscriber sees retained /
   qos=1 message
 - loop prevention: a payload tagged with the bridge's own `_bridge_id`
@@ -203,5 +206,5 @@ config can then use `inbound_topics: ["spatialdds/<operator_name>/#"]`.
 ## Sibling bridges
 
 - [`bridges/web_bridge/`](../web_bridge/README.md) — HTTP/WebSocket bridge for browsers.
-- [`bridges/mcap_bridge/`](../mcap_bridge/README.md) — record/replay envelopes to MCAP files.
+- [`bridges/mcap_bridge/`](../mcap_bridge/README.md) — record/replay typed samples to MCAP files.
 - [`bridges/ros2_bridge/`](../ros2_bridge/README.md) — bidirectional ROS 2 ↔ SpatialDDS bridge.

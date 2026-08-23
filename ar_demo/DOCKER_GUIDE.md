@@ -91,10 +91,11 @@ docker run --rm -p 9000:9000 cyclonedds-python python3 http_binding.py 9000
 ### IDL Compilation
 
 `/app/spatialdds.idl` is a convenience aggregator: it defines no types of its
-own, it only `#include`s the profile files under `idl/v1.7/`. Nothing in the
-demo consumes generated bindings — the wire type is the JSON envelope declared
-in `spatialdds_demo/dds_transport.py` — so this is purely for downstream
-consumers who want typed stubs.
+own, it only `#include`s the profile files under `idl/v1.7/`. The demo itself
+does not compile through it — `scripts/generate_types.py` runs `idlc -l py`
+over the profile files directly and writes `spatialdds_idl/`, which is what
+every process imports. The aggregator is for downstream consumers who want
+one file to point a compiler at.
 
 **C** — the aggregator works, and `-o` is honoured:
 

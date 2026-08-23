@@ -8,8 +8,15 @@ clients. Two generations of endpoints live in the same process:
 | **Legacy** (`/v1/...`) | One-shot REST wrappers around localize + catalog, plus a fire-hose WebSocket. | The Cesium web demo under [`web/`](../../web/). Stable. |
 | **Generic** (`/ws`, `/api/...`) | Subscribe-based protocol with topic patterns, optional `msg_type` filtering, server-side rate limiting, and browser-to-DDS publishing. | Any browser app that wants to listen to or talk to the SpatialDDS bus without hard-coded topics. |
 
-Both share a single CycloneDDS subscriber on `spatialdds/envelope/v1`, so adding the
+Both are fed by one discovery-driven subscriber: it reads announces, resolves
+each announced §3.3.2 type, and opens a typed reader per lane. Adding the
 generic side doesn't double the DDS load.
+
+**The bus carries types; the socket carries JSON.** Everything a WebSocket
+client sees is serialised at this boundary. The `/ws` protocol is unchanged —
+same message shape, same field names — but `msg_type` now holds the announced
+registry type (`detection3d`, `framed_pose`) rather than a demo-private label,
+which is strictly more information in the same place.
 
 ## Run
 
@@ -71,14 +78,14 @@ endpoint's correctness. A service leaves the cache when:
 - **its announce expires** — entries older than `stamp + 2 x ttl_sec` are swept
   on the next read.
 
-DDS dispose is not yet a removal path here, for a local reason rather than a
-spec one. `spatial::disco::Announce` is properly keyed on `service_id`, so
-per-service instance lifecycle is what the spec intends — but this demo does not
-publish that type. It JSON-encodes announces into a single unkeyed envelope
-topic, which collapses every service onto one instance and leaves
-NOT_ALIVE_DISPOSED referring to the topic rather than to a service. The typed-wire
-migration restores dispose as the primary signal; until then Depart and TTL are
-what the cache can observe. `GET /api/stats` reports the cache counters.
+- **its instance is disposed** — `spatial::disco::Announce` is `@key
+  service_id`, so NOT_ALIVE_DISPOSED names one service rather than the topic.
+
+Dispose is the primary signal and the spec's MUST (C.5). `Depart` is the
+SHOULD, and this demo publishes both, because a bridge to MQTT or a WebSocket
+carries no DDS instance state — only a message crosses. TTL is the backstop
+for a publisher that vanished without either. `GET /api/stats` reports the
+cache counters.
 
 ### Serving authored manifests
 
@@ -94,7 +101,7 @@ the response.
 GET  /health                  → bridge status + last seen ANNOUNCE
 POST /v1/localize             → Phase 3 LOCALIZE_REQUEST one-shot
 POST /v1/catalog/query        → Phase 4 CATALOG_QUERY one-shot
-WS   /v1/stream               → every received envelope, no filtering
+WS   /v1/stream               → every received sample, no filtering
 ```
 
 `/v1/localize` accepts `{ "prior_geopose": ..., "service_id": ... }` and returns a
@@ -113,17 +120,21 @@ JSON messages over WebSocket, identified by a `type` field.
   "type": "subscribe",
   "id": "sub_1",                                          // optional; auto-assigned otherwise
   "pattern": "spatialdds/*/sensing/detection3d/v1",       // glob on logical_topic
-  "msg_types": ["Detection3DSet", "ROS2_DETECTION3D_SET"],// optional, AND-ed with pattern
+  "msg_types": ["detection3d"],                           // optional, AND-ed with pattern
   "max_rate_hz": 5.0                                      // optional server-side throttle
 }
 
 // Unsubscribe
 { "type": "unsubscribe", "id": "sub_1" }
 
-// Publish a SpatialDDS envelope back to the DDS bus
+// Publish back to the DDS bus. `msg_type` is resolved through the §3.3.2
+// registry and the payload is built into that type before it is written, on
+// the QoS profile §3.3.3 assigns it — so a malformed payload is refused here,
+// with an error you can see, rather than becoming a well-formed message that
+// fails somewhere else.
 {
   "type": "publish",
-  "msg_type": "ROS2_FRAMED_POSE",
+  "msg_type": "framed_pose",
   "logical_topic": "spatialdds/web_client/ego/pose/v1",
   "payload": { "pose": { "t": {"x": 1, "y": 2, "z": 0}, "q": {"x": 0, "y": 0, "z": 0, "w": 1} } }
 }
@@ -141,11 +152,11 @@ JSON messages over WebSocket, identified by a `type` field.
 // Subscription confirmed
 { "type": "subscribed", "id": "sub_1", "pattern": "...", "status": "ok" }
 
-// A relayed envelope (one per message even if multiple of your subs match)
+// A relayed sample (one per message even if multiple of your subs match)
 {
   "type": "data",
   "sub_id": "sub_1",
-  "msg_type": "Detection3DSet",
+  "msg_type": "detection3d",
   "logical_topic": "spatialdds/operator_a/sensing/detection3d/v1",
   "timestamp_ns": 1714071012500000000,
   "payload": { ... }                  // SpatialDDS payload JSON, verbatim
@@ -187,7 +198,7 @@ zero-dep ES6 client. Auto-reconnects with a 2 s backoff, runs a 10 s ping.
   sdds.subscribe(
     "spatialdds/*/sensing/detection3d/v1",
     (msg) => console.log(msg.payload),
-    { msgTypes: ["Detection3DSet", "ROS2_DETECTION3D_SET"], maxRateHz: 5 }
+    { msgTypes: ["detection3d"], maxRateHz: 5 }
   );
 
   const topics = await sdds.listTopics();       // [{logical_topic, rate_hz, ...}]
@@ -201,31 +212,41 @@ in a browser for a minimal topic browser + raw-message viewer. ~80 LOC of
 vanilla HTML/JS. Useful for verifying which topics are live without wiring
 up a real client.
 
-## Architecture (one CycloneDDS reader, two fan-outs)
+## Architecture (discovery in, two fan-outs, typed out)
 
 ```
-SpatialDDS bus (envelope topic)
-        │
+SpatialDDS bus
+        │  announces on spatialdds/discovery/announce/v1  (@key service_id)
         ▼
-  DDSTransport (sync poll thread)
+  StreamSubscriber ── resolves each announced type through the 3.3.2 registry
+        │             and opens one typed reader per lane
         │
-        ├──► _emit_dds_event ────► DDSEventBroadcaster ──► WS /v1/stream  (legacy)
+        │  (poll thread; JSON serialisation happens here and only here)
+        ▼
+  _emit_dds_event ──► DDSEventBroadcaster ──► WS /v1/stream  (legacy)
         │
         └──► loop.call_soon_threadsafe(...)
                     │
                     ▼
               ClientManager.dispatch  ──► WS /ws  (generic, per-client filters)
-                                       \\─ TopicRouter (stats + rate limits)
+                                       \─ TopicRouter (stats + rate limits)
 
-  WS /ws  publish messages ──► EnvelopePublisher (RELIABLE+KEEP_ALL writer)
-                                          │
-                                          ▼
-                                   SpatialDDS bus
+  WS /ws  publish ──► _BrowserPublisher
+                          │  resolves msg_type -> class, builds the payload
+                          │  into it, writes on that type's 3.3.3 profile
+                          ▼
+                   SpatialDDS bus
 ```
 
-The `EnvelopePublisher` and `EnvelopeSubscriber` factories are shared with the
-MCAP and ROS 2 bridges via [`bridges/envelope_io.py`](../envelope_io.py) so QoS
-choices stay aligned.
+Announces reach browsers under a per-service logical topic
+(`spatialdds/{service}/discovery/announce/v1`) even though they are one keyed
+topic on the bus. Browsers have subscribed with that wildcard since before the
+announce topic was consolidated, so the bridge names the service in the logical
+topic it hands out and the `/ws` protocol does not change.
+
+The typed streaming layer is [`spatialdds_demo/stream.py`](../../spatialdds_demo/stream.py),
+shared with the fusion demo, MCAP and MQTT, so QoS and type resolution stay
+aligned across all of them.
 
 ## Tests
 
@@ -234,11 +255,11 @@ choices stay aligned.
 python3 -m pytest -q bridges/web_bridge/test_router.py bridges/web_bridge/test_client.py
 
 # Integration test (FastAPI TestClient WebSocket round-trip, no real DDS needed
-# — uses an in-process bridge between dispatch and a synthetic envelope source)
+# — drives ClientManager.dispatch directly from a synthetic sample source)
 python3 -m pytest -q bridges/web_bridge/test_integration.py
 ```
 
 ## Sibling bridges
 
-- [`bridges/mcap_bridge/`](../mcap_bridge/README.md) — record/replay envelope traffic to MCAP.
+- [`bridges/mcap_bridge/`](../mcap_bridge/README.md) — record/replay typed traffic to MCAP.
 - [`bridges/ros2_bridge/`](../ros2_bridge/README.md) — bidirectional bridge between SpatialDDS and ROS 2.
