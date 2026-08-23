@@ -44,7 +44,6 @@ from spatialdds_demo.discovery_bus import AnnounceSubscriber
 from spatialdds_demo.discovery_http import (
     DiscoveryError,
     bootstrap_manifest,
-    query_from_geohash,
     search as discovery_search,
 )
 from spatialdds_demo.json_mapping import from_json, to_json
@@ -793,16 +792,18 @@ def wellknown_search(payload: Dict[str, Any]) -> Dict[str, Any]:
 @app.get("/.well-known/spatialdds/search")
 def wellknown_search_geohash(geohash: str, kind: Optional[str] = None) -> Dict[str, Any]:
     """
-    GET shorthand from the spec: expand the geohash to its bounding box and
-    treat it as the query coverage. Thin translation onto the POST path.
+    The GET convenience form, which §3.3.0 makes REQUIRED alongside POST for
+    interoperability with the Geospatial DNS-SD binding: "The GET form is
+    equivalent to a POST with `{"geohash": "{geohash}"}` (and optional `kind`
+    filter). The response format is identical."
+
+    So it is exactly that — the same body, through the same call — rather than
+    a second path that has to be kept in step with the first.
     """
-    try:
-        query = query_from_geohash(geohash, [kind] if kind else None)
-        return discovery_search(
-            bridge.announce_records(), query, manifest_provider=_served_manifest
-        )
-    except DiscoveryError as exc:
-        raise HTTPException(status_code=exc.status, detail=str(exc))
+    body: Dict[str, Any] = {"geohash": geohash}
+    if kind:
+        body["kind"] = [kind]
+    return wellknown_search(body)
 
 
 @app.get("/.well-known/spatialdds/bootstrap")

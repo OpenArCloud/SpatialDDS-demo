@@ -74,13 +74,63 @@ ManifestProvider = Callable[[ServiceRecord], Optional[Dict[str, Any]]]
 # Request validation
 # --------------------------------------------------------------------------
 
-def validate_search_request(query: Dict[str, Any]) -> None:
+# Geometry members and the flag that governs each, for the edge normalization
+# below.
+_PRESENCE_FLAGS = (
+    ("bbox", "has_bbox"),
+    ("aabb", "has_aabb"),
+    ("crs", "has_crs"),
+    ("frame_ref", "has_frame_ref"),
+)
+
+
+def _normalize_element(element: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Validate a search body, raising :class:`DiscoveryError` on rejection.
+    One CoverageElement as the HTTP binding's own examples write it.
+
+    The IDL models optionality as a `has_x` flag beside a value, and that is
+    what rides the bus. The spec's §3.3.0 request examples are hand-written
+    JSON that simply omits the flags — `{"crs": "EPSG:4326", "bbox": [...]}` is
+    the binding's own worked example — so a server that insists on the flags
+    rejects the documented request. The flag is inferred only when its key is
+    *absent*; an explicit `false` still means "ignore this member", which is
+    the rule §3.3.4 states and the reason the flags exist.
+
+    Circle has no entry above: `circle_center` is a fixed-length array that is
+    present-but-zero on every element that came off the bus, so a present key
+    says nothing. `has_circle` must be explicit.
+    """
+    if not isinstance(element, dict):
+        raise DiscoveryError("Each coverage element must be a JSON object")
+    out = dict(element)
+    for member, flag in _PRESENCE_FLAGS:
+        if flag not in out and out.get(member) not in (None, "", [], {}):
+            out[flag] = True
+    return out
+
+
+def normalize_search_request(query: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate a search body and return it in the shape matching works on.
+
+    Rejections raise :class:`DiscoveryError`, which carries the HTTP status.
 
     Hard cutover: 1.7 deleted ``CoverageQuery.expr`` along with Appendix F.X,
     so a body carrying it is rejected rather than silently answered with the
     filter the caller believes is being applied.
+
+    Two accommodations for the HTTP binding's request table (§3.3.0), which is
+    not quite the on-bus ``CoverageQuery`` struct:
+
+    * ``geohash`` is a top-level shorthand — "the server expands the geohash to
+      its bounding box and treats it as an additional coverage element". A body
+      of ``{"geohash": "9q8yy"}`` alone is the binding's minimal example, and
+      the GET convenience form is *defined* as equivalent to it, so it has to
+      be answerable.
+    * ``coverage_frame_ref`` is not in the request table at all and appears in
+      none of its examples, so a conformant client will not send one. Absent,
+      the query is read as earth-fixed, which is what §3.3.4 says an element
+      with no frame means.
     """
     if not isinstance(query, dict):
         raise DiscoveryError("Request body must be a JSON object")
@@ -91,18 +141,55 @@ def validate_search_request(query: Dict[str, Any]) -> None:
             "structured 'filter' (CoverageFilter) instead"
         )
 
-    if "coverage" not in query or "coverage_frame_ref" not in query:
+    raw_coverage = query.get("coverage")
+    if raw_coverage is not None and not isinstance(raw_coverage, list):
+        raise DiscoveryError("coverage must be an array of CoverageElement")
+    coverage = [_normalize_element(e) for e in (raw_coverage or [])]
+
+    frame_ref = query.get("coverage_frame_ref")
+
+    geohash = query.get("geohash")
+    if geohash:
+        if not isinstance(geohash, str):
+            raise DiscoveryError("geohash must be a string")
+        west, south, east, north = geohash_bounds(geohash)
+        geohash_frame, element = _earth_fixed_bbox(west, south, east, north)
+        # An *additional* element, per §3.3.0 — a geohash alongside a coverage
+        # block widens the query rather than replacing it.
+        coverage.append(element)
+        if frame_ref is None:
+            frame_ref = geohash_frame
+
+    if not coverage:
         raise DiscoveryError(
-            "CoverageQuery requires coverage[] and coverage_frame_ref"
+            "search requires coverage[] or a geohash (§3.3.0: 400 on missing "
+            "coverage)"
         )
 
+    if frame_ref is None:
+        frame_ref = _earth_fixed_frame_ref()
+
     try:
-        SpatialDDSValidator.validate_frame_ref(query["coverage_frame_ref"])
-        SpatialDDSValidator.validate_coverage(
-            query["coverage"], query["coverage_frame_ref"]
-        )
+        SpatialDDSValidator.validate_frame_ref(frame_ref)
+        SpatialDDSValidator.validate_coverage(coverage, frame_ref)
     except Exception as exc:
         raise DiscoveryError(f"Invalid coverage: {exc}") from exc
+
+    normalized = dict(query)
+    normalized["coverage"] = coverage
+    normalized["coverage_frame_ref"] = frame_ref
+    return normalized
+
+
+def validate_search_request(query: Dict[str, Any]) -> None:
+    """Validate only, for callers that do not want the normalized body."""
+    normalize_search_request(query)
+
+
+def _earth_fixed_frame_ref() -> Dict[str, Any]:
+    """The frame an element with no declared frame is in (§3.3.4)."""
+    frame_ref, _ = _earth_fixed_bbox(0.0, 0.0, 0.0, 0.0)
+    return frame_ref
 
 
 # --------------------------------------------------------------------------
@@ -444,7 +531,7 @@ def search(
 
     Results are ordered by ``service_id`` so paging is stable across calls.
     """
-    validate_search_request(query)
+    query = normalize_search_request(query)
 
     coverage_q = query.get("coverage") or []
     has_filter = bool(query.get("has_filter")) or isinstance(query.get("filter"), dict)

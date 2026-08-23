@@ -161,8 +161,9 @@ class SpatialDDSValidator:
 
         1.7 deleted ``CoverageElement.type``: the geometry kind is derived
         from the presence flags. ``has_bbox`` is the geographic (bbox) form,
-        ``has_aabb`` alone is the local volume form, and neither plus
-        ``global: true`` is the global form.
+        ``has_aabb`` alone is the local volume form, ``has_circle`` is the
+        centre-and-radius form added by 1.7's findings-batch-2 revision, and
+        none of the three plus ``global: true`` is the global form.
         """
         if "type" in element:
             raise ValidationError(
@@ -213,17 +214,32 @@ class SpatialDDSValidator:
                             "volume aabb appears to be lon/lat; use meters with a frame_ref"
                         )
 
+        if element.get("has_circle"):
+            center = element.get("circle_center")
+            radius = element.get("circle_radius_m")
+            if not isinstance(center, list) or len(center) != 3:
+                raise ValidationError(
+                    "circle_center must be an array [x, y, z] "
+                    "(lon, lat, alt in earth-fixed frames)"
+                )
+            if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in center):
+                raise ValidationError("circle_center values must be finite numbers")
+            if not isinstance(radius, (int, float)) or not math.isfinite(radius):
+                raise ValidationError("circle_radius_m must be a finite number")
+            if radius < 0:
+                raise ValidationError("circle_radius_m must not be negative")
+
         if element.get("has_frame_ref"):
             frame_ref = element.get("frame_ref")
             if not frame_ref:
                 raise ValidationError("has_frame_ref is true but frame_ref missing")
             cls.validate_frame_ref(frame_ref)
 
-        if not element.get("has_bbox") and not element.get("has_aabb"):
+        if not any(element.get(flag) for flag in ("has_bbox", "has_aabb", "has_circle")):
             if not element.get("global"):
                 raise ValidationError(
-                    "CoverageElement must provide bbox or aabb geometry, "
-                    "or set global=true"
+                    "CoverageElement must provide bbox, aabb or circle "
+                    "geometry, or set global=true"
                 )
 
     @classmethod

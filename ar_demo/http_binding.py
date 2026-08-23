@@ -15,6 +15,7 @@ bridge so the two servers cannot drift.
 """
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import parse_qs
 import json
 import os
 import uuid
@@ -77,7 +78,7 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
         self._set_headers(204)
 
     def do_GET(self):
-        parsed_path = self.path.split("?", 1)[0]
+        parsed_path, _, raw_query = self.path.partition("?")
 
         if parsed_path == "/":
             self._send_json(
@@ -89,6 +90,8 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
                         # registration). `resolver` is not served here — this
                         # binding has no manifests of its own to resolve.
                         "bootstrap": "/.well-known/spatialdds/bootstrap",
+                        # POST for the full query, GET ?geohash= for the
+                        # convenience form; §3.3.0 requires both.
                         "search": "/.well-known/spatialdds/search",
                         # demo-local extensions
                         "register": "/.well-known/spatialdds/register",
@@ -97,6 +100,8 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
                     "spec": "https://github.com/OpenArCloud/SpatialDDS-spec",
                 }
             )
+        elif parsed_path == "/.well-known/spatialdds/search":
+            self._handle_search_get(raw_query)
         elif parsed_path == "/.well-known/spatialdds/bootstrap":
             self._send_json(bootstrap_manifest())
         elif parsed_path == "/.well-known/spatialdds/list":
@@ -125,6 +130,32 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
             self._handle_register()
         else:
             self._send_error_json(f"Endpoint not found: {parsed_path}", 404)
+
+    # -- GET handlers ------------------------------------------------------
+    def _handle_search_get(self, raw_query: str):
+        """
+        The GET convenience form.
+
+        §3.3.0 makes it REQUIRED alongside POST — "for interoperability with
+        the Geospatial DNS-SD binding" — and defines it as equivalent to a POST
+        with `{"geohash": ...}` plus an optional `kind`. Built as exactly that
+        body and handed to the same core call, so the two forms cannot answer
+        differently.
+        """
+        params = parse_qs(raw_query)
+        geohash = (params.get("geohash") or [""])[0]
+        if not geohash:
+            self._send_error_json(
+                "GET /.well-known/spatialdds/search requires ?geohash=", 400)
+            return
+        body: Dict[str, Any] = {"geohash": geohash}
+        kind = (params.get("kind") or [""])[0]
+        if kind:
+            body["kind"] = [kind]
+        try:
+            self._send_json(search(_records(), body))
+        except DiscoveryError as exc:
+            self._send_error_json(str(exc), exc.status)
 
     # -- POST handlers -----------------------------------------------------
     def _handle_search(self):
