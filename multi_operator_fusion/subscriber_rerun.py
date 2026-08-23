@@ -17,7 +17,7 @@ Rendered types:
     video_frame, oarc.lidar_frame   raw sensor frames
     radar_detection                 radar detection sets
     planned_trajectory              intent, and the conflicts between plans
-    oarc.fused_track                the platform's unified tracks
+    fused_track                the platform's unified tracks
     oarc.fusion_coverage            the coverage headline
     entity_binding, spatial_event   cross-topic correlation, alerts
 """
@@ -253,7 +253,7 @@ class RerunMultiOpSubscriber:
             operator = operator_from_topic(topic) or "unknown"
             handle_sample(self, msg_type, topic, operator, payload, frame_num)
             if msg_type in {"framed_pose", "detection3d",
-                            "oarc.fused_track"}:
+                            "fused_track"}:
                 seen += 1
             if max_frames > 0 and seen >= max_frames:
                 return
@@ -719,7 +719,7 @@ _HANDLERS = {
     "lidar_frame": lambda s, op, p, n: s._handle_lidar(op, p, n),
     "radar_detection": lambda s, op, p, n: s._handle_radar(op, p, n),
     "detection3d": lambda s, op, p, n: s._handle_det3d(op, p, n),
-    "oarc.fused_track": lambda s, op, p, n: s._handle_fused_tracks(p, n),
+    "fused_track": lambda s, op, p, n: s._handle_fused_tracks(p, n),
     "oarc.fusion_coverage": lambda s, op, p, n: s._handle_coverage(p, n),
     "planned_trajectory": lambda s, op, p, n: s._handle_planned_trajectory(op, p, n),
     "spatial_event": lambda s, op, p, n: s._handle_spatial_event(p, n),

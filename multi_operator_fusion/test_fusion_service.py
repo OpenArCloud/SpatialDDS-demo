@@ -135,7 +135,7 @@ class MessageRouting(unittest.TestCase):
 
     def test_publish_tracks_emits_a_real_fused_track_set(self):
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.oarc_demo import FusedTrackSet
+        from spatialdds_idl.spatial.semantics import FusedTrackSet
 
         svc, transport = self._make_service()
         svc.on_message(DET3D_TYPE,
@@ -147,7 +147,9 @@ class MessageRouting(unittest.TestCase):
         topic, payload = transport.sent[0]
         self.assertEqual(topic, "spatialdds/platform/fusion/track/v1")
         track_set = from_json(FusedTrackSet, payload)
-        self.assertEqual(track_set.source_operator, "platform")
+        # Spec FusedTrackSet is keyed by the fusion stream, not a source operator.
+        self.assertEqual(track_set.stream_id, "platform-fusion")
+        self.assertEqual(track_set.schema_version, "spatial.semantics/1.7")
         self.assertEqual(len(track_set.tracks), 1)
         self.assertEqual(track_set.tracks[0].source_operators, ["operator_a"])
 

@@ -24,10 +24,10 @@ if str(_HERE) not in sys.path:
 import rerun as rr  # noqa: E402
 
 from spatialdds_demo.json_mapping import from_json, to_json  # noqa: E402
-from spatialdds_idl.spatial.semantics import Detection3DSet  # noqa: E402
-from spatialdds_idl.oarc_demo import (  # noqa: E402
-    FusedTrackSet, FusionCoverage,
+from spatialdds_idl.spatial.semantics import (  # noqa: E402
+    Detection3DSet, FusedTrackSet,
 )
+from spatialdds_idl.oarc_demo import FusionCoverage  # noqa: E402
 from spatialdds_idl.spatial.core import (  # noqa: E402
     EntityBinding, FramedPose, PlannedTrajectory,
 )
@@ -173,7 +173,7 @@ class TestSubscriberRerun(unittest.TestCase):
                      operator="infrastructure")
 
     def test_fused_tracks(self):
-        self._drive("oarc.fused_track",
+        self._drive("fused_track",
                      "spatialdds/platform/fusion/track/v1",
                      _fused_tracks_payload(),
                      operator="platform")
@@ -223,7 +223,7 @@ class TestSubscriberRerun(unittest.TestCase):
         from subscriber_rerun import _HANDLERS
 
         for type_name in ("framed_pose", "detection3d",
-                          "planned_trajectory", "oarc.fused_track",
+                          "planned_trajectory", "fused_track",
                           "oarc.fusion_coverage", "spatial_event",
                           "entity_binding"):
             with self.subTest(type=type_name):

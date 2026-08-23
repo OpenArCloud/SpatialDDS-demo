@@ -424,7 +424,7 @@ class TestDispatch(unittest.TestCase):
         for type_name, decoder in (
             ("detection3d", detection3d_set_to_array),
             ("detection3d", detection3d_set_to_array),
-            ("oarc.fused_track", detection3d_set_to_array),
+            ("fused_track", detection3d_set_to_array),
             ("framed_pose", framed_pose_to_pose_stamped),
             ("geopose", geo_pose_to_nav_sat_fix),
             ("imu_sample", imu_sample_to_imu),

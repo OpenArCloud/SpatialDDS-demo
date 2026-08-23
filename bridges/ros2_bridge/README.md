@@ -17,7 +17,7 @@ multi-operator fusion service's reverse-direction case:
 | ROS 2 → SpatialDDS | `sensor_msgs/Imu` | `imu_sample` | `IMU_RT` | `spatialdds/{op}/imu/{sensor}/sample/v1` |
 | ROS 2 → SpatialDDS | `sensor_msgs/CompressedImage` | `video_frame` + `blob_chunk` | `VIDEO_LIVE` | `spatialdds/{op}/vision/{sensor}/frame/v1` |
 | ROS 2 → SpatialDDS | `vision_msgs/Detection3DArray` | `detection3d` | `DET_RT` | `spatialdds/{op}/sensing/detection3d/v1` |
-| SpatialDDS → ROS 2 | `detection3d` / `oarc.fused_track` | (decoded) | | → `vision_msgs/Detection3DArray` |
+| SpatialDDS → ROS 2 | `detection3d` / `fused_track` | (decoded) | | → `vision_msgs/Detection3DArray` |
 | SpatialDDS → ROS 2 | `framed_pose` | (decoded) | | → `geometry_msgs/PoseStamped` |
 | SpatialDDS → ROS 2 | `geopose` | (decoded) | | → `sensor_msgs/NavSatFix` |
 | SpatialDDS → ROS 2 | `imu_sample` | (decoded) | | → `sensor_msgs/Imu` |
@@ -147,7 +147,7 @@ docker run --rm --network host \
 ```
 
 The reverse direction: run any SpatialDDS publisher (e.g. the multi-op
-fusion demo) — the bridge will republish `oarc.fused_track` samples
+fusion demo) — the bridge will republish `fused_track` samples
 as `vision_msgs/Detection3DArray` on `/fused/detections_3d`.
 
 ## Two-domain design

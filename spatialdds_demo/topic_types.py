@@ -21,11 +21,13 @@ from spatialdds_idl.oarc_demo import (
     BootstrapResponse,
     CatalogQuery,
     CatalogResponse,
-    FusedTrackSet,
     FusionCoverage,
 )
 from spatialdds_idl.spatial.anchors import AnchorDelta
 from spatialdds_idl.spatial.argeo import VpsRequest, VpsResponse
+from spatialdds_idl.spatial.semantics import (
+    Detection2DSet, Detection3DSet, FusedTrackSet,
+)
 from spatialdds_idl.spatial.core import (
     BlobChunk,
     EntityBinding,
@@ -36,7 +38,6 @@ from spatialdds_idl.spatial.core import (
 )
 from spatialdds_idl.spatial.disco import Announce, CoverageQuery, CoverageResponse, Depart
 from spatialdds_idl.spatial.events import SpatialEvent
-from spatialdds_idl.spatial.semantics import Detection2DSet, Detection3DSet
 from spatialdds_idl.spatial.vio import ImuSample
 from spatialdds_idl.spatial.sensing.lidar import LidarFrame, LidarMeta
 from spatialdds_idl.spatial.sensing.rad import (
@@ -60,6 +61,7 @@ REGISTERED: Dict[str, Type] = {
     "radar_detection": RadDetectionSet,
     "detection3d": Detection3DSet,
     "detection2d": Detection2DSet,
+    "fused_track": FusedTrackSet,
     "lidar_frame": LidarFrame,
     "lidar_meta": LidarMeta,
     "imu_sample": ImuSample,
@@ -82,11 +84,9 @@ REGISTERED: Dict[str, Type] = {
 # thing the spec still has no type for; everything else the demo used to
 # carry an `oarc.*` name for now has a registered one.
 EXTENSIONS: Dict[str, Type] = {
-    # No fused-track type: semantics::Tracklet is feature-level and
-    # vision::Track2D is per-image, so a cross-operator fused track — the
-    # output of the flagship demo — has nowhere to go.
-    "oarc.fused_track": FusedTrackSet,
-    # No type for fusion coverage metrics either.
+    # Fusion coverage metrics have no spec type — an aggregate diagnostic, not
+    # track content (the fused tracks themselves are now the registered
+    # `fused_track` -> semantics::FusedTrackSet).
     "oarc.fusion_coverage": FusionCoverage,
     # No catalogue query/response pair in 1.7; ContentAnnounce advertises
     # content but nothing asks a catalogue what is in an area.

@@ -294,7 +294,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
 
         from bridge import MqttDdsBridge
         from spatialdds_demo import typed_transport as tt
-        from spatialdds_idl.oarc_demo import FusedTrackSet
+        from spatialdds_idl.spatial.semantics import FusedTrackSet
 
         topic = "spatialdds/platform/fusion/track/v1"
         cfg = _make_config("outbound_only", bridge_id="bridge-out",
@@ -302,7 +302,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         bridge = MqttDdsBridge(cfg)
         # The bridge subscribes through discovery, so the lane has to be
         # announced before anything is written to it.
-        _announce_lane(topic, "oarc.fused_track", "POSE_RT", "platform")
+        _announce_lane(topic, "fused_track", "DET_RT", "platform")
         bridge.start(block=False)
         time.sleep(3.0)
 
@@ -336,7 +336,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         self.assertNotIn("_bridge_id", body)
         props = dict(getattr(msg.properties, "UserProperty", []) or [])
         self.assertEqual(props.get("spatialdds_bridge_id"), "bridge-out")
-        self.assertEqual(props.get("spatialdds_msg_type"), "oarc.fused_track")
+        self.assertEqual(props.get("spatialdds_msg_type"), "fused_track")
 
     # ──────────────────────────────────────────────────────────────────────
     # Loop prevention

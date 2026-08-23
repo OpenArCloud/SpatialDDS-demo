@@ -36,7 +36,7 @@ class TestMsgTypeInference(unittest.TestCase):
         ("spatialdds/infra/vision/cam_0/meta/v1",  "video_meta"),
         ("spatialdds/infra/rf_beam/unit1/frame/v1", "rf_beam"),
         ("spatialdds/op/plan/robot_1/trajectory/v1", "planned_trajectory"),
-        ("spatialdds/platform/fusion/track/v1",    "oarc.fused_track"),
+        ("spatialdds/platform/fusion/track/v1",    "fused_track"),
         ("spatialdds/platform/fusion/coverage/v1", "oarc.fusion_coverage"),
         ("spatialdds/platform/entity/binding/v1",  "entity_binding"),
         ("spatialdds/platform/events/conflict/v1", "spatial_event"),

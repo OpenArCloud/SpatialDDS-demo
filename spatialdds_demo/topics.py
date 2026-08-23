@@ -70,9 +70,11 @@ REGISTERED_TOPIC_TYPES = {
     "rad_sensor_meta",
     "radio_sensor_meta",
     # Added in 1.7 batch 3: the VPS request/response pair now has spec types
-    # (argeo). `tile_meta` was dropped in the batch-3 follow-up —
-    # `geometry_tile` is the canonical registry name for TileMeta.
+    # (argeo) and cross-source fused tracks have one (semantics). `tile_meta`
+    # was dropped in the batch-3 follow-up — `geometry_tile` is the canonical
+    # registry name for TileMeta.
     "vps_response",
+    "fused_track",
     # Blob transfer is its own mechanism rather than a topic type, but a
     # lane carrying chunks still has to name something.
     "blob_chunk",

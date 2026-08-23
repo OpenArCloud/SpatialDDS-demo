@@ -184,7 +184,9 @@ def resolve_type(type_name: str):
         TileMeta,
     )
     from spatialdds_idl.spatial.events import SpatialEvent
-    from spatialdds_idl.spatial.semantics import Detection2DSet, Detection3DSet
+    from spatialdds_idl.spatial.semantics import (
+        Detection2DSet, Detection3DSet, FusedTrackSet,
+    )
     from spatialdds_idl.spatial.sensing.lidar import LidarFrame, LidarMeta
     from spatialdds_idl.spatial.sensing.rad import (
         RadDetectionSet, RadSensorMeta, RadTensorFrame, RadTensorMeta,
@@ -207,6 +209,7 @@ def resolve_type(type_name: str):
         "rad_sensor_meta": RadSensorMeta,
         "detection3d": Detection3DSet,
         "detection2d": Detection2DSet,
+        "fused_track": FusedTrackSet,
         "lidar_frame": LidarFrame,
         "lidar_meta": LidarMeta,
         "imu_sample": ImuSample,

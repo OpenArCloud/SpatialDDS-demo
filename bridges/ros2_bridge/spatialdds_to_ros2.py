@@ -50,7 +50,7 @@ from test_mocks import (  # noqa: E402
 # vision_msgs/Detection3DArray. 3.3.2 registers no name for the semantic
 # Detection3DSet, which is why the demo has to use an oarc.* one.
 SDDS_MSG_TYPES_DETECTION3D = ("detection3d", "detection3d")
-SDDS_MSG_TYPES_FUSED_TRACK = ("oarc.fused_track",)
+SDDS_MSG_TYPES_FUSED_TRACK = ("fused_track",)
 SDDS_MSG_TYPES_FRAMED_POSE = ("framed_pose",)
 SDDS_MSG_TYPES_GEO_POSE = ("geopose",)
 SDDS_MSG_TYPES_IMU = ("imu_sample",)

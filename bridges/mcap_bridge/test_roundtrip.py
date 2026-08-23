@@ -49,7 +49,7 @@ def _wire(cls, payload):
 
 def _samples():
     """``[(type_name, topic, payload, stamp_ns)]`` — real payloads."""
-    from spatialdds_idl.oarc_demo import FusedTrackSet
+    from spatialdds_idl.spatial.semantics import FusedTrackSet
     from spatialdds_idl.spatial.semantics import Detection3DSet
     from spatialdds_idl.spatial.core import FramedPose
     from spatialdds_idl.spatial.disco import Announce
@@ -84,7 +84,7 @@ def _samples():
              1.0, 2.0, 0.0, q=(0.0, 0.0, 0.0, 1.0),
              frame_ref_fqn="operator_a/map", timestamp_s=100.5)),
          100_500_000_000),
-        ("oarc.fused_track", "spatialdds/platform/fusion/track/v1",
+        ("fused_track", "spatialdds/platform/fusion/track/v1",
          _wire(FusedTrackSet, make_fused_track_set([track], timestamp_s=102.0)),
          102_000_000_000),
         ("spatialdds/discovery/announce",

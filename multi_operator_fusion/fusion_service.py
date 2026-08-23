@@ -76,7 +76,7 @@ SCENE_FRAME_FQN = "scene/intersection"
 # disagree about what is on a topic.
 PLATFORM_SERVICE_ID = "platform-fusion"
 PLATFORM_LANES = (
-    (TRACK_TOPIC, "oarc.fused_track", "POSE_RT"),
+    (TRACK_TOPIC, "fused_track", "DET_RT"),
     (COVERAGE_TOPIC, "oarc.fusion_coverage", "MAP_META"),
     (TRAJ_CONFLICT_TOPIC, "spatial_event", "EVENT_RT"),
     (ENTITY_BINDING_TOPIC, "entity_binding", "MAP_META"),
@@ -237,6 +237,7 @@ class FusionService:
         self._thread = threading.Thread(target=self._tick_loop, daemon=True)
         self._conflict_detector = TrajectoryConflictDetector()
         self._reported_conflicts: set = set()  # dedupes (agent_a, agent_b) pairs
+        self._track_seq = 0  # per-source monotonic seq on FusedTrackSet
 
     def on_message(self, type_name: str, topic: str,
                    payload: dict, stamp_ns: int) -> None:
@@ -350,8 +351,10 @@ class FusionService:
             ))
 
     def _publish_tracks(self, tracks, t: float) -> None:
+        self._track_seq += 1
         self._transport.publish(TRACK_TOPIC, make_fused_track_set(
-            tracks, source_operator="platform", timestamp_s=t))
+            tracks, stream_id=PLATFORM_SERVICE_ID, frame_ref_fqn=SCENE_FRAME_FQN,
+            source_id=PLATFORM_SERVICE_ID, seq=self._track_seq, timestamp_s=t))
 
     def _publish_coverage(self, tracks, t: float) -> None:
         # `metrics` was a nested free-form object under the old payload; the

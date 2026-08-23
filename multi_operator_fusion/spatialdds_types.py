@@ -330,29 +330,49 @@ def make_detection_set(set_id: str, source_operator: str, frame_ref_fqn: str,
         set_id, source_operator, frame_ref_fqn, dets, frame_seq, timestamp_s)
 
 
-def make_fused_track(track, timestamp_s: float) -> Dict:
-    """One :class:`fusion.FusedTrack` as an ``oarc_demo::FusedTrack`` dict."""
+def make_fused_track(track) -> Dict:
+    """One :class:`fusion.FusedTrack` as a spec ``semantics::FusedTrack`` dict.
+
+    The demo's scalar position sigma becomes an isotropic 3x3 covariance — the
+    spec carries uncertainty as a covariance, not a bare scalar. The demo has no
+    velocity covariance, so ``has_velocity_cov`` stays false. Provenance
+    (``source_operators`` / ``source_modalities`` / ``source_count``) is the
+    point of the type; the per-operator detection ids ride ``EntityBinding``,
+    not the track.
+    """
+    sigma = float(track.position_uncertainty)
+    var = sigma * sigma
     return {
         "track_id": str(track.track_id),
-        "position": _vec((track.position.x, track.position.y, track.position.z)),
-        "velocity": _vec((track.velocity.vx, track.velocity.vy, track.velocity.vz)),
-        "position_uncertainty": float(track.position_uncertainty),
         "object_class": str(track.object_class),
         "confidence": float(track.confidence),
+        "position": _vec((track.position.x, track.position.y, track.position.z)),
+        "has_position_cov": True,
+        "position_cov": [var, 0.0, 0.0, 0.0, var, 0.0, 0.0, 0.0, var],
+        "has_velocity": True,
+        "velocity": _vec((track.velocity.vx, track.velocity.vy, track.velocity.vz)),
+        "has_velocity_cov": False,
+        "velocity_cov": [0.0] * 9,
         "source_operators": [str(o) for o in track.source_operators],
         "source_modalities": [str(m) for m in track.source_modalities],
         "source_count": int(track.source_count),
-        "track_age": float(track.track_age),
-        "stamp": _stamp(getattr(track, "timestamp", timestamp_s)),
+        "track_age_s": float(track.track_age),
     }
 
 
-def make_fused_track_set(tracks, *, source_operator: str = "platform",
+def make_fused_track_set(tracks, *, stream_id: str = "platform/fusion",
+                         frame_ref_fqn: str = "scene/intersection",
+                         source_id: str = "platform-fusion", seq: int = 0,
                          timestamp_s: float = 0.0) -> Dict:
+    """A ``semantics::FusedTrackSet`` for one fusion stream (keyed by stream_id)."""
     return {
-        "source_operator": str(source_operator),
-        "tracks": [make_fused_track(t, timestamp_s) for t in tracks],
+        "stream_id": str(stream_id),
+        "schema_version": "spatial.semantics/1.7",
+        "frame_ref": _frame_ref(frame_ref_fqn),
+        "tracks": [make_fused_track(t) for t in tracks],
         "stamp": _stamp(timestamp_s),
+        "source_id": str(source_id),
+        "seq": int(seq),
     }
 
 

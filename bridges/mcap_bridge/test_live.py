@@ -39,7 +39,7 @@ import replayer as replayer_mod  # noqa: E402
 SCENE = "scene/intersection"
 DET_TYPE = "detection3d"
 POSE_TYPE = "framed_pose"
-TRACK_TYPE = "oarc.fused_track"
+TRACK_TYPE = "fused_track"
 
 
 def _samples() -> List[Tuple[str, str, dict]]:

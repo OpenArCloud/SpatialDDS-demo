@@ -47,7 +47,7 @@ REPLAY_PROFILES = {
     "rf_beam": "RF_BEAM_RT",
     "detection3d": "DET_RT",
     "framed_pose": "POSE_RT",
-    "oarc.fused_track": "POSE_RT",
+    "fused_track": "DET_RT",
     "oarc.fusion_coverage": "MAP_META",
     "lidar_frame": "LIDAR_RT",
     "lidar_meta": "SENSOR_META",

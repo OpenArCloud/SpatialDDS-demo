@@ -34,10 +34,10 @@ from infrastructure_publisher import (  # noqa: E402
     make_detection3d_payload,
 )
 from spatialdds_demo.json_mapping import from_json
-from spatialdds_idl.spatial.semantics import Detection3DSet  # noqa: E402
-from spatialdds_idl.oarc_demo import (  # noqa: E402
-    FusedTrackSet, FusionCoverage,
+from spatialdds_idl.spatial.semantics import (  # noqa: E402
+    Detection3DSet, FusedTrackSet,
 )
+from spatialdds_idl.oarc_demo import FusionCoverage  # noqa: E402
 from spatialdds_types import (  # noqa: E402
     make_detection, make_detection_set,
 )

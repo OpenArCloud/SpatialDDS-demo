@@ -40,7 +40,7 @@ TOPIC_TYPE_MAP: List[Tuple[str, str]] = [
     ("*/rad/*/meta/*",            "radar_tensor_meta"),
     ("*/rf_beam/*/frame/*",       "rf_beam"),
     ("*/rf_beam/*/meta/*",        "rf_beam_meta"),
-    ("*/fusion/track/*",          "oarc.fused_track"),
+    ("*/fusion/track/*",          "fused_track"),
     ("*/fusion/coverage/*",       "oarc.fusion_coverage"),
     ("*/plan/*/trajectory/*",     "planned_trajectory"),
     ("*/entity/binding/*",        "entity_binding"),

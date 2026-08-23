@@ -542,7 +542,7 @@ class _BrowserPublisher:
         "vps_response": "VPS_RESP",
         "detection3d": "DET_RT",
         "framed_pose": "POSE_RT",
-        "oarc.fused_track": "POSE_RT",
+        "fused_track": "DET_RT",
         "oarc.fusion_coverage": "MAP_META",
         "oarc.catalog_query": "VPS_REQ",
         "oarc.catalog_response": "VPS_RESP",
