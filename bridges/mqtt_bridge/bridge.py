@@ -1,18 +1,31 @@
-"""MQTT ↔ SpatialDDS bridge.
+"""MQTT <-> SpatialDDS bridge.
 
-Wires a paho-mqtt client to the shared envelope publisher/subscriber
-(``bridges/envelope_io.py``). Topic strings are 1:1 between MQTT and the
-SpatialDDS envelope's ``logical_topic`` — no translation. Payloads are JSON
-on both sides.
+A typed adapter, not a relay. DDS carries real samples; MQTT carries JSON,
+because that is what MQTT clients expect. Inbound, the topic (or an MQTT v5
+user property) names a §3.3.2 type, the JSON is built into that type, and a
+malformed payload is refused at the bridge instead of being republished as a
+well-formed string nobody can parse. Outbound, typed samples are serialised
+once, here.
+
+Topic strings are 1:1 between MQTT and DDS — no translation.
 
 Loop prevention
 ---------------
 
-Every message the bridge republishes carries a ``_bridge_id`` field set
-to ``config.bridge_id``. Messages received with the bridge's own
-``_bridge_id`` are dropped. Combined with non-overlapping inbound /
-outbound topic filters, this prevents the obvious echo loop where the
-bridge re-relays its own output forever.
+Two independent mechanisms, neither of which touches the payload:
+
+* **DDS side** — the bridge's readers carry IGNORE_LOCAL_PARTICIPANT, so
+  they never see what the bridge's own writers published. DDS answers this
+  at the middleware; previously the bridge injected a ``_bridge_id`` field
+  into the payload and filtered on it, which is not expressible in a typed
+  struct and was never really the payload's business.
+* **MQTT side** — the bridge tags what it publishes with a ``spatialdds_bridge_id``
+  MQTT v5 user property and drops anything arriving with its own id, so two
+  peered bridges do not ping-pong. Transport metadata rides in transport
+  headers.
+
+Non-overlapping inbound / outbound topic filters remain the first line of
+defence for both.
 """
 
 from __future__ import annotations
@@ -58,16 +71,48 @@ class MqttDdsBridge:
     """Long-lived MQTT ↔ DDS relay. Call ``start()`` to run; ``stop()`` to
     tear down (or send SIGINT)."""
 
+    # MQTT v5 user property naming the bridge that published a message, so
+    # a peer bridge can drop its own traffic without a payload field.
+    USER_PROPERTY_BRIDGE_ID = "spatialdds_bridge_id"
+
     # The MQTT user-property name used to override topic-based msg_type
     # inference, when the publisher knows the type explicitly.
     USER_PROPERTY_MSG_TYPE = "spatialdds_msg_type"
+
+    # 3.3.3 QoS profile per registered type. A message bridged in from MQTT
+    # goes onto the lane the spec assigns its type — not onto one profile
+    # the bridge picked for everything, which is what a single envelope
+    # topic forced.
+    DDS_QOS_PROFILES = {
+        "geopose": "POSE_RT",
+        "navsat_status": "POSE_RT",
+        "planned_trajectory": "EVENT_RT",
+        "entity_binding": "MAP_META",
+        "spatial_event": "EVENT_RT",
+        "video_frame": "VIDEO_LIVE",
+        "radar_tensor": "RADAR_RT",
+        "radar_detection": "RADAR_RT",
+        "rf_beam": "RF_BEAM_RT",
+        "oarc.detection3d_velocity": "RADAR_RT",
+        "oarc.framed_pose": "POSE_RT",
+        "oarc.fused_track": "POSE_RT",
+        "oarc.fusion_coverage": "MAP_META",
+        "oarc.lidar_frame": "GEOM_TILE",
+        "oarc.lidar_meta": "MAP_META",
+        "oarc.radar_tensor_meta": "MAP_META",
+        "oarc.video_frame_meta": "MAP_META",
+        "oarc.rf_beam_meta": "MAP_META",
+    }
+    DEFAULT_DDS_PROFILE = "EVENT_RT"
 
     def __init__(self, config: BridgeConfig):
         self.config = config
         self.stats = BridgeStats()
         self._stop_event = threading.Event()
-        self._envelope_pub = None      # bridges.envelope_io.EnvelopePublisher
-        self._envelope_sub = None      # bridges.envelope_io.EnvelopeSubscriber
+        self._participant = None       # cyclonedds DomainParticipant
+        self._writers: dict = {}       # logical_topic -> TypedDictWriter
+        self._stream_sub = None        # spatialdds_demo.stream.StreamSubscriber
+        self._pump = None              # thread polling the stream subscriber
         self._mqtt = None              # paho.mqtt.client.Client
         self._mqtt_lock = threading.Lock()  # paho's thread-safety story is fuzzy
 
@@ -78,17 +123,24 @@ class MqttDdsBridge:
         # Lazy-import paho/cyclonedds so unit tests can import the module
         # without these deps installed.
         import paho.mqtt.client as mqtt
-        from envelope_io import EnvelopePublisher, EnvelopeSubscriber
+        from cyclonedds.domain import DomainParticipant
+
+        from spatialdds_demo.stream import StreamSubscriber
 
         # ── DDS side ────────────────────────────────────────────────────
-        if self.config.direction in ("bidirectional", "inbound_only"):
-            self._envelope_pub = EnvelopePublisher(self.config.dds_domain_id)
+        # One participant for both directions, which is what makes
+        # IGNORE_LOCAL_PARTICIPANT the loop guard: the readers below are in
+        # the same participant as the writers this bridge creates inbound.
+        self._participant = DomainParticipant(self.config.dds_domain_id)
 
         if self.config.direction in ("bidirectional", "outbound_only"):
-            self._envelope_sub = EnvelopeSubscriber(
-                self.config.dds_domain_id,
-                callback=self._on_dds_envelope,
+            self._stream_sub = StreamSubscriber(
+                self._participant, self._on_dds_sample,
+                on_announce=self._on_dds_announce,
+                ignore_local=True,
             )
+            self._pump = threading.Thread(target=self._poll_dds, daemon=True)
+            self._pump.start()
 
         # ── MQTT side ───────────────────────────────────────────────────
         client_kwargs = {
@@ -126,9 +178,6 @@ class MqttDdsBridge:
         )
         self._mqtt.loop_start()
 
-        if self._envelope_sub is not None:
-            self._envelope_sub.start()
-
         if not block:
             return
 
@@ -145,20 +194,12 @@ class MqttDdsBridge:
         if self._stop_event.is_set():
             return
         self._stop_event.set()
-        if self._envelope_sub is not None:
-            try:
-                self._envelope_sub.stop()
-            except Exception:
-                pass
+        if self._pump is not None:
+            self._pump.join(timeout=2)
         if self._mqtt is not None:
             try:
                 self._mqtt.loop_stop()
                 self._mqtt.disconnect()
-            except Exception:
-                pass
-        if self._envelope_pub is not None:
-            try:
-                self._envelope_pub.close()
             except Exception:
                 pass
         self._log_stats(force=True)
@@ -209,8 +250,10 @@ class MqttDdsBridge:
             self.stats.inbound_errors += 1
             return
 
-        # Loop prevention
-        if payload.get("_bridge_id") == self.config.bridge_id:
+        # Loop prevention: our own traffic coming back from a peer bridge.
+        # The id is an MQTT user property, so it never enters the payload
+        # and never has to be expressible as a struct field.
+        if self._extract_bridge_id(msg) == self.config.bridge_id:
             self.stats.inbound_dropped_loop += 1
             return
 
@@ -222,65 +265,100 @@ class MqttDdsBridge:
 
         msg_type = self._extract_msg_type(msg) or infer_msg_type(topic)
 
-        # Tag with bridge_id so the corresponding /ws or DDS subscriber
-        # can recognize bridged traffic. Tagging in the OUTBOUND direction
-        # also prevents an immediate ping-pong when bidirectional bridges
-        # peer with each other.
-        payload["_bridge_id"] = self.config.bridge_id
-
         try:
-            self._envelope_pub.publish(
-                logical_topic=topic,
-                msg_type=msg_type,
-                payload=payload,
-            )
+            self._dds_writer(topic, msg_type).write(payload)
             self.stats.inbound_count += 1
             self.stats.last_inbound_topic = topic
         except Exception as exc:
-            logger.exception("[mqtt_bridge] DDS publish failed for %s: %s", topic, exc)
+            # Includes an unresolvable type and a payload that is not a
+            # well-formed sample of it. Both are the bridge's problem to
+            # report, not the next consumer's to discover.
+            logger.error("[mqtt_bridge] DDS publish failed for %s (%s): %s",
+                         topic, msg_type, exc)
             self.stats.inbound_errors += 1
+
+    def _dds_writer(self, logical_topic: str, msg_type: str):
+        """A typed writer for ``logical_topic``, created on first use."""
+        writer = self._writers.get(logical_topic)
+        if writer is not None:
+            return writer
+
+        from spatialdds_demo import topic_types, typed_transport as tt
+
+        datatype = topic_types.resolve(msg_type)
+        writer = tt.TypedDictWriter(
+            self._participant, logical_topic, datatype,
+            self.DDS_QOS_PROFILES.get(msg_type, self.DEFAULT_DDS_PROFILE))
+        self._writers[logical_topic] = writer
+        return writer
+
+    def _extract_bridge_id(self, msg) -> Optional[str]:
+        return self._user_property(msg, self.USER_PROPERTY_BRIDGE_ID)
 
     def _extract_msg_type(self, msg) -> Optional[str]:
         """If the publisher attached a ``spatialdds_msg_type`` MQTT v5 user
         property, prefer it over topic-based inference."""
+        return self._user_property(msg, self.USER_PROPERTY_MSG_TYPE)
+
+    @staticmethod
+    def _user_property(msg, name: str) -> Optional[str]:
         properties = getattr(msg, "properties", None)
         if properties is None:
             return None
-        user_props = getattr(properties, "UserProperty", None) or []
-        for k, v in user_props:
-            if k == self.USER_PROPERTY_MSG_TYPE:
+        for k, v in (getattr(properties, "UserProperty", None) or []):
+            if k == name:
                 return str(v)
         return None
 
     # ── DDS → MQTT ──────────────────────────────────────────────────────
 
-    def _on_dds_envelope(self, msg_type: str, logical_topic: str,
-                           payload: dict, stamp_ns: int) -> None:
-        """``EnvelopeSubscriber`` callback. Runs on the DDS poll thread."""
+    def _poll_dds(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                self._stream_sub.poll(stamp_ns=time.time_ns())
+            except Exception:
+                # One bad sample must not stop the bridge; next poll continues.
+                logger.exception("[mqtt_bridge] DDS poll failed")
+            self._stop_event.wait(0.02)
+
+    def _on_dds_announce(self, service_id: str, announce: dict) -> None:
+        """
+        Announces cross as a message on a per-service topic.
+
+        On DDS an announce is a keyed instance and a departure is a dispose;
+        MQTT has neither, which is why C.5 asks for a `Depart` message
+        alongside the dispose. This is the crossing point where that matters.
+        """
+        name = announce.get("name") or service_id.removeprefix("svc:")
+        self._on_dds_sample("spatialdds/discovery/announce",
+                            f"spatialdds/{name}/discovery/announce/v1",
+                            announce, time.time_ns())
+
+    def _on_dds_sample(self, type_name: str, logical_topic: str,
+                       payload: dict, stamp_ns: int) -> None:
+        """
+        One typed sample, serialised for MQTT. Runs on the DDS poll thread.
+
+        Nothing checks for the bridge's own traffic here: the reader carries
+        IGNORE_LOCAL_PARTICIPANT, so what this bridge wrote never arrives.
+        """
         if not isinstance(payload, dict):
-            return
-        # Loop prevention — we receive our OWN inbound publish back via
-        # DDS too; drop it.
-        if payload.get("_bridge_id") == self.config.bridge_id:
-            self.stats.outbound_dropped_loop += 1
             return
         if not matches_any(logical_topic, self.config.outbound_topics):
             self.stats.outbound_dropped_filter += 1
             return
 
-        # Tag for the receiving side so a peer bridge knows it's bridged.
-        out = dict(payload)
-        out["_bridge_id"] = self.config.bridge_id
-
         qos, retain = get_qos(logical_topic)
+        properties = self._publish_properties(type_name)
 
         try:
             with self._mqtt_lock:
-                info = self._mqtt.publish(
+                self._mqtt.publish(
                     topic=logical_topic,
-                    payload=json.dumps(out),
+                    payload=json.dumps(payload),
                     qos=qos,
                     retain=retain,
+                    properties=properties,
                 )
             self.stats.outbound_count += 1
             self.stats.last_outbound_topic = logical_topic
@@ -288,6 +366,24 @@ class MqttDdsBridge:
             logger.exception("[mqtt_bridge] MQTT publish failed for %s: %s",
                               logical_topic, exc)
             self.stats.outbound_errors += 1
+
+    def _publish_properties(self, type_name: str):
+        """
+        MQTT v5 user properties carrying what used to be in the payload: the
+        bridge id (loop prevention) and the SpatialDDS type, so a subscriber
+        knows what the JSON is without inferring it from the topic.
+        """
+        try:
+            from paho.mqtt.properties import Properties
+            from paho.mqtt.packettypes import PacketTypes
+        except Exception:                                   # pragma: no cover
+            return None
+        props = Properties(PacketTypes.PUBLISH)
+        props.UserProperty = [
+            (self.USER_PROPERTY_BRIDGE_ID, self.config.bridge_id),
+            (self.USER_PROPERTY_MSG_TYPE, type_name),
+        ]
+        return props
 
     # ── Stats ──────────────────────────────────────────────────────────
 

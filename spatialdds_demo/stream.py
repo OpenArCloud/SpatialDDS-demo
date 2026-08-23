@@ -125,12 +125,19 @@ class StreamSubscriber:
 
     def __init__(self, participant: DomainParticipant, callback: StreamCallback,
                  *, on_announce: Optional[Callable[[str, Dict[str, Any]], None]] = None,
-                 on_depart: Optional[Callable[[str], None]] = None):
+                 on_depart: Optional[Callable[[str], None]] = None,
+                 ignore_local: bool = False):
+        """
+        ``ignore_local`` makes every lane reader skip what this participant's
+        own writers published — what a bridge needs so it does not read its
+        own republished output back and relay it forever.
+        """
         self._callback = callback
         self._on_announce = on_announce
         self._on_depart = on_depart
         self._announces = AnnounceSubscriber(participant)
-        self._streams = tt.MultiTopicSubscriber(participant)
+        self._streams = tt.MultiTopicSubscriber(participant,
+                                                ignore_local=ignore_local)
         self._service_topics: Dict[str, List[str]] = {}
 
     @property

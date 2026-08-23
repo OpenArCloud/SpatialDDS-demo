@@ -1,8 +1,9 @@
-"""Tier-2 integration tests for the MQTT ↔ DDS bridge.
+"""Tier-2 integration tests for the MQTT <-> DDS bridge.
 
 Spins up the bridge in-process against a running Mosquitto broker and the
 local CycloneDDS bus. Each test publishes on one side and asserts the
-other side receives.
+other side receives — and on the DDS side that what arrived is a real
+typed sample, not merely some JSON.
 
 Skipped if Mosquitto isn't reachable on ``MQTT_BROKER:MQTT_PORT`` (defaults
 ``localhost:1883``). The repo's
@@ -70,11 +71,129 @@ def _prewarm_idl():
     """CycloneDDS Python lazily fills the IDL type-object cache the first
     time a Topic is built. Pre-warm in the main thread before background
     threads (the bridge / test publisher) race on it."""
-    from nuscenes.dds_envelope_transport import EnvelopeTransport
-    warm = EnvelopeTransport(lambda _e: None, DDS_DOMAIN, "mqtt-prewarm")
-    warm.start()
+    from cyclonedds.domain import DomainParticipant
+
+    from spatialdds_demo import typed_transport as tt
+    from spatialdds_idl.oarc_demo import OperatorDetectionSet
+
+    tt.make_writer(DomainParticipant(DDS_DOMAIN), "spatialdds/prewarm/v1",
+                   OperatorDetectionSet, "RADAR_RT")
     time.sleep(0.2)
-    warm.stop()
+
+
+def _det_set(operator: str, det_id: str = "d1") -> dict:
+    """A real OperatorDetectionSet payload, built as the publishers build it."""
+    sys.path.insert(0, str(_REPO_ROOT / "multi_operator_fusion"))
+    from spatialdds_types import (
+        make_detection, make_detection_set, make_detection_with_velocity,
+    )
+    det = make_detection(
+        det_id=det_id, class_id="vehicle.car", score=0.9,
+        center=(1.0, 2.0, 0.0), size=(4.5, 1.8, 1.6), q=(0.0, 0.0, 0.0, 1.0),
+        frame_ref_fqn="scene/intersection", timestamp_s=1.0, source_id=operator,
+    )
+    return make_detection_set(
+        set_id="s1", source_operator=operator,
+        frame_ref_fqn="scene/intersection",
+        dets=[make_detection_with_velocity(det, velocity=(0.0, 0.0, 0.0),
+                                           source_modality="det3d")],
+        frame_seq=1, timestamp_s=1.0)
+
+
+def _track_set() -> dict:
+    sys.path.insert(0, str(_REPO_ROOT / "multi_operator_fusion"))
+    from fusion import FusedTrack, Position, Velocity
+    from spatialdds_types import make_fused_track_set
+
+    return make_fused_track_set([FusedTrack(
+        track_id="t1", position=Position(0.0, 0.0, 0.0),
+        velocity=Velocity(0.0, 0.0, 0.0), position_uncertainty=0.3,
+        object_class="vehicle.car", confidence=0.9,
+        source_operators=["operator_a"], source_modalities=["det3d"],
+        source_count=1, timestamp=1.0, track_age=1.0,
+    )], timestamp_s=1.0)
+
+
+class _DdsObserver:
+    """
+    A typed reader on one named topic, polled on a thread.
+
+    Explicit rather than discovery-driven on purpose: these tests publish
+    onto topics no service announces, so there is nothing to discover. A
+    real consumer reads announces; a test harness names what it wants.
+    """
+
+    def __init__(self, topic: str, type_name: str, qos_profile: str):
+        from cyclonedds.domain import DomainParticipant
+
+        from spatialdds_demo import topic_types, typed_transport as tt
+        from spatialdds_demo.json_mapping import to_json
+
+        self._to_json = to_json
+        self.datatype = topic_types.resolve(type_name)
+        self.samples: List[dict] = []
+        self._reader = tt.make_reader(DomainParticipant(DDS_DOMAIN), topic,
+                                      self.datatype, qos_profile)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        from spatialdds_demo import typed_transport as tt
+
+        while not self._stop.is_set():
+            for sample in tt.take_samples(self._reader):
+                self.samples.append(self._to_json(sample))
+            self._stop.wait(0.05)
+
+    def stop(self):
+        self._stop.set()
+        self._thread.join(timeout=2)
+
+
+def _announce_lane(topic: str, type_name: str, qos_profile: str,
+                   service: str):
+    """
+    Announce one lane so a discovery-driven consumer will open a reader.
+
+    Returns the publisher; keep it alive for as long as the lane matters,
+    since closing it disposes the instance and signals a departure.
+    """
+    from cyclonedds.domain import DomainParticipant
+
+    sys.path.insert(0, str(_REPO_ROOT / "multi_operator_fusion"))
+    from spatialdds_demo.stream import StreamPublisher
+    from spatialdds_types import circle_coverage, make_announce, topic_meta
+
+    publisher = StreamPublisher(DomainParticipant(DDS_DOMAIN))
+    publisher.announce(make_announce(
+        operator=service, service_kind="SENSING",
+        topics=[topic_meta(topic, type_name, qos_profile)],
+        coverage=circle_coverage(0.0, 0.0, 100.0), timestamp_s=time.time()))
+    _LANES.append(publisher)
+    return publisher
+
+
+_LANES: List = []
+
+
+def _publish_mqtt(client_id: str, topic: str, payload: dict,
+                  *, bridge_id: str = "") -> None:
+    """Publish JSON on MQTT, optionally tagged with a bridge id."""
+    from paho.mqtt.packettypes import PacketTypes
+    from paho.mqtt.properties import Properties
+
+    props = None
+    if bridge_id:
+        props = Properties(PacketTypes.PUBLISH)
+        props.UserProperty = [("spatialdds_bridge_id", bridge_id)]
+    pub = _new_mqtt_client(client_id)
+    pub.connect(MQTT_HOST, MQTT_PORT, keepalive=10)
+    pub.loop_start()
+    pub.publish(topic, json.dumps(payload), qos=1, properties=props)
+    time.sleep(2.0)
+    pub.loop_stop()
+    pub.disconnect()
 
 
 def _make_config(direction: str, *, bridge_id: str = "test-bridge",
@@ -110,200 +229,227 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         _prewarm_idl()
 
     # ──────────────────────────────────────────────────────────────────────
-    # Inbound: MQTT publish → bridge → DDS subscriber sees envelope
+    # Inbound: MQTT publish → bridge → a typed sample on DDS
     # ──────────────────────────────────────────────────────────────────────
 
     def test_mqtt_to_dds_inbound(self):
         from bridge import MqttDdsBridge
 
+        topic = "spatialdds/operator_test/sensing/detection3d/v1"
         cfg = _make_config("inbound_only", bridge_id="bridge-in",
-                            client_id="bridge-in-mqtt")
+                           client_id="bridge-in-mqtt")
         bridge = MqttDdsBridge(cfg)
         bridge.start(block=False)
-        time.sleep(2.0)  # MQTT connect + DDS discovery
+        time.sleep(2.0)                       # MQTT connect + DDS discovery
 
-        # Subscribe on DDS via the lossless reader from envelope_io
-        from envelope_io import EnvelopeSubscriber
-        received: List[dict] = []
-
-        def on_dds(msg_type, logical_topic, payload, _stamp_ns):
-            if logical_topic.startswith("spatialdds/operator_test/"):
-                received.append({
-                    "msg_type": msg_type,
-                    "logical_topic": logical_topic,
-                    "payload": payload,
-                })
-
-        sub = EnvelopeSubscriber(DDS_DOMAIN, on_dds)
-        sub.start()
+        observer = _DdsObserver(topic, "oarc.detection3d_velocity", "RADAR_RT")
         time.sleep(2.0)
-
         try:
-            mqtt_pub = _new_mqtt_client("test-pub-inbound")
-            mqtt_pub.connect(MQTT_HOST, MQTT_PORT, keepalive=10)
-            mqtt_pub.loop_start()
-            mqtt_pub.publish(
-                "spatialdds/operator_test/sensing/detection3d/v1",
-                json.dumps({"detections": [{"det_id": "d1"}],
-                             "source_operator": "operator_test"}),
-                qos=1,
-            )
-            time.sleep(2.0)
-            mqtt_pub.loop_stop()
-            mqtt_pub.disconnect()
+            _publish_mqtt("test-pub-inbound", topic, _det_set("operator_test"))
         finally:
-            sub.stop()
+            observer.stop()
             bridge.stop()
 
-        self.assertGreaterEqual(len(received), 1,
-            "DDS side should have seen at least one envelope")
-        match = next((r for r in received
-                       if r["msg_type"] == "Detection3DSet"), None)
-        self.assertIsNotNone(match, f"no Detection3DSet seen — got {received}")
-        self.assertEqual(match["logical_topic"],
-                          "spatialdds/operator_test/sensing/detection3d/v1")
-        self.assertEqual(match["payload"]["detections"][0]["det_id"], "d1")
-        # Bridge tags every relayed payload with its bridge_id
-        self.assertEqual(match["payload"].get("_bridge_id"), "bridge-in")
+        self.assertGreaterEqual(len(observer.samples), 1,
+                                "DDS side saw no sample")
+        sample = observer.samples[0]
+        # It arrived as a real OperatorDetectionSet — the reader would not
+        # have deserialised anything else onto this typed topic.
+        self.assertEqual(sample["source_operator"], "operator_test")
+        self.assertEqual(sample["dets"][0]["detection"]["det_id"], "d1")
+
+    def test_malformed_payload_is_refused_at_the_bridge(self):
+        """
+        The envelope relayed anything that was JSON and let some later
+        consumer discover it was nonsense. A typed bridge cannot: the
+        payload has to build into the announced type, and this one does not.
+        """
+        from bridge import MqttDdsBridge
+
+        topic = "spatialdds/operator_bad/sensing/detection3d/v1"
+        cfg = _make_config("inbound_only", bridge_id="bridge-bad",
+                           client_id="bridge-bad-mqtt")
+        bridge = MqttDdsBridge(cfg)
+        bridge.start(block=False)
+        time.sleep(2.0)
+
+        observer = _DdsObserver(topic, "oarc.detection3d_velocity", "RADAR_RT")
+        time.sleep(1.5)
+        try:
+            _publish_mqtt("test-pub-bad", topic,
+                          {"detections": [{"det_id": "d1"}]})   # old shape
+        finally:
+            observer.stop()
+            bridge.stop()
+
+        self.assertEqual(observer.samples, [],
+                         "a malformed payload reached the bus")
+        self.assertGreaterEqual(bridge.stats.inbound_errors, 1)
 
     # ──────────────────────────────────────────────────────────────────────
-    # Outbound: DDS publish → bridge → MQTT subscriber sees message
+    # Outbound: typed DDS sample → bridge → MQTT subscriber
     # ──────────────────────────────────────────────────────────────────────
 
     def test_dds_to_mqtt_outbound(self):
+        from cyclonedds.domain import DomainParticipant
+
         from bridge import MqttDdsBridge
+        from spatialdds_demo import typed_transport as tt
+        from spatialdds_idl.oarc_demo import FusedTrackSet
 
+        topic = "spatialdds/platform/fusion/track/v1"
         cfg = _make_config("outbound_only", bridge_id="bridge-out",
-                            client_id="bridge-out-mqtt")
+                           client_id="bridge-out-mqtt")
         bridge = MqttDdsBridge(cfg)
+        # The bridge subscribes through discovery, so the lane has to be
+        # announced before anything is written to it.
+        _announce_lane(topic, "oarc.fused_track", "POSE_RT", "platform")
         bridge.start(block=False)
-        time.sleep(2.0)
+        time.sleep(3.0)
 
-        # Subscribe on MQTT
         received: List = []
         mqtt_sub = _new_mqtt_client("test-sub-outbound")
-
-        def on_mqtt(_client, _ud, msg):
-            received.append(msg)
-
-        mqtt_sub.on_message = on_mqtt
+        mqtt_sub.on_message = lambda _c, _u, msg: received.append(msg)
         mqtt_sub.connect(MQTT_HOST, MQTT_PORT, keepalive=10)
         mqtt_sub.subscribe("spatialdds/platform/fusion/#", qos=1)
         mqtt_sub.loop_start()
         time.sleep(1.0)
 
         try:
-            from envelope_io import EnvelopePublisher
-            pub = EnvelopePublisher(DDS_DOMAIN)
-            pub.publish(
-                logical_topic="spatialdds/platform/fusion/track/v1",
-                msg_type="FusedTrackSet",
-                payload={"tracks": [{"track_id": "t1"}], "frame_seq": 7},
-            )
+            writer = tt.TypedDictWriter(DomainParticipant(DDS_DOMAIN), topic,
+                                        FusedTrackSet, "POSE_RT")
             time.sleep(2.0)
-            pub.close()
+            writer.write(_track_set())
+            time.sleep(3.0)
         finally:
             mqtt_sub.loop_stop()
             mqtt_sub.disconnect()
             bridge.stop()
 
-        self.assertGreaterEqual(len(received), 1,
-            "MQTT subscriber should have received at least one message")
+        self.assertGreaterEqual(len(received), 1, "MQTT saw nothing")
         msg = received[0]
-        self.assertEqual(msg.topic, "spatialdds/platform/fusion/track/v1")
+        self.assertEqual(msg.topic, topic)
         body = json.loads(msg.payload.decode("utf-8"))
         self.assertEqual(body["tracks"][0]["track_id"], "t1")
-        self.assertEqual(body.get("_bridge_id"), "bridge-out")
+        # The bridge id and the SpatialDDS type ride in MQTT user
+        # properties, not in the payload — a typed struct has no field for
+        # either, and neither was ever the payload's business.
+        self.assertNotIn("_bridge_id", body)
+        props = dict(getattr(msg.properties, "UserProperty", []) or [])
+        self.assertEqual(props.get("spatialdds_bridge_id"), "bridge-out")
+        self.assertEqual(props.get("spatialdds_msg_type"), "oarc.fused_track")
 
     # ──────────────────────────────────────────────────────────────────────
-    # Loop prevention: messages tagged with the bridge's own bridge_id
-    # don't get re-relayed.
+    # Loop prevention
     # ──────────────────────────────────────────────────────────────────────
 
     def test_loop_prevention_inbound(self):
+        """A message tagged with the bridge's own id is not re-relayed."""
         from bridge import MqttDdsBridge
 
+        topic = "spatialdds/operator_loop/sensing/detection3d/v1"
         cfg = _make_config("inbound_only", bridge_id="bridge-loop",
-                            client_id="bridge-loop-mqtt")
+                           client_id="bridge-loop-mqtt")
         bridge = MqttDdsBridge(cfg)
         bridge.start(block=False)
         time.sleep(2.0)
 
-        from envelope_io import EnvelopeSubscriber
-        received: List[dict] = []
-
-        def on_dds(_mt, logical_topic, payload, _ns):
-            if logical_topic.startswith("spatialdds/operator_loop/"):
-                received.append(payload)
-
-        sub = EnvelopeSubscriber(DDS_DOMAIN, on_dds)
-        sub.start()
+        observer = _DdsObserver(topic, "oarc.detection3d_velocity", "RADAR_RT")
         time.sleep(2.0)
-
         try:
-            mqtt_pub = _new_mqtt_client("test-pub-loop")
-            mqtt_pub.connect(MQTT_HOST, MQTT_PORT, keepalive=10)
-            mqtt_pub.loop_start()
-            # Tag with the bridge's own bridge_id → must be dropped
-            mqtt_pub.publish(
-                "spatialdds/operator_loop/sensing/detection3d/v1",
-                json.dumps({"detections": [], "_bridge_id": "bridge-loop"}),
-                qos=1,
-            )
-            time.sleep(1.5)
-            mqtt_pub.loop_stop()
-            mqtt_pub.disconnect()
+            _publish_mqtt("test-pub-loop", topic, _det_set("operator_loop"),
+                          bridge_id="bridge-loop")
         finally:
-            sub.stop()
+            observer.stop()
             bridge.stop()
 
-        self.assertEqual(len(received), 0,
-            f"Bridge republished its own message: {received}")
+        self.assertEqual(observer.samples, [],
+                         "bridge republished its own message")
         self.assertGreaterEqual(bridge.stats.inbound_dropped_loop, 1)
 
+    def test_bridge_does_not_read_back_its_own_dds_writes(self):
+        """
+        The DDS-side loop guard is IGNORE_LOCAL_PARTICIPANT, not a payload
+        tag: a bidirectional bridge writes to DDS inbound and reads DDS
+        outbound, and must not see its own write.
+        """
+        from bridge import MqttDdsBridge
+
+        topic = "spatialdds/infrastructure/sensing/detection3d/v1"
+        cfg = _make_config("bidirectional", bridge_id="bridge-echo",
+                           client_id="bridge-echo-mqtt")
+        cfg.inbound_topics = [topic]
+        cfg.outbound_topics = [topic]        # deliberately overlapping
+        bridge = MqttDdsBridge(cfg)
+        _announce_lane(topic, "oarc.detection3d_velocity", "RADAR_RT",
+                       "infrastructure")
+        bridge.start(block=False)
+        time.sleep(3.0)
+
+        echoed: List = []
+        mqtt_sub = _new_mqtt_client("test-sub-echo")
+        mqtt_sub.on_message = lambda _c, _u, msg: echoed.append(msg)
+        mqtt_sub.connect(MQTT_HOST, MQTT_PORT, keepalive=10)
+        mqtt_sub.subscribe(topic, qos=1)
+        mqtt_sub.loop_start()
+        time.sleep(1.0)
+        try:
+            _publish_mqtt("test-pub-echo", topic, _det_set("infrastructure"))
+            time.sleep(2.0)
+        finally:
+            mqtt_sub.loop_stop()
+            mqtt_sub.disconnect()
+            bridge.stop()
+
+        # One message on MQTT: the one the test published. If the bridge had
+        # read its own DDS write back it would have republished it.
+        from_bridge = [m for m in echoed
+                       if dict(getattr(m.properties, "UserProperty", []) or [])
+                       .get("spatialdds_bridge_id") == "bridge-echo"]
+        self.assertEqual(from_bridge, [],
+                         "bridge echoed its own DDS write back to MQTT")
+
     # ──────────────────────────────────────────────────────────────────────
-    # Topic filtering: a message that doesn't match outbound_topics is not
-    # relayed even if it arrives on DDS.
+    # Topic filtering
     # ──────────────────────────────────────────────────────────────────────
 
     def test_outbound_filter_excludes_unmatched(self):
-        from bridge import MqttDdsBridge
+        from cyclonedds.domain import DomainParticipant
 
+        from bridge import MqttDdsBridge
+        from spatialdds_demo import typed_transport as tt
+        from spatialdds_idl.oarc_demo import OperatorDetectionSet
+
+        topic = "spatialdds/operator_a/sensing/detection3d/v1"   # not outbound
         cfg = _make_config("outbound_only", bridge_id="bridge-filter",
-                            client_id="bridge-filter-mqtt")
+                           client_id="bridge-filter-mqtt")
         bridge = MqttDdsBridge(cfg)
+        _announce_lane(topic, "oarc.detection3d_velocity", "RADAR_RT",
+                       "operator_a")
         bridge.start(block=False)
-        time.sleep(2.0)
+        time.sleep(3.0)
 
         received: List = []
         mqtt_sub = _new_mqtt_client("test-sub-filter")
         mqtt_sub.on_message = lambda _c, _u, msg: received.append(msg)
         mqtt_sub.connect(MQTT_HOST, MQTT_PORT, keepalive=10)
-        # Wide subscription so we'd see anything that DOES make it through
         mqtt_sub.subscribe("spatialdds/#", qos=1)
         mqtt_sub.loop_start()
         time.sleep(1.0)
 
         try:
-            from envelope_io import EnvelopePublisher
-            pub = EnvelopePublisher(DDS_DOMAIN)
-            # NOT in outbound_topics filter — should be dropped
-            pub.publish(
-                logical_topic="spatialdds/operator_a/sensing/detection3d/v1",
-                msg_type="Detection3DSet",
-                payload={"detections": []},
-            )
-            time.sleep(1.5)
-            pub.close()
+            writer = tt.TypedDictWriter(DomainParticipant(DDS_DOMAIN), topic,
+                                        OperatorDetectionSet, "RADAR_RT")
+            time.sleep(2.0)
+            writer.write(_det_set("operator_a"))
+            time.sleep(2.0)
         finally:
             mqtt_sub.loop_stop()
             mqtt_sub.disconnect()
             bridge.stop()
 
-        unmatched = [m for m in received
-                       if m.topic == "spatialdds/operator_a/sensing/detection3d/v1"]
-        self.assertEqual(len(unmatched), 0,
-            "Out-of-filter DDS message leaked to MQTT")
+        self.assertEqual([m for m in received if m.topic == topic], [],
+                         "out-of-filter DDS message leaked to MQTT")
         self.assertGreaterEqual(bridge.stats.outbound_dropped_filter, 1)
 
 

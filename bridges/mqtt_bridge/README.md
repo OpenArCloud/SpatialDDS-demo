@@ -1,14 +1,24 @@
 # SpatialDDS ↔ MQTT Bridge
 
-Relay between an MQTT broker (local Mosquitto, AWS IoT Core, etc.) and a
-CycloneDDS domain. Edge devices publish JSON on MQTT topics; the bridge
-forwards the same payload onto the SpatialDDS envelope topic with the
-matching `logical_topic` and an inferred `msg_type`. Outbound traffic
-(fused tracks, infrastructure telemetry) flows back the other way.
+Typed adapter between an MQTT broker (local Mosquitto, AWS IoT Core, etc.)
+and a CycloneDDS domain. Edge devices publish JSON on MQTT topics; the
+bridge resolves the topic to a §3.3.2 type, builds the JSON into that type,
+and writes a real sample on the QoS profile §3.3.3 assigns it. Outbound
+traffic (fused tracks, infrastructure telemetry) is serialised back to JSON
+here. DDS carries types; MQTT carries JSON, which is what MQTT clients
+expect.
 
-The MQTT topic IS the SpatialDDS `logical_topic` — there's no translation
-table to maintain. Every other bridge in this repo (web, MCAP, ROS 2)
-already speaks the same wire format.
+A payload that is not a well-formed sample of its type is refused at the
+bridge, with the error attributed to the topic it arrived on — rather than
+being republished as well-formed JSON that fails somewhere else later.
+
+The MQTT topic IS the DDS topic — there's no translation table to maintain.
+
+**Loop prevention** uses no payload field. On DDS the bridge's readers carry
+`IGNORE_LOCAL_PARTICIPANT`, so they never see its own writes; on MQTT it
+tags what it publishes with a `spatialdds_bridge_id` user property and drops
+anything arriving with its own id. Transport metadata belongs in transport
+headers, and a typed struct has no field for it anyway.
 
 ## When to use it
 
@@ -16,7 +26,7 @@ already speaks the same wire format.
   see your local DDS domain. They speak MQTT to AWS IoT Core; the bridge
   in your VPC fans out onto the SpatialDDS bus.
 - **Browser dashboards over WebSockets** — Mosquitto's WebSocket listener
-  + the bridge gives you topic-routed envelope streaming with no custom
+  + the bridge gives you topic-routed JSON streaming with no custom
   protocol. (For richer per-client filtering / publishing, see
   [`bridges/web_bridge/`](../web_bridge/README.md).)
 - **Cross-VPC / cross-cloud federation** — two SpatialDDS domains can
@@ -26,9 +36,9 @@ already speaks the same wire format.
 
 ```
 bridges/mqtt_bridge/
-├── topic_mapping.py            msg_type inference + QoS/retain rules + pattern matching
+├── topic_mapping.py            type inference + QoS/retain rules + pattern matching
 ├── config.py                   YAML config schema + env-var overrides
-├── bridge.py                   the relay itself (paho-mqtt + envelope_io)
+├── bridge.py                   the adapter itself (paho-mqtt + typed DDS)
 ├── __main__.py                 CLI entry point
 ├── mosquitto.conf              local-dev Mosquitto config (anonymous, 1883 + WS 9001)
 ├── config.example.yaml         template config (Mosquitto + AWS IoT Core blocks)

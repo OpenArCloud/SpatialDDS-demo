@@ -23,7 +23,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Type
 
-from cyclonedds.core import InstanceState
+from cyclonedds.core import InstanceState, Qos
 from cyclonedds.domain import DomainParticipant
 from cyclonedds.pub import DataWriter
 from cyclonedds.sub import DataReader
@@ -76,13 +76,24 @@ def make_reader(
     qos_profile: str,
     *,
     lifespan_sec: Optional[float] = None,
+    ignore_local: bool = False,
 ) -> DataReader:
-    """A reader on ``topic_name`` matching ``make_writer``'s QoS."""
+    """
+    A reader on ``topic_name`` matching ``make_writer``'s QoS.
+
+    ``ignore_local`` adds IGNORE_LOCAL_PARTICIPANT, so the reader never sees
+    what writers in its own participant published. That is what a bridge
+    needs: it republishes onto DDS what it received from elsewhere, and
+    without this it reads its own output straight back. DDS answers this at
+    the middleware, so nothing has to ride in the payload to mark it.
+    """
+    from cyclonedds.core import Policy
+
+    qos = qos_profiles.qos_for(qos_profile, lifespan_sec=lifespan_sec)
+    if ignore_local:
+        qos = Qos(*qos, Policy.IgnoreLocal.Participant)
     topic = get_topic(participant, topic_name, datatype)
-    return DataReader(
-        participant, topic,
-        qos=qos_profiles.qos_for(qos_profile, lifespan_sec=lifespan_sec),
-    )
+    return DataReader(participant, topic, qos=qos)
 
 
 # --- instance lifecycle -----------------------------------------------------
@@ -174,8 +185,10 @@ class MultiTopicSubscriber:
     extension points.
     """
 
-    def __init__(self, participant: DomainParticipant):
+    def __init__(self, participant: DomainParticipant, *,
+                 ignore_local: bool = False):
         self._participant = participant
+        self._ignore_local = ignore_local
         self._readers: Dict[str, Tuple[Any, str]] = {}   # topic -> (reader, type_name)
         self._lock = threading.Lock()
 
@@ -190,7 +203,8 @@ class MultiTopicSubscriber:
         with self._lock:
             if topic in self._readers:
                 return False
-        reader = make_reader(self._participant, topic, datatype, qos_profile)
+        reader = make_reader(self._participant, topic, datatype, qos_profile,
+                             ignore_local=self._ignore_local)
         with self._lock:
             self._readers[topic] = (reader, type_name or datatype.__name__)
         return True

@@ -2,8 +2,11 @@
 
 Three jobs:
 
-  * ``infer_msg_type(topic)`` — turn an MQTT/DDS topic string into a
-    SpatialDDS msg_type string when the publisher didn't supply one.
+  * ``infer_msg_type(topic)`` — turn an MQTT topic string into a §3.3.2
+    registered type name when the publisher didn't supply one. On the DDS
+    side the type is announced, so this is only needed for the inbound
+    direction, where the message comes from MQTT and has no announce
+    behind it.
   * ``get_qos(topic)`` — pick an MQTT QoS level + retain flag based on
     the topic's role (meta = retained, frames = best-effort, decisions
     = at-least-once, etc.).
@@ -25,35 +28,41 @@ from typing import Iterable, List, Tuple
 # Order matters: the FIRST pattern that matches wins. More-specific
 # patterns should come before more-general ones.
 TOPIC_TYPE_MAP: List[Tuple[str, str]] = [
-    ("*/sensing/detection3d/*",   "Detection3DSet"),
-    ("*/sensing/detection2d/*",   "Detection2DSet"),
-    ("*/ego/pose/*",              "FramedPose"),
-    ("*/geo/*/pose/*",            "GeoPose"),
-    ("*/vision/*/frame/*",        "VisionFrame"),
-    ("*/vision/*/meta/*",         "VisionMeta"),
-    ("*/lidar/*/frame/*",         "LidarFrame"),
-    ("*/lidar/*/meta/*",          "LidarMeta"),
-    ("*/rad/*/frame/*",           "RadDetectionSet"),
-    ("*/rad/*/tensor/*",          "RadTensorFrame"),
-    ("*/rad/*/meta/*",            "RadTensorMeta"),
-    ("*/rf_beam/*/frame/*",       "RfBeamFrame"),
-    ("*/rf_beam/*/meta/*",        "RfBeamMeta"),
-    ("*/radio/*/scan/*",          "RadioScan"),
-    ("*/radio/*/meta/*",          "RadioSensorMeta"),
-    ("*/imu/*/sample/*",          "ImuSample"),
-    ("*/fusion/track/*",          "FusedTrackSet"),
-    ("*/fusion/coverage/*",       "CoverageMetrics"),
-    ("*/plan/*/trajectory/*",     "PlannedTrajectory"),
-    ("*/entity/binding/*",        "EntityBinding"),
-    ("*/discovery/announce/*",    "Announce"),
-    ("*/events/*",                "SpatialEvent"),
+    ("*/sensing/detection3d/*",   "oarc.detection3d_velocity"),
+    ("*/ego/pose/*",              "oarc.framed_pose"),
+    ("*/geo/*/pose/*",            "geopose"),
+    ("*/vision/*/frame/*",        "video_frame"),
+    ("*/vision/*/meta/*",         "oarc.video_frame_meta"),
+    ("*/lidar/*/frame/*",         "oarc.lidar_frame"),
+    ("*/lidar/*/meta/*",          "oarc.lidar_meta"),
+    ("*/rad/*/frame/*",           "radar_detection"),
+    ("*/rad/*/tensor/*",          "radar_tensor"),
+    ("*/rad/*/meta/*",            "oarc.radar_tensor_meta"),
+    ("*/rf_beam/*/frame/*",       "rf_beam"),
+    ("*/rf_beam/*/meta/*",        "oarc.rf_beam_meta"),
+    ("*/fusion/track/*",          "oarc.fused_track"),
+    ("*/fusion/coverage/*",       "oarc.fusion_coverage"),
+    ("*/plan/*/trajectory/*",     "planned_trajectory"),
+    ("*/entity/binding/*",        "entity_binding"),
+    ("*/events/*",                "spatial_event"),
+    # Discovery is not a TopicMeta lane, so it has no registry name; the
+    # bridge handles it as its own case.
+    ("*/discovery/announce/*",    "spatialdds/discovery/announce"),
 ]
 
 
 def infer_msg_type(topic: str) -> str:
-    """Best-effort type inference for ``topic``. Returns ``"Unknown"`` if
-    nothing matches — the bridge still relays the message, callers just
-    don't get a specific msg_type label."""
+    """
+    Best-effort type inference for ``topic``. ``"Unknown"`` if nothing
+    matches.
+
+    Note what dropped out of this table in the typed migration: 2D
+    detections, IMU samples, radio scans. Each had an invented name here and
+    no §3.3.2 registration, so a consumer could not have turned any of them
+    into a reader; the entries were labels this bridge told itself. Where a
+    real type exists but the registry does not name it, the demo's own
+    ``oarc.*`` extension name is used and the gap is on the findings list.
+    """
     for pattern, msg_type in TOPIC_TYPE_MAP:
         if fnmatch.fnmatchcase(topic, pattern):
             return msg_type

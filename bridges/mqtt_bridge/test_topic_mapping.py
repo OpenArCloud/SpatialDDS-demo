@@ -22,70 +22,53 @@ from topic_mapping import (  # noqa: E402
 
 
 class TestMsgTypeInference(unittest.TestCase):
-    def test_detection3d(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/op_a/sensing/detection3d/v1"),
-            "Detection3DSet",
-        )
+    """
+    Inferred names are §3.3.2 registry names, so a consumer can resolve one
+    into a reader. The old table returned invented labels like
+    ``"Detection3DSet"`` that no registry knew.
+    """
 
-    def test_pose(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/op_a/ego/pose/v1"), "FramedPose"
-        )
+    CASES = [
+        ("spatialdds/op_a/sensing/detection3d/v1", "oarc.detection3d_velocity"),
+        ("spatialdds/op_a/ego/pose/v1",            "oarc.framed_pose"),
+        ("spatialdds/op_a/geo/gnss_0/pose/v1",     "geopose"),
+        ("spatialdds/infra/vision/cam_0/frame/v1", "video_frame"),
+        ("spatialdds/infra/vision/cam_0/meta/v1",  "oarc.video_frame_meta"),
+        ("spatialdds/infra/rf_beam/unit1/frame/v1", "rf_beam"),
+        ("spatialdds/op/plan/robot_1/trajectory/v1", "planned_trajectory"),
+        ("spatialdds/platform/fusion/track/v1",    "oarc.fused_track"),
+        ("spatialdds/platform/fusion/coverage/v1", "oarc.fusion_coverage"),
+        ("spatialdds/platform/entity/binding/v1",  "entity_binding"),
+        ("spatialdds/platform/events/conflict/v1", "spatial_event"),
+    ]
 
-    def test_geopose_with_sensor_id(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/op_a/geo/gnss_0/pose/v1"), "GeoPose"
-        )
+    def test_inferred_names_are_registry_names(self):
+        for topic, expected in self.CASES:
+            with self.subTest(topic=topic):
+                self.assertEqual(infer_msg_type(topic), expected)
 
-    def test_vision_frame(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/infra/vision/cam_0/frame/v1"),
-            "VisionFrame",
-        )
+    def test_every_inferred_name_resolves_to_a_class(self):
+        """
+        The point of inferring a type: the bridge has to build the payload
+        into it. A name that resolves to nothing is a name the bridge
+        cannot act on.
+        """
+        try:
+            from spatialdds_demo import topic_types
+        except Exception as exc:                       # pragma: no cover
+            self.skipTest(f"generated bindings unavailable: {exc}")
+        for _, name in self.CASES:
+            with self.subTest(type=name):
+                self.assertIsNotNone(topic_types.try_resolve(name))
 
-    def test_vision_meta(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/infra/vision/cam_0/meta/v1"),
-            "VisionMeta",
-        )
+    def test_announce_is_its_own_case(self):
+        # Discovery is not a TopicMeta lane, so it has no registry name.
+        self.assertEqual(infer_msg_type("spatialdds/discovery/announce/v1"),
+                         "spatialdds/discovery/announce")
 
-    def test_rf_beam(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/infra/rf_beam/unit1/frame/v1"),
-            "RfBeamFrame",
-        )
-
-    def test_radio_scan(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/op/radio/wifi_0/scan/v1"), "RadioScan"
-        )
-
-    def test_planned_trajectory(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/op/plan/robot_1/trajectory/v1"),
-            "PlannedTrajectory",
-        )
-
-    def test_imu_sample(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/op/imu/imu_0/sample/v1"), "ImuSample"
-        )
-
-    def test_fused_track(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/platform/fusion/track/v1"),
-            "FusedTrackSet",
-        )
-
-    def test_announce(self):
-        self.assertEqual(
-            infer_msg_type("spatialdds/discovery/announce/v1"), "Announce"
-        )
-
-    def test_unknown(self):
-        self.assertEqual(infer_msg_type("totally/random/topic"), "Unknown")
-        self.assertEqual(infer_msg_type(""), "Unknown")
+    def test_unmatched_topic_is_unknown(self):
+        self.assertEqual(infer_msg_type("spatialdds/op/some/other/v1"),
+                         "Unknown")
 
 
 class TestQosMapping(unittest.TestCase):
