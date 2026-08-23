@@ -9,7 +9,6 @@ Starts VPS, catalog, and bridge servers, then exercises:
 
 import json
 import os
-import queue
 import signal
 import subprocess
 import sys
@@ -18,7 +17,6 @@ import urllib.error
 import urllib.request
 from typing import Dict, Optional, List
 
-from spatialdds_demo.dds_transport import DDSTransport
 from spatialdds_demo.topics import TOPIC_DISCOVERY_QUERY_V1, TOPIC_DISCOVERY_RESPONSE
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 
@@ -87,52 +85,44 @@ def _wait_for_health(timeout: float = 10.0) -> Dict[str, object]:
 
 
 def _coverage_query(domain_id: int = 1) -> Dict[str, object]:
-    inbox: queue.Queue = queue.Queue()
+    """
+    Ask the bus who covers an area, using the typed CoverageClient.
 
-    def on_message(envelope: object) -> None:
-        inbox.put(envelope)
+    C.5: the query goes on the well-known topic and names the topic the
+    reply should come back on, so a reply reaches one asker rather than
+    every client on the bus.
+    """
+    from cyclonedds.domain import DomainParticipant
 
-    transport = DDSTransport(on_message_callback=on_message, domain_id=domain_id, local_sender_id="bridge-test")
-    transport.start()
+    from spatialdds_demo.json_mapping import from_json, to_json
+    from spatialdds_demo.service_bus import CoverageClient
+    from spatialdds_idl.spatial.disco import CoverageQuery
+
+    query_id = "bridge-test-coverage"
+    reply_topic = TOPIC_DISCOVERY_RESPONSE(query_id)
+    client = CoverageClient(DomainParticipant(domain_id), reply_topic)
+
     coverage_frame_ref, coverage_elem = create_coverage_bbox_earth_fixed(
         -97.75, 30.27, -97.72, 30.29
     )
     query = {
-        "query_id": "bridge-test-coverage",
+        "query_id": query_id,
         "coverage": [coverage_elem],
         "coverage_frame_ref": coverage_frame_ref,
+        # Presence-flagged: the value is always on the wire and the flag says
+        # whether to read it.
         "has_coverage_eval_time": False,
+        "coverage_eval_time": SpatialDDSValidator.now_time(),
         "has_filter": True,
         "filter": {"type_in": [], "qos_profile_in": [], "module_id_in": []},
-        "reply_topic": TOPIC_DISCOVERY_RESPONSE("bridge-test-coverage"),
+        "reply_topic": reply_topic,
         "stamp": SpatialDDSValidator.now_time(),
         "ttl_sec": 60,
     }
-    transport.publish(
-        TOPIC_DISCOVERY_QUERY_V1,
-        "COVERAGE_QUERY",
-        json.dumps(query),
-        query["query_id"],
-    )
-
-    response_env = _wait_for(inbox, "COVERAGE_RESPONSE", timeout=6)
-    transport.stop()
-    if not response_env:
+    response = client.query(from_json(CoverageQuery, query), timeout=8.0)
+    if response is None:
         raise RuntimeError("COVERAGE_RESPONSE timeout")
-    return json.loads(response_env.payload_json)
-
-
-def _wait_for(queue_obj: queue.Queue, msg_type: str, timeout: float) -> Optional[object]:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        remaining = max(0.1, deadline - time.time())
-        try:
-            envelope = queue_obj.get(timeout=remaining)
-        except queue.Empty:
-            continue
-        if envelope.msg_type == msg_type:
-            return envelope
-    return None
+    return to_json(response)
 
 
 def _post_json(path: str, payload: Dict[str, object]) -> Dict[str, object]:

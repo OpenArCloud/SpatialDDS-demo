@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live test against the real DeepSense publisher.
+"""Live test against the real DeepSense publisher, on typed topics.
 
 Spawns ``deepsense/publisher.py`` as a subprocess, runs the recorder against
 the same DDS domain, then runs the replayer with a fresh subscriber and
@@ -38,29 +38,31 @@ import recorder as recorder_mod  # noqa: E402
 import replayer as replayer_mod  # noqa: E402
 
 
-# msg_types we expect to see for at least one frame's worth of publishing.
-EXPECTED_MSG_TYPES = {
-    "DEEPSENSE_RF_BEAM_META",
-    "DEEPSENSE_RAD_TENSOR_META",
-    "DEEPSENSE_VISION_META",
-    "DEEPSENSE_RF_BEAM_FRAME",
-    "DEEPSENSE_RAD_TENSOR_FRAME",
-    "DEEPSENSE_VISION_FRAME",
-    "DEEPSENSE_UNIT1_GEOPOSE",
-    "DEEPSENSE_UNIT2_GEOPOSE",
-    "DEEPSENSE_LIDAR2D_FRAME",
-    "DEEPSENSE_DET2D_SET",
-}
+def _expected_topics() -> Dict[str, str]:
+    """``{topic: §3.3.2 type}`` for every lane the DeepSense publisher owns.
+
+    Read from the publisher's own lane table rather than restated here, so
+    adding a lane cannot leave this test silently checking the old set.
+    """
+    sys.path.insert(0, str(_REPO_ROOT / "deepsense"))
+    sys.path.insert(0, str(_REPO_ROOT / "nuscenes"))
+    from publisher import LANES  # deepsense/publisher.py
+
+    return {topic: type_name for topic, type_name, _profile in LANES.values()}
 
 
 def _prewarm_idl(domain: int) -> None:
     """Force the lazy IDL type-object cache to fill once before any worker
     thread/subprocess races on it (see bug fix in test_live.py)."""
-    from nuscenes.dds_envelope_transport import EnvelopeTransport
-    warm = EnvelopeTransport(lambda _e: None, domain, "deepsense-prewarm")
-    warm.start()
-    time.sleep(0.2)
-    warm.stop()
+    from cyclonedds.domain import DomainParticipant
+
+    from spatialdds_demo import topic_types, typed_transport as tt
+
+    participant = DomainParticipant(domain)
+    for i, type_name in enumerate(sorted(set(_expected_topics().values()))):
+        tt.make_writer(participant, f"spatialdds/prewarm/{i}/v1",
+                       topic_types.resolve(type_name), "EVENT_RT")
+    time.sleep(0.3)
 
 
 def _spawn_publisher(domain: int, dataroot: str, max_samples: int,
@@ -147,32 +149,43 @@ def _phase1_record(domain: int, dataroot: str, max_samples: int, sequence: int,
 
 
 def _phase2_replay(domain: int, mcap_path: Path) -> Tuple[int, Counter, Dict[str, int]]:
-    """Subscribe on a *RELIABLE+KEEP_ALL* reader (mirroring the recorder) so
-    we can verify the bridge's archival round-trip is lossless. Real-time
-    consumers using the existing EnvelopeTransport's default best-effort
-    reader will see the same loss patterns they'd see from a live publisher
-    — that's a property of the live transport, not the bridge."""
+    """
+    Subscribe with a typed reader per lane, on that lane's own QoS profile,
+    and verify the archival round-trip.
+
+    Note what per-type QoS means here: the real-time lanes are BEST_EFFORT
+    per 3.3.3, so a replay of them is allowed to drop samples exactly as the
+    live publisher's would. That is the profile, not the bridge. The latched
+    metadata lanes are reliable and must not lose anything.
+    """
+    from cyclonedds.domain import DomainParticipant
+
+    from spatialdds_demo import topic_types, typed_transport as tt
+
     received_msg_types: Counter = Counter()
     received_per_topic: Dict[str, int] = {}
     rx_lock = threading.Lock()
     stop = threading.Event()
 
-    reader = recorder_mod._make_lossless_reader(domain)
+    sys.path.insert(0, str(_REPO_ROOT / "deepsense"))
+    from publisher import LANES  # deepsense/publisher.py
+
+    participant = DomainParticipant(domain)
+    readers = [
+        (tt.make_reader(participant, topic, topic_types.resolve(type_name),
+                        profile), topic, type_name)
+        for topic, type_name, profile in LANES.values()
+    ]
 
     def _drain():
         while not stop.is_set():
-            samples = reader.take(N=512)
-            if samples:
-                for sample in samples:
-                    if sample is None or not hasattr(sample, "payload_json"):
-                        continue
-                    msg_type = getattr(sample, "msg_type", "") or ""
-                    topic = getattr(sample, "logical_topic", "") or ""
+            for reader, topic, type_name in readers:
+                for _sample in tt.take_samples(reader, n=512):
                     with rx_lock:
-                        received_msg_types[msg_type] += 1
-                        received_per_topic[topic] = received_per_topic.get(topic, 0) + 1
-            else:
-                stop.wait(timeout=0.05)
+                        received_msg_types[type_name] += 1
+                        received_per_topic[topic] = (
+                            received_per_topic.get(topic, 0) + 1)
+            stop.wait(timeout=0.02)
 
     drain_thread = threading.Thread(target=_drain, daemon=True)
     drain_thread.start()
@@ -248,12 +261,12 @@ def main() -> int:
     rx_total = sum(rx_msg_types.values())
     print(f"[ds-test] replayer published {published}; subscriber received {rx_total}", flush=True)
 
-    # The subscriber may receive the replayer's own envelopes via DDS loopback
-    # AND the replayer's reader-side filter doesn't apply to it. We expect
-    # parity within best-effort QoS tolerance: every msg_type seen during
-    # recording must appear during replay; per-topic counts must be ≥ 1.
-    rec_msg_types = {mt for topic, _ in counts.items() for mt in [_topic_to_msg_type_guess(topic, counts)] if mt}
-    missing_types = EXPECTED_MSG_TYPES - set(rx_msg_types.keys())
+    # Every §3.3.2 type the publisher announces must appear during replay,
+    # and every topic must carry at least one sample. Exact per-lane counts
+    # are not asserted: the real-time lanes are BEST_EFFORT per 3.3.3 and
+    # may legitimately drop, which is the profile rather than the bridge.
+    expected_types = set(_expected_topics().values())
+    missing_types = expected_types - set(rx_msg_types.keys())
     if missing_types:
         print(f"[ds-test] FAIL: expected msg_types missing from replay: {sorted(missing_types)}",
               flush=True)
@@ -274,15 +287,10 @@ def main() -> int:
         rx = rx_per_topic[topic]
         print(f"  rx={rx:>4}/recorded={recorded:>4}  {topic}", flush=True)
 
-    print(f"[ds-test] PASS — {len(EXPECTED_MSG_TYPES)} msg_types and "
-          f"{len(counts)} topics survived publish→record→replay→subscribe", flush=True)
+    print(f"[ds-test] PASS — {len(expected_types)} types and "
+          f"{len(counts)} topics survived publish→record→replay→subscribe",
+          flush=True)
     return 0
-
-
-def _topic_to_msg_type_guess(_topic: str, _counts) -> str:
-    # Placeholder — we report msg_types from the replay side directly,
-    # so no reverse lookup is needed.
-    return ""
 
 
 if __name__ == "__main__":

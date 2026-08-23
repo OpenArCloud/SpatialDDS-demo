@@ -1,3 +1,22 @@
+"""
+The JSON envelope transport, kept as the benchmarks' baseline arm.
+
+Nothing in the demo publishes through this any more. It survives for one
+reason: the benchmarks compare the envelope against typed topics, and a
+comparison needs both arms. `require_dds_env` is the other reason — it
+validates the DDS environment and has nothing to do with the envelope.
+
+What it was: one struct on one topic, with the actual SpatialDDS payload
+serialised to a JSON string inside it and the topic name demoted to a
+string field. Every mechanism the spec relies on DDS *for* — per-topic QoS,
+instances and keys, durability, content filtering, per-topic security,
+XTypes evolution, and interoperability with any other conformant
+participant — was unavailable by construction. See
+`spatialdds_demo/stream.py` for what replaced it.
+
+Do not add callers.
+"""
+
 import hashlib
 import json
 import os
