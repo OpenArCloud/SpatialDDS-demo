@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: MIT
+// Demo-owned types for flows SpatialDDS 1.7 has no struct for.
+//
+// Everything here is a gap in the spec as far as this demo is concerned; each
+// struct is WG input. Spec types are used wherever a spec type exists — this
+// module exists so that no opaque JSON has to ride the bus.
+
+#ifndef OARC_DEMO_INCLUDED
+#define OARC_DEMO_INCLUDED
+
+#ifndef SPATIAL_CORE_INCLUDED
+#define SPATIAL_CORE_INCLUDED
+#include "core.idl"
+#endif
+
+module oarc_demo {
+
+  const string MODULE_ID = "oarc.demo/1.7";
+
+  typedef builtin::Time Time;
+
+  // --- Bootstrap query/response ------------------------------------------
+  // 1.7 defines the bootstrap *manifest* (5.x) and its well-known HTTPS path,
+  // but no on-bus query/response pair. The demo needs one to show cold start
+  // without HTTP.
+  @extensibility(APPENDABLE) struct BootstrapQuery {
+    @key string client_id;
+    string client_kind;
+    sequence<string, 16> capabilities;
+    string location_hint;
+    Time stamp;
+  };
+
+  @extensibility(APPENDABLE) struct BootstrapResponse {
+    @key string client_id;
+    string spatialdds_bootstrap;
+    int32  dds_domain;
+    string cyclonedds_profile;
+    sequence<string, 16> manifest_uris;
+    uint32 ttl_sec;
+    Time   stamp;
+  };
+
+};
+
+#endif // OARC_DEMO_INCLUDED
