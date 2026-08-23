@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Unit tests for multi_operator_fusion.publisher helpers.
 
-Tests the pure functions — topic naming, spatial offset, operator
-provenance stamping, and sensor-filter configuration — without loading
-the nuScenes dataset or starting DDS.
+Tests the pure functions — topic naming, spatial offset, and sensor-filter
+configuration — without loading the nuScenes dataset or starting DDS.
 
 Run: python multi_operator_fusion/test_publisher.py
 """
@@ -19,9 +18,9 @@ if str(SELF_DIR) not in sys.path:
     sys.path.insert(0, str(SELF_DIR))
 
 from publisher import (  # noqa: E402
+    LANES,
     SENSOR_FILTERS,
-    _offset_xyz,
-    _stamp_operator,
+    _offset_vec,
     _topic,
 )
 
@@ -46,45 +45,75 @@ class TopicNaming(unittest.TestCase):
         )
 
 
-class OperatorStamping(unittest.TestCase):
-    def test_adds_source_operator_key(self):
-        payload = {"frame_seq": 1}
-        _stamp_operator(payload, "operator_a")
-        self.assertEqual(payload["source_operator"], "operator_a")
-        self.assertEqual(payload["frame_seq"], 1)
+class OperatorIdentity(unittest.TestCase):
+    """
+    The operator lives in the topic name, not in the payload.
 
-    def test_overwrites_existing_source(self):
-        payload = {"source_operator": "stale"}
-        _stamp_operator(payload, "infrastructure")
-        self.assertEqual(payload["source_operator"], "infrastructure")
+    Every payload used to carry a stamped `source_operator`, including spec
+    types that have no such field — where it was simply dropped on the wire.
+    DDS expects that kind of identity in the topic, and it is there.
+    """
+
+    def test_operator_is_in_every_topic(self):
+        for parts, _type_name, _profile in (
+                lane for lane in LANES.values() if lane is not None):
+            with self.subTest(lane="/".join(parts)):
+                self.assertTrue(
+                    _topic("operator_a", *parts).startswith(
+                        "spatialdds/operator_a/"))
 
 
 class OffsetApplication(unittest.TestCase):
-    def test_applies_to_nested_xyz(self):
-        payload = {"pose_se3": {"t": {"x": 1.0, "y": 2.0, "z": 3.0}}}
-        _offset_xyz(payload, [("pose_se3", "t")], (10.0, 20.0, 30.0))
-        self.assertEqual(payload["pose_se3"]["t"], {"x": 11.0, "y": 22.0, "z": 33.0})
+    """Vec3 is ``double[3]``, so an offset shifts an array, not a dict."""
 
-    def test_applies_to_list_of_detections(self):
-        payload = {"detections": [
-            {"center": {"x": 0.0, "y": 0.0, "z": 0.0}},
-            {"center": {"x": 5.0, "y": -5.0, "z": 1.0}},
-        ]}
-        for det in payload["detections"]:
-            _offset_xyz(det, [("center",)], (100.0, 0.0, 0.0))
-        self.assertEqual(payload["detections"][0]["center"]["x"], 100.0)
-        self.assertEqual(payload["detections"][1]["center"]["x"], 105.0)
-        self.assertEqual(payload["detections"][1]["center"]["y"], -5.0)
+    def test_applies_to_nested_vec(self):
+        payload = {"pose": {"t": [1.0, 2.0, 3.0]}}
+        _offset_vec(payload, ("pose", "t"), (10.0, 20.0, 30.0))
+        self.assertEqual(payload["pose"]["t"], [11.0, 22.0, 33.0])
+
+    def test_applies_to_each_detection(self):
+        dets = [{"center": [0.0, 0.0, 0.0]}, {"center": [5.0, -5.0, 1.0]}]
+        for det in dets:
+            _offset_vec(det, ("center",), (100.0, 0.0, 0.0))
+        self.assertEqual(dets[0]["center"], [100.0, 0.0, 0.0])
+        self.assertEqual(dets[1]["center"], [105.0, -5.0, 1.0])
 
     def test_missing_path_is_noop(self):
         payload = {"other": 1}
-        _offset_xyz(payload, [("pose_se3", "t")], (1.0, 2.0, 3.0))
+        _offset_vec(payload, ("pose", "t"), (1.0, 2.0, 3.0))
         self.assertEqual(payload, {"other": 1})
 
-    def test_zero_offset_leaves_values_unchanged(self):
+    def test_dict_form_is_still_accepted(self):
+        """The nuScenes converters are migrated, but be forgiving of input."""
         payload = {"xyz_m": {"x": 1.5, "y": 2.5, "z": 3.5}}
-        _offset_xyz(payload, [("xyz_m",)], (0.0, 0.0, 0.0))
-        self.assertEqual(payload["xyz_m"], {"x": 1.5, "y": 2.5, "z": 3.5})
+        _offset_vec(payload, ("xyz_m",), (1.0, 0.0, 0.0))
+        self.assertEqual(payload["xyz_m"], [2.5, 2.5, 3.5])
+
+    def test_zero_offset_leaves_values_unchanged(self):
+        payload = {"xyz_m": [1.5, 2.5, 3.5]}
+        _offset_vec(payload, ("xyz_m",), (0.0, 0.0, 0.0))
+        self.assertEqual(payload["xyz_m"], [1.5, 2.5, 3.5])
+
+
+class LaneTable(unittest.TestCase):
+    def test_every_lane_names_a_resolvable_type_and_a_real_profile(self):
+        from spatialdds_demo import qos_profiles, topic_types
+
+        for key, lane in LANES.items():
+            if lane is None:
+                continue                   # per-camera, built at publish time
+            _parts, type_name, profile = lane
+            with self.subTest(lane=key):
+                self.assertIsNotNone(topic_types.try_resolve(type_name))
+                self.assertIsNotNone(qos_profiles.get(profile))
+
+    def test_detection_lane_carries_velocity(self):
+        """
+        This lane feeds the fusion service, which gates association on
+        velocity. nuScenes has it (box_velocity) and semantics::Detection3D
+        has no field for it, so the lane carries the composed type.
+        """
+        self.assertEqual(LANES["detection3d"][1], "oarc.detection3d_velocity")
 
 
 class SensorFilterSpec(unittest.TestCase):
