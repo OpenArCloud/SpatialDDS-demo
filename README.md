@@ -1,9 +1,13 @@
 # SpatialDDS Demo
 
-Reference demos for **SpatialDDS 1.7** (https://spatialdds.org) — the stamped
-release, 2026-08-23, tag `v1.7` — running on CycloneDDS. The repo vendors that
-release's IDL verbatim under `idl/v1.7`, mirrors its manifest examples in
-`manifests/v1.7`, and ships four runnable demos.
+Reference demos for **SpatialDDS 1.7** — the stamped release, 2026-08-23, tag
+`v1.7` — running on CycloneDDS. The repo vendors that release's IDL verbatim
+under `idl/v1.7`, mirrors its manifest examples in `manifests/v1.7`, and ships
+four runnable demos.
+
+The spec itself lives at [spatialdds.org](https://spatialdds.org), and its
+source — the IDL this repo vendors, the prose, and the release tags — at
+[OpenArCloud/SpatialDDS-spec](https://github.com/OpenArCloud/SpatialDDS-spec).
 
 > **The pin is the `v1.7` tag, not the spec repo's `main`.** Main is now the
 > 1.8 draft, bootstrapped from 1.7 and still carrying unswept `/1.7`
