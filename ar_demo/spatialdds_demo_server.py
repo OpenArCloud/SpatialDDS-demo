@@ -29,6 +29,7 @@ from spatialdds_demo.topics import (
     TOPIC_VPS_QUERY_V1,
     TOPIC_VPS_RESULT_V1,
 )
+from spatialdds_validation import SpatialDDSValidator
 from spatialdds_test import (
     SpatialDDSLogger,
     VPSServiceV15,
@@ -129,8 +130,21 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
 
+    # An Announce is a lease, not a birth certificate: `ttl_sec` says how long
+    # it stays good, and a consumer honouring it drops the service when that
+    # lapses. Publishing once at startup and never again means a service that
+    # is running perfectly disappears from every cache after its TTL — which
+    # is what happened here, silently, once the demo had been up ten minutes.
+    # Re-publish well inside the window.
+    refresh_every = max(10.0, float(announce.get("ttl_sec", 300)) / 3.0)
+    next_refresh = time.time() + refresh_every
+
     try:
         while not stopping.is_set():
+            if time.time() >= next_refresh:
+                announce["stamp"] = SpatialDDSValidator.now_time()
+                announcer.publish(from_json(TypedAnnounce, announce))
+                next_refresh = time.time() + refresh_every
             serve_localize(vps)
             serve_coverage(coverage)
             time.sleep(0.05)

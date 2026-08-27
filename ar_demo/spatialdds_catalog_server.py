@@ -9,16 +9,28 @@ from typing import Any, Dict, List
 from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo.dds_transport import require_dds_env
+from spatialdds_demo.discovery_bus import AnnouncePublisher
 from spatialdds_demo.json_mapping import from_json, to_json
-from spatialdds_demo.service_bus import CatalogService
+from spatialdds_demo.service_bus import CatalogService, CoverageService
 from spatialdds_idl.oarc_demo import CatalogResponse
+from spatialdds_idl.spatial.disco import (
+    Announce as TypedAnnounce,
+    CoverageResponse as TypedCoverageResponse,
+)
 from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
+    TOPIC_DISCOVERY_ANNOUNCE_V1,
+    TOPIC_DISCOVERY_QUERY_V1,
+    TOPIC_SOURCE_ANNOUNCE_PREVIEW,
     TOPIC_SOURCE_REQUEST,
     TOPIC_SOURCE_SPEC,
 )
 from spatialdds_test import SpatialDDSLogger
-from spatialdds_validation import SpatialDDSValidator, complete_coverage_element
+from spatialdds_validation import (
+    SpatialDDSValidator,
+    complete_coverage_element,
+    create_coverage_bbox_earth_fixed,
+)
 
 
 def _load_seed(path: str) -> List[Dict[str, Any]]:
@@ -43,6 +55,113 @@ def _load_seed(path: str) -> List[Dict[str, Any]]:
             for element in (entry.get("coverage") or [])
         ]
     return payload
+
+
+def _seed_coverage(dataset: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    One bbox covering everything in the catalogue.
+
+    Derived from the seed rather than configured separately, so the announce
+    cannot claim an area the data does not cover — the failure the VPS's
+    `geopose`-for-`vps_response` announce was: an advertisement that stopped
+    matching what the service actually does, with nothing to catch it.
+    """
+    west = south = float("inf")
+    east = north = float("-inf")
+    for entry in dataset:
+        for element in entry.get("coverage") or []:
+            if not element.get("has_bbox"):
+                continue
+            w, s_, e, n = (float(v) for v in element["bbox"][:4])
+            west, south = min(west, w), min(south, s_)
+            east, north = max(east, e), max(north, n)
+    if west > east or south > north:
+        # Nothing in the seed carries a bbox; announce global coverage rather
+        # than a nonsense extent, and let consumers filter on content.
+        return [complete_coverage_element(**{"global": True})]
+    frame_ref, element = create_coverage_bbox_earth_fixed(west, south, east, north)
+    return [element]
+
+
+def _catalog_announce(dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    The catalogue's own `spatial::disco::Announce`.
+
+    Without this the service was on the bus but invisible: nothing could
+    discover it, the web bridge never opened a reader on its query topic, and
+    a client had to already know `spatialdds/catalog/query/v1` to use it. The
+    VPS has always announced; this is the same thing for content.
+
+    `kind` is CONTENT, so `/.well-known/spatialdds/search?kind=CONTENT` finds
+    it and the VPS search does not.
+    """
+    frame_ref, _ = create_coverage_bbox_earth_fixed(0.0, 0.0, 0.0, 0.0)
+    service_id = os.getenv("SPATIALDDS_CATALOG_SERVICE_ID", "svc:content:demo/catalog")
+    return {
+        "service_id": service_id,
+        "name": os.getenv("SPATIALDDS_CATALOG_SERVICE_NAME", "MockCatalog-v1"),
+        "kind": "CONTENT",
+        "version": "1.7",
+        "org": os.getenv("SPATIALDDS_CATALOG_ORG", "ExampleOrg"),
+        "hints": [],
+        "caps": {
+            "supported_profiles": [
+                {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7},
+                {"name": "spatial.discovery", "major": 1, "min_minor": 7, "max_minor": 7},
+            ],
+            "preferred_profiles": [],
+            "features": [],
+        },
+        # The query lane only. Responses go to the `reply_topic` each query
+        # names, which is chosen by the client and so cannot be advertised.
+        "topics": [
+            {
+                "name": TOPIC_CATALOG_QUERY_V1,
+                "type": "oarc.catalog_query",
+                "version": "v1",
+                "qos_profile": "VPS_REQ",
+                # Advisory hints; a request/reply lane has no steady rate and
+                # no chunking, so both are zero (= unspecified).
+                "target_rate_hz": 0.0,
+                "max_chunk_bytes": 0,
+            },
+        ],
+        "coverage": _seed_coverage(dataset),
+        "coverage_frame_ref": frame_ref,
+        "has_coverage_eval_time": False,
+        "coverage_eval_time": SpatialDDSValidator.now_time(),
+        "transforms": [],
+        "manifest_uri": os.getenv(
+            "SPATIALDDS_CATALOG_MANIFEST_URI",
+            "spatialdds://catalog.example.com/zone:demo/manifest:catalog",
+        ),
+        "auth_hint": "",
+        "stamp": SpatialDDSValidator.now_time(),
+        "ttl_sec": 300,
+        "coverage_source_ids": [],
+    }
+
+
+def _service_summary(announce: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    The compact row a `CoverageResponse` carries (§3.3, 1.7).
+
+    1.7 made `CoverageResponse` return `ServiceSummary` rows rather than whole
+    announcements: enough to decide whether you want a service, plus the
+    `manifest_uri` to resolve for the rest. Carrying topics or caps here is
+    explicitly refused by the validator.
+    """
+    return {
+        "service_id": announce["service_id"],
+        "name": announce["name"],
+        "kind": announce["kind"],
+        "org": announce["org"],
+        "manifest_uri": announce["manifest_uri"],
+        "coverage": announce["coverage"],
+        "coverage_frame_ref": announce["coverage_frame_ref"],
+        "stamp": announce["stamp"],
+        "ttl_sec": announce["ttl_sec"],
+    }
 
 
 def _parse_page_token(token: str) -> int:
@@ -153,15 +272,79 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
             )
             print(f"catalog: results={len(page)} next_page_token={next_token or 'none'}")
 
+    def serve_coverage(coverage: CoverageService, announce: Dict[str, Any]) -> None:
+        """
+        Typed CoverageQuery -> CoverageResponse, replying where the query asks.
+
+        The DDS half of discovery. The catalogue answered nothing here until
+        now, so an on-bus CoverageQuery found the VPS and never the content
+        service — the same invisibility as having no announce, one layer up.
+        """
+        for query in coverage.take_queries():
+            data = to_json(query)
+            logger.log_message(
+                "COVERAGE_QUERY", "RECV", "Client", f"Catalog:{announce['name']}",
+                data, TOPIC_DISCOVERY_QUERY_V1, TOPIC_SOURCE_SPEC,
+                show_message_content,
+            )
+            intersects = SpatialDDSValidator.check_coverage_intersection(
+                data.get("coverage") or [],
+                announce["coverage"],
+                data.get("coverage_frame_ref"),
+                announce["coverage_frame_ref"],
+            )
+            response = {
+                "query_id": data.get("query_id", ""),
+                "results": [_service_summary(announce)] if intersects else [],
+                "next_page_token": "",
+            }
+            coverage.reply(query.reply_topic,
+                           from_json(TypedCoverageResponse, response))
+            logger.log_message(
+                "COVERAGE_RESPONSE", "SEND", f"Catalog:{announce['name']}", "Client",
+                response, query.reply_topic, TOPIC_SOURCE_REQUEST,
+                show_message_content,
+            )
+
     participant = DomainParticipant(domain_id)
     catalog = CatalogService(participant)
+    coverage = CoverageService(participant)
+
+    # Keyed, latched Announce, disposed on the way out — so a consumer learns
+    # this catalogue left rather than waiting for its TTL to lapse.
+    announcer = AnnouncePublisher(participant)
+    announce = _catalog_announce(dataset)
+    announcer.publish(from_json(TypedAnnounce, announce))
+    print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")
+    print(f"announce service_id: {announce['service_id']} (kind=CONTENT)")
+    logger.log_message(
+        "ANNOUNCE", "SEND", f"Catalog:{announce['name']}", "DDS_NETWORK",
+        announce, TOPIC_DISCOVERY_ANNOUNCE_V1, TOPIC_SOURCE_ANNOUNCE_PREVIEW,
+        show_message_content,
+    )
+
+    # An Announce is a lease, not a birth certificate: `ttl_sec` says how long
+    # it stays good, and a consumer honouring it drops the service when that
+    # lapses. Publishing once at startup and never again means a service that
+    # is running perfectly disappears from every cache after its TTL — which
+    # is what happened here, silently, once the demo had been up ten minutes.
+    # Re-publish well inside the window.
+    refresh_every = max(10.0, float(announce.get("ttl_sec", 300)) / 3.0)
+    next_refresh = time.time() + refresh_every
 
     try:
         while True:
+            if time.time() >= next_refresh:
+                announce["stamp"] = SpatialDDSValidator.now_time()
+                announcer.publish(from_json(TypedAnnounce, announce))
+                next_refresh = time.time() + refresh_every
             serve(catalog)
+            serve_coverage(coverage, announce)
             time.sleep(0.05)
     except KeyboardInterrupt:
         pass
+    finally:
+        announcer.close()
 
     return 0
 
