@@ -42,18 +42,22 @@ from fastapi.staticfiles import StaticFiles
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.discovery_bus import AnnounceSubscriber
 from spatialdds_demo.discovery_http import (
+    normalize_search_request,
+    record_from_announce,
     DiscoveryError,
     bootstrap_manifest,
     search as discovery_search,
 )
 from spatialdds_demo.json_mapping import from_json, to_json
-from spatialdds_demo.service_bus import CatalogClient, VpsClient
+from spatialdds_demo.service_bus import CatalogClient, CoverageClient, VpsClient
 from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
 from spatialdds_idl.spatial.argeo import VpsRequest as TypedVpsRequest
+from spatialdds_idl.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_CATALOG_QUERY_V1,
     TOPIC_CATALOG_REPLIES,
+    TOPIC_DISCOVERY_QUERY_V1,
     TOPIC_VPS_QUERY_V1,
 )
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
@@ -84,6 +88,7 @@ class SpatialDDSBridge:
         self._last_announce: Optional[Dict[str, Any]] = None
         self._announce_sub: Optional[AnnounceSubscriber] = None
         self._announce_participant = None
+        self._coverage = None
         self._vps: Optional[VpsClient] = None
         self._catalog: Optional[CatalogClient] = None
         self._announces = AnnounceCache()
@@ -147,6 +152,98 @@ class SpatialDDSBridge:
         self.drain_announces()
         return self._announces.records()
 
+    def coverage_records(self, coverage, coverage_frame_ref, window: float = 1.5):
+        """
+        Discover services by asking the bus, not by reading the cache.
+
+        Issues a real `spatial::disco::CoverageQuery` on the well-known topic
+        and gathers the `CoverageResponse` each service sends back. That is the
+        DDS half of discovery actually happening — visible on the stream,
+        answered by the services themselves — rather than the bridge deciding
+        privately from announces it happens to hold.
+
+        The returned `ServiceSummary` rows are deliberately compact (§3.3), so
+        they name *which* services matched but cannot describe them. Their
+        detail comes from the retained announce this bridge already holds,
+        which is exactly what §3.3 says to do: resolve the summary to the
+        manifest the HTTP binding would have returned.
+
+        Returns None when the bus answers nothing, so the caller can fall back
+        to the cache rather than reporting an empty deployment.
+        """
+        self.ensure_transport()
+        if self._coverage is None:
+            client_id = f"bridge-{uuid.uuid4().hex[:6]}"
+            self._coverage = CoverageClient(
+                self._announce_participant,
+                f"spatialdds/discovery/replies/{client_id}/v1")
+        now = SpatialDDSValidator.now_time()
+        query = {
+            "query_id": str(uuid.uuid4()),
+            "coverage": coverage,
+            "coverage_frame_ref": coverage_frame_ref,
+            # No transform evaluation instant: the demo's coverage is static,
+            # so there is nothing to evaluate "as of".
+            "has_coverage_eval_time": False,
+            "coverage_eval_time": now,
+            # The HTTP binding's own `filter` is applied by the shared core
+            # against the returned records, so the bus query stays broad and
+            # the two cannot disagree about what a filter means.
+            "has_filter": False,
+            "filter": {"type_in": [], "qos_profile_in": [], "module_id_in": []},
+            "reply_topic": self._coverage.reply_topic,
+            "stamp": now,
+            "ttl_sec": 30,
+        }
+        responses = self._coverage.gather(
+            from_json(TypedCoverageQuery, query), window=window)
+
+        # Relay the exchange. Nothing announces the well-known discovery topic
+        # and the reply topic is client-chosen, so the announce-driven relay
+        # cannot see either — yet both are real samples: the query was written
+        # to the bus (the services log receiving it) and each response was read
+        # off it. Emitted after the fact, under the registered type names, so
+        # this is a record of what happened rather than a statement of intent.
+        _emit_dds_event({
+            "ts": time.time(), "dir": "tx", "domain": self._domain_id,
+            "msg_type": "coverage_query",
+            "logical_topic": TOPIC_DISCOVERY_QUERY_V1,
+            "request_id": query["query_id"], "payload": query,
+        })
+        for response in responses:
+            _emit_dds_event({
+                "ts": time.time(), "dir": "rx", "domain": self._domain_id,
+                "msg_type": "coverage_response",
+                "logical_topic": self._coverage.reply_topic,
+                "request_id": query["query_id"], "payload": to_json(response),
+            })
+
+        summaries = {
+            summary.service_id: summary
+            for response in responses
+            for summary in (response.results or [])
+        }
+        if not summaries:
+            return None
+
+        # Detail comes from the retained announce where we hold one — it has
+        # the topics and caps a ServiceSummary deliberately omits. Where we do
+        # not, the summary itself still answers the question that was asked:
+        # who covers this area. Falling back to the cache *per service* rather
+        # than wholesale matters, because a service can be answering queries
+        # while its announce has lapsed from the cache, and dropping it then
+        # would report "nobody covers you" about a service that just said it
+        # does.
+        by_id = {r.service_id: r for r in self.announce_records()}
+        records = []
+        for service_id in sorted(summaries):
+            record = by_id.get(service_id)
+            if record is None:
+                record = record_from_announce(
+                    to_json(summaries[service_id]), validate=False)
+            records.append(record)
+        return records
+
     def announce_stats(self) -> Dict[str, int]:
         self.drain_announces()
         return self._announces.stats()
@@ -184,18 +281,6 @@ class SpatialDDSBridge:
             request = self._create_localize_request(service_id, prior_geopose)
             if self._vps is None:
                 self._vps = VpsClient(self._announce_participant)
-            _emit_dds_event(
-                {
-                    "ts": time.time(),
-                    "dir": "tx",
-                    "domain": self._domain_id,
-                    "msg_type": "LOCALIZE_REQUEST",
-                    "logical_topic": TOPIC_VPS_QUERY_V1,
-                    "request_id": request.get("query_id", ""),
-                    "payload": request,
-                }
-            )
-
             typed = self._vps.request(from_json(TypedVpsRequest, request), timeout=8)
             if typed is None:
                 raise RuntimeError("LOCALIZE_RESPONSE timeout")
@@ -220,22 +305,30 @@ class SpatialDDSBridge:
             query = self._create_catalog_query(
                 geopose, reply_topic, limit=limit, kind_in=kind_in
             )
-            _emit_dds_event(
-                {
-                    "ts": time.time(),
-                    "dir": "tx",
-                    "domain": self._domain_id,
-                    "msg_type": "CATALOG_QUERY",
-                    "logical_topic": TOPIC_CATALOG_QUERY_V1,
-                    "request_id": query.get("query_id", ""),
-                    "payload": query,
-                }
-            )
 
             typed = self._catalog.query(from_json(TypedCatalogQuery, query), timeout=6)
             if typed is None:
                 raise RuntimeError("CATALOG_RESPONSE timeout")
-            return to_json(typed)
+            response = to_json(typed)
+            # Relay the reply, because it really did land on the bus and this
+            # participant really did read it — the announce-driven relay
+            # cannot, since a CatalogQuery names a client-chosen reply topic
+            # that by definition is never announced. Without this the
+            # catalogue half of the demo is invisible on the stream while the
+            # VPS half is not, purely because the VPS reply topic happens to
+            # be announced.
+            _emit_dds_event(
+                {
+                    "ts": time.time(),
+                    "dir": "rx",
+                    "domain": self._domain_id,
+                    "msg_type": "oarc.catalog_response",
+                    "logical_topic": reply_topic,
+                    "request_id": response.get("query_id", ""),
+                    "payload": response,
+                }
+            )
+            return response
         finally:
             _unlock(self._request_lock)
 
@@ -478,6 +571,14 @@ def _stream_callback(type_name: str, logical_topic: str,
                      payload: Dict[str, Any], stamp_ns: int) -> None:
     """
     ``StreamSubscriber`` callback: one typed sample, as JSON for the browser.
+
+    This is the only thing that reaches a WebSocket client, so what a client
+    sees is what the bus carried — nothing else. The bridge used to also
+    announce its own outbound requests here, before writing them, under the
+    demo-private names ``LOCALIZE_REQUEST`` and ``CATALOG_QUERY``. That put a
+    line on the stream for a sample that had not been written yet, under a
+    name no announce declares, and every request appeared twice: once as the
+    bridge's intention and once as the sample itself.
 
     This is the JSON edge. The bus carries real types; everything a
     WebSocket client sees is produced here, in the shape the /ws protocol
@@ -750,10 +851,21 @@ def api_stats() -> Dict[str, Any]:
 
 # ─── Spec discovery, Layer 1.5 (HTTP binding) ────────────────────────────────
 #
-# Answered from the live announce cache in one round trip — no CoverageQuery is
-# issued onto the bus per request. Semantics come from
-# spatialdds_demo/discovery_http.py, shared with ar_demo/http_binding.py, so
-# both servers answer the same request identically.
+# The bridge translates: an HTTP search becomes a real `CoverageQuery` on the
+# well-known discovery topic, and the services answer it themselves. §3.3 calls
+# the HTTP and DDS bindings independent mechanisms that SHOULD agree, and for a
+# gateway fronting services that live on DDS, agreeing by *asking them* is the
+# honest reading — and the only one where discovery is visible on the bus
+# alongside the localize and catalogue exchanges it precedes.
+#
+# The cache remains the fallback. A deployment whose services answer no
+# coverage queries still resolves, from the retained announces this bridge
+# holds, rather than reporting an empty world.
+#
+# Semantics — matching, filtering, pagination, manifest assembly — stay in
+# spatialdds_demo/discovery_http.py, shared with ar_demo/http_binding.py. Only
+# the *source* of the records differs, which is what has always separated the
+# two servers.
 
 
 def _served_manifest(record) -> Optional[Dict[str, Any]]:
@@ -779,11 +891,32 @@ def _served_manifest(record) -> Optional[Dict[str, Any]]:
     return manifest
 
 
+def _discovery_records(payload: Dict[str, Any]):
+    """
+    Ask the bus who covers this area; fall back to the cache if nobody answers.
+
+    The normalized request is what goes on the wire, so the geohash shorthand
+    and an omitted `coverage_frame_ref` reach the services as the coverage the
+    spec says they mean.
+    """
+    normalized = normalize_search_request(payload)
+    try:
+        records = bridge.coverage_records(
+            normalized["coverage"], normalized["coverage_frame_ref"])
+    except Exception as exc:                     # bus unavailable, mid-restart
+        print(f"discovery: coverage query failed ({exc}); using announce cache")
+        return bridge.announce_records()
+    if records is None:
+        print("discovery: no CoverageResponse; using announce cache")
+        return bridge.announce_records()
+    return records
+
+
 @app.post("/.well-known/spatialdds/search")
 def wellknown_search(payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
         return discovery_search(
-            bridge.announce_records(), payload, manifest_provider=_served_manifest
+            _discovery_records(payload), payload, manifest_provider=_served_manifest
         )
     except DiscoveryError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc))

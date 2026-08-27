@@ -88,11 +88,27 @@ records come from.
 
 `/.well-known/spatialdds/resolver` is not served.
 
-### Answered from cache, not from the bus
+### Translated to the bus, with the cache behind it
 
-Search reads a cache of retained announces rather than issuing a CoverageQuery
-per request, so it answers in one round trip. That makes cache freshness the
-endpoint's correctness. A service leaves the cache when:
+A search issues a real `CoverageQuery` on `spatialdds/discovery/query/v1` and
+gathers the `CoverageResponse` each service sends back — the services decide
+whether they cover the area, not the bridge. Two consequences worth knowing:
+
+* **It takes a collection window** (~1.5 s). There is no completion signal in a
+  one-to-many exchange, because a querier cannot know how many services exist.
+* **The reply reader is KEEP_ALL, not the profile's KEEP_LAST(1).**
+  `CoverageResponse` carries no `@key`, so every responder's reply lands on one
+  instance; at depth 1 the last writer wins and the querier sees one service
+  where several answered, with nothing to indicate loss.
+
+The announce cache remains behind it, for detail and for fallback. A
+`ServiceSummary` is deliberately compact, so topics and caps come from the
+retained announce where one is held; where none is, the summary alone still
+answers who covers the area. If nothing answers at all, the whole result comes
+from the cache rather than reporting an empty deployment.
+
+That makes cache freshness matter for detail rather than for existence. A
+service leaves the cache when:
 
 - **it departs** — a `DEPART` message evicts it immediately;
 - **its announce expires** — entries older than `stamp + 2 x ttl_sec` are swept
@@ -146,8 +162,6 @@ dds domain: 1  (from bootstrap — a manifest synthesized from an
 == 4. Subscribe over /ws, use the service, take the sample
 -> {'type': 'subscribed', 'id': 'cold_start', 'pattern': 'spatialdds/vps/*', 'status': 'ok'}
 -> curl -X POST http://127.0.0.1:8088/v1/localize -d {"service_id": "svc:vps:demo/austin-downtown"}
-<- data on spatialdds/vps/query/v1 (LOCALIZE_REQUEST)
-   fields: query_id, service_id, client_frame_ref, has_prior_geopose, prior_geopose, ...
 <- data on spatialdds/vps/query/v1 (vps_query)
    fields: query_id, service_id, client_frame_ref, has_prior_geopose, prior_geopose, ...
 <- data on spatialdds/vps/result/v1 (vps_response)
@@ -157,11 +171,8 @@ dds domain: 1  (from bootstrap — a manifest synthesized from an
 == Cold start complete — bootstrap to live data, no SpatialDDS client code.
 ```
 
-Two things in that transcript are worth knowing about:
+One thing in that transcript is worth knowing about:
 
-- The query appears twice — once as `LOCALIZE_REQUEST`, the bridge's own tx
-  event for the dashboard, and once as `vps_query`, the sample read back off
-  the bus. Same `query_id` both times.
 - `service.connection` is absent from the manifest, so the domain id comes from
   bootstrap. An `Announce` has no connection block to carry and §8.2.3 makes
   the field OPTIONAL, so synthesis omits it rather than inventing one; §3.3.0

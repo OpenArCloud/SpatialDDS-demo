@@ -199,8 +199,14 @@ class CoverageClient:
         self._writer = tt.make_writer(
             participant, TOPIC_DISCOVERY_QUERY_V1, CoverageQuery,
             COVERAGE_QUERY_PROFILE)
+        # KEEP_ALL, not the profile's KEEP_LAST(1): every service that covers
+        # the queried area answers this one topic, and `CoverageResponse` has
+        # no `@key`, so all of their replies share a single instance. At depth
+        # 1 the last writer wins and the querier concludes one service exists
+        # where several do — with nothing to indicate loss.
         self._reader = tt.make_reader(
-            participant, reply_topic, CoverageResponse, COVERAGE_RESP_PROFILE)
+            participant, reply_topic, CoverageResponse, COVERAGE_RESP_PROFILE,
+            keep_all=True)
 
     @property
     def reply_topic(self) -> str:
@@ -217,6 +223,39 @@ class CoverageClient:
                     return response
             time.sleep(poll_interval)
         return None
+
+    def gather(self, query: CoverageQuery, window: float = 1.5,
+               poll_interval: float = DEFAULT_POLL_INTERVAL
+               ) -> List[CoverageResponse]:
+        """
+        Every response to one query, not just the first.
+
+        Coverage discovery is one-to-many: the query goes to a well-known
+        topic that every service reads, and each answers separately on the
+        reply topic the query named. :meth:`query` returns as soon as one
+        replies, which is right for a request/reply flow with a single
+        responder and wrong here — it would find whichever service happened to
+        answer first and silently miss the rest.
+
+        There is no completion signal to wait for, because a querier cannot
+        know how many services exist. So this collects for a fixed window.
+        """
+        self._writer.write(query)
+        responses: List[CoverageResponse] = []
+        seen_services: set = set()
+        deadline = time.time() + window
+        while time.time() < deadline:
+            for response in tt.take_samples(self._reader):
+                if response.query_id != query.query_id:
+                    continue
+                # A service that re-announces mid-window could answer twice.
+                key = tuple(sorted(r.service_id for r in (response.results or [])))
+                if key in seen_services and key != ():
+                    continue
+                seen_services.add(key)
+                responses.append(response)
+            time.sleep(poll_interval)
+        return responses
 
 
 # --- Bootstrap: "which domain and which manifests?" -------------------------

@@ -77,6 +77,7 @@ def make_reader(
     *,
     lifespan_sec: Optional[float] = None,
     ignore_local: bool = False,
+    keep_all: bool = False,
 ) -> DataReader:
     """
     A reader on ``topic_name`` matching ``make_writer``'s QoS.
@@ -86,10 +87,22 @@ def make_reader(
     needs: it republishes onto DDS what it received from elsewhere, and
     without this it reads its own output straight back. DDS answers this at
     the middleware, so nothing has to ride in the payload to mark it.
+
+    ``keep_all`` replaces the profile's history with KEEP_ALL, for the one
+    shape a per-topic profile cannot express: a reply topic that *many*
+    services write to in answer to one request. `CoverageResponse` carries no
+    ``@key``, so every responder's reply lands on the same instance; under the
+    profile's KEEP_LAST(1) the second reply overwrites the first before a
+    reader polling at any sane interval can take it, and the querier silently
+    sees one service where several answered. History is a reader-side policy,
+    so raising it here changes nothing for anyone else on the topic.
     """
     from cyclonedds.core import Policy
 
     qos = qos_profiles.qos_for(qos_profile, lifespan_sec=lifespan_sec)
+    if keep_all:
+        qos = Qos(*(p for p in qos if not isinstance(p, type(Policy.History.KeepLast(1)))),
+                  Policy.History.KeepAll)
     if ignore_local:
         qos = Qos(*qos, Policy.IgnoreLocal.Participant)
     topic = get_topic(participant, topic_name, datatype)
