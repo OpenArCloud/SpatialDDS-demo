@@ -16,6 +16,7 @@
           <button id="btnDiscover" type="button">Discover Content (Mock Catalog)</button>
           <button id="btnToggleTiles" type="button">Photorealistic 3D Tiles: On</button>
           <button id="btnToggleDdsOverlay" type="button">DDS Messages: Off</button>
+          <button id="btnToggleRestOverlay" type="button">REST Messages: Off</button>
           <button id="btnClear" type="button">Clear</button>
         </div>
         <pre id="readout">status: idle</pre>
@@ -27,8 +28,12 @@
         <div>Arrows rotate</div>
         <div>Q/E up/down</div>
       </div>
+      <div id="restOverlay" class="overlay hidden">
+        <div id="restOverlayHeader">REST Messages (browser &rarr; bridge)</div>
+        <pre id="restOverlayBody"></pre>
+      </div>
       <div id="ddsOverlay" class="overlay hidden">
-        <div id="ddsOverlayHeader">DDS Messages</div>
+        <div id="ddsOverlayHeader">DDS Messages (on the bus)</div>
         <pre id="ddsOverlayBody"></pre>
       </div>
       <div id="cesiumContainer"></div>

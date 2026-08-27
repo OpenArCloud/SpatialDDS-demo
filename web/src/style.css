@@ -101,6 +101,7 @@ body {
   line-height: 1.4;
 }
 
+#restOverlay,
 #ddsOverlay {
   position: absolute;
   bottom: 12px;
@@ -118,10 +119,12 @@ body {
   backdrop-filter: blur(6px);
 }
 
+#restOverlay.hidden,
 #ddsOverlay.hidden {
   display: none;
 }
 
+#restOverlayHeader,
 #ddsOverlayHeader {
   padding: 8px 10px;
   font-size: 12px;
@@ -131,6 +134,7 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+#restOverlayBody,
 #ddsOverlayBody {
   margin: 0;
   padding: 10px;
@@ -139,4 +143,14 @@ body {
   white-space: pre-wrap;
   overflow: auto;
   font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+/* Stacked, so both panels can be open together — the whole reason for having
+   two: one REST call on top, the DDS traffic it caused underneath. */
+#restOverlay {
+  bottom: calc(45vh + 24px);
+}
+
+#restOverlayHeader {
+  color: #ffd9a0;
 }

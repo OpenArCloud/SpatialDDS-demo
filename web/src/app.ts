@@ -1,7 +1,10 @@
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
-import { bridgeDiscover, bridgeHealth, bridgeLocalize } from './spatialdds_bridge';
+import {
+  bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize, observeRest
+} from './spatialdds_bridge';
+import type { RestExchange } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
 
 const readoutEl = document.getElementById('readout') as HTMLPreElement | null;
@@ -9,6 +12,7 @@ const localizeBtn = document.getElementById('btnLocalize') as HTMLButtonElement 
 const discoverBtn = document.getElementById('btnDiscover') as HTMLButtonElement | null;
 const toggleTilesBtn = document.getElementById('btnToggleTiles') as HTMLButtonElement | null;
 const toggleDdsOverlayBtn = document.getElementById('btnToggleDdsOverlay') as HTMLButtonElement | null;
+const toggleRestOverlayBtn = document.getElementById('btnToggleRestOverlay') as HTMLButtonElement | null;
 const clearBtn = document.getElementById('btnClear') as HTMLButtonElement | null;
 const modeBadgeEl = document.getElementById('modeBadge') as HTMLSpanElement | null;
 const ddsOverlayEl = document.getElementById('ddsOverlay') as HTMLDivElement | null;
@@ -35,10 +39,21 @@ const appLogs: string[] = [];
 let readoutItems = 0;
 let readoutMessage = 'ready';
 let bridgeActive = false;
+// The VPS this client discovered, cached for the session. Null until the first
+// localize, and null again if discovery found nothing — in which case the
+// bridge chooses, exactly as it did before discovery existed.
+let vpsServiceId: string | null = null;
+// Likewise for the content catalogue. Informational rather than routing:
+// `CatalogQuery` names a reply topic, not a target service, so a client that
+// has discovered a catalogue still asks on the well-known query topic. What
+// discovery buys here is knowing a catalogue covers this position at all.
+let contentServiceId: string | null = null;
 let photorealisticTileset: Cesium.Cesium3DTileset | null = null;
 let photorealisticEnabled = false;
 const GEOPOSE_QUAT_IS_ENU_TO_BODY = false;
 let ddsOverlayVisible = false;
+let restOverlayVisible = false;
+const restMessages: string[] = [];
 let ddsSocket: WebSocket | null = null;
 const ddsMessages: string[] = [];
 
@@ -215,9 +230,31 @@ function clearEntities() {
   entityIds.clear();
 }
 
+/**
+ * Find the VPS covering a position, once per session.
+ *
+ * Discovery runs from the prior rather than at startup, because the prior is
+ * the position the client is actually asking about — and it is the only
+ * position it has before a fix. That ordering is the cold start: find who
+ * serves here, then ask them where you are.
+ */
+async function ensureVpsService(prior: GeoPose): Promise<string | null> {
+  if (vpsServiceId) {
+    return vpsServiceId;
+  }
+  vpsServiceId = await bridgeFindService(prior);
+  appLog(
+    vpsServiceId
+      ? `discover:vps ${vpsServiceId}`
+      : 'discover:vps none — bridge will choose'
+  );
+  return vpsServiceId;
+}
+
 async function handleLocalize() {
   const prior = seedPriorGeopose();
-  const response = bridgeActive ? await bridgeLocalize(prior) : await mockLocalize();
+  const serviceId = bridgeActive ? await ensureVpsService(prior) : null;
+  const response = bridgeActive ? await bridgeLocalize(prior, serviceId) : await mockLocalize();
   currentPose = response.geopose;
   clearEntities();
   addMarker('user-location', 'You are here', response.geopose, markerUrl);
@@ -245,6 +282,19 @@ async function handleLocalize() {
   renderReadout(viewer ? cameraGeoPose(viewer) : response.geopose);
 }
 
+async function ensureContentService(position: GeoPose): Promise<string | null> {
+  if (contentServiceId) {
+    return contentServiceId;
+  }
+  contentServiceId = await bridgeFindService(position, 'CONTENT');
+  appLog(
+    contentServiceId
+      ? `discover:content ${contentServiceId}`
+      : 'discover:content none — querying the well-known topic anyway'
+  );
+  return contentServiceId;
+}
+
 async function handleDiscover() {
   if (!currentPose) {
     readoutItems = 0;
@@ -253,6 +303,9 @@ async function handleDiscover() {
     return;
   }
 
+  if (bridgeActive) {
+    await ensureContentService(currentPose);
+  }
   const response = bridgeActive ? await bridgeDiscover(currentPose) : await mockDiscover(currentPose);
   response.items.forEach((item) => addItemEntity(item));
   readoutItems = response.items.length;
@@ -328,6 +381,50 @@ function wsUrlFromBridgeUrl(url: string): string {
     return url.replace('http://', 'ws://');
   }
   return `ws://${url}`;
+}
+
+function renderRestOverlay() {
+  const body = document.getElementById('restOverlayBody');
+  if (body) {
+    body.textContent = restMessages.join('\n\n');
+  }
+}
+
+/**
+ * Record one HTTP exchange with the bridge.
+ *
+ * The counterpart to the DDS window: that one shows what reached the bus,
+ * this one shows what the browser actually sent and got back. Open both and
+ * a single REST call is visible turning into the several bus messages it
+ * causes — which is the bridge's whole job, and otherwise invisible.
+ */
+function pushRestExchange(exchange: RestExchange) {
+  const status = exchange.error
+    ? `${exchange.status || 'ERR'} ${exchange.error}`.trim()
+    : String(exchange.status);
+  const lines = [`${exchange.method} ${exchange.path} -> ${status} (${exchange.ms}ms)`];
+  if (exchange.request !== undefined) {
+    lines.push(`request:  ${JSON.stringify(exchange.request)}`);
+  }
+  if (exchange.response !== undefined) {
+    lines.push(`response: ${JSON.stringify(exchange.response, null, 2)}`);
+  }
+  restMessages.push(lines.join('\n'));
+  const limit = 50;
+  if (restMessages.length > limit) {
+    restMessages.splice(0, restMessages.length - limit);
+  }
+  renderRestOverlay();
+}
+
+function toggleRestOverlay() {
+  restOverlayVisible = !restOverlayVisible;
+  if (toggleRestOverlayBtn) {
+    toggleRestOverlayBtn.textContent = `REST Messages: ${restOverlayVisible ? 'On' : 'Off'}`;
+  }
+  const panel = document.getElementById('restOverlay');
+  panel?.classList.toggle('hidden', !restOverlayVisible);
+  renderRestOverlay();
 }
 
 function renderDdsOverlay() {
@@ -542,6 +639,15 @@ export function initApp() {
   toggleDdsOverlayBtn?.addEventListener('click', () => {
     toggleDdsOverlay();
   });
+
+  toggleRestOverlayBtn?.addEventListener('click', () => {
+    toggleRestOverlay();
+  });
+
+  // Record from startup, not from when the panel is opened, so the calls the
+  // app made while booting (/health, and the first discovery) are already
+  // there when you look.
+  observeRest(pushRestExchange);
 
 
   void loadSceneAssets(viewer);
