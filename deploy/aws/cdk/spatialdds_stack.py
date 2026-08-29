@@ -325,6 +325,27 @@ class SpatialDDSStack(Stack):
         # ``ApplicationLoadBalancedFargateService`` wires up the ALB,
         # target group, and Fargate service in one go; we point at the
         # web bridge's port mapping.
+        # Joining an existing security group, when one is named.
+        #
+        # This is how the task shares a DDS bus with an OpenVPS deployment
+        # without changing anything in openvps-deploy. That stack's RTPS rules
+        # exist already but their source is its own group — written for two GPU
+        # hosts discovering each other, not for a peer outside the group. A
+        # task placed *inside* that group is covered by the self-referencing
+        # rule as it stands.
+        #
+        # Additive: CDK still creates the service's own group for the ALB
+        # path, so nothing about HTTP ingress changes.
+        peer_security_group_ids = [
+            gid.strip()
+            for gid in str(config.get("security_group_ids") or "").split(",")
+            if gid.strip()
+        ]
+        extra_groups = [
+            ec2.SecurityGroup.from_security_group_id(self, f"PeerSg{i}", gid)
+            for i, gid in enumerate(peer_security_group_ids)
+        ]
+
         service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self, "Service",
             cluster=cluster,
@@ -336,6 +357,11 @@ class SpatialDDSStack(Stack):
             listener_port=80,
             # Send ALB → web bridge container, port 8088.
             target_protocol=elbv2.ApplicationProtocol.HTTP,
+            security_groups=None if not extra_groups else [
+                ec2.SecurityGroup(self, "ServiceSg", vpc=vpc,
+                                  description=f"{construct_id} service"),
+                *extra_groups,
+            ],
         )
 
         # ── Cross-host DDS, when peers are configured ────────────────────
@@ -349,12 +375,15 @@ class SpatialDDSStack(Stack):
         # naming its SG here would couple the two deployments' templates.
         dds_peers = str(config.get("dds_peers") or "").strip()
         dds_peer_cidr = str(config.get("dds_peer_cidr") or "").strip()
-        if dds_peers:
+        if dds_peers and not peer_security_group_ids:
             if not dds_peer_cidr:
                 raise ValueError(
-                    "dds_peers is set but dds_peer_cidr is not: RTPS is UDP and "
-                    "the task's security group has to allow the peer in, or "
-                    "discovery completes one way and no sample is ever exchanged"
+                    "dds_peers is set but neither dds_peer_cidr nor "
+                    "security_group_ids is: RTPS is UDP and the peer has to be "
+                    "allowed in, or discovery completes one way and no sample "
+                    "is ever exchanged. Either open a CIDR, or join the peer's "
+                    "security group, which is what openvps-deploy's own RTPS "
+                    "rules already cover."
                 )
             service.service.connections.allow_from(
                 ec2.Peer.ipv4(dds_peer_cidr),

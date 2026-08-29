@@ -80,10 +80,22 @@ ar_demo:
 #      told where to look. Cyclone peer syntax, space- or comma-separated.
 #      The peer needs this stack's address in *its* list too, or discovery
 #      completes one way and no sample is ever exchanged.
-#   3. A security group opening. RTPS is UDP from 7400 for domain 0; the
-#      rule is added only when dds_peers is set, and the deploy refuses to
-#      synthesise if peers are named without a CIDR.
+#   3. A way in. RTPS is UDP from 7400 for domain 0, and the peer's security
+#      group has to allow this task. Two ways:
 #
-# vpc_id: "vpc-0123456789abcdef0"
-# dds_peers: "udp/10.0.1.42"
-# dds_peer_cidr: "10.0.0.0/16"
+#      * `security_group_ids` — join the peer's own group. openvps-deploy's
+#        RTPS rules are sourced from its own security group, written for two
+#        GPU hosts finding each other; a task inside that group is covered by
+#        them unchanged. Nothing to alter in that repo, and `DdsPeers` and
+#        `AttachElasticIp` there are already stack parameters, so its side is
+#        deploy-time configuration rather than a code change.
+#      * `dds_peer_cidr` — open a CIDR on this task's own group instead, for a
+#        peer whose group you cannot join.
+#
+#      Naming peers with neither is refused at synth, rather than deploying
+#      something whose discovery completes one way and exchanges nothing.
+#
+# vpc_id: "vpc-0123456789abcdef0"        # place the task beside the peer
+# dds_peers: "udp/10.0.1.42"             # the peer's private IP
+# security_group_ids: "sg-0123456789abcdef0"   # the peer's security group
+# dds_peer_cidr: "10.0.0.0/16"           # alternative to the line above
