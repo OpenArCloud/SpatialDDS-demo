@@ -174,3 +174,46 @@ deploy/aws/
    1–2 minutes.
 4. **Hit the deployed ALB with `smoke_test.py BASE=...`** — same
    assertions you ran locally.
+
+## The AR demo in the deployment
+
+The task runs two demos side by side, because one bus can carry both:
+
+| URL | Demo |
+|---|---|
+| `/` | Multi-operator fusion — the canvas dashboard |
+| `/ar/` | The Cesium AR demo — discovery, localize, catalogue |
+| `/.well-known/spatialdds/*` | Spec discovery over the live bus |
+
+Two extra containers serve the AR half: `vps` and `catalog`. Both announce
+themselves, so the browser finds them the way any client would — a search
+issues a `CoverageQuery` and these answer it — rather than the bridge naming a
+service it was configured with. Both are non-essential: if either stops, the
+fusion demo carries on and discovery correctly reports that nothing covers the
+area.
+
+Turn the AR half off with `features.ar_demo: false`. Point it at a different
+place — including, later, a real map — with the `ar_demo:` block in
+`config.yaml`.
+
+### The Cesium bundle
+
+Built in the image (`Dockerfile.deploy` stage 1) and served by the bridge at
+`/ar`. Two consequences worth knowing:
+
+* **Vite bakes `VITE_*` env into the bundle at build time**, so the Ion token
+  is a build arg. Without it the app still runs — plain globe instead of
+  photorealistic tiles, which the UI already has a toggle for. Scope the token
+  to this deployment's domains in the Ion console; it ships in the bundle
+  either way, as every client-side map credential does.
+* **The bridge URL is deliberately not baked in.** The app falls back to its
+  own origin, which is right for a deployment where one process serves the
+  bundle and the API behind one load balancer.
+
+### Still HTTP
+
+The ALB listens on port 80. That is fine for a demo you open directly and
+wrong for anything embedded or shared, and Ion is happier over HTTPS. Adding
+it needs a certificate and a domain, which are deployment decisions rather
+than repo ones — `features.custom_domain` / `hosted_zone_id` are the
+placeholders for it.

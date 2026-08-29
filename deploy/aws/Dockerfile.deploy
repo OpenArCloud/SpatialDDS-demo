@@ -10,6 +10,33 @@
 # `global` and `from` field names as valid Python. deploy.sh builds this tag
 # locally before invoking CDK, so the deploy does not depend on the registry
 # copy; see scripts/publish_base_image.sh for publishing it.
+# ----------------------------------------------------------------------
+# Stage 1: the Cesium AR bundle.
+#
+# Vite bakes its `VITE_*` env into the bundle at build time, so anything the
+# browser needs has to be decided here rather than at run time. The bridge URL
+# is deliberately *not* set: the app falls back to its own origin, which is
+# correct for a deployment where one process serves both the bundle and the
+# API behind one load balancer.
+#
+# The Ion token is a build arg because it is a client-side credential that
+# ends up in the bundle either way. Without it the app still runs — it just
+# shows the plain globe instead of photorealistic tiles, which the UI already
+# has a toggle for. Scope the token to this deployment's domains in the Ion
+# console rather than treating it as a secret.
+# ----------------------------------------------------------------------
+FROM node:20-slim AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+ARG VITE_CESIUM_ION_TOKEN=""
+ARG VITE_CESIUM_ION_ASSET_ID=""
+ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN
+ENV VITE_CESIUM_ION_ASSET_ID=$VITE_CESIUM_ION_ASSET_ID
+RUN npm run build
+
+
 FROM ghcr.io/openarcloud/cyclonedds-python-base:11.0.1-ubuntu22.04
 
 # ----------------------------------------------------------------------
@@ -37,6 +64,11 @@ ENV CYCLONEDDS_URI=file:///etc/cyclonedds.xml
 # keeps reusing the deps layer above.
 COPY . /app/
 ENV PYTHONPATH=/app
+
+# The built AR bundle, served by the bridge at /ar. Copied after the source
+# so a Python-only change does not rebuild it.
+COPY --from=web /web/dist /app/web/dist
+ENV SPATIALDDS_BRIDGE_AR_DIR=/app/web/dist
 
 # Sensible defaults; per-container overrides (command, port mapping)
 # come from docker-compose / the CDK stack.

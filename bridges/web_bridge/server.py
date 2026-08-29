@@ -916,6 +916,24 @@ def _served_manifest(record) -> Optional[Dict[str, Any]]:
         return None
     if not manifest:
         return None
+
+    # The authored document must describe the service that announced it.
+    # `manifest_uri` is just a string in an announce, so a misconfigured
+    # deployment can point at someone else's manifest — and then discovery
+    # answers with a document naming a different service, whose topics and
+    # connection details a client would take at face value. Seen for real: a
+    # VPS configured for Austin whose manifest_uri still pointed at the
+    # bundled SF manifest, so `/search` reported `svc:vps:demo/sf-downtown`
+    # for a service announcing `svc:vps:demo/austin-downtown`.
+    #
+    # Synthesis from the announce is the safe answer: less detail, but about
+    # the right service.
+    described = ((manifest.get("service") or {}).get("service_id") or "").strip()
+    if described and record.service_id and described != record.service_id:
+        print(f"discovery: {uri} describes {described!r}, but "
+              f"{record.service_id!r} announced it; synthesizing instead")
+        return None
+
     # Debug only. Which path produced a result is not part of the response.
     print(f"discovery: serving authored manifest for {uri} ({status.get('mode')})")
     return manifest
@@ -1091,6 +1109,24 @@ if Path(STATIC_DIR).is_dir():
     @app.get("/debug")
     def _debug_index():
         return FileResponse(_static_dir / "debug.html")
+
+
+# The Cesium AR demo, when a built bundle is present.
+#
+# Mounted separately from the fusion dashboard rather than replacing it: the
+# two demos are different things and both are served by this one process in a
+# deployment. `html=True` makes StaticFiles serve index.html for the mount
+# root, which is what a single-page bundle needs.
+#
+# Built by `npm run build` in web/. The deploy image builds it; a local run
+# usually does not have one, and then this simply does not mount — the AR demo
+# is served by Vite on :5173 during development.
+AR_DIR = os.getenv("SPATIALDDS_BRIDGE_AR_DIR", "")
+if AR_DIR and Path(AR_DIR).is_dir():
+    app.mount("/ar", StaticFiles(directory=AR_DIR, html=True), name="ar")
+    print(f"AR demo served from {AR_DIR} at /ar")
+elif AR_DIR:
+    print(f"SPATIALDDS_BRIDGE_AR_DIR={AR_DIR!r} is not a directory; /ar not served")
 
 
 if __name__ == "__main__":

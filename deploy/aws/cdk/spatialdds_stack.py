@@ -10,7 +10,7 @@ deploys it.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from aws_cdk import (
     CfnOutput,
@@ -97,6 +97,11 @@ class SpatialDDSStack(Stack):
             memory_limit_mib=memory_mib,
         )
 
+        # AR-demo settings: which place the mock VPS claims to cover, and
+        # which catalogue it serves. Swapping these is how the demo points at
+        # a different map — including, later, a real one.
+        ar: Dict[str, Any] = dict(config.get("ar_demo") or {})
+
         common_env: Dict[str, str] = {
             "SPATIALDDS_DDS_DOMAIN": "0",
             # The bootstrap manifest the bridge serves at
@@ -169,6 +174,50 @@ class SpatialDDSStack(Stack):
                 log_group=log_group,
             ),
         )
+
+        # Containers for the AR demo: a VPS and a content catalogue, the two
+        # services the Cesium app discovers and calls. Both announce
+        # themselves, so the browser finds them the way any client would —
+        # `/.well-known/spatialdds/search` issues a CoverageQuery and these
+        # answer it — rather than the bridge naming a service it was
+        # configured with.
+        #
+        # Both are non-essential: if either stops, the web bridge and the
+        # fusion demo carry on, and discovery correctly reports that nothing
+        # covers the area rather than pretending otherwise.
+        if features.get("ar_demo", True):
+            ar_env = {
+                **common_env,
+                "SPATIALDDS_VPS_SERVICE_ID": ar.get("vps_service_id", "svc:vps:demo/austin-downtown"),
+                "SPATIALDDS_VPS_SERVICE_NAME": ar.get("vps_service_name", "MockVPS-Austin"),
+                "SPATIALDDS_VPS_COVERAGE_BBOX": ar.get("coverage_bbox", "-97.75,30.27,-97.72,30.29"),
+                "SPATIALDDS_VPS_MAP_FQN": ar.get("map_fqn", "map/austin"),
+                "SPATIALDDS_VPS_MAP_ID": ar.get("map_id", "austin-map"),
+                "SPATIALDDS_DEMO_MANIFEST_URI": ar.get(
+                    "manifest_uri",
+                    "spatialdds://vps.example.com/zone:austin-downtown/manifest:vps"),
+            }
+            task_def.add_container(
+                "vps",
+                image=image,
+                command=["python3", "ar_demo/spatialdds_demo_server.py", "--summary-only"],
+                essential=False,
+                environment=ar_env,
+                logging=ecs.LogDriver.aws_logs(
+                    stream_prefix="vps", log_group=log_group),
+            )
+            task_def.add_container(
+                "catalog",
+                image=image,
+                command=["python3", "ar_demo/spatialdds_catalog_server.py",
+                         "--summary-only",
+                         "--seed", ar.get("catalog_seed",
+                                          "bridges/web_bridge/tests/catalog_seed_austin.json")],
+                essential=False,
+                environment=ar_env,
+                logging=ecs.LogDriver.aws_logs(
+                    stream_prefix="catalog", log_group=log_group),
+            )
 
         # Container 3: synthetic publisher (toggle via features.synthetic_publisher).
         if features.get("synthetic_publisher", True):
@@ -271,6 +320,12 @@ class SpatialDDSStack(Stack):
             value=f"http://{alb_dns}/static/index.html",
             description="SpatialDDS web dashboard (debug UI for the /ws protocol)",
         )
+        if features.get("ar_demo", True):
+            CfnOutput(
+                self, "ARDemoURL",
+                value=f"http://{alb_dns}/ar/",
+                description="Cesium AR demo — discovery, localize and catalogue over REST",
+            )
         CfnOutput(
             self, "HealthURL",
             value=f"http://{alb_dns}/health",

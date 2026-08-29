@@ -1,12 +1,40 @@
 import type { CatalogItem, DiscoverResponse, GeoPose, LocalizeResponse } from './types';
 import { geohashEncode } from './geohash';
 
-const DEFAULT_BRIDGE_URL = 'http://localhost:8088';
+const DEV_BRIDGE_URL = 'http://localhost:8088';
+
 // `import.meta.env` is Vite's, so it is absent when this module is imported
 // outside a bundle — which the parser tests do, to exercise the parsers
 // without standing up a browser and a bridge.
 const VITE_ENV = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-const BRIDGE_URL = VITE_ENV?.VITE_SPATIALDDS_BRIDGE_URL || DEFAULT_BRIDGE_URL;
+
+/**
+ * Where the bridge is, in the three places this app runs.
+ *
+ * 1. An explicit `VITE_SPATIALDDS_BRIDGE_URL` always wins. That is what
+ *    `web/.env.local` sets for local development, where Vite serves the page
+ *    on :5173 and the bridge is a separate process on :8088.
+ * 2. Otherwise, when the page is served from anywhere but localhost, the
+ *    bridge is assumed to be the same origin — which is true of the deployed
+ *    build, where one process serves both the bundle and the API behind one
+ *    load balancer. Hard-coding localhost there produced a bundle that could
+ *    only ever talk to the viewer's own machine.
+ * 3. Falling back to localhost keeps a bundle opened straight off disk, or
+ *    served by any dev server without the env var, working as it always did.
+ */
+function resolveBridgeUrl(): string {
+  const configured = VITE_ENV?.VITE_SPATIALDDS_BRIDGE_URL;
+  if (configured) {
+    return configured;
+  }
+  const origin = typeof window !== 'undefined' ? window.location : undefined;
+  if (origin && origin.hostname && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(origin.hostname)) {
+    return origin.origin;
+  }
+  return DEV_BRIDGE_URL;
+}
+
+const BRIDGE_URL = resolveBridgeUrl();
 
 export type BridgeStatus = {
   ok: boolean;

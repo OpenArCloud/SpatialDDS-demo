@@ -287,6 +287,35 @@ class BridgeEndpoints(unittest.TestCase):
         response = self.client.get("/.well-known/spatialdds/search?geohash=9q8yy")
         self.assertEqual(response.json()["results"], [authored])
 
+    def test_a_manifest_describing_another_service_is_refused(self):
+        """
+        `manifest_uri` is only a string in an announce, so a misconfigured
+        deployment can point at someone else's manifest. Serving it would
+        answer discovery with a document naming a different service, whose
+        topics and connection a client would take at face value.
+
+        Seen for real while bringing the AR demo up on Fargate: a VPS
+        configured for Austin whose manifest_uri still pointed at the bundled
+        SF manifest, so `/search` reported `svc:vps:demo/sf-downtown` for a
+        service announcing `svc:vps:demo/austin-downtown`.
+        """
+        record = self.cache.records()[0]
+        other = {"id": "spatialdds://demo.example/zone:sf/manifest:vps",
+                 "profile": "spatial.manifest/1.7", "rtype": "service",
+                 "service": {"service_id": "svc:vps:someone/else", "kind": "VPS"}}
+        mine = {**other, "service": {"service_id": record.service_id, "kind": "VPS"}}
+
+        original = self.server.resolve_manifest
+        self.addCleanup(setattr, self.server, "resolve_manifest", original)
+
+        self.server.resolve_manifest = lambda uri, **kw: (other, {"mode": "test"})
+        self.assertIsNone(self.server._served_manifest(record),
+                          "a manifest for another service must not be served")
+
+        self.server.resolve_manifest = lambda uri, **kw: (mine, {"mode": "test"})
+        self.assertEqual(self.server._served_manifest(record), mine,
+                         "a manifest for this service is served verbatim")
+
     def test_an_unmatched_announce_is_synthesized(self):
         response = self.client.get("/.well-known/spatialdds/search?geohash=9q8yy")
         doc = response.json()["results"][0]

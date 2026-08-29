@@ -157,3 +157,35 @@ test.describe('localize carries the discovered service', () => {
     expect('service_id' in body).toBe(false);
   });
 });
+
+test.describe('bridge URL resolution', () => {
+  // Exercised through a copy of the rule rather than by re-importing the
+  // module, because the module resolves its URL once at import and Playwright
+  // shares that import across tests. The rule is short enough that a
+  // divergence would be obvious; what matters is pinning the *decision*.
+  function resolve(configured: string | undefined, hostname: string | undefined): string {
+    if (configured) return configured;
+    if (hostname && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(hostname)) {
+      return `https://${hostname}`;
+    }
+    return 'http://localhost:8088';
+  }
+
+  test('an explicit env var always wins', () => {
+    expect(resolve('http://bridge:9000', 'demo.example')).toBe('http://bridge:9000');
+    expect(resolve('http://bridge:9000', 'localhost')).toBe('http://bridge:9000');
+  });
+
+  test('a hosted page talks to its own origin', () => {
+    // The deployed build serves the bundle and the API from one process
+    // behind one load balancer. Hard-coding localhost there produced a bundle
+    // that could only ever reach the viewer's own machine.
+    expect(resolve(undefined, 'demo.spatialdds.org')).toBe('https://demo.spatialdds.org');
+  });
+
+  test('localhost still falls back to the dev bridge port', () => {
+    for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+      expect(resolve(undefined, host)).toBe('http://localhost:8088');
+    }
+  });
+});

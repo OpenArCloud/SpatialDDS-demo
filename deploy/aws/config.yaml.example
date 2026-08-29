@@ -29,8 +29,24 @@ features:
   s3_bucket_name: ""             # empty → CDK auto-generates a unique name
   recording_duration_s: 600
 
+  # The AR demo: a mock VPS and a content catalogue announcing themselves on
+  # the bus, plus the Cesium bundle served at /ar. On by default — it is the
+  # demo most people are looking for, and it costs two small containers.
+  ar_demo: true
+
   # Custom domain / HTTPS — not yet wired by deploy.sh. Set these and
   # extend spatialdds_stack.py to issue an ACM cert + Route53 record
   # when you're ready for production.
   custom_domain: ""              # e.g., demo.spatialdds.org
   hosted_zone_id: ""             # the Route53 zone ID
+
+# ── AR demo (optional; the defaults describe the bundled Austin mock) ──
+# Which place the mock VPS claims to cover, and which catalogue it serves.
+# Point these at a real map's location when swapping the mock for a real VPS.
+ar_demo:
+  vps_service_id: "svc:vps:demo/austin-downtown"
+  vps_service_name: "MockVPS-Austin"
+  coverage_bbox: "-97.75,30.27,-97.72,30.29"    # west,south,east,north
+  map_fqn: "map/austin"
+  map_id: "austin-map"
+  catalog_seed: "bridges/web_bridge/tests/catalog_seed_austin.json"
