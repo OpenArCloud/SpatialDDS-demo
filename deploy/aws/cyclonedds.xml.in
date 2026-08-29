@@ -12,8 +12,9 @@
     without multicast.
 
   * **Two hosts on one bus** — this task and, for example, an OpenVPS
-    instance running its own participants. Then each side names the other in
-    its peer list.
+    instance running its own participants. Only this side has to name the
+    other, as a bare `udp/HOST` with no port; a peer list on the far end is
+    optional. Measured, with the reasoning, in deploy/aws/README.md.
 
   Multicast is off in both cases because an AWS VPC does not carry it.
   Leaving it on gives a deployment that works on a laptop, works on one host

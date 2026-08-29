@@ -129,9 +129,19 @@ drops the second NAT gateway; the peer list is rendered into the Cyclone
 config at container start, because it names addresses that change when a peer
 instance is replaced.
 
-Discovery is symmetric: **the other end needs this task's address in its own
-peer list**, or participants are discovered one way and no sample is ever
-exchanged. That failure is silent on both sides.
+**Only this side needs a peer list.** Measured in a two-host container test,
+with `<Peers>` left empty on the other end and this side naming it as a bare
+`udp/HOST` with no port: every participant on that host was discovered, a
+150 KB image made a localize round trip with its SHA-256 intact, and a
+departure propagated (the service left `search` within seconds of the peer
+stopping). Recovery is automatic in both directions that matter for a GPU
+instance that scales to zero — the peer restarting on the same address was
+rediscovered in ~16s, and a participant that joined the peer *after* this task
+was already running showed up in ~18s.
+
+Naming this task in the other end's peer list too is harmless and makes
+discovery converge sooner, but it is not required — which is the point, since
+that side is not ours to reconfigure.
 
 The intended peer is the `spatialdds` variant of
 [openvps-deploy](https://github.com/OpenArCloud/openvps-deploy), whose GPU
