@@ -1,5 +1,9 @@
 # SpatialDDS Demo
 
+![Cesium AR demo](web/screenshot.png)
+
+![Multi-operator fusion canvas dashboard](multi_operator_fusion/screenshot.png)
+
 Reference demos for **SpatialDDS 1.7** — the stamped release, 2026-08-23, tag
 `v1.7` — running on CycloneDDS. The repo vendors that release's IDL verbatim
 under `idl/v1.7`, mirrors its manifest examples in `manifests/v1.7`, and ships
@@ -64,10 +68,6 @@ rows, `CoverageQuery.expr` and `CoverageElement.type` are gone, `GeoPose` lost
 `spatial.<profile>/1.7`. `idl/v1.4`, `idl/v1.6` and the matching `manifests/`
 directories are kept for reference only; nothing loads them. Details in
 [`ar_demo/SPEC_COMPLIANCE.md`](ar_demo/SPEC_COMPLIANCE.md).
-
-![Multi-operator fusion canvas dashboard](multi_operator_fusion/screenshot.png)
-
-![Cesium web demo](web/screenshot.png)
 
 ## Demos in this repo
 
