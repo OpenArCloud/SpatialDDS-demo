@@ -15,7 +15,17 @@ memory: 2048         # 2 GB total
 
 # ── Features (all optional) ────────────────────────────────────────────
 features:
-  # Synthetic Detection3D publisher. On by default so the dashboard has
+  # ── Which demo this deployment runs ─────────────────────────────────
+  # They share one DDS domain, so running both means each one's message
+  # window shows the other's traffic — the fusion side publishes
+  # detections and entity bindings continuously. Pick one.
+  #
+  #   fusion_demo: the multi-operator fusion dashboard at /
+  #   ar_demo:     the Cesium AR demo at /ar/
+  fusion_demo: true
+  ar_demo: false
+
+  # Synthetic Detection3D publisher (fusion demo only). On by default so the dashboard has
   # something to show on first deploy without any data prerequisites.
   synthetic_publisher: true
   synthetic_operators: 3
@@ -28,11 +38,6 @@ features:
   recording: false
   s3_bucket_name: ""             # empty → CDK auto-generates a unique name
   recording_duration_s: 600
-
-  # The AR demo: a mock VPS and a content catalogue announcing themselves on
-  # the bus, plus the Cesium bundle served at /ar. On by default — it is the
-  # demo most people are looking for, and it costs two small containers.
-  ar_demo: true
 
   # Custom domain / HTTPS — not yet wired by deploy.sh. Set these and
   # extend spatialdds_stack.py to issue an ACM cert + Route53 record
@@ -50,3 +55,14 @@ ar_demo:
   map_fqn: "map/austin"
   map_id: "austin-map"
   catalog_seed: "bridges/web_bridge/tests/catalog_seed_austin.json"
+
+  # Cesium Ion, for photorealistic 3D tiles. Optional — without these the
+  # demo uses OpenStreetMap imagery and hides the tiles toggle.
+  #
+  # Vite bakes these into the bundle at build time, so they are served to
+  # every visitor. That is normal for a client-side map credential, but it
+  # means: use a token scoped to this deployment's hostname in the Ion
+  # console, not a personal one. (A developer's token leaking here through
+  # web/.env.local is why .dockerignore now excludes that file.)
+  cesium_ion_token: ""
+  cesium_ion_asset_id: ""       # e.g. 2275207 for Google Photorealistic 3D Tiles

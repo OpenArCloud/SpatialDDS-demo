@@ -10,7 +10,7 @@ deploys it.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from aws_cdk import (
     CfnOutput,
@@ -82,11 +82,36 @@ class SpatialDDSStack(Stack):
         # first — ``docker build --platform=linux/amd64 -f Dockerfile.base
         # -t <same-tag> .`` from the repo root — because the registry has
         # only the superseded 0.10.5 tag.
+        # AR-demo settings: which place the mock VPS claims to cover, which
+        # catalogue it serves, and its Cesium credentials. Read here rather
+        # than beside the other container config because the image asset
+        # below needs it — Vite bakes the Ion values in at build time.
+        ar: Dict[str, Any] = dict(config.get("ar_demo") or {})
+
+        # Cesium Ion credentials for the AR bundle, if configured. Vite bakes
+        # `VITE_*` into the bundle at build time, so these have to be build
+        # args — there is no run-time way to supply them.
+        #
+        # They end up in a publicly served bundle, as every client-side map
+        # credential does. Scope the token to this deployment's hostname in
+        # the Ion console; do not reuse a developer's personal token. Without
+        # them the app falls back to OpenStreetMap imagery and hides the
+        # photorealistic-tiles toggle, which is a working demo, just a
+        # plainer one.
+        build_args = {}
+        ion_token = str(ar.get("cesium_ion_token") or "").strip()
+        ion_asset = str(ar.get("cesium_ion_asset_id") or "").strip()
+        if ion_token:
+            build_args["VITE_CESIUM_ION_TOKEN"] = ion_token
+        if ion_asset:
+            build_args["VITE_CESIUM_ION_ASSET_ID"] = ion_asset
+
         image_asset = ecr_assets.DockerImageAsset(
             self, "Image",
             directory=str(_REPO_ROOT),
             file=_DOCKERFILE_REL,
             platform=ecr_assets.Platform.LINUX_AMD64,
+            build_args=build_args or None,
         )
         image = ecs.ContainerImage.from_docker_image_asset(image_asset)
 
@@ -96,11 +121,6 @@ class SpatialDDSStack(Stack):
             cpu=cpu,
             memory_limit_mib=memory_mib,
         )
-
-        # AR-demo settings: which place the mock VPS claims to cover, and
-        # which catalogue it serves. Swapping these is how the demo points at
-        # a different map — including, later, a real one.
-        ar: Dict[str, Any] = dict(config.get("ar_demo") or {})
 
         common_env: Dict[str, str] = {
             "SPATIALDDS_DDS_DOMAIN": "0",
@@ -160,20 +180,26 @@ class SpatialDDSStack(Stack):
         # Container 2: fusion service. Non-essential — if it crashes the
         # web bridge keeps serving (the dashboard just won't show fused
         # tracks until it restarts).
-        task_def.add_container(
-            "fusion",
-            image=image,
-            command=[
-                "python3", "-m", "multi_operator_fusion.fusion_service",
-                "--domain", "0", "--quiet",
-            ],
-            essential=False,
-            environment=common_env,
-            logging=ecs.LogDriver.aws_logs(
-                stream_prefix="fusion",
-                log_group=log_group,
-            ),
-        )
+        #
+        # Gated, because the two demos share one DDS domain when both run and
+        # the fusion side publishes detections and entity bindings
+        # continuously. A viewer of the AR demo then watches a message window
+        # full of another demo's traffic. They are separate demos; run one.
+        if features.get("fusion_demo", True):
+            task_def.add_container(
+                "fusion",
+                image=image,
+                command=[
+                    "python3", "-m", "multi_operator_fusion.fusion_service",
+                    "--domain", "0", "--quiet",
+                ],
+                essential=False,
+                environment=common_env,
+                logging=ecs.LogDriver.aws_logs(
+                    stream_prefix="fusion",
+                    log_group=log_group,
+                ),
+            )
 
         # Containers for the AR demo: a VPS and a content catalogue, the two
         # services the Cesium app discovers and calls. Both announce
@@ -185,7 +211,7 @@ class SpatialDDSStack(Stack):
         # Both are non-essential: if either stops, the web bridge and the
         # fusion demo carry on, and discovery correctly reports that nothing
         # covers the area rather than pretending otherwise.
-        if features.get("ar_demo", True):
+        if features.get("ar_demo", False):
             ar_env = {
                 **common_env,
                 "SPATIALDDS_VPS_SERVICE_ID": ar.get("vps_service_id", "svc:vps:demo/austin-downtown"),
@@ -220,7 +246,7 @@ class SpatialDDSStack(Stack):
             )
 
         # Container 3: synthetic publisher (toggle via features.synthetic_publisher).
-        if features.get("synthetic_publisher", True):
+        if features.get("fusion_demo", True) and features.get("synthetic_publisher", True):
             task_def.add_container(
                 "publisher",
                 image=image,
@@ -245,7 +271,7 @@ class SpatialDDSStack(Stack):
         # (tracked TODO). Enable just to verify the recorder runs in the
         # task topology; download via ``ecs execute-command`` if needed.
         recording_bucket = None
-        if features.get("recording", False):
+        if features.get("fusion_demo", True) and features.get("recording", False):
             bucket_name = features.get("s3_bucket_name") or None
             recording_bucket = s3.Bucket(
                 self, "RecordingBucket",
@@ -320,7 +346,7 @@ class SpatialDDSStack(Stack):
             value=f"http://{alb_dns}/static/index.html",
             description="SpatialDDS web dashboard (debug UI for the /ws protocol)",
         )
-        if features.get("ar_demo", True):
+        if features.get("ar_demo", False):
             CfnOutput(
                 self, "ARDemoURL",
                 value=f"http://{alb_dns}/ar/",

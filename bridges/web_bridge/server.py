@@ -58,10 +58,8 @@ from spatialdds_idl.spatial.argeo import VpsRequest as TypedVpsRequest
 from spatialdds_idl.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
-    TOPIC_CATALOG_QUERY_V1,
     TOPIC_CATALOG_REPLIES,
     TOPIC_DISCOVERY_QUERY_V1,
-    TOPIC_VPS_QUERY_V1,
 )
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 from spatialdds_test import MockSensorData

@@ -57,18 +57,24 @@ echo "[deploy] bootstrapping CDK (idempotent)..."
 ( cd cdk && cdk bootstrap "aws://${ACCOUNT_ID}/${REGION}" --quiet ) || true
 
 # Pre-flight: ensure the cyclonedds-python-base image used by
-# Dockerfile.deploy is available locally for linux/amd64 (the platform
-# Fargate runs). On an arm64 host the default ``docker build`` produces an
-# arm64-only image which the CDK asset (which forces --platform
-# linux/amd64) can't use, and the registry copy of this tag may not exist
-# yet — only 0.10.5 has ever been pushed, and it is arm64-only. Always
-# build the base for linux/amd64 here so deploy works on either host arch
-# regardless. (Idempotent — Docker reuses the cache when the Dockerfile and
-# the apt/pip layers haven't changed.)
+# Dockerfile.deploy needs its base for linux/amd64 — the platform Fargate
+# runs, and the one the CDK asset forces. On an arm64 host a plain
+# ``docker build`` produces an arm64-only image the asset cannot use.
+#
+# The base is published multi-arch now, so pull it: building it here instead
+# means compiling CycloneDDS under emulation, which takes half an hour and
+# produces the same bytes. Fall back to building only if the pull fails —
+# a network without ghcr, or a tag not yet pushed.
 BASE_TAG="ghcr.io/openarcloud/cyclonedds-python-base:11.0.1-ubuntu22.04"
 echo "[deploy] ensuring base image ${BASE_TAG} is available for linux/amd64..."
-( cd ../.. && docker build --platform=linux/amd64 \
-    -f Dockerfile.base -t "$BASE_TAG" . )
+if docker pull --platform=linux/amd64 -q "$BASE_TAG" >/dev/null 2>&1; then
+  echo "[deploy]   pulled from the registry"
+else
+  echo "[deploy]   not pullable; building locally (compiles CycloneDDS under" \
+       "emulation on arm64 — expect ~30 minutes)"
+  ( cd ../.. && docker build --platform=linux/amd64 \
+      -f Dockerfile.base -t "$BASE_TAG" . )
+fi
 
 OUTPUTS_FILE="$(pwd)/outputs.json"
 echo "[deploy] cdk deploy (this typically takes 5–10 minutes)..."
@@ -85,9 +91,14 @@ echo "============================================"
 echo "  Deployment Complete"
 echo "============================================"
 
-python3 - <<PY
-import json, sys
-with open("${OUTPUTS_FILE}") as f:
+# Quoted delimiter: an unquoted heredoc has the shell rewrite backslashes
+# before Python sees them, which turned the line-continuation below into an
+# unterminated string. The deploy itself had already succeeded by then, so
+# this only ever broke the closing summary — and the non-zero exit made a
+# working deployment look like a failed one.
+OUTPUTS_FILE="$OUTPUTS_FILE" python3 - <<'PY'
+import json, os, sys
+with open(os.environ["OUTPUTS_FILE"]) as f:
     outputs = json.load(f) or {}
 if not outputs:
     print("(no outputs reported)")
