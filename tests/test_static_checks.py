@@ -93,6 +93,39 @@ class TestScriptsReferenceRealFiles(unittest.TestCase):
         self.assertEqual(missing, [], "\n".join(missing))
 
 
+class CdkStackSynthesises(unittest.TestCase):
+    """
+    The deploy stack builds without executing AWS.
+
+    `cdk synth` runs the stack definition as ordinary Python, so it catches
+    what any other module would catch — a name used before assignment, a bad
+    reference, a typo in a construct argument. It just is not run by anything,
+    because the file only executes during a deploy.
+
+    That cost a failed deployment: a config value read into `ar` was used by
+    the image asset above where it was assigned, and `UnboundLocalError`
+    surfaced only after the base image had been pulled and cdk had started.
+    A second of synth beforehand would have said so.
+    """
+
+    def test_the_stack_synthesises(self):
+        cdk_dir = REPO / "deploy" / "aws" / "cdk"
+        if not (cdk_dir / "app.py").exists():
+            self.skipTest("no CDK app in this checkout")
+        try:
+            import aws_cdk  # noqa: F401
+        except ImportError:
+            self.skipTest(
+                "CDK-UNAVAILABLE: pip install aws-cdk-lib. Without it a stack "
+                "that cannot even be constructed reaches a real deploy.")
+
+        result = subprocess.run([sys.executable, "app.py"], cwd=cdk_dir,
+                                capture_output=True, text=True, timeout=180)
+        self.assertEqual(
+            result.returncode, 0,
+            f"cdk app failed to synthesise:\n{result.stderr[-2000:]}")
+
+
 class EntryPointsAreImportable(unittest.TestCase):
     """
     Every runnable script parses and its module-level code is sound.
