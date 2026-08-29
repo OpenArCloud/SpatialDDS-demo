@@ -188,12 +188,22 @@ POST /v1/catalog/query        → Phase 4 CATALOG_QUERY one-shot
 WS   /v1/stream               → every received sample, no filtering
 ```
 
-`/v1/localize` accepts `{ "prior_geopose": ..., "service_id": ... }` and returns
-`spatial::argeo::VpsResponse` as JSON — `status` (a `VpsStatus` identifier),
+`/v1/localize` accepts `{ "prior_geopose": ..., "service_id": ...,
+"query_image": ... }` and returns `spatial::argeo::VpsResponse` as JSON — `status` (a `VpsStatus` identifier),
 `node_geo` behind `has_node_geo`, `confidence`, and `rmse_m` behind
 `has_rmse_m`. `/v1/catalog/query` accepts a `geopose`, an optional `kind_in`
 array and an optional `limit`; `expr` is refused with a 400, since 1.7 removed
 it.
+
+`query_image` is a base64 JPEG — the one place inline bytes are reasonable,
+since HTTP has no side channel. The bridge chunks it onto
+`spatialdds/blob/chunk/v1` as `spatial::core::BlobChunk` and puts only a
+`BlobRef` (id, role, SHA-256) in the `VpsRequest`, which is §3.2's rule once
+the bytes reach the bus. Chunks are published *before* the request that
+references them, so a responder has them in hand; the lane is reliable and
+TRANSIENT_LOCAL and chunks are keyed `(blob_id, index)`, so a reader that
+opens late still receives every one. Omit the field and the bridge sends a
+placeholder, as it always did.
 
 ## Generic protocol (`/ws`)
 

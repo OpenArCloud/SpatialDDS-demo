@@ -23,6 +23,7 @@ optional rate limiting). Browser-to-DDS publishing resolves the requested
 msg_type through the 3.3.2 registry and writes a real typed sample.
 """
 
+import base64
 import json
 import os
 import queue
@@ -49,6 +50,8 @@ from spatialdds_demo.discovery_http import (
     search as discovery_search,
 )
 from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds_demo import blob
+from spatialdds_demo.blob import BlobPublisher
 from spatialdds_demo.service_bus import CatalogClient, CoverageClient, VpsClient
 from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
 from spatialdds_idl.spatial.argeo import VpsRequest as TypedVpsRequest
@@ -89,6 +92,7 @@ class SpatialDDSBridge:
         self._announce_sub: Optional[AnnounceSubscriber] = None
         self._announce_participant = None
         self._coverage = None
+        self._blobs = None
         self._vps: Optional[VpsClient] = None
         self._catalog: Optional[CatalogClient] = None
         self._announces = AnnounceCache()
@@ -269,6 +273,7 @@ class SpatialDDSBridge:
         self,
         prior_geopose: Optional[Dict[str, Any]] = None,
         service_id: Optional[str] = None,
+        query_image: Optional[bytes] = None,
     ) -> Dict[str, Any]:
         _lock(self._request_lock)
         try:
@@ -278,7 +283,8 @@ class SpatialDDSBridge:
                 if not announce:
                     raise RuntimeError("No ANNOUNCE received")
                 service_id = announce.get("service_id", "")
-            request = self._create_localize_request(service_id, prior_geopose)
+            request = self._create_localize_request(
+                service_id, prior_geopose, query_image)
             if self._vps is None:
                 self._vps = VpsClient(self._announce_participant)
             typed = self._vps.request(from_json(TypedVpsRequest, request), timeout=8)
@@ -333,21 +339,34 @@ class SpatialDDSBridge:
             _unlock(self._request_lock)
 
     def _create_localize_request(
-        self, service_id: str, prior_geopose: Optional[Dict[str, Any]]
+        self, service_id: str, prior_geopose: Optional[Dict[str, Any]],
+        query_image: Optional[bytes] = None,
     ) -> Dict[str, Any]:
         query_id = str(uuid.uuid4())
         prior = prior_geopose or _default_prior_geopose()
         # Query imagery by reference (argeo::VpsRequest.query_blobs), never
         # inline bytes; the bytes travel out-of-band as BlobChunk (§3.2).
-        payload = f"MOCK_IMAGE_{self._frame_seq}".encode("utf-8")
-        query_image = MockSensorData.blob_ref("vps/query-image", payload)
+        #
+        # The bytes are published *before* the request that references them,
+        # so a responder polling both lanes has them in hand when the request
+        # arrives. It would work either way — the blob lane is TRANSIENT_LOCAL
+        # and chunks are keyed per index, so a late reader still gets them —
+        # but ordering it this way means the common case needs no waiting.
+        payload = query_image if query_image else (
+            f"MOCK_IMAGE_{self._frame_seq}".encode("utf-8"))
+        blob_id = str(uuid.uuid4())
+        if self._blobs is None:
+            self._blobs = BlobPublisher(self._announce_participant)
+        written = self._blobs.publish(blob_id, payload)
+        print(f"localize: query image {len(payload)} bytes in {written} chunk(s)")
+        query_image_ref = blob.blob_ref(blob_id, "vps/query-image", payload)
         request = {
             "query_id": query_id,
             "service_id": service_id,
             "client_frame_ref": self._client_frame_ref,
             "has_prior_geopose": True,
             "prior_geopose": prior,
-            "query_blobs": [query_image],
+            "query_blobs": [query_image_ref],
             "query_stream_id": self._stream_ref["fqn"],
             "has_quality_requirements": True,
             "quality_requirements": {"max_rmse_m": 0.2, "min_confidence": 0.6},
@@ -776,8 +795,19 @@ def health() -> Dict[str, Any]:
 def localize(payload: Dict[str, Any]) -> Dict[str, Any]:
     prior = payload.get("prior_geopose") if isinstance(payload, dict) else None
     service_id = payload.get("service_id") if isinstance(payload, dict) else None
+    # `query_image` is base64 in the HTTP body — the one place inline bytes are
+    # reasonable, since HTTP has no side channel. The bridge is what turns them
+    # into BlobChunk samples, which is §3.2's rule for the bus.
+    image_b64 = payload.get("query_image") if isinstance(payload, dict) else None
+    query_image = None
+    if image_b64:
+        try:
+            query_image = base64.b64decode(image_b64, validate=True)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"query_image is not valid base64: {exc}")
     try:
-        return bridge.localize(prior, service_id)
+        return bridge.localize(prior, service_id, query_image)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

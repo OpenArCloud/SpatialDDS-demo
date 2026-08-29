@@ -30,6 +30,74 @@ from spatialdds_idl.spatial.core import BlobChunk  # noqa: E402
 from spatialdds_test import SpatialDDSClientV15, SpatialDDSLogger  # noqa: E402
 
 
+class BlobLane(unittest.TestCase):
+    """
+    The publisher/subscriber pair, without a bus.
+
+    `chunk`/`Reassembler` were always tested; what did not exist was anything
+    that put chunks *on* a topic or took them off one. The VPS request
+    therefore referenced a blob whose bytes had never been published anywhere,
+    and no responder looked, so nothing said so.
+    """
+
+    IMAGE = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + b"jpeg-ish" * 30000  # ~240 KB
+
+    def test_the_lane_is_reliable_and_durable(self):
+        """
+        A blob with a hole in it is not a blob, and a request can overtake its
+        own imagery — so the lane has to be both reliable and TRANSIENT_LOCAL
+        for a reader that opens late to still receive every chunk.
+        """
+        from spatialdds_demo import qos_profiles
+
+        profile = qos_profiles.get(blob.BLOB_PROFILE)
+        self.assertTrue(profile.reliable)
+        self.assertTrue(profile.latched)
+
+    def test_chunks_reassemble_to_the_advertised_checksum(self):
+        blob_id = "11111111-2222-3333-4444-555555555555"
+        ref = blob.blob_ref(blob_id, "vps/query-image", self.IMAGE)
+
+        reassembler = blob.Reassembler()
+        recovered = None
+        for sample in blob.chunk(blob_id, self.IMAGE):
+            recovered = reassembler.feed(sample) or recovered
+
+        self.assertEqual(recovered, self.IMAGE)
+        # The end-to-end check a responder makes: what arrived is what the
+        # BlobRef advertised. Chunk CRC32 catches corruption in transit; this
+        # catches a truncated or mismatched blob.
+        self.assertEqual(blob.checksum(recovered), ref["checksum"])
+
+    def test_a_corrupt_chunk_is_refused_not_absorbed(self):
+        blob_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        chunks = list(blob.chunk(blob_id, self.IMAGE))
+        chunks[0].data = bytes(chunks[0].data) + b"tamper"
+
+        with self.assertRaises(blob.CorruptChunk):
+            blob.Reassembler().feed(chunks[0])
+
+    def test_out_of_order_chunks_still_reassemble(self):
+        """Chunks are keyed (blob_id, index); arrival order is not delivery order."""
+        blob_id = "99999999-8888-7777-6666-555555555555"
+        chunks = list(blob.chunk(blob_id, self.IMAGE))
+        self.assertGreater(len(chunks), 2)
+
+        reassembler = blob.Reassembler()
+        recovered = None
+        for sample in reversed(chunks):
+            recovered = reassembler.feed(sample) or recovered
+        self.assertEqual(recovered, self.IMAGE)
+
+    def test_an_incomplete_blob_yields_nothing(self):
+        blob_id = "12121212-3434-5656-7878-909090909090"
+        chunks = list(blob.chunk(blob_id, self.IMAGE))
+        reassembler = blob.Reassembler()
+        for sample in chunks[:-1]:
+            self.assertIsNone(reassembler.feed(sample))
+        self.assertEqual(reassembler.pending, [blob_id])
+
+
 class VpsBlobPath(unittest.TestCase):
     # Larger than one 65,535-byte chunk so chunking is actually forced.
     IMAGE = b"\x89JPEG-mock-query-image-" * 8000  # ~184 KB

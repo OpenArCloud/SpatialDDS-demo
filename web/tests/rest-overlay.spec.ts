@@ -29,6 +29,15 @@ test('REST overlay records the exchanges the app makes', async ({ page, request 
   // The discovered service is named in the request body.
   await expect(page.locator('#restOverlayBody')).toContainText('svc:vps:demo/austin-downtown');
 
+  // The query frame: a real JPEG captured from the Cesium canvas, shown in the
+  // panel as its size because the base64 itself is tens of thousands of chars.
+  // Its presence here is the browser-side proof that the request carries real
+  // imagery rather than the placeholder the bridge used to invent.
+  const restText = (await page.locator('#restOverlayBody').textContent()) || '';
+  const sizeMatch = /"query_image":\s*"<(\d+) KB base64/.exec(restText);
+  expect(sizeMatch, 'localize request carries a captured query image').not.toBeNull();
+  expect(Number(sizeMatch![1])).toBeGreaterThan(0);
+
   await page.evaluate(() => document.getElementById('btnDiscover')?.click());
   await expect(page.locator('#restOverlayBody')).toContainText(
     'POST /v1/catalog/query -> 200', { timeout: 20_000 });

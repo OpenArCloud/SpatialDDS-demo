@@ -162,9 +162,16 @@ export async function bridgeFindService(
 
 export async function bridgeLocalize(
   prior: GeoPose,
-  serviceId?: string | null
+  serviceId?: string | null,
+  queryImage?: string | null
 ): Promise<LocalizeResponse> {
   const body: Record<string, unknown> = { prior_geopose: prior };
+  if (queryImage) {
+    // base64 JPEG. Inline here because HTTP has no side channel; the bridge
+    // chunks it onto the blob lane, which is where §3.2 requires the bytes to
+    // ride once they reach the bus.
+    body.query_image = queryImage;
+  }
   if (serviceId) {
     // Names the service the client discovered. Absent, the bridge picks
     // whichever announce arrived most recently.

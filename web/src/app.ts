@@ -251,10 +251,44 @@ async function ensureVpsService(prior: GeoPose): Promise<string | null> {
   return vpsServiceId;
 }
 
+/**
+ * The frame the VPS is asked to localize.
+ *
+ * A browser has no camera, so the demo sends what it is looking at: the
+ * rendered Cesium view, as a real JPEG. That is not a photograph and a real
+ * VPS would not match against it — but it is real bytes of a realistic size,
+ * which is what makes the request honest. Until this existed the request
+ * referenced a blob containing the ASCII string `MOCK_IMAGE_3`, and nothing
+ * ever published even that.
+ *
+ * Returns null if the canvas cannot be read, in which case the bridge falls
+ * back to its placeholder and localization still works.
+ */
+function captureQueryImage(): string | null {
+  if (!viewer) {
+    return null;
+  }
+  try {
+    viewer.render();
+    const dataUrl = viewer.canvas.toDataURL('image/jpeg', 0.7);
+    const comma = dataUrl.indexOf(',');
+    return comma > 0 ? dataUrl.slice(comma + 1) : null;
+  } catch (error) {
+    appLog(`capture: failed (${String(error)})`);
+    return null;
+  }
+}
+
 async function handleLocalize() {
   const prior = seedPriorGeopose();
   const serviceId = bridgeActive ? await ensureVpsService(prior) : null;
-  const response = bridgeActive ? await bridgeLocalize(prior, serviceId) : await mockLocalize();
+  const queryImage = bridgeActive ? captureQueryImage() : null;
+  if (queryImage) {
+    appLog(`capture: ${Math.round((queryImage.length * 3) / 4 / 1024)} KB query frame`);
+  }
+  const response = bridgeActive
+    ? await bridgeLocalize(prior, serviceId, queryImage)
+    : await mockLocalize();
   currentPose = response.geopose;
   clearEntities();
   addMarker('user-location', 'You are here', response.geopose, markerUrl);
@@ -383,6 +417,20 @@ function wsUrlFromBridgeUrl(url: string): string {
   return `ws://${url}`;
 }
 
+/**
+ * JSON.stringify replacer that summarises payloads instead of printing them.
+ *
+ * The localize request carries a base64 JPEG. Printed in full it is tens of
+ * thousands of characters and the panel becomes useless, so it is shown as its
+ * size — which is the part a reader actually wants from it.
+ */
+function abbreviateBlobs(_key: string, value: unknown): unknown {
+  if (typeof value === 'string' && value.length > 256) {
+    return `<${Math.round((value.length * 3) / 4 / 1024)} KB base64, ${value.length} chars>`;
+  }
+  return value;
+}
+
 function renderRestOverlay() {
   const body = document.getElementById('restOverlayBody');
   if (body) {
@@ -404,7 +452,7 @@ function pushRestExchange(exchange: RestExchange) {
     : String(exchange.status);
   const lines = [`${exchange.method} ${exchange.path} -> ${status} (${exchange.ms}ms)`];
   if (exchange.request !== undefined) {
-    lines.push(`request:  ${JSON.stringify(exchange.request)}`);
+    lines.push(`request:  ${JSON.stringify(exchange.request, abbreviateBlobs)}`);
   }
   if (exchange.response !== undefined) {
     lines.push(`response: ${JSON.stringify(exchange.response, null, 2)}`);
@@ -594,7 +642,12 @@ async function loadSceneAssets(activeViewer: Cesium.Viewer) {
 
 export function initApp() {
   viewer = new Cesium.Viewer('cesiumContainer', {
-    terrain: undefined
+    terrain: undefined,
+    // Without preserveDrawingBuffer the WebGL back buffer is cleared after
+    // each present, and reading the canvas returns a blank image. The demo
+    // captures the rendered view as the VPS query frame, so it needs the
+    // buffer to survive long enough to be read.
+    contextOptions: { webgl: { preserveDrawingBuffer: true } }
   });
 
   viewer.scene.camera.setView({

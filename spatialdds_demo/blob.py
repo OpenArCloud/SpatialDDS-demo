@@ -64,6 +64,76 @@ def blob_ref(blob_id: str, role: str, data: bytes) -> Dict[str, str]:
             "checksum": checksum(data)}
 
 
+class BlobPublisher:
+    """
+    Writes a blob's chunks onto the well-known blob lane.
+
+    Kept beside the chunker so a producer cannot chunk correctly and then
+    publish on the wrong topic or profile. GEOM_TILE is reliable and
+    TRANSIENT_LOCAL, which is what makes the ordering work: chunks are keyed
+    ``(blob_id, index)``, so each is its own instance at depth 1, and a
+    consumer that opens its reader *after* the request arrives still receives
+    every chunk. Without durability a request that overtook its own imagery
+    would find nothing and have no way to know why.
+    """
+
+    def __init__(self, participant):
+        from spatialdds_demo import typed_transport as tt
+
+        self._writer = tt.make_writer(
+            participant, BLOB_TOPIC, BlobChunk, BLOB_PROFILE)
+
+    def publish(self, blob_id: str, data: bytes,
+                max_bytes: int = MAX_CHUNK_BYTES) -> int:
+        """Publish ``data`` as chunks; returns how many were written."""
+        count = 0
+        for sample in chunk(blob_id, data, max_bytes=max_bytes):
+            self._writer.write(sample)
+            count += 1
+        return count
+
+
+class BlobSubscriber:
+    """
+    Reads the blob lane and reassembles whole blobs.
+
+    ``poll`` returns ``{blob_id: bytes}`` for every blob completed since the
+    last call. Completed blobs are retained so a consumer can look one up by
+    the ``BlobRef.blob_id`` a later request names.
+    """
+
+    def __init__(self, participant, keep: int = 8):
+        from spatialdds_demo import typed_transport as tt
+
+        self._reader = tt.make_reader(
+            participant, BLOB_TOPIC, BlobChunk, BLOB_PROFILE)
+        self._reassembler = Reassembler()
+        self._done: Dict[str, bytes] = {}
+        self._order: List[str] = []
+        self._keep = keep
+
+    def poll(self) -> Dict[str, bytes]:
+        from spatialdds_demo import typed_transport as tt
+
+        completed: Dict[str, bytes] = {}
+        for sample in tt.take_samples(self._reader):
+            try:
+                data = self._reassembler.feed(sample)
+            except CorruptChunk as exc:
+                print(f"blob: {exc}")
+                continue
+            if data is not None:
+                completed[sample.blob_id] = data
+                self._done[sample.blob_id] = data
+                self._order.append(sample.blob_id)
+                while len(self._order) > self._keep:
+                    self._done.pop(self._order.pop(0), None)
+        return completed
+
+    def get(self, blob_id: str) -> Optional[bytes]:
+        return self._done.get(blob_id)
+
+
 class CorruptChunk(ValueError):
     """A chunk whose bytes do not match the CRC32 it carries."""
 
