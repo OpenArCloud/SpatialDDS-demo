@@ -118,7 +118,11 @@ def _announce_fresh(announce: Dict[str, Any]) -> bool:
         return True
     try:
         stamp_time = float(stamp.get("sec", 0)) + float(stamp.get("nanosec", 0)) / 1_000_000_000.0
-    except (TypeError, ValueError):
+    except (AttributeError, TypeError, ValueError):
+        # AttributeError too: a stamp that is not a mapping at all. Off the bus
+        # it always is — `to_json` renders `Time` as a dict — but this check
+        # exists to fail open on metadata the demo did not populate, and a
+        # stamp of the wrong shape is exactly that case.
         return True
     return (time.time() - stamp_time) <= float(ttl_sec) * 2.0
 

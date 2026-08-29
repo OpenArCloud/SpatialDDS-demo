@@ -42,6 +42,7 @@ in_image() {
 
 # ── fast: host only ─────────────────────────────────────────────────────────
 run "host suite" python3 -m pytest -q \
+  ar_demo/test_ar_demo_services.py \
   multi_operator_fusion \
   bridges/ros2_bridge/test_conversions.py \
   bridges/ros2_bridge/test_bridge_node.py \

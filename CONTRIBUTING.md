@@ -47,7 +47,7 @@ The table below is what those tiers run, if you want one of them alone.
 
 | Suite | How to run | Needs |
 |---|---|---|
-| Unit + bridge logic | `python3 -m pytest multi_operator_fusion bridges/ros2_bridge/test_conversions.py bridges/ros2_bridge/test_bridge_node.py bridges/mqtt_bridge bridges/web_bridge/test_router.py bridges/web_bridge/test_client.py bridges/web_bridge/test_dashboard_routes.py bridges/web_bridge/test_discovery_http.py bridges/web_bridge/test_wellknown_endpoints.py bridges/mcap_bridge tests/ nuscenes/test_nuscenes_shapes.py deepsense/test_deepsense_shapes.py` | host — **344 passed, 11 skipped** |
+| Unit + bridge logic | `python3 -m pytest multi_operator_fusion ar_demo/test_ar_demo_services.py bridges/ros2_bridge/test_conversions.py bridges/ros2_bridge/test_bridge_node.py bridges/mqtt_bridge bridges/web_bridge/test_router.py bridges/web_bridge/test_client.py bridges/web_bridge/test_dashboard_routes.py bridges/web_bridge/test_discovery_http.py bridges/web_bridge/test_wellknown_endpoints.py bridges/mcap_bridge tests/ nuscenes/test_nuscenes_shapes.py deepsense/test_deepsense_shapes.py` | host — **360 passed, 11 skipped** |
 | Interop probe, both directions | `python3 -m unittest tests.test_interop` | Docker (needs `CYCLONEDDS_URI`) |
 | Head-of-line isolation | `python3 -m unittest tests.test_head_of_line` | Docker (needs `CYCLONEDDS_URI`) |
 | ROS 2 DDS round-trip | `python3 -m unittest bridges.ros2_bridge.test_dds_roundtrip` | Docker |
