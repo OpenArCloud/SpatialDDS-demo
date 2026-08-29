@@ -23,12 +23,31 @@ If you institute patent litigation against any entity (including a cross-claim o
 ## Test matrix
 
 Most suites run on the host. The ones needing DDS, ROS 2 or a broker run in
-containers. "Test your changes" means the host suites at minimum, plus whichever
-container suite covers what you touched.
+containers.
+
+**`scripts/run_tests.sh` runs them in three tiers**, and is the answer to
+"did I break anything":
+
+```bash
+scripts/run_tests.sh            # fast     ~20s    host only
+scripts/run_tests.sh standard   # + DDS    ~3min   adds the container suites
+scripts/run_tests.sh full       # + ROS 2  ~25min  adds the ROS 2 and MQTT tiers
+```
+
+Run `standard` before pushing anything that touches `spatialdds_demo/`, a
+bridge, or the IDL — three minutes covers every class of failure the host
+suite structurally cannot see. Run `full` after touching the ROS 2 bridge.
+
+The script prints PASS/FAIL per suite and exits non-zero if any failed, because
+the alternative is what actually happened: a tier ran a file that had been
+deleted, took the two tiers after it down with it, and nobody noticed for six
+days while the host suite stayed green.
+
+The table below is what those tiers run, if you want one of them alone.
 
 | Suite | How to run | Needs |
 |---|---|---|
-| Unit + bridge logic | `python3 -m pytest multi_operator_fusion bridges/ros2_bridge/test_conversions.py bridges/mqtt_bridge bridges/web_bridge/test_router.py bridges/web_bridge/test_client.py bridges/web_bridge/test_dashboard_routes.py bridges/web_bridge/test_discovery_http.py bridges/web_bridge/test_wellknown_endpoints.py bridges/mcap_bridge tests/ nuscenes/test_nuscenes_shapes.py deepsense/test_deepsense_shapes.py` | host — **332 passed, 11 skipped** |
+| Unit + bridge logic | `python3 -m pytest multi_operator_fusion bridges/ros2_bridge/test_conversions.py bridges/ros2_bridge/test_bridge_node.py bridges/mqtt_bridge bridges/web_bridge/test_router.py bridges/web_bridge/test_client.py bridges/web_bridge/test_dashboard_routes.py bridges/web_bridge/test_discovery_http.py bridges/web_bridge/test_wellknown_endpoints.py bridges/mcap_bridge tests/ nuscenes/test_nuscenes_shapes.py deepsense/test_deepsense_shapes.py` | host — **344 passed, 11 skipped** |
 | Interop probe, both directions | `python3 -m unittest tests.test_interop` | Docker (needs `CYCLONEDDS_URI`) |
 | Head-of-line isolation | `python3 -m unittest tests.test_head_of_line` | Docker (needs `CYCLONEDDS_URI`) |
 | ROS 2 DDS round-trip | `python3 -m unittest bridges.ros2_bridge.test_dds_roundtrip` | Docker |
