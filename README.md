@@ -61,14 +61,6 @@ is a participant built from the generated types, the spec's topic names and the
 §3.3.3 profile table, with **no demo transport code**, and it exchanges samples
 with the demo in both directions.
 
-1.7 broke the wire format (the spec allows this pre-adoption), so there are no
-compatibility shims here: `CoverageResponse` returns compact `ServiceSummary`
-rows, `CoverageQuery.expr` and `CoverageElement.type` are gone, `GeoPose` lost
-`frame_kind`/`frame_ref`, and every module versions together as
-`spatial.<profile>/1.7`. `idl/v1.4`, `idl/v1.6` and the matching `manifests/`
-directories are kept for reference only; nothing loads them. Details in
-[`ar_demo/SPEC_COMPLIANCE.md`](ar_demo/SPEC_COMPLIANCE.md).
-
 ## Demos in this repo
 
 | Demo | Path | What it shows |
