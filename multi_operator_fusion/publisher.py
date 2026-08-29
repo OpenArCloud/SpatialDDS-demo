@@ -15,6 +15,10 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, Iterable, Tuple
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # annotations only; nuScenes is an optional dependency
+    from nuscenes.nuscenes import NuScenes
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NUSCENES_DIR = REPO_ROOT / "nuscenes"

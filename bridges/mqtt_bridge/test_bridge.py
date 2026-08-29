@@ -21,7 +21,10 @@ import threading
 import time
 import unittest
 from pathlib import Path
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List
+
+if TYPE_CHECKING:  # annotations only — `config` needs sys.path set up first
+    from config import BridgeConfig
 
 _HERE = Path(__file__).resolve().parent
 _REPO_ROOT = _HERE.parent.parent
@@ -197,6 +200,10 @@ def _publish_mqtt(client_id: str, topic: str, payload: dict,
 
 def _make_config(direction: str, *, bridge_id: str = "test-bridge",
                    client_id: str = "test-mqtt-bridge") -> "BridgeConfig":
+    # Imported inside the function because `config` is only importable with the
+    # bridge package on sys.path, which the harness arranges; the TYPE_CHECKING
+    # import above is what makes the annotation resolvable to a reader and to
+    # a static check.
     from config import BridgeConfig
     return BridgeConfig(
         mqtt_broker=MQTT_HOST,
