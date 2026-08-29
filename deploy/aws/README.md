@@ -116,6 +116,29 @@ features:
   recording: false                       # see "Known limitations" below
 ```
 
+## Sharing a bus with another deployment
+
+The task's participants find each other inside one network namespace, with
+multicast off and no peers — a VPC carries no multicast, so relying on it
+gives a deployment that works on a laptop, works on one host, and silently
+finds nothing across two.
+
+To span two hosts, set `vpc_id`, `dds_peers` and `dds_peer_cidr` in
+`config.yaml`. Placing this task in the peer's VPC avoids peering entirely and
+drops the second NAT gateway; the peer list is rendered into the Cyclone
+config at container start, because it names addresses that change when a peer
+instance is replaced.
+
+Discovery is symmetric: **the other end needs this task's address in its own
+peer list**, or participants are discovered one way and no sample is ever
+exchanged. That failure is silent on both sides.
+
+The intended peer is the `spatialdds` variant of
+[openvps-deploy](https://github.com/OpenArCloud/openvps-deploy), whose GPU
+instance runs OpenVPS's map localizer as a DDS participant alongside a copy of
+this bridge, and which takes the same kind of peer list through its `DdsPeers`
+stack parameter.
+
 ## Topology — why a single task
 
 Fargate awsvpc networking gives each task its own ENI but **every

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Rendered at container start into /etc/cyclonedds.xml, with the PEERS marker
+  replaced by one <Peer> per address in SPATIALDDS_DDS_PEERS. See
+  deploy/aws/dds-entrypoint.sh.
+
+  Two deployments have to work from one file:
+
+  * **One task, alone.** Every container shares the task's network namespace,
+    so discovery is local. No peers; ParticipantIndex=auto probes the local
+    port range, which is how participants in one namespace find each other
+    without multicast.
+
+  * **Two hosts on one bus** — this task and, for example, an OpenVPS
+    instance running its own participants. Then each side names the other in
+    its peer list.
+
+  Multicast is off in both cases because an AWS VPC does not carry it.
+  Leaving it on gives a deployment that works on a laptop, works on one host
+  over loopback, and silently finds nothing across two — an absence of peers
+  rather than an error, which is the worst way for this to fail.
+
+  The interface is autodetermined rather than pinned to `lo`. Pinning to
+  loopback is right for a single task and makes a second host impossible:
+  RTPS advertises the address it binds, and no off-host peer can route to
+  127.0.0.1.
+-->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface autodetermine="true"/>
+      </Interfaces>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <Peers><!--PEERS--></Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

@@ -54,11 +54,23 @@ class SpatialDDSStack(Stack):
 
         # ── VPC ───────────────────────────────────────────────────────────
         # Two AZs (ALB minimum); one NAT to keep the bill modest.
-        vpc = ec2.Vpc(
-            self, "Vpc",
-            max_azs=2,
-            nat_gateways=1,
-        )
+        # Own VPC by default. Name an existing one to put this task beside
+        # something already deployed — an OpenVPS instance, say — so the two
+        # can share a DDS bus without VPC peering, and so this stack stops
+        # paying for a second NAT gateway.
+        #
+        # `from_lookup` needs a concrete account and region, which app.py
+        # supplies from the environment; a stack synthesised without them
+        # cannot resolve an existing VPC and says so rather than guessing.
+        existing_vpc_id = str(config.get("vpc_id") or "").strip()
+        if existing_vpc_id:
+            vpc = ec2.Vpc.from_lookup(self, "Vpc", vpc_id=existing_vpc_id)
+        else:
+            vpc = ec2.Vpc(
+                self, "Vpc",
+                max_azs=2,
+                nat_gateways=1,
+            )
 
         # ── ECS cluster + log group ──────────────────────────────────────
         cluster = ecs.Cluster(
@@ -134,6 +146,11 @@ class SpatialDDSStack(Stack):
             "SPATIALDDS_BOOTSTRAP_SITE": construct_id,
             "SPATIALDDS_TRANSPORT": "dds",
             "CYCLONEDDS_URI": "file:///etc/cyclonedds.xml",
+            # Unicast RTPS peers, for putting this task on a bus that spans
+            # more than itself — an OpenVPS instance running its own
+            # participants, say. Empty is the single-task case and is what
+            # every container here has used until now.
+            "SPATIALDDS_DDS_PEERS": str(config.get("dds_peers") or ""),
             "PYTHONUNBUFFERED": "1",
         }
 
@@ -320,6 +337,30 @@ class SpatialDDSStack(Stack):
             # Send ALB → web bridge container, port 8088.
             target_protocol=elbv2.ApplicationProtocol.HTTP,
         )
+
+        # ── Cross-host DDS, when peers are configured ────────────────────
+        # RTPS is UDP. Cyclone's default port range for domain 0 starts at
+        # 7400; discovery and user traffic both live in it. Opened only when
+        # `dds_peers` is set, so a single-task deployment keeps a security
+        # group that allows nothing inbound but the ALB.
+        #
+        # The source is a CIDR rather than a peer security group because the
+        # other end is a different stack — possibly a different VPC — and
+        # naming its SG here would couple the two deployments' templates.
+        dds_peers = str(config.get("dds_peers") or "").strip()
+        dds_peer_cidr = str(config.get("dds_peer_cidr") or "").strip()
+        if dds_peers:
+            if not dds_peer_cidr:
+                raise ValueError(
+                    "dds_peers is set but dds_peer_cidr is not: RTPS is UDP and "
+                    "the task's security group has to allow the peer in, or "
+                    "discovery completes one way and no sample is ever exchanged"
+                )
+            service.service.connections.allow_from(
+                ec2.Peer.ipv4(dds_peer_cidr),
+                ec2.Port.udp_range(7400, 7500),
+                "RTPS discovery and user traffic from the DDS peer",
+            )
 
         # WebSocket + long-lived stream connections need a longer ALB idle
         # timeout than the 60s default. /v1/stream and /ws stay open

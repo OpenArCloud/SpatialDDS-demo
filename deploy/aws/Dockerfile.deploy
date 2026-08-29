@@ -66,8 +66,14 @@ RUN python3 -m pip install --no-cache-dir \
 
 # Loopback-only CycloneDDS config (Fargate-style: all containers share
 # the same network namespace, so we never want inter-task multicast).
-COPY deploy/aws/cyclonedds.xml /etc/cyclonedds.xml
+# The template plus an entrypoint that renders it. The peer list names
+# addresses that are not known until deploy time and change when a peer host
+# is replaced, so it cannot be baked in.
+COPY deploy/aws/cyclonedds.xml.in /etc/cyclonedds.xml.in
+COPY deploy/aws/dds-entrypoint.sh /usr/local/bin/dds-entrypoint.sh
+RUN chmod +x /usr/local/bin/dds-entrypoint.sh
 ENV CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+ENTRYPOINT ["/usr/local/bin/dds-entrypoint.sh"]
 
 # Application source. Copy as the last layer so iterating on Python code
 # keeps reusing the deps layer above.

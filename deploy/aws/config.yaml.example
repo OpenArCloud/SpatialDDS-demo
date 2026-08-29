@@ -66,3 +66,24 @@ ar_demo:
   # web/.env.local is why .dockerignore now excludes that file.)
   cesium_ion_token: ""
   cesium_ion_asset_id: ""       # e.g. 2275207 for Google Photorealistic 3D Tiles
+
+# ── Sharing a DDS bus with another deployment (optional) ───────────────
+# By default this stack makes its own VPC and its task talks to itself over
+# the task's network namespace. To put it on a bus that spans more than
+# itself — an OpenVPS instance running its own SpatialDDS participants, for
+# example — three things have to line up:
+#
+#   1. A network path. Name an existing VPC below and the task is placed
+#      there, beside the peer, with no VPC peering to arrange and no second
+#      NAT gateway to pay for. Leave it empty to keep the private VPC.
+#   2. Unicast peers. A VPC carries no multicast, so RTPS discovery must be
+#      told where to look. Cyclone peer syntax, space- or comma-separated.
+#      The peer needs this stack's address in *its* list too, or discovery
+#      completes one way and no sample is ever exchanged.
+#   3. A security group opening. RTPS is UDP from 7400 for domain 0; the
+#      rule is added only when dds_peers is set, and the deploy refuses to
+#      synthesise if peers are named without a CIDR.
+#
+# vpc_id: "vpc-0123456789abcdef0"
+# dds_peers: "udp/10.0.1.42"
+# dds_peer_cidr: "10.0.0.0/16"
