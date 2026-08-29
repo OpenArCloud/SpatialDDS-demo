@@ -54,6 +54,20 @@ cp config.yaml.example config.yaml          # edit aws_region / stack_name
 ./deploy.sh
 ```
 
+**Pick one demo first.** Both run on one DDS domain, so deploying both means
+each one's message window shows the other's traffic — the fusion side
+publishes detections continuously. In `config.yaml`:
+
+| | `features:` | Serves |
+|---|---|---|
+| Multi-operator fusion | `fusion_demo: true`, `ar_demo: false` | canvas dashboard at `/` |
+| AR demo | `fusion_demo: false`, `ar_demo: true` | Cesium app at `/ar/` |
+
+The AR demo also wants Cesium Ion credentials in the `ar_demo:` block for
+photorealistic tiles; without them it falls back to OpenStreetMap imagery.
+They are baked into the bundle at build time and therefore served to every
+visitor, so use a token scoped to the deployment's hostname.
+
 Output ends with the dashboard / WebSocket / topics URLs and a one-liner
 to point [`smoke_test.py`](smoke_test.py) at the deployed ALB:
 
@@ -175,28 +189,7 @@ deploy/aws/
 4. **Hit the deployed ALB with `smoke_test.py BASE=...`** — same
    assertions you ran locally.
 
-## The AR demo in the deployment
-
-The task runs two demos side by side, because one bus can carry both:
-
-| URL | Demo |
-|---|---|
-| `/` | Multi-operator fusion — the canvas dashboard |
-| `/ar/` | The Cesium AR demo — discovery, localize, catalogue |
-| `/.well-known/spatialdds/*` | Spec discovery over the live bus |
-
-Two extra containers serve the AR half: `vps` and `catalog`. Both announce
-themselves, so the browser finds them the way any client would — a search
-issues a `CoverageQuery` and these answer it — rather than the bridge naming a
-service it was configured with. Both are non-essential: if either stops, the
-fusion demo carries on and discovery correctly reports that nothing covers the
-area.
-
-Turn the AR half off with `features.ar_demo: false`. Point it at a different
-place — including, later, a real map — with the `ar_demo:` block in
-`config.yaml`.
-
-### The Cesium bundle
+## The Cesium bundle
 
 Built in the image (`Dockerfile.deploy` stage 1) and served by the bridge at
 `/ar`. Two consequences worth knowing:
@@ -210,7 +203,7 @@ Built in the image (`Dockerfile.deploy` stage 1) and served by the bridge at
   own origin, which is right for a deployment where one process serves the
   bundle and the API behind one load balancer.
 
-### Still HTTP
+## Still HTTP
 
 The ALB listens on port 80. That is fine for a demo you open directly and
 wrong for anything embedded or shared, and Ion is happier over HTTPS. Adding

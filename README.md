@@ -9,6 +9,35 @@ The spec itself lives at [spatialdds.org](https://spatialdds.org), and its
 source — the IDL this repo vendors, the prose, and the release tags — at
 [OpenArCloud/SpatialDDS-spec](https://github.com/OpenArCloud/SpatialDDS-spec).
 
+## Run one
+
+Both need Docker; nothing else has prerequisites.
+
+**AR demo** — bootstrap, discovery, localization, catalogue, on a Cesium globe.
+
+```bash
+./run_bridge_server_docker.sh          # VPS + catalogue + bridge on :8088
+cd web && npm install && npm run dev   # → http://localhost:5173/
+```
+
+Turn on **REST Messages** and **DDS Messages**, then click Localize: the REST
+panel shows the two HTTP calls the browser makes, the DDS panel the five bus
+messages they cause. That pairing is the demo's point — a browser using the
+spec's HTTP binding while everything behind it is DDS.
+
+**Multi-operator fusion** — three fleet operators and a 6G base station
+sharing detections; a fuser publishing unified tracks. Dashboard on :8088,
+Rerun viewer on :9090.
+
+```bash
+bash multi_operator_fusion/scripts/download_demo_data.sh   # prints links if missing
+bash multi_operator_fusion/run_docker_demo.sh
+bash multi_operator_fusion/stop_docker_demo.sh             # when done
+```
+
+Tests: `scripts/run_tests.sh` (~20s) or `scripts/run_tests.sh standard`
+(~3 min, adds the container suites). AWS: [`deploy/aws/`](deploy/aws/README.md).
+
 > **The pin is the `v1.7` tag, not the spec repo's `main`.** Main is now the
 > 1.8 draft, bootstrapped from 1.7 and still carrying unswept `/1.7`
 > identifiers. Resyncing from it would mix draft 1.8 IDL into a demo that
