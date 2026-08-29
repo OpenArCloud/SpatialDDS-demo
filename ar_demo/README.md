@@ -88,6 +88,59 @@ cd ../web && npm install && npm run dev
 Stop the bridge when done with `../stop_bridge_server_docker.sh`.
 Logs land under `../bridges/web_bridge/logs/`.
 
+### Localize with Image
+
+**Localize** sends the rendered Cesium view. That exercises the blob lane with
+real bytes, but no VPS could match a screenshot against a map. **Localize with
+Image** sends the other kind of query: an actual photograph from the scan a VPS
+map was built from.
+
+Nothing ships in the repository. Query frames are pictures of a real place and
+the manifest carries that place's coordinates, so a bundle is installed locally
+into `../web/public/query-frames/`, which is git-ignored. With no bundle present
+the button stays disabled and says so.
+
+Install one from any OpenVPS dataset directory — the one holding `status.json`
+and `hlocMaps/<map-id>/`:
+
+```bash
+scripts/install_query_frames.py ~/path/to/<dataset-id> --count 3
+```
+
+That copies a few of the map's own registered frames and writes
+`manifest.json`, whose `anchor` comes from the map's `transform.json`.
+
+Frames from the map, rather than an upload control, because a 1.7 `VpsRequest`
+has nowhere to carry camera intrinsics. OpenVPS's DDS binding falls back to the
+map's own camera model — right for query images drawn from the map, wrong for a
+foreign camera, and their notes record that returning `VPS_SUCCESS` while 9.6 m
+out. An upload button would invite exactly that.
+
+The prior is taken from the bundle's anchor rather than the demo's start
+position, which is load-bearing rather than cosmetic: discovery is a geohash
+search around the prior, so a downtown prior finds no VPS covering a map
+scanned elsewhere. Localizing therefore moves the camera to the map.
+
+To exercise it locally the stand-in VPS has to cover that map. Take the
+coordinates from the bundle's `manifest.json` and give the stack a bounding box
+around them:
+
+```bash
+SPATIALDDS_VPS_COVERAGE_BBOX="<lon-min>,<lat-min>,<lon-max>,<lat-max>" \
+SPATIALDDS_VPS_MAP_FQN="map/<name>" \
+SPATIALDDS_VPS_SERVICE_ID="svc:vps:oarc/openvps-scan" \
+  ../run_bridge_server_docker.sh
+```
+
+The pose that comes back from the stand-in is **the prior plus a few metres of
+jitter** — it reassembles the image and verifies its checksum, then discards it
+without looking at a pixel. So sending different frames changes nothing. What
+is real is the whole request path: a full-size JPEG chunked onto
+`spatialdds/blob/chunk/v1`, reassembled and checksum-verified at the service
+that discovery found. Against a real OpenVPS deployment the same request
+returns a pose derived from the pixels. `web/tests/localize-image.spec.ts`
+covers the path and skips when no bundle is installed or no VPS covers it.
+
 ## HTTP binding (spec-compliance wrapper, no DDS)
 
 `http_binding.py` is a REST wrapper for the discovery payload shapes —

@@ -41,11 +41,11 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
   -e PYTHONPATH=/app \
   -e BRIDGE_LOG_BTS="${bts}" \
   -e BRIDGE_LOG_DIR="/app/bridges/web_bridge/logs" \
-  -e SPATIALDDS_VPS_COVERAGE_BBOX="-97.75,30.27,-97.72,30.29" \
-  -e SPATIALDDS_VPS_MAP_FQN="map/austin" \
-  -e SPATIALDDS_VPS_MAP_ID="austin-map" \
-  -e SPATIALDDS_VPS_SERVICE_ID="svc:vps:demo/austin-downtown" \
-  -e SPATIALDDS_VPS_SERVICE_NAME="MockVPS-Austin" \
+  -e SPATIALDDS_VPS_COVERAGE_BBOX="${SPATIALDDS_VPS_COVERAGE_BBOX:--97.75,30.27,-97.72,30.29}" \
+  -e SPATIALDDS_VPS_MAP_FQN="${SPATIALDDS_VPS_MAP_FQN:-map/austin}" \
+  -e SPATIALDDS_VPS_MAP_ID="${SPATIALDDS_VPS_MAP_ID:-austin-map}" \
+  -e SPATIALDDS_VPS_SERVICE_ID="${SPATIALDDS_VPS_SERVICE_ID:-svc:vps:demo/austin-downtown}" \
+  -e SPATIALDDS_VPS_SERVICE_NAME="${SPATIALDDS_VPS_SERVICE_NAME:-MockVPS-Austin}" \
   -e SPATIALDDS_DEMO_MANIFEST_URI="spatialdds://vps.example.com/zone:austin-downtown/manifest:vps" \
   -e SPATIALDDS_CATALOG_SEED="/app/bridges/web_bridge/tests/catalog_seed_austin.json" \
   -v "${PWD}:/app" \

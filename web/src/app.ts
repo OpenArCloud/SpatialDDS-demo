@@ -1,5 +1,10 @@
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
+import {
+  loadQueryFrame,
+  loadQueryFrameManifest,
+  type QueryFrameManifest
+} from './query_frames';
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
@@ -10,6 +15,7 @@ import type { CatalogItem, GeoPose } from './types';
 
 const readoutEl = document.getElementById('readout') as HTMLPreElement | null;
 const localizeBtn = document.getElementById('btnLocalize') as HTMLButtonElement | null;
+const localizeImageBtn = document.getElementById('btnLocalizeImage') as HTMLButtonElement | null;
 const discoverBtn = document.getElementById('btnDiscover') as HTMLButtonElement | null;
 const toggleTilesBtn = document.getElementById('btnToggleTiles') as HTMLButtonElement | null;
 const toggleDdsOverlayBtn = document.getElementById('btnToggleDdsOverlay') as HTMLButtonElement | null;
@@ -37,6 +43,9 @@ let viewer: Cesium.Viewer | null = null;
 let currentPose: GeoPose | null = null;
 const entityIds = new Set<string>();
 const appLogs: string[] = [];
+let frameCursor = 0;
+/** The installed query-frame bundle, or null when none is installed. */
+let queryFrames: QueryFrameManifest | null = null;
 let readoutItems = 0;
 let readoutMessage = 'ready';
 let bridgeActive = false;
@@ -283,11 +292,62 @@ function captureQueryImage(): string | null {
 
 async function handleLocalize() {
   const prior = seedPriorGeopose();
-  const serviceId = bridgeActive ? await ensureVpsService(prior) : null;
   const queryImage = bridgeActive ? captureQueryImage() : null;
   if (queryImage) {
     appLog(`capture: ${Math.round((queryImage.length * 3) / 4 / 1024)} KB query frame`);
   }
+  await localizeWith(prior, queryImage);
+}
+
+/**
+ * Localize using a real photograph from the scan a VPS map was built from.
+ *
+ * The prior comes from the installed bundle's map anchor rather than the demo's
+ * start position. That is not cosmetic: discovery is a geohash search around
+ * the prior, and the map is wherever it was scanned, so the demo's own start
+ * position finds no VPS covering it. The cached service id is cleared for the
+ * same reason — the service that answers downtown is not the one holding it.
+ */
+async function handleLocalizeWithImage() {
+  if (!queryFrames) {
+    appLog('frame: no query-frame bundle installed (see ar_demo/README.md)');
+    return;
+  }
+  const file = queryFrames.frames[frameCursor % queryFrames.frames.length];
+  frameCursor += 1;
+
+  let queryImage: string;
+  try {
+    queryImage = await loadQueryFrame(file);
+  } catch (error) {
+    appLog(`frame: load failed (${String(error)})`);
+    return;
+  }
+  appLog(
+    `frame: ${file} ${Math.round((queryImage.length * 3) / 4 / 1024)} KB` +
+    (queryFrames.label ? ` (${queryFrames.label})` : '')
+  );
+
+  vpsServiceId = null;
+  await localizeWith(priorFromManifest(queryFrames), queryImage);
+}
+
+/** The prior a bundle implies: its map's anchor, level and facing north. */
+function priorFromManifest(manifest: QueryFrameManifest): GeoPose {
+  const nowMs = Date.now();
+  return {
+    lat_deg: manifest.anchor.lat_deg,
+    lon_deg: manifest.anchor.lon_deg,
+    alt_m: manifest.anchor.alt_m ?? 0,
+    q: [0, 0, 0, 1],
+    stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
+    cov: 'COV_NONE'
+  };
+}
+
+/** Everything both localize paths share once the request is decided. */
+async function localizeWith(prior: GeoPose, queryImage: string | null) {
+  const serviceId = bridgeActive ? await ensureVpsService(prior) : null;
   const response = bridgeActive
     ? await bridgeLocalize(prior, serviceId, queryImage)
     : await mockLocalize();
@@ -736,6 +796,10 @@ export function initApp() {
     void handleLocalize();
   });
 
+  localizeImageBtn?.addEventListener('click', () => {
+    void handleLocalizeWithImage();
+  });
+
   discoverBtn?.addEventListener('click', () => {
     void handleDiscover();
   });
@@ -770,6 +834,18 @@ export function initApp() {
 }
 
 async function initBridgeMode() {
+  // Before the mode check, so the button's enabled state can depend on it.
+  try {
+    queryFrames = await loadQueryFrameManifest();
+    if (queryFrames) {
+      appLog(`frames: ${queryFrames.frames.length} installed` +
+             (queryFrames.label ? ` (${queryFrames.label})` : ''));
+    }
+  } catch (error) {
+    appLog(`frames: manifest invalid (${String(error)})`);
+    queryFrames = null;
+  }
+
   const status = await bridgeHealth();
   bridgeActive = status.ok;
 
@@ -777,12 +853,26 @@ async function initBridgeMode() {
     setModeBadge('bridge', `DDS domain ${status.dds_domain ?? 'unknown'}`);
     if (localizeBtn) localizeBtn.textContent = 'Localize (DDS)';
     if (discoverBtn) discoverBtn.textContent = 'Discover Content (DDS)';
+    // Enabled only with a bundle installed: without one there is no real
+    // photograph to send, and no anchor to search for a VPS around.
+    if (localizeImageBtn) {
+      localizeImageBtn.disabled = queryFrames === null;
+      if (!queryFrames) {
+        localizeImageBtn.title = 'No query-frame bundle installed (see ar_demo/README.md)';
+      }
+    }
     readoutMessage = 'dds bridge online';
     appLog('bridge:online');
   } else {
     setModeBadge('mock', status.message);
     if (localizeBtn) localizeBtn.textContent = 'Localize (Mock VPS)';
     if (discoverBtn) discoverBtn.textContent = 'Discover Content (Mock Catalog)';
+    // The mock returns a canned downtown pose and never reads the image, so
+    // offering the button here would imply a localization that never happened.
+    if (localizeImageBtn) {
+      localizeImageBtn.disabled = true;
+      localizeImageBtn.title = 'Needs the DDS bridge — the mock VPS ignores query imagery';
+    }
     readoutMessage = `mock mode (${status.message})`;
     appLog(`bridge:offline ${status.message}`);
   }

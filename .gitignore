@@ -78,3 +78,7 @@ deploy/aws/config.yaml
 deploy/aws/outputs.json
 deploy/aws/cdk/cdk.out/
 deploy/aws/cdk/cdk.context.json
+
+# Query-frame bundles: real photographs of a real place, plus that place's
+# coordinates. Installed locally, never committed. See ar_demo/README.md.
+web/public/query-frames/
