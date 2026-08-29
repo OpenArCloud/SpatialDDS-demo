@@ -47,3 +47,14 @@ bridges/web_bridge/logs/
 # OS junk
 .DS_Store
 Thumbs.db
+
+# Developer-local build config. Vite loads .env.local at build time, so
+# leaving these in the context bakes one machine's settings into every image:
+# a deployed bundle that calls `localhost:8088` for its API and therefore
+# never leaves Mock Mode, and — worse — that developer's Cesium Ion token
+# embedded in a publicly served bundle nobody meant to publish.
+#
+# Deployment values belong in build args (see deploy/aws/Dockerfile.deploy),
+# not in a file that happens to be lying next to the source.
+**/.env.local
+**/.env.*.local

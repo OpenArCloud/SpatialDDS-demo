@@ -19,8 +19,33 @@ function ensureCesiumAssets() {
 
 ensureCesiumAssets();
 
+/**
+ * Where this bundle will be served from.
+ *
+ * `/` for local development and the root-mounted case; `/ar/` for the
+ * deployment, where the bridge serves the fusion dashboard at `/` and mounts
+ * this app beside it.
+ *
+ * It has to be one value feeding both `base` and the Cesium define, because
+ * they are two different mechanisms pointing at the same files and nothing
+ * makes them agree:
+ *
+ *  * `base` rewrites the bundle's own asset URLs, and Vite applies it to
+ *    `import.meta.env.BASE_URL`.
+ *  * `define` textually substitutes the bare identifier `CESIUM_BASE_URL` at
+ *    compile time — including inside Cesium's own source, which reads it as a
+ *    global to find its workers, web assets and widget images.
+ *
+ * Setting only `base` left the define at `/cesium/`, so the app's scripts
+ * loaded from `/ar/` while Cesium fetched its assets from the site root and
+ * 404'd on every one. The globe rendered as a single flat colour with no
+ * error that named the cause.
+ */
+const base = process.env.VITE_BASE_PATH || '/';
+
 export default defineConfig({
+  base,
   define: {
-    CESIUM_BASE_URL: JSON.stringify('/cesium/')
+    CESIUM_BASE_URL: JSON.stringify(`${base}cesium/`)
   }
 });

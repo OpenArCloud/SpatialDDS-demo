@@ -34,7 +34,13 @@ function resolveBridgeUrl(): string {
   return DEV_BRIDGE_URL;
 }
 
-const BRIDGE_URL = resolveBridgeUrl();
+/**
+ * The one resolved bridge URL. Exported so nothing else re-derives it: the
+ * DDS overlay had its own copy of the old `ENV || localhost` rule, so when
+ * this one learned to use the page origin the overlay kept dialling
+ * localhost and reported "ws: error" on a working deployment.
+ */
+export const BRIDGE_URL = resolveBridgeUrl();
 
 export type BridgeStatus = {
   ok: boolean;

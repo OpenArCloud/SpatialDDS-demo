@@ -34,6 +34,15 @@ ARG VITE_CESIUM_ION_TOKEN=""
 ARG VITE_CESIUM_ION_ASSET_ID=""
 ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN
 ENV VITE_CESIUM_ION_ASSET_ID=$VITE_CESIUM_ION_ASSET_ID
+# `--base=/ar/` because the bridge mounts this bundle at /ar, not at the site
+# root. Vite writes absolute asset URLs from `base`; left at the default the
+# HTML loads and every asset 404s, which renders as a blank page with a
+# working page source — the failure mode that looks like "Cesium is broken".
+# `main.ts` already reads `import.meta.env.BASE_URL` for CESIUM_BASE_URL, so
+# Cesium's own workers and assets follow the same base.
+# One variable drives both Vite's `base` and the Cesium asset define — see
+# web/vite.config.ts for why they cannot be set independently.
+ENV VITE_BASE_PATH=/ar/
 RUN npm run build
 
 

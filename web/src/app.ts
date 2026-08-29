@@ -2,7 +2,8 @@ import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
-  bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize, observeRest
+  BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
+  observeRest
 } from './spatialdds_bridge';
 import type { RestExchange } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
@@ -69,10 +70,11 @@ const START_Q: [number, number, number, number] = [0.4967, -0.0336, -0.0585, 0.8
 // START_Q is a body->ENU quaternion (ROS REP-103: x-forward, y-left, z-up).
 
 const ENV = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env;
+const HAS_ION_TOKEN = Boolean(ENV.VITE_CESIUM_ION_TOKEN);
 const PHOTOREAL_ASSET_ID = ENV.VITE_CESIUM_ION_ASSET_ID
   ? Number(ENV.VITE_CESIUM_ION_ASSET_ID)
   : undefined;
-const BRIDGE_URL = ENV.VITE_SPATIALDDS_BRIDGE_URL || 'http://localhost:8088';
+// Imported, not re-derived — see spatialdds_bridge.ts.
 
 function appLog(message: string) {
   appLogs.push(message);
@@ -491,11 +493,31 @@ function pushDdsMessage(entry: string) {
   renderDdsOverlay();
 }
 
+/**
+ * The bus lanes this demo drives.
+ *
+ * A deployment can carry more than one demo on one bus — the hosted stack runs
+ * the multi-operator fusion demo beside this one — and the fusion side
+ * publishes detections and entity bindings continuously. Subscribing to
+ * everything drowns the four exchanges an AR client actually makes in traffic
+ * belonging to a different demo.
+ *
+ * Server-side patterns rather than filtering here, so the unwanted samples are
+ * never sent at all. That is what `/ws` is for; `/v1/stream` is the
+ * unfiltered firehose and has no way to say "only these".
+ */
+const DDS_OVERLAY_PATTERNS = [
+  'spatialdds/discovery/*',              // CoverageQuery and the replies
+  'spatialdds/*/discovery/announce/v1',  // services arriving and departing
+  'spatialdds/vps/*',                    // localize request and reply
+  'spatialdds/catalog/*'                 // content query and reply
+];
+
 function connectDdsOverlay() {
   if (ddsSocket) {
     return;
   }
-  const wsUrl = `${wsUrlFromBridgeUrl(BRIDGE_URL)}/v1/stream`;
+  const wsUrl = `${wsUrlFromBridgeUrl(BRIDGE_URL)}/ws`;
   try {
     ddsSocket = new WebSocket(wsUrl);
   } catch (error) {
@@ -506,19 +528,37 @@ function connectDdsOverlay() {
 
   ddsSocket.onopen = () => {
     pushDdsMessage(`ws: connected ${wsUrl}`);
+    DDS_OVERLAY_PATTERNS.forEach((pattern, i) => {
+      ddsSocket?.send(JSON.stringify({
+        type: 'subscribe', id: `overlay_${i}`, pattern
+      }));
+    });
+    pushDdsMessage(`ws: watching ${DDS_OVERLAY_PATTERNS.join('  ')}`);
   };
   ddsSocket.onmessage = (event) => {
     try {
-      const payload = JSON.parse(event.data as string) as {
-        ts?: number;
-        dir?: string;
+      const msg = JSON.parse(event.data as string) as {
+        type?: string;
         msg_type?: string;
         logical_topic?: string;
+        timestamp_ns?: number;
         payload?: unknown;
+        message?: string;
       };
-      const ts = payload.ts ? new Date(payload.ts * 1000).toISOString() : new Date().toISOString();
-      const header = `[${ts}] ${payload.dir || '?'} ${payload.msg_type || '?'} ${payload.logical_topic || ''}`.trim();
-      const body = payload.payload ? JSON.stringify(payload.payload, null, 2) : '';
+      if (msg.type === 'error') {
+        pushDdsMessage(`ws: ${msg.message || 'error'}`);
+        return;
+      }
+      // subscribed / pong / topics acknowledgements are protocol chatter, not
+      // bus traffic — this window is for what crossed the bus.
+      if (msg.type !== 'data') {
+        return;
+      }
+      const ts = msg.timestamp_ns
+        ? new Date(msg.timestamp_ns / 1_000_000).toISOString()
+        : new Date().toISOString();
+      const header = `[${ts}] ${msg.msg_type || '?'} ${msg.logical_topic || ''}`.trim();
+      const body = msg.payload ? JSON.stringify(msg.payload, null, 2) : '';
       pushDdsMessage(body ? `${header}\n${body}` : header);
     } catch (error) {
       pushDdsMessage(`ws: parse error ${String(error)}`);
@@ -641,14 +681,33 @@ async function loadSceneAssets(activeViewer: Cesium.Viewer) {
 }
 
 export function initApp() {
-  viewer = new Cesium.Viewer('cesiumContainer', {
+  // Cesium's default imagery, terrain, geocoder and base-layer picker are all
+  // Ion services, so with no token the globe renders as nothing at all — not
+  // as a plain globe. A deployment that ships no credential still has to show
+  // something, so fall back to OpenStreetMap raster tiles and switch off the
+  // widgets that would only fail.
+  //
+  // Local development keeps Ion when web/.env.local supplies a token, which is
+  // also what the photorealistic-tiles toggle needs.
+  const viewerOptions: Cesium.Viewer.ConstructorOptions = {
     terrain: undefined,
     // Without preserveDrawingBuffer the WebGL back buffer is cleared after
     // each present, and reading the canvas returns a blank image. The demo
     // captures the rendered view as the VPS query frame, so it needs the
     // buffer to survive long enough to be read.
     contextOptions: { webgl: { preserveDrawingBuffer: true } }
-  });
+  };
+  if (!HAS_ION_TOKEN) {
+    viewerOptions.baseLayer = new Cesium.ImageryLayer(
+      new Cesium.OpenStreetMapImageryProvider({
+        url: 'https://tile.openstreetmap.org/'
+      })
+    );
+    viewerOptions.baseLayerPicker = false;   // lists Ion assets
+    viewerOptions.geocoder = false;          // Ion geocoding service
+    appLog('cesium: no Ion token — OpenStreetMap imagery, no photoreal tiles');
+  }
+  viewer = new Cesium.Viewer('cesiumContainer', viewerOptions);
 
   viewer.scene.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(START_LON, START_LAT, START_HEIGHT_M),
