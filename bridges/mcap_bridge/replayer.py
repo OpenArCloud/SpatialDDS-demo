@@ -32,30 +32,12 @@ if str(_REPO_ROOT) not in sys.path:
 from mcap.reader import make_reader  # noqa: E402
 
 
-# 3.3.3 QoS profile per registered type — the same table the bridges use, so
-# a replayed sample sits on the lane the spec assigns it.
-REPLAY_PROFILES = {
-    "geopose": "POSE_RT",
-    "navsat_status": "POSE_RT",
-    "planned_trajectory": "EVENT_RT",
-    "entity_binding": "MAP_META",
-    "spatial_event": "EVENT_RT",
-    "video_frame": "VIDEO_LIVE",
-    "radar_tensor": "RADAR_RT",
-    "radar_detection": "RADAR_RT",
-        "detection3d": "DET_RT",
-    "rf_beam": "RF_BEAM_RT",
-    "detection3d": "DET_RT",
-    "framed_pose": "POSE_RT",
-    "fused_track": "DET_RT",
-    "oarc.fusion_coverage": "MAP_META",
-    "lidar_frame": "LIDAR_RT",
-    "lidar_meta": "SENSOR_META",
-    "radar_tensor_meta": "SENSOR_META",
-    "video_meta": "SENSOR_META",
-    "rf_beam_meta": "SENSOR_META",
-}
-DEFAULT_PROFILE = "EVENT_RT"
+# The lane each type rides when nothing announced one. Imported rather than
+# restated: this file used to carry its own copy, and it drifted from the
+# announces it replays.
+from spatialdds_demo.topic_types import (  # noqa: E402
+    DEFAULT_PROFILE, PROFILE_FOR_TYPE as REPLAY_PROFILES,
+)
 ANNOUNCE_TYPE = "spatialdds/discovery/announce"
 
 
@@ -68,6 +50,7 @@ class _ReplayWriters:
         self._participant = DomainParticipant(domain_id)
         self._writers = {}
         self._skipped = set()
+        self._announced_profiles = {}
 
     def write(self, topic: str, type_name: str, payload: dict) -> bool:
         """True if written. False if this build cannot type the topic."""
@@ -76,6 +59,37 @@ class _ReplayWriters:
             return False
         writer.write(payload)
         return True
+
+    def learn_profiles(self, announce: dict) -> None:
+        """
+        Take each lane's QoS profile from the announce that declares it.
+
+        A recording's channel metadata carries the message type but not the
+        profile, so this replayer used to write from a table of its own. That
+        table is a second source of truth for something the recording already
+        contains — the announces are in the file, and every `TopicMeta` names
+        its `qos_profile` — and it drifted: `fused_track` was announced on
+        POSE_RT and replayed on DET_RT. Deadline is request/offered QoS, so
+        33 ms requested against 100 ms offered simply does not match, and the
+        sample vanished with no error on either side.
+
+        Reading the profile from the announce means a replay offers what the
+        original publisher offered, whatever the deployment chose.
+        """
+        for meta in announce.get("topics") or []:
+            name, profile = meta.get("name"), meta.get("qos_profile")
+            if name and profile:
+                self._announced_profiles[name] = profile
+
+    def _profile_for(self, topic: str, type_name: str) -> str:
+        if type_name == ANNOUNCE_TYPE:
+            return "DISCOVERY_ANNOUNCE"
+        announced = self._announced_profiles.get(topic)
+        if announced:
+            return announced
+        # Nothing announced this lane — a partial recording, or data captured
+        # before its announce. Fall back to the type's usual profile.
+        return REPLAY_PROFILES.get(type_name, DEFAULT_PROFILE)
 
     def _ensure(self, topic: str, type_name: str):
         from spatialdds_demo import topic_types, typed_transport as tt
@@ -102,8 +116,7 @@ class _ReplayWriters:
                 ("spatialdds/discovery/announce/v1"
                  if type_name == ANNOUNCE_TYPE else topic),
                 datatype,
-                ("DISCOVERY_ANNOUNCE" if type_name == ANNOUNCE_TYPE
-                 else REPLAY_PROFILES.get(type_name, DEFAULT_PROFILE)))
+                self._profile_for(topic, type_name))
             self._writers[topic] = writer
         return writer
 
@@ -145,6 +158,23 @@ def _channels(summary):
     return out
 
 
+def _learn_announced_profiles(reader, writers) -> None:
+    """
+    Scan the recording's announces for each lane's declared QoS profile.
+
+    Read-only, and separate from replaying them, because writers are all built
+    up front and a writer's QoS cannot be changed afterwards.
+    """
+    for schema, channel, message in reader.iter_messages(log_time_order=True):
+        type_name, _ = _identify(schema, channel)
+        if type_name != ANNOUNCE_TYPE:
+            continue
+        try:
+            writers.learn_profiles(json.loads(message.data.decode("utf-8")))
+        except Exception as exc:
+            print(f"[replayer] unreadable announce: {exc}", file=sys.stderr)
+
+
 def _replay_announces(reader, writers) -> int:
     """Write every recorded announce, before any data. Returns how many."""
     count = 0
@@ -152,8 +182,11 @@ def _replay_announces(reader, writers) -> int:
         type_name, topic = _identify(schema, channel)
         if type_name != ANNOUNCE_TYPE:
             continue
-        if writers.write(topic, type_name,
-                         json.loads(message.data.decode("utf-8"))):
+        announce = json.loads(message.data.decode("utf-8"))
+        # Learn each lane's profile before any data writer is built, so the
+        # replay offers what the original publisher offered.
+        writers.learn_profiles(announce)
+        if writers.write(topic, type_name, announce):
             count += 1
     return count
 
@@ -202,6 +235,12 @@ def replay(
 
                 if not prepared:
                     prepared = True
+                    # Learn the lanes' QoS profiles before building any
+                    # writer, because `prepare` builds them all at once and a
+                    # writer's QoS is fixed at creation. The announces are
+                    # replayed again below for the consumers' benefit; this
+                    # pass only reads them.
+                    _learn_announced_profiles(reader, writers)
                     writers.prepare(_channels(summary))
                     # Announces first, then let discovery settle. A consumer
                     # that finds its topics through discovery has no reader

@@ -108,6 +108,50 @@ WELL_KNOWN: Dict[str, Type] = {
 }
 
 
+# --- §3.3.3 QoS profile per registered type ---------------------------------
+# The lane the spec assigns each type, for producers that have no announce to
+# read it from. A publisher that *does* have one should prefer what the
+# announce declares — the profile is a deployment's choice, and this is only
+# the default. Kept here beside the type registry because it was previously
+# copied into each bridge, and the copies drifted: the MCAP replayer wrote
+# `fused_track` on DET_RT while the announce declared POSE_RT, and since
+# Deadline is request/offered QoS the reader and writer silently never
+# matched.
+PROFILE_FOR_TYPE: Dict[str, str] = {
+    "geopose": "POSE_RT",
+    "framed_pose": "POSE_RT",
+    "navsat_status": "POSE_RT",
+    "planned_trajectory": "EVENT_RT",
+    "entity_binding": "MAP_META",
+    "spatial_event": "EVENT_RT",
+    "video_frame": "VIDEO_LIVE",
+    "video_meta": "SENSOR_META",
+    "radar_tensor": "RADAR_RT",
+    "radar_tensor_meta": "SENSOR_META",
+    "radar_detection": "RADAR_RT",
+    "detection2d": "DET_RT",
+    "detection3d": "DET_RT",
+    "fused_track": "DET_RT",
+    "lidar_frame": "LIDAR_RT",
+    "lidar_meta": "SENSOR_META",
+    "imu_sample": "IMU_RT",
+    "anchor_delta": "ANCHOR_DELTA",
+    "rf_beam": "RF_BEAM_RT",
+    "rf_beam_meta": "SENSOR_META",
+    "vps_query": "VPS_REQ",
+    "vps_response": "VPS_RESP",
+    "blob_chunk": "GEOM_TILE",
+    "oarc.fusion_coverage": "MAP_META",
+}
+
+DEFAULT_PROFILE = "EVENT_RT"
+
+
+def profile_for(type_name: str) -> str:
+    """The default lane for a type; EVENT_RT when it has no assignment."""
+    return PROFILE_FOR_TYPE.get(type_name, DEFAULT_PROFILE)
+
+
 class UnknownTopicType(KeyError):
     """A TopicMeta.type this build cannot map to a class."""
 

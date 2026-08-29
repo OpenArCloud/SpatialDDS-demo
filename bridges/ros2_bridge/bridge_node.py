@@ -334,6 +334,54 @@ def _config_from_cli_args(operator: str, dds_domain: int, topics: list) -> dict:
 
 # ---- The node ---------------------------------------------------------------
 
+def _image_chunks(encoder, msg, mapping):
+    """
+    The blob chunks that accompany a frame, if this mapping produces any.
+
+    A `VisionFrame` is metadata plus a `BlobRef`; the image bytes travel
+    separately on the shared blob topic, and `BlobRef.blob_id` ties the two
+    together. Only the compressed-image encoder has bytes to send, so every
+    other mapping yields nothing and the caller's loop simply does not run.
+
+    Keyed off the encoder rather than the message type so a mapping that
+    reuses the encoder gets the same treatment automatically.
+    """
+    if encoder is not _enc_compressed_image:
+        return
+    sensor_id = mapping.get("sensor_id") or "cam"
+    seq = int(getattr(msg.header.stamp, "sec", 0) or 0)
+    yield from compressed_image_blob(msg, sensor_id, frame_seq=seq)
+
+
+class _TypedWriters:
+    """
+    Lazily-built typed writers, one per SpatialDDS topic.
+
+    The ROS 2 side names a topic and a §3.3.2 type for each mapping; this
+    resolves the type to its generated class and opens a writer on the lane
+    §3.3.3 assigns it. Writers are built on first use because which topics a
+    run touches depends on its config.
+
+    An unresolvable type raises rather than being skipped: this bridge is the
+    producer, and a producer that cannot build the type it is about to
+    advertise has nothing to write.
+    """
+
+    def __init__(self, participant):
+        self._participant = participant
+        self._writers: Dict[str, Any] = {}
+
+    def write(self, topic: str, type_name: str, payload: Any) -> None:
+        writer = self._writers.get(topic)
+        if writer is None:
+            datatype = topic_types.resolve(type_name)
+            writer = tt.TypedDictWriter(
+                self._participant, topic, datatype,
+                topic_types.profile_for(type_name))
+            self._writers[topic] = writer
+        writer.write(payload)
+
+
 def main():  # pragma: no cover - Tier-3 only
     import argparse
     import sys as _sys

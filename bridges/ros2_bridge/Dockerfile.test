@@ -48,9 +48,9 @@ CMD ["bash", "-c", "\
     python3 -m pytest bridges/ros2_bridge/test_conversions.py -v && \
     echo '' && \
     echo '=============================' && \
-    echo '  Tier 2: Envelope Round-Trip' && \
+    echo '  Tier 2: DDS Round-Trip     ' && \
     echo '=============================' && \
-    python3 -m pytest bridges/ros2_bridge/test_envelope_roundtrip.py -v && \
+    python3 -m pytest bridges/ros2_bridge/test_dds_roundtrip.py -v && \
     echo '' && \
     echo '=============================' && \
     echo '  Tier 3b: Mock Fidelity     ' && \
