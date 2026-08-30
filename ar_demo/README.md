@@ -137,9 +137,18 @@ jitter** — it reassembles the image and verifies its checksum, then discards i
 without looking at a pixel. So sending different frames changes nothing. What
 is real is the whole request path: a full-size JPEG chunked onto
 `spatialdds/blob/chunk/v1`, reassembled and checksum-verified at the service
-that discovery found. Against a real OpenVPS deployment the same request
-returns a pose derived from the pixels. `web/tests/localize-image.spec.ts`
-covers the path and skips when no bundle is installed or no VPS covers it.
+that discovery found.
+
+Put a real OpenVPS localizer on the same bus and the identical request returns
+a pose computed from the pixels — distinct frames give distinct poses, in
+3.6-5.7 s on a T4. That has been run end to end;
+[deploy/aws/README.md](../deploy/aws/README.md#running-against-a-real-openvps)
+has the recipe. Nothing in this demo changes for it: the button, the request
+and the blob lane are the same, and discovery picks whichever VPS covers the
+bundle's map.
+
+`web/tests/localize-image.spec.ts` covers the path and skips when no bundle is
+installed or no VPS covers it.
 
 ## HTTP binding (spec-compliance wrapper, no DDS)
 

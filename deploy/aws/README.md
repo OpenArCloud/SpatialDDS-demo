@@ -143,10 +143,11 @@ Naming this task in the other end's peer list too is harmless and makes
 discovery converge sooner, but it is not required — which is the point, since
 that side is not ours to reconfigure.
 
-The intended peer is the `spatialdds` variant of
+The peer is the `spatialdds` variant of
 [openvps-deploy](https://github.com/OpenArCloud/openvps-deploy), whose GPU
 instance runs OpenVPS's map localizer as a DDS participant alongside a copy of
-this bridge.
+this bridge. This has been run end to end — see *Running against a real
+OpenVPS* below for the recipe and what it measured.
 
 **That side needs no code change.** `DdsPeers` and `AttachElasticIp` are stack
 parameters there, so telling it about this task is deploy-time configuration.
@@ -156,6 +157,89 @@ the group. Setting `security_group_ids` here puts this task inside that group,
 where those rules cover it as written. An Elastic IP is not needed either: its
 own description notes the private IP already survives stop/start, and a task
 in the same VPC reaches it that way.
+
+## Running against a real OpenVPS
+
+Done once, on `us-east-1`. The AR demo's **Localize with Image** button sends a
+real photograph from the scan a map was built from; with a real localizer on
+the bus the pose comes back from the pixels rather than from the stand-in.
+
+**1. Deploy the localizer.** Into *this task's VPC*, so no VPC peering is
+needed, and a public subnet, since that stack has no NAT gateway:
+
+```sh
+cd ../openvps-deploy/deploy/aws
+aws cloudformation create-stack --stack-name openvps-spatialdds \
+  --template-body file://template.yaml --capabilities CAPABILITY_IAM \
+  --on-failure DO_NOTHING \
+  --parameters ParameterKey=Variant,ParameterValue=spatialdds \
+               ParameterKey=VpcId,ParameterValue=<this task's VPC> \
+               ParameterKey=SubnetId,ParameterValue=<a public subnet in it> \
+               ParameterKey=SecretsManagerArn,ParameterValue=<the secret>
+```
+
+About 35 minutes: most of it builds the localizer image. `--on-failure
+DO_NOTHING` keeps `/var/log/openvps-bootstrap.log` alive if it fails.
+
+**2. Give it a map.** Either build one through MapBuilder, or drop a map you
+already have onto the maps volume, which skips MapBuilder and its auth
+entirely. The localizer scans `/home/ubuntu/data/maps` for dataset directories
+containing `status.json` and `hlocMaps/<map-id>/`, each with `config.yaml` and
+`transform.json` — the layout MapBuilder already produces, so a downloaded map
+can be copied across as-is (a presigned S3 URL and `curl` is enough). Then:
+
+```sh
+aws ssm send-command --instance-ids <id> --document-name AWS-RunShellScript \
+  --parameters 'commands=["curl -s --max-time 300 http://127.0.0.1:8000/load_map/<map-id>"]'
+```
+
+**`transform.json` is not optional.** Coverage in 1.7 is entirely geographic,
+so a map with no geodetic anchor has nothing truthful to advertise and that
+binding declines to announce it. It stays localizable over HTTP and invisible
+to discovery — correct, and confusing if unexpected.
+
+**3. Point this task at it.** In `config.yaml`, with the instance's *private*
+IP, then `./deploy.sh`:
+
+```yaml
+dds_peers: "udp/10.0.62.182"
+security_group_ids: "sg-0096e778676953888"   # the openvps stack's own group
+```
+
+`security_group_ids` is what gets RTPS through: that stack's 7400-7500 rule is
+sourced from its own security group, written for two GPU hosts finding each
+other, so a task placed inside the group is covered by it unchanged. Nothing in
+`openvps-deploy` needs editing.
+
+**4. Check it.** Discovery first, from the geohash cell containing the map's
+anchor, then a localize naming what discovery returned:
+
+```sh
+curl "$BASE/.well-known/spatialdds/search?geohash=<cell>"
+# -> svc:vps:oarc/<name>;v=<map-id>
+```
+
+Measured: discovery inside ~20 s of the announce, and 3.6-5.7 s per localize
+for a 180-270 KB JPEG — decode, NetVLAD retrieval, SuperGlue matching and PnP
+on a T4. Distinct frames give distinct poses and a repeated frame reproduces
+its pose exactly, which is the check that the pixels are being used at all: a
+stand-in returning the prior plus jitter passes every other test.
+
+### Three things that will bite
+
+* **The private IP changes on stop/start.** `dds_peers` names an address, so
+  restarting the instance means editing `config.yaml` and redeploying this
+  task. An Elastic IP would remove the step; the stack has `AttachElasticIp`
+  for it.
+* **The instance does not idle-stop with a map loaded.** Its idle detector
+  counts GPU processes and a resident localizer holds one, so it logs
+  `busy (gpu:1proc); resetting idle clock` every five minutes indefinitely.
+  At $0.752/hr, stop it by hand when finished.
+* **Two VPS services on one bus is the normal case here**, since this task
+  runs its own stand-in. A request names the service it wants and both ends
+  honour that name, so the stand-in leaves OpenVPS's requests alone — but a
+  request naming nobody is answered by whoever replies first, and co-located
+  beats remote every time.
 
 ## Topology — why a single task
 
