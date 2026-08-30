@@ -17,6 +17,7 @@ Neither needs a bus, a broker or ROS 2 to detect. Both take milliseconds.
 """
 
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -159,3 +160,70 @@ class EntryPointsAreImportable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MermaidDiagramsParse(unittest.TestCase):
+    """
+    Mermaid blocks that GitHub can actually render.
+
+    A diagram that fails to parse does not degrade — GitHub replaces the whole
+    block with "Unable to render rich display", so a README's most useful part
+    silently becomes an error box. Nothing in the normal test run touches
+    markdown, so it stays broken until someone opens the page.
+
+    This is a targeted check, not a parser. It catches the construct that
+    actually broke ar_demo/README.md: a semicolon in message or note text.
+    Mermaid treats `;` as a statement separator, so `cached; dispose, Depart`
+    ends the message at the semicolon and then fails on what follows. The rest
+    of the line reads perfectly well to a human, which is what makes it worth a
+    test rather than a review note.
+    """
+
+    ROOT = pathlib.Path(__file__).resolve().parent.parent
+    # cdk.out holds build-cache copies of files that live elsewhere in the tree.
+    SKIP = ("node_modules", "cdk.out", "directions")
+
+    def _blocks(self):
+        for md in sorted(self.ROOT.rglob("*.md")):
+            rel = md.relative_to(self.ROOT)
+            if any(part in self.SKIP for part in rel.parts):
+                continue
+            text = md.read_text(errors="ignore")
+            for n, block in enumerate(
+                    re.findall(r"```mermaid\n(.*?)```", text, re.S), 1):
+                yield rel, n, block
+
+    def test_no_semicolons_in_diagram_text(self):
+        found = []
+        for rel, n, block in self._blocks():
+            for line in block.splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("%%"):
+                    continue
+                # Only the text after the first ':' is message/note content.
+                _, sep, text = stripped.partition(":")
+                if sep and ";" in text:
+                    found.append(f"{rel} (block {n}): {stripped}")
+        self.assertEqual(found, [], "semicolons break mermaid parsing:\n  " +
+                         "\n  ".join(found))
+
+    def test_every_participant_is_declared(self):
+        """
+        An undeclared participant still renders, in first-use order rather than
+        the order the diagram intends — so the columns silently rearrange.
+        """
+        problems = []
+        for rel, n, block in self._blocks():
+            if not block.lstrip().startswith("sequenceDiagram"):
+                continue
+            declared = set(re.findall(r"^\s*participant\s+(\w+)", block, re.M))
+            used = set()
+            for a, b in re.findall(r"^\s*(\w+)\s*-+>>?\s*(\w+)\s*:", block, re.M):
+                used |= {a, b}
+            for note in re.findall(r"^\s*Note over ([\w, ]+):", block, re.M):
+                used |= {x.strip() for x in note.split(",")}
+            missing = sorted(used - declared)
+            if missing:
+                problems.append(f"{rel} (block {n}): {', '.join(missing)}")
+        self.assertEqual(problems, [], "undeclared mermaid participants:\n  " +
+                         "\n  ".join(problems))

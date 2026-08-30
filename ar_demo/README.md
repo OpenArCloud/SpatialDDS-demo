@@ -32,7 +32,7 @@ sequenceDiagram
     Note over VPS,Cat: Services announce and re-announce to keep the lease alive
     VPS->>Bus: Announce — spatialdds/discovery/announce/v1
     Cat->>Bus: Announce
-    Bus-->>Bridge: cached; dispose, Depart and TTL all evict
+    Bus-->>Bridge: cached — dispose, Depart and TTL all evict
 
     Note over UI,Bridge: REST — discovery
     UI->>Bridge: GET /.well-known/spatialdds/search?geohash=...
@@ -41,7 +41,7 @@ sequenceDiagram
     Bus-->>Bridge: summaries
     Bridge-->>UI: results[] — bus answers plus the announce cache,<br/>so a service that only announces is still found
 
-    Note over UI,VPS: REST — localize; imagery rides by reference
+    Note over UI,VPS: REST — localize, imagery rides by reference
     UI->>Bridge: POST /v1/localize<br/>service_id, prior_geopose, query_image (base64)
     Bridge->>Bus: BlobChunk xN — spatialdds/blob/chunk/v1 (GEOM_TILE)
     Bridge->>Bus: VpsRequest — spatialdds/vps/query/v1<br/>query_blobs: BlobRef + sha256
