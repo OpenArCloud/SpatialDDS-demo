@@ -386,15 +386,44 @@ class CacheLifecycle(unittest.TestCase):
         self.assertFalse(cache.depart("svc:a"))  # already gone
 
     def test_ttl_expiry_removes_from_search(self):
+        """A service that stops announcing goes stale on schedule."""
         cache = AnnounceCache()
-        stale = SpatialDDSValidator.now_time()
-        stale["sec"] -= 700  # > 2 x ttl_sec below
-        cache.admit(_announce("svc:a", SF, ttl_sec=300, stamp=stale))
+        cache.admit(_announce("svc:a", SF, ttl_sec=300))
         cache.admit(_announce("svc:c", SF, ttl_sec=300))
 
         query = _query((-122.45, 37.75, -122.40, 37.80))
-        self.assertEqual(_ids(search(cache.records(), dict(query))), ["svc:c"])
-        self.assertEqual(cache.stats()["expired"], 1)
+        self.assertEqual(sorted(_ids(search(cache.records(), dict(query))))
+                         , ["svc:a", "svc:c"])
+
+        # 700s later, past 2 x ttl_sec, with nothing having re-announced.
+        later = time.time() + 700
+        self.assertEqual(_ids(search(cache.records(now=later), dict(query))), [])
+        self.assertEqual(cache.stats()["expired"], 2)
+
+    def test_a_frozen_stamp_does_not_expire_a_service_that_keeps_announcing(self):
+        """
+        Re-announcing is evidence of life even when the stamp does not move.
+
+        A publisher may re-announce by re-writing a sample it built once: the
+        DDS Lifespan is refreshed, so the sample stays valid on the wire, while
+        the payload stamp stays frozen at first build. OpenVPS's binding does
+        this. Judged on the stamp alone the service is expired the moment it
+        arrives — measured on AWS, its announce was admitted and swept in the
+        same sweep, and discovery reported an empty deployment while the
+        localizer was answering requests.
+        """
+        cache = AnnounceCache()
+        frozen = SpatialDDSValidator.now_time()
+        frozen["sec"] -= 700  # older than 2 x ttl_sec, and never updated
+        cache.admit(_announce("svc:a", SF, ttl_sec=300, stamp=frozen))
+
+        query = _query((-122.45, 37.75, -122.40, 37.80))
+        self.assertEqual(_ids(search(cache.records(), dict(query))), ["svc:a"])
+        self.assertEqual(cache.stats()["expired"], 0)
+
+        # Still nothing new 700s on: now it is genuinely stale.
+        later = time.time() + 700
+        self.assertEqual(_ids(search(cache.records(now=later), dict(query))), [])
 
     def test_entry_without_ttl_is_kept(self):
         cache = AnnounceCache()

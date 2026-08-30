@@ -256,17 +256,62 @@ class BridgeEndpoints(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(ids(response.json()), ["svc:vps:demo/sf"])
 
+    def test_an_announce_only_service_survives_another_service_answering(self):
+        """
+        Answering a CoverageQuery is not obligatory; announcing is enough.
+
+        OpenVPS's DDS binding publishes an Announce and serves VpsRequest, with
+        no coverage responder at all. The endpoint used to return the bus
+        answers whenever any arrived and consult the cache only when none did,
+        so one service replying made every announce-only service vanish — a
+        real VPS, its announce held in this bridge's own cache, reported as
+        nobody being there. Both must come back.
+        """
+        from spatialdds_demo.discovery_http import record_from_announce
+
+        answered = [record_from_announce(
+            announce(service_id="svc:vps:demo/answers",
+                     manifest_uri="spatialdds://demo.example/zone:sf/manifest:b"))]
+        self.addCleanup(setattr, self.server.bridge, "coverage_records",
+                        self.server.bridge.coverage_records)
+        self.server.bridge.coverage_records = lambda *a, **k: answered
+
+        response = self.client.get("/.well-known/spatialdds/search?geohash=9q8yy")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(sorted(ids(response.json())),
+                         ["svc:vps:demo/answers", "svc:vps:demo/sf"])
+
+    def test_a_bus_answer_supersedes_the_cached_announce_for_that_service(self):
+        """Same service on both sides resolves once, to the fresher answer."""
+        from spatialdds_demo.discovery_http import record_from_announce
+
+        answered = [record_from_announce(
+            announce(manifest_uri="spatialdds://demo.example/zone:sf/manifest:fresh"))]
+        self.addCleanup(setattr, self.server.bridge, "coverage_records",
+                        self.server.bridge.coverage_records)
+        self.server.bridge.coverage_records = lambda *a, **k: answered
+
+        response = self.client.get("/.well-known/spatialdds/search?geohash=9q8yy")
+        self.assertEqual(ids(response.json()), ["svc:vps:demo/sf"])
+
     def test_a_departed_service_is_absent_from_the_http_response(self):
         self.assertTrue(self.cache.depart("svc:vps:demo/sf"))
         response = self.client.get("/.well-known/spatialdds/search?geohash=9q8yy")
         self.assertEqual(response.json()["results"], [])
 
     def test_an_expired_service_is_absent_from_the_http_response(self):
-        stale = announce()
-        stale["stamp"]["sec"] -= 700          # > 2 x ttl_sec
+        """
+        Stale means "nothing has arrived for it lately", not "its stamp is old"
+        — a re-announced sample can carry a frozen stamp and still be a live
+        service saying so. See test_discovery_http for that case; here the
+        announce arrived 700s ago and nothing has repeated it since.
+        """
+        import time
+
         cache = self.AnnounceCache()
-        self.assertTrue(cache.admit(stale))
-        self.server.bridge.announce_records = cache.records
+        self.assertTrue(cache.admit(announce()))
+        later = time.time() + 700             # > 2 x ttl_sec, nothing re-announced
+        self.server.bridge.announce_records = lambda: cache.records(now=later)
         response = self.client.get("/.well-known/spatialdds/search?geohash=9q8yy")
         self.assertEqual(response.json()["results"], [])
 

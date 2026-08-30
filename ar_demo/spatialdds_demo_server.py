@@ -141,7 +141,9 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     # Reads the blob lane continuously, so query imagery is in hand by the
     # time the request that references it is processed.
     blobs = blob.BlobSubscriber(participant)
-    vps = VpsService(participant)
+    # Named, so a request addressed to another VPS on the same well-known topic
+    # is left for that service to answer.
+    vps = VpsService(participant, service.service_id)
     coverage = CoverageService(participant)
     announcer.publish(from_json(TypedAnnounce, announce))
     print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")

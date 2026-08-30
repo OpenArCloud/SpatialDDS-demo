@@ -53,6 +53,8 @@ class AnnounceCache:
         self.admitted = 0
         self.departed = 0
         self.expired = 0
+        # When each service's announce last arrived. See _is_expired.
+        self._seen: Dict[str, float] = {}
 
     # -- ingestion ---------------------------------------------------------
     def admit(self, announce: Dict[str, Any]) -> bool:
@@ -70,6 +72,7 @@ class AnnounceCache:
             return False
         with self._lock:
             self._entries[record.service_id] = record
+            self._seen[record.service_id] = time.time()
             self.admitted += 1
         return True
 
@@ -107,6 +110,7 @@ class AnnounceCache:
             return False
         with self._lock:
             removed = self._entries.pop(service_id, None) is not None
+            self._seen.pop(service_id, None)
             if removed:
                 self.departed += 1
         return removed
@@ -124,24 +128,48 @@ class AnnounceCache:
         dropped = 0
         with self._lock:
             for service_id, record in list(self._entries.items()):
-                if self._is_expired(record, now):
+                if self._is_expired(record, now, self._seen.get(service_id)):
                     del self._entries[service_id]
+                    self._seen.pop(service_id, None)
                     dropped += 1
             self.expired += dropped
         return dropped
 
-    def _is_expired(self, record: ServiceRecord, now: float) -> bool:
+    def _is_expired(self, record: ServiceRecord, now: float,
+                    last_seen: Optional[float] = None) -> bool:
+        """
+        Past its TTL backstop, measured from the last evidence the service was
+        alive: its announce's stamp, or when that announce last arrived.
+
+        The stamp alone is not that evidence. A publisher may re-announce by
+        re-writing a sample it built once — which refreshes the DDS Lifespan,
+        so the sample stays valid on the wire, while the payload stamp stays
+        frozen at first build. OpenVPS's binding does exactly this in
+        `ServiceAnnouncer.tick`. Judging on the stamp alone then expires a
+        service that is alive, announcing, and answering requests: measured on
+        AWS, its announce was admitted and swept on arrival, and discovery
+        reported an empty deployment while the localizer was serving poses.
+
+        Taking the later of the two keeps the guarantee that matters — an
+        announce nobody has repeated goes stale on schedule — while treating a
+        sample that just arrived as the service asserting itself now, which is
+        what publishing it means.
+        """
         ttl = record.payload.get("ttl_sec")
         stamp = _stamp_seconds(record.payload)
-        if not ttl or stamp is None:
-            # No TTL or no stamp: nothing to expire against, so keep it. Depart
-            # remains the removal path.
+        if not ttl:
+            # No TTL: nothing to expire against, so keep it. Depart remains the
+            # removal path.
+            return False
+        freshest = max([v for v in (stamp, last_seen) if v is not None],
+                       default=None)
+        if freshest is None:
             return False
         try:
             budget = float(ttl) * self._ttl_multiplier
         except (TypeError, ValueError):
             return False
-        return (now - stamp) > budget
+        return (now - freshest) > budget
 
     def get(self, service_id: str) -> Optional[ServiceRecord]:
         with self._lock:

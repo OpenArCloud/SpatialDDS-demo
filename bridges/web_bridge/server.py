@@ -939,23 +939,42 @@ def _served_manifest(record) -> Optional[Dict[str, Any]]:
 
 def _discovery_records(payload: Dict[str, Any]):
     """
-    Ask the bus who covers this area; fall back to the cache if nobody answers.
+    Everything this bridge knows covers the area: what the bus answers, plus
+    what it has announced to us.
 
     The normalized request is what goes on the wire, so the geohash shorthand
     and an omitted `coverage_frame_ref` reach the services as the coverage the
     spec says they mean.
+
+    The union is the point. Answering a `CoverageQuery` is not something §3.3
+    obliges a service to do — a service may simply announce, and OpenVPS's DDS
+    binding is exactly that: it publishes an `Announce` and serves VpsRequest,
+    with no coverage responder anywhere. An earlier version returned the bus
+    answers whenever *any* arrived and only fell back to the cache when none
+    did, which made every announce-only service invisible the moment one other
+    service answered — including a real VPS whose announce was sitting in this
+    bridge's own cache. Nothing errored; discovery just said nobody was there.
+
+    Bus answers win per service where both exist: a service that just replied
+    is more current than a retained announce, and `coverage_records` already
+    resolves each summary against the cache for the detail a summary omits.
+    Records the query does not cover are filtered by the shared core, so
+    handing it the full cache costs nothing but a predicate call.
     """
     normalized = normalize_search_request(payload)
+    cached = bridge.announce_records()
     try:
-        records = bridge.coverage_records(
+        answered = bridge.coverage_records(
             normalized["coverage"], normalized["coverage_frame_ref"])
     except Exception as exc:                     # bus unavailable, mid-restart
         print(f"discovery: coverage query failed ({exc}); using announce cache")
-        return bridge.announce_records()
-    if records is None:
+        return cached
+    if answered is None:
         print("discovery: no CoverageResponse; using announce cache")
-        return bridge.announce_records()
-    return records
+        return cached
+    merged = {record.service_id: record for record in cached}
+    merged.update({record.service_id: record for record in answered})
+    return list(merged.values())
 
 
 @app.post("/.well-known/spatialdds/search")

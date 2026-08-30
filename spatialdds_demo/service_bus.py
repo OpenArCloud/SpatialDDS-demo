@@ -59,17 +59,53 @@ CATALOG_REQ_PROFILE = "VPS_REQ"
 CATALOG_RESP_PROFILE = "VPS_RESP"
 
 
+def service_id_base(service_id: str) -> str:
+    """
+    A service id without its revision suffix.
+
+    `VpsRequest.service_id` names a service, optionally pinning a revision as
+    `<id>;v=<revision>` — OpenVPS uses it for the map a request wants. Routing
+    is by the part before the suffix; what the revision means is the service's
+    business.
+    """
+    return (service_id or "").split(";", 1)[0]
+
+
 class VpsService:
     """Server side of the localization exchange."""
 
-    def __init__(self, participant: DomainParticipant):
+    def __init__(self, participant: DomainParticipant, service_id: str = ""):
         self._reader = tt.make_reader(
             participant, TOPIC_VPS_QUERY_V1, VpsRequest, VPS_REQ_PROFILE)
         self._writer = tt.make_writer(
             participant, TOPIC_VPS_RESULT_V1, VpsResponse, VPS_RESP_PROFILE)
+        self._service_id = service_id_base(service_id)
+
+    def addressed_to_us(self, service_id: str) -> bool:
+        """
+        Whether a request naming ``service_id`` is this service's to answer.
+
+        An empty name means "whoever is listening", which is what a client that
+        has not discovered anything sends. A name that is not ours belongs to
+        someone else on the same well-known topic.
+
+        Without this a responder answers every request on the lane, including
+        ones addressed elsewhere, and because the client correlates on
+        ``query_id`` alone the first reply wins. Two VPS services on one bus
+        then make discovery pointless: a request addressed to the VPS that
+        holds the map is answered by whichever is nearer, with a pose from a
+        different map and nothing in the response saying so. Measured on AWS,
+        a co-located stand-in beat a real localizer to every request in 0.4 s.
+        A service constructed without an id keeps the old answer-everything
+        behaviour, since single-service deployments have nothing to confuse.
+        """
+        if not self._service_id or not service_id:
+            return True
+        return service_id_base(service_id) == self._service_id
 
     def take_requests(self) -> List[VpsRequest]:
-        return tt.take_samples(self._reader)
+        return [request for request in tt.take_samples(self._reader)
+                if self.addressed_to_us(getattr(request, "service_id", ""))]
 
     def reply(self, response: VpsResponse) -> None:
         self._writer.write(response)
@@ -89,23 +125,37 @@ class VpsClient:
                 ) -> Optional[VpsResponse]:
         self._writer.write(request)
         return self.await_reply(request.query_id, timeout=timeout,
-                                poll_interval=poll_interval)
+                                poll_interval=poll_interval,
+                                expect_service_id=getattr(request, "service_id", ""))
 
     def await_reply(self, query_id: str, timeout: float = 10.0,
-                    poll_interval: float = DEFAULT_POLL_INTERVAL
-                    ) -> Optional[VpsResponse]:
+                    poll_interval: float = DEFAULT_POLL_INTERVAL,
+                    expect_service_id: str = "") -> Optional[VpsResponse]:
         """
         Correlation is the query_id the response mirrors — no envelope needed.
+
+        When the request named a service, the responder has to be that service:
+        a reply carrying someone else's ``service_id`` answers a question this
+        client did not ask. Both ends need the check — a well-behaved responder
+        stays quiet, but one that answers everything would otherwise win the
+        race on latency alone, and the pose it returns is from another map.
+        Revision suffixes are ignored on both sides, so a service that pins the
+        map it answered still matches the request that asked for it.
 
         Replies for other requests are ignored rather than consumed-and-dropped
         where possible; at demo concurrency a single in-flight request is the
         normal case.
         """
+        expected = service_id_base(expect_service_id)
         deadline = time.time() + timeout
         while time.time() < deadline:
             for response in tt.take_samples(self._reader):
-                if response.query_id == query_id:
-                    return response
+                if response.query_id != query_id:
+                    continue
+                if expected and service_id_base(
+                        getattr(response, "service_id", "")) != expected:
+                    continue
+                return response
             time.sleep(poll_interval)
         return None
 
