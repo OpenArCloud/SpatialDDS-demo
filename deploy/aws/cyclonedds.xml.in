@@ -21,16 +21,22 @@
   over loopback, and silently finds nothing across two — an absence of peers
   rather than an error, which is the worst way for this to fail.
 
-  The interface is autodetermined rather than pinned to `lo`. Pinning to
-  loopback is right for a single task and makes a second host impossible:
-  RTPS advertises the address it binds, and no off-host peer can route to
-  127.0.0.1.
+  The interface is pinned to the container's own primary address, rendered at
+  start by dds-entrypoint.sh, rather than left to `autodetermine`. Pinning to
+  loopback would make a second host impossible — RTPS advertises the address it
+  binds, and no off-host peer can route to 127.0.0.1 — but `autodetermine` is
+  not a safe substitute either: on Fargate it selected loopback, which let the
+  containers in one task discover each other over the shared namespace while
+  every packet to an off-host peer went nowhere. Nothing errored, the peer list
+  was correct, and a tcpdump on the peer saw not one RTPS datagram. Pinning to
+  the measured address makes the choice observable and wrong-proof; the
+  entrypoint logs it.
 -->
 <CycloneDDS xmlns="https://cdds.io/config">
   <Domain id="any">
     <General>
       <Interfaces>
-        <NetworkInterface autodetermine="true"/>
+        <!--INTERFACE-->
       </Interfaces>
       <AllowMulticast>false</AllowMulticast>
     </General>
