@@ -11,45 +11,113 @@ Exercised against the canonical IDL bundled at
 
 ## Protocol flow
 
+Two clients reach the same services. The browser goes through the web bridge
+over REST and WebSocket; the headless client speaks DDS directly. The bus half
+is identical — same topics, same types, same QoS profiles.
+
+### Browser → web bridge → bus
+
+What the Cesium UI actually does. REST is a client convenience, not a second
+protocol: every call below turns into typed samples on the well-known topics.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI as Browser (Cesium)
+    participant Bridge as Web bridge
+    participant Bus as DDS bus
+    participant VPS as VPS service
+    participant Cat as Catalog service
+
+    Note over VPS,Cat: Services announce and re-announce to keep the lease alive
+    VPS->>Bus: Announce — spatialdds/discovery/announce/v1
+    Cat->>Bus: Announce
+    Bus-->>Bridge: cached; dispose, Depart and TTL all evict
+
+    Note over UI,Bridge: REST — discovery
+    UI->>Bridge: GET /.well-known/spatialdds/search?geohash=...
+    Bridge->>Bus: CoverageQuery — spatialdds/discovery/query/v1
+    VPS-->>Bus: CoverageResponse (ServiceSummary)
+    Bus-->>Bridge: summaries
+    Bridge-->>UI: results[] — bus answers plus the announce cache,<br/>so a service that only announces is still found
+
+    Note over UI,VPS: REST — localize; imagery rides by reference
+    UI->>Bridge: POST /v1/localize<br/>service_id, prior_geopose, query_image (base64)
+    Bridge->>Bus: BlobChunk xN — spatialdds/blob/chunk/v1 (GEOM_TILE)
+    Bridge->>Bus: VpsRequest — spatialdds/vps/query/v1<br/>query_blobs: BlobRef + sha256
+    Bus-->>VPS: request and chunks
+    VPS-->>Bus: VpsResponse — spatialdds/vps/result/v1<br/>VpsStatus, node_geo, confidence, rmse_m
+    Bus-->>Bridge: matched on query_id and service_id
+    Bridge-->>UI: pose as JSON
+
+    Note over UI,Cat: REST — content
+    UI->>Bridge: POST /v1/catalog/query
+    Bridge->>Bus: CatalogQuery — spatialdds/catalog/query/v1
+    Cat-->>Bus: CatalogResponse
+    Bridge-->>UI: items[]
+
+    Note over UI,Bridge: WebSocket — observability
+    UI->>Bridge: WS /ws, subscribe to topic patterns
+    Bridge-->>UI: every matching sample seen on the bus
+```
+
+`/health`, `/.well-known/spatialdds/search`, `/v1/localize` and
+`/v1/catalog/query` are the whole REST surface the UI uses; `/ws` carries the
+DDS message window. Each REST route is a hand-written translation, which is why
+the bridge exposes four of them rather than the whole type registry — the
+WebSocket needs no such translation and carries anything on the bus.
+
+### Headless client → bus
+
+`run_local_tests_with_logs.sh`. No bridge, no HTTP.
+
 ```mermaid
 sequenceDiagram
     autonumber
     participant Client
-    participant DDS as DDS Bus
-    participant VPS as VPS Service
-    participant Bootstrap as Bootstrap Service
+    participant Boot as Bootstrap service
+    participant Bus as DDS bus
+    participant VPS as VPS service
+    participant Cat as Catalog service
 
-    Note over Client,Bootstrap: Phase 0 — bootstrap.Query/Response (domain discovery)
-    Client->>Bootstrap: BOOTSTRAP_QUERY<br/>client_id, capabilities, location_hint
-    Bootstrap-->>Client: BOOTSTRAP_RESPONSE<br/>dds_domain, manifest_uris
+    Note over Client,Boot: Phase 0 — domain discovery
+    Client->>Boot: BootstrapQuery — client_id, capabilities, location_hint
+    Boot-->>Client: BootstrapResponse — dds_domain, manifest_uris
 
-    Note over VPS,DDS: Phase 1 — discovery.Announce (caps + typed topics)
-    VPS->>DDS: ANNOUNCE<br/>service_id, kind:VPS<br/>coverage[] + topics[]<br/>caps + manifest_uri
+    Note over VPS,Bus: Phase 1 — Announce
+    VPS->>Bus: service_id, kind VPS, coverage[], topics[], caps, manifest_uri
 
-    Note over Client,DDS: Phase 2 — CoverageQuery/Response
-    Client->>DDS: COVERAGE_QUERY<br/>query_id + coverage[] + reply_topic
-    DDS-->>VPS: Routed by bbox intersection
-    VPS-->>DDS: COVERAGE_RESPONSE page
-    DDS-->>Client: COVERAGE_RESPONSE page
+    Note over Client,Bus: Phase 2 — CoverageQuery / CoverageResponse
+    Client->>Bus: CoverageQuery — query_id, coverage[], reply_topic
+    Bus-->>VPS: delivered to every subscriber on the topic
+    VPS-->>Bus: CoverageResponse — each service evaluates the predicate itself
+    Bus-->>Client: ServiceSummary page
 
-    Note over Client,VPS: Phase 3 — Localization exchange
-    Client->>VPS: LOCALIZE_REQUEST (VisionFrame + KeyframeFeatures)
-    VPS-->>Client: LOCALIZE_RESPONSE (NodeGeo + GeoPose, quality)
+    Note over Client,VPS: Phase 3 — localization
+    Client->>Bus: VpsRequest — prior_geopose, query_blobs: BlobRef
+    Bus-->>VPS: request
+    VPS-->>Bus: VpsResponse — VpsStatus, node_geo (FramedPose + GeoPose),<br/>confidence, rmse_m
+    Bus-->>Client: reply correlated by query_id
 
-    Note over Client,DDS: Phase 4 — Content discovery (catalog)
-    Client->>DDS: CATALOG_QUERY
-    DDS-->>Catalog: Routed by bbox
-    Catalog-->>DDS: CATALOG_RESPONSE
-    DDS-->>Client: CATALOG_RESPONSE
+    Note over Client,Cat: Phase 4 — content discovery
+    Client->>Bus: CatalogQuery
+    Cat-->>Bus: CatalogResponse
+    Bus-->>Client: items
 
-    Note over Client,DDS: Phase 5 — Anchor publication
-    Client->>DDS: ANCHOR_DELTA<br/>op:ADD, anchor entry with GeoPose + checksum
+    Note over Client,Bus: Phase 5 — anchor publication
+    Client->>Bus: AnchorDelta — op ADD, GeoPose + checksum
 ```
+
+One difference worth knowing: this client names a `BlobRef` for its query
+imagery but never publishes the chunks, so the VPS logs the image as not
+received and localizes without it. The bridge path does publish them. Nothing
+in the exchange depends on the pixels until a real localizer is on the bus —
+see [Localize with Image](#localize-with-image).
 
 ## Run the protocol flow
 
-The end-to-end flow against a real DDS bus, with all four services + a
-client, written to log files:
+The end-to-end flow against a real DDS bus — bootstrap, VPS and catalog
+services plus a client, each written to its own log file:
 
 ```bash
 ./run_local_tests_with_logs.sh
@@ -104,7 +172,7 @@ Install one from any OpenVPS dataset directory — the one holding `status.json`
 and `hlocMaps/<map-id>/`:
 
 ```bash
-scripts/install_query_frames.py ~/path/to/<dataset-id> --count 3
+../scripts/install_query_frames.py ~/path/to/<dataset-id> --count 3
 ```
 
 That copies a few of the map's own registered frames and writes
@@ -157,14 +225,17 @@ useful when you just want to exercise the registration/search shapes
 without standing up DDS. Distinct from the live web bridge, which
 talks to a real DDS bus.
 
+Run from the repository root — it imports `spatialdds_demo`, so the root has
+to be on `PYTHONPATH`:
+
 ```bash
 # Start the REST API (default port 8080)
-python3 http_binding.py
+PYTHONPATH=. python3 ar_demo/http_binding.py
 
 # Register a service manifest
 curl -X POST http://localhost:8080/.well-known/spatialdds/register \
   -H "Content-Type: application/json" \
-  -d @../manifests/v1.7/vps_manifest.json
+  -d @manifests/v1.7/vps_manifest.json
 
 # Fetch the bootstrap manifest
 curl http://localhost:8080/.well-known/spatialdds/bootstrap
