@@ -141,14 +141,20 @@ class AnnounceCache:
         Past its TTL backstop, measured from the last evidence the service was
         alive: its announce's stamp, or when that announce last arrived.
 
-        The stamp alone is not that evidence. A publisher may re-announce by
-        re-writing a sample it built once — which refreshes the DDS Lifespan,
-        so the sample stays valid on the wire, while the payload stamp stays
-        frozen at first build. OpenVPS's binding does exactly this in
-        `ServiceAnnouncer.tick`. Judging on the stamp alone then expires a
-        service that is alive, announcing, and answering requests: measured on
-        AWS, its announce was admitted and swept on arrival, and discovery
-        reported an empty deployment while the localizer was serving poses.
+        The stamp alone is not that evidence. A publisher can re-announce by
+        re-writing a sample it built once: each write refreshes the DDS
+        Lifespan, so the sample stays valid on the wire, while the payload
+        stamp stays frozen at first build. The two liveness signals then
+        disagree, and a consumer reading only the stamp expires a service that
+        is alive, announcing, and answering requests.
+
+        That is not hypothetical. A real VPS did it, and this cache judging on
+        the stamp alone admitted its announce and swept it in the same pass —
+        discovery reported an empty deployment while the localizer returned
+        poses for the map it had just advertised, with nothing erroring at
+        either end. That publisher has since been fixed; this tolerance is kept
+        because the next one will not have been, and the failure it produces is
+        silent on both sides.
 
         Taking the later of the two keeps the guarantee that matters — an
         announce nobody has repeated goes stale on schedule — while treating a

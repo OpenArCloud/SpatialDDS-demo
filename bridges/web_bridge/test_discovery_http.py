@@ -404,13 +404,14 @@ class CacheLifecycle(unittest.TestCase):
         """
         Re-announcing is evidence of life even when the stamp does not move.
 
-        A publisher may re-announce by re-writing a sample it built once: the
+        A publisher can re-announce by re-writing a sample it built once: the
         DDS Lifespan is refreshed, so the sample stays valid on the wire, while
-        the payload stamp stays frozen at first build. OpenVPS's binding does
-        this. Judged on the stamp alone the service is expired the moment it
-        arrives — measured on AWS, its announce was admitted and swept in the
-        same sweep, and discovery reported an empty deployment while the
-        localizer was answering requests.
+        the payload stamp stays frozen at first build. Judged on the stamp
+        alone such a service is expired the moment it arrives — admitted and
+        swept in the same pass, so discovery reports an empty deployment while
+        the service answers requests. Seen against a real VPS and since fixed
+        in that publisher; the tolerance stays because the failure is silent at
+        both ends and the next publisher gets no warning either.
         """
         cache = AnnounceCache()
         frozen = SpatialDDSValidator.now_time()
