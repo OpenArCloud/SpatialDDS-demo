@@ -192,7 +192,13 @@ export async function initAligner() {
         cloud.positions[i * 3], cloud.positions[i * 3 + 1], cloud.positions[i * 3 + 2]),
       color: Cesium.Color.fromBytes(
         cloud.colors[i * 3], cloud.colors[i * 3 + 1], cloud.colors[i * 3 + 2]),
-      pixelSize: 2
+      pixelSize: 2,
+      // Drawn over the tiles by default. Depth-tested, the cloud disappears
+      // the moment it sits inside tile geometry, which is most of the time
+      // for a ground-level capture — and an invisible cloud cannot be
+      // aligned. The toggle restores depth testing to judge whether the
+      // cloud sits on the ground or through it.
+      disableDepthTestDistance: Number.POSITIVE_INFINITY
     });
   }
   const state = { yaw: 0, east: 0, north: 0, up: 0 };
@@ -267,6 +273,15 @@ export async function initAligner() {
     const px = Number((e.target as HTMLInputElement).value);
     el('sizeVal').textContent = String(px);
     for (let i = 0; i < points.length; i += 1) points.get(i).pixelSize = px;
+  });
+
+  el('onTop').addEventListener('click', (e) => {
+    const b = e.target as HTMLButtonElement;
+    const on = b.dataset.on !== 'false';
+    b.dataset.on = on ? 'false' : 'true';
+    b.textContent = on ? 'Points: depth-tested' : 'Points: on top';
+    const v = on ? 0 : Number.POSITIVE_INFINITY;
+    for (let i = 0; i < points.length; i += 1) points.get(i).disableDepthTestDistance = v;
   });
 
   el('toggleTiles').addEventListener('click', (e) => {
