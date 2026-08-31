@@ -39,6 +39,10 @@
         <button id="recentre">Recentre</button>
       </div>
       <div class="row">
+        <button id="layerNear">Near (LiDAR): on</button>
+        <button id="layerFar">Sparse (all range): on</button>
+      </div>
+      <div class="row">
         <button id="onTop" data-on="true">Points: on top</button>
         <button id="toggleTiles">Hide 3D tiles</button>
         <button id="reset">Reset</button>
@@ -55,6 +59,10 @@
         <pre id="out"></pre>
       </details>
       <p class="hint">
+        Two layers: dense LiDAR points, trustworthy to ~8 m, and COLMAP's
+        sparse points, correct at any range. Beyond 8 m the phone's depth
+        under-reports distance — 0.70x at 18-30 m — so the building is drawn
+        from the sparse layer, not the dense one.
         <b>Click the ground</b> to put the anchor where the map's origin
         belongs, then set yaw. Align yaw off straight edges — façades, kerbs,
         path lines — not the fountain itself, which is nearly rotationally

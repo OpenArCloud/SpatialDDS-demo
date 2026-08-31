@@ -11,6 +11,14 @@
  * `matrix` taking map coordinates into the anchor's ENU frame — the same
  * `map_to_enu` the localizer applies before converting a pose to geodetic.
  *
+ * Two layers, because depth from a phone is only trustworthy up to a point.
+ * Measured on this capture, ARKit's depth is unbiased out to ~8 m and then
+ * under-reports: at 18-30 m even the least-occluded returns come back at 0.70
+ * of true distance, which pulls far structure toward the camera and makes a
+ * building look both too close and too small. So the dense layer is capped at
+ * the honest range, and COLMAP's sparse points — triangulated from imagery,
+ * correct at any distance — carry everything beyond it.
+ *
  * Only yaw and position are exposed. A map that has been metrically aligned
  * to its ARKit prior (`hloc_metric_alignment --mode rescale_model`) is already
  * level and metric, so roll, pitch and scale are not free parameters — and
@@ -81,8 +89,9 @@ export async function initAligner() {
   const lat = Number(params.get('lat') ?? 30.2839212);
   const lon = Number(params.get('lon') ?? -97.7396265);
   const height = Number(params.get('h') ?? 0);
-  const cloudUrl = params.get('ply')
-    ?? `${import.meta.env.BASE_URL}aligner/fountain2.ply`;
+  const base = import.meta.env.BASE_URL;
+  const nearUrl = params.get('near') ?? `${base}aligner/fountain2_near.ply`;
+  const farUrl = params.get('far') ?? `${base}aligner/fountain2_sparse.ply`;
 
   const status = el<HTMLParagraphElement>('status');
   const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -181,30 +190,39 @@ export async function initAligner() {
     }
   }
 
-  const response = await fetch(cloudUrl);
-  if (!response.ok) throw new Error(`${cloudUrl}: HTTP ${response.status}`);
-  const cloud = parsePly(await response.arrayBuffer(), 500_000);
-
-  const points = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
-  for (let i = 0; i < cloud.count; i += 1) {
-    points.add({
-      position: new Cesium.Cartesian3(
-        cloud.positions[i * 3], cloud.positions[i * 3 + 1], cloud.positions[i * 3 + 2]),
-      color: Cesium.Color.fromBytes(
-        cloud.colors[i * 3], cloud.colors[i * 3 + 1], cloud.colors[i * 3 + 2]),
-      pixelSize: 2,
-      // Drawn over the tiles by default. Depth-tested, the cloud disappears
-      // the moment it sits inside tile geometry, which is most of the time
-      // for a ground-level capture — and an invisible cloud cannot be
-      // aligned. The toggle restores depth testing to judge whether the
-      // cloud sits on the ground or through it.
-      disableDepthTestDistance: Number.POSITIVE_INFINITY
-    });
+  async function fetchCloud(url: string, cap: number) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+    return parsePly(await res.arrayBuffer(), cap);
   }
+  const [nearCloud, farCloud] = await Promise.all([
+    fetchCloud(nearUrl, 500_000),
+    fetchCloud(farUrl, 200_000)
+  ]);
+
+  function build(cloud: Cloud, size: number) {
+    const c = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
+    for (let i = 0; i < cloud.count; i += 1) {
+      c.add({
+        position: new Cesium.Cartesian3(
+          cloud.positions[i * 3], cloud.positions[i * 3 + 1], cloud.positions[i * 3 + 2]),
+        color: Cesium.Color.fromBytes(
+          cloud.colors[i * 3], cloud.colors[i * 3 + 1], cloud.colors[i * 3 + 2]),
+        pixelSize: size,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
+      });
+    }
+    return c;
+  }
+  const points = build(nearCloud, 2);
+  // Sparse points are ~30x rarer, so they need to be bigger to read as
+  // structure rather than as speckle.
+  const far = build(farCloud, 4);
   const state = { yaw: 0, east: 0, north: 0, up: 0, scale: 1 };
   const describe = () =>
-    `${cloud.count.toLocaleString()} points · anchor `
-    + `${anchor.lat.toFixed(6)}, ${anchor.lon.toFixed(6)} · click ground to move it`;
+    `${nearCloud.count.toLocaleString()} near + ${farCloud.count.toLocaleString()} sparse`
+    + ` · anchor ${anchor.lat.toFixed(6)}, ${anchor.lon.toFixed(6)}`
+    + ` · click ground to move it`;
 
   /** map -> ENU: basis first, then yaw about up, then the offset. */
   function mapToEnu(): Cesium.Matrix4 {
@@ -219,8 +237,9 @@ export async function initAligner() {
   }
 
   function apply() {
-    points.modelMatrix = Cesium.Matrix4.multiply(
-      enuToFixed, mapToEnu(), new Cesium.Matrix4());
+    const m = Cesium.Matrix4.multiply(enuToFixed, mapToEnu(), new Cesium.Matrix4());
+    points.modelMatrix = m;
+    far.modelMatrix = m;
     el('yawVal').textContent = `${state.yaw.toFixed(1)}°`;
     el('eastVal').textContent = `${state.east.toFixed(1)} m`;
     el('northVal').textContent = `${state.north.toFixed(1)} m`;
@@ -259,10 +278,29 @@ export async function initAligner() {
     apply();
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-  /** Exactly the shape OpenVPS stores in transform.json. */
+  /**
+   * Exactly the shape OpenVPS stores in transform.json.
+   *
+   * Note what it does with it. `MapTransformInfo` premultiplies a +90 degree
+   * rotation about X — its `graphics_to_robotics_transform` — on the way in,
+   * because the matrix MapAligner writes is map-to-*graphics* (X right, Y up,
+   * Z backwards), not map-to-ENU. This tool works in ENU, so it has to undo
+   * that rotation before writing, or the localizer applies it a second time
+   * and every GeoPose comes out rotated 90 degrees about east, with nothing
+   * failing loudly enough to notice.
+   */
   function transform() {
+    // Inverse of the localizer's graphics->robotics rotation.
+    const roboticsToGraphics = new Cesium.Matrix4(
+      1, 0, 0, 0,
+      0, 0, 1, 0,
+      0, -1, 0, 0,
+      0, 0, 0, 1
+    );
+    const stored = Cesium.Matrix4.multiply(
+      roboticsToGraphics, mapToEnu(), new Cesium.Matrix4());
     // Cesium stores Matrix4 column-major; transform.json wants rows.
-    const flat = Cesium.Matrix4.toArray(mapToEnu());
+    const flat = Cesium.Matrix4.toArray(stored);
     const rows: number[][] = [];
     for (let r = 0; r < 4; r += 1) {
       rows.push([0, 1, 2, 3].map((c) => Number(flat[c * 4 + r].toFixed(9))));
@@ -318,6 +356,7 @@ export async function initAligner() {
     const px = Number((e.target as HTMLInputElement).value);
     el('sizeVal').textContent = String(px);
     for (let i = 0; i < points.length; i += 1) points.get(i).pixelSize = px;
+    for (let i = 0; i < far.length; i += 1) far.get(i).pixelSize = px + 2;
   });
 
   el('onTop').addEventListener('click', (e) => {
@@ -327,6 +366,18 @@ export async function initAligner() {
     b.textContent = on ? 'Points: depth-tested' : 'Points: on top';
     const v = on ? 0 : Number.POSITIVE_INFINITY;
     for (let i = 0; i < points.length; i += 1) points.get(i).disableDepthTestDistance = v;
+    for (let i = 0; i < far.length; i += 1) far.get(i).disableDepthTestDistance = v;
+  });
+
+  el('layerNear').addEventListener('click', (e) => {
+    points.show = !points.show;
+    (e.target as HTMLButtonElement).textContent =
+      points.show ? 'Near (LiDAR): on' : 'Near (LiDAR): off';
+  });
+  el('layerFar').addEventListener('click', (e) => {
+    far.show = !far.show;
+    (e.target as HTMLButtonElement).textContent =
+      far.show ? 'Sparse (all range): on' : 'Sparse (all range): off';
   });
 
   el('toggleTiles').addEventListener('click', (e) => {

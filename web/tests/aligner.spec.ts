@@ -8,8 +8,8 @@ import { expect, test } from '@playwright/test';
 test('map aligner loads a cloud and emits a transform', async ({ page, request }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  const ply = await request.get('/aligner/fountain2.ply').catch(() => null);
-  test.skip(!ply || !ply.ok(), 'no aligner point cloud installed');
+  const near = await request.get('/aligner/fountain2_near.ply').catch(() => null);
+  test.skip(!near || !near.ok(), 'no aligner point cloud installed');
 
   const errors: string[] = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -18,7 +18,7 @@ test('map aligner loads a cloud and emits a transform', async ({ page, request }
   await page.goto('/aligner.html');
 
   // Status reports the point count once the PLY is parsed.
-  await expect(page.locator('#status')).toContainText(/points · anchor/, { timeout: 60_000 });
+  await expect(page.locator('#status')).toContainText(/near \+ .* sparse/, { timeout: 60_000 });
 
   // The emitted transform is what gets POSTed to OpenVPS, so pin its shape.
   // textContent, not innerText: the readout lives inside a collapsed <details>
