@@ -62,11 +62,14 @@ def main():
                          "instead of 15.6) and looked mis-scaled rather than "
                          "cropped.")
     ap.add_argument("--min-confidence", type=int, default=2, choices=(0, 1, 2))
-    ap.add_argument("--keep-sky", action="store_true",
-                    help="keep sky-coloured points. ARKit gives sky pixels a "
-                         "finite depth, so they land as a blue haze at roughly "
-                         "building height; they are dropped by default because "
-                         "they obscure exactly what alignment needs to see.")
+    ap.add_argument("--drop-sky", action="store_true",
+                    help="drop blue, bright points. ARKit gives sky pixels a "
+                         "finite depth and they land as a haze at building "
+                         "height — but so does shaded limestone, and colour "
+                         "cannot tell them apart: measured on this capture, "
+                         "even a strict threshold removes 40% of the facade "
+                         "and 30% of the upper building. Off by default "
+                         "because it costs more structure than it saves haze.")
     ap.add_argument("--validate", type=Path, help="map sparse.ply to compare against")
     a = ap.parse_args()
 
@@ -132,7 +135,7 @@ def main():
     if not pts:
         sys.exit("no points survived filtering")
     P = np.concatenate(pts); C = np.concatenate(cols)
-    if not a.keep_sky:
+    if a.drop_sky:
         r, g, b = C[:, 0].astype(int), C[:, 1].astype(int), C[:, 2].astype(int)
         sky = (b > r + 25) & (b > 110) & (g > r)
         print(f"  dropped {int(sky.sum()):,} sky-coloured points")
