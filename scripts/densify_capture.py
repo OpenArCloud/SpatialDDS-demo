@@ -55,8 +55,18 @@ def main():
     ap.add_argument("-o", "--out", type=Path, required=True, help="output .ply")
     ap.add_argument("--stride", type=int, default=4, help="use every Nth frame")
     ap.add_argument("--voxel", type=float, default=0.03, help="downsample size, m")
-    ap.add_argument("--max-depth", type=float, default=15.0, help="drop beyond, m")
+    ap.add_argument("--max-depth", type=float, default=30.0,
+                    help="drop beyond, m. ARKit reports out to ~25 m here; a "
+                         "tighter cap silently truncates the scene — at 20 m "
+                         "this capture lost half its building height (7.2 m "
+                         "instead of 15.6) and looked mis-scaled rather than "
+                         "cropped.")
     ap.add_argument("--min-confidence", type=int, default=2, choices=(0, 1, 2))
+    ap.add_argument("--keep-sky", action="store_true",
+                    help="keep sky-coloured points. ARKit gives sky pixels a "
+                         "finite depth, so they land as a blue haze at roughly "
+                         "building height; they are dropped by default because "
+                         "they obscure exactly what alignment needs to see.")
     ap.add_argument("--validate", type=Path, help="map sparse.ply to compare against")
     a = ap.parse_args()
 
@@ -122,6 +132,11 @@ def main():
     if not pts:
         sys.exit("no points survived filtering")
     P = np.concatenate(pts); C = np.concatenate(cols)
+    if not a.keep_sky:
+        r, g, b = C[:, 0].astype(int), C[:, 1].astype(int), C[:, 2].astype(int)
+        sky = (b > r + 25) & (b > 110) & (g > r)
+        print(f"  dropped {int(sky.sum()):,} sky-coloured points")
+        P, C = P[~sky], C[~sky]
     # stray_to_colmap left-multiplies diag(1,-1,-1) onto the camera-to-world
     # pose, which flips the *world*, not the camera. So the map frame is the
     # ARKit frame with Y and Z negated. Verified exactly: flipped ARKit camera

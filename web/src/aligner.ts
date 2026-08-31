@@ -183,7 +183,7 @@ export async function initAligner() {
 
   const response = await fetch(cloudUrl);
   if (!response.ok) throw new Error(`${cloudUrl}: HTTP ${response.status}`);
-  const cloud = parsePly(await response.arrayBuffer(), 300_000);
+  const cloud = parsePly(await response.arrayBuffer(), 500_000);
 
   const points = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
   for (let i = 0; i < cloud.count; i += 1) {
@@ -201,7 +201,7 @@ export async function initAligner() {
       disableDepthTestDistance: Number.POSITIVE_INFINITY
     });
   }
-  const state = { yaw: 0, east: 0, north: 0, up: 0 };
+  const state = { yaw: 0, east: 0, north: 0, up: 0, scale: 1 };
   const describe = () =>
     `${cloud.count.toLocaleString()} points · anchor `
     + `${anchor.lat.toFixed(6)}, ${anchor.lon.toFixed(6)} · click ground to move it`;
@@ -210,6 +210,10 @@ export async function initAligner() {
   function mapToEnu(): Cesium.Matrix4 {
     const spin = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(state.yaw));
     const rot = Cesium.Matrix3.multiply(spin, MAP_TO_ENU_BASIS, new Cesium.Matrix3());
+    // Scale is a diagnostic, not a normal control. The map should already be
+    // metric; if a value other than 1 fits, that is evidence about the map
+    // rather than a setting to leave adjusted.
+    Cesium.Matrix3.multiplyByScalar(rot, state.scale, rot);
     return Cesium.Matrix4.fromRotationTranslation(
       rot, new Cesium.Cartesian3(state.east, state.north, state.up));
   }
@@ -221,6 +225,7 @@ export async function initAligner() {
     el('eastVal').textContent = `${state.east.toFixed(1)} m`;
     el('northVal').textContent = `${state.north.toFixed(1)} m`;
     el('upVal').textContent = `${state.up.toFixed(1)} m`;
+    el('scaleVal').textContent = `${state.scale.toFixed(3)}x`;
     el('out').textContent = JSON.stringify(transform(), null, 1);
     status.textContent = describe();
   }
@@ -231,6 +236,20 @@ export async function initAligner() {
   picker.setInputAction((click: { position: Cesium.Cartesian2 }) => {
     const hit = viewer.scene.pickPosition(click.position);
     if (!Cesium.defined(hit)) return;
+    if (measuring) {
+      measured.push(hit);
+      if (measured.length === 1) {
+        el('measureOut').textContent = 'click the second point';
+      } else {
+        ruler.show = true;
+        const d = Cesium.Cartesian3.distance(measured[0], measured[1]);
+        el('measureOut').textContent = `${d.toFixed(2)} m between the two picks`;
+        measured.length = 0;
+        measuring = false;
+        el('measure').textContent = 'Measure';
+      }
+      return;
+    }
     const carto = Cesium.Cartographic.fromCartesian(hit);
     anchor.lat = Cesium.Math.toDegrees(carto.latitude);
     anchor.lon = Cesium.Math.toDegrees(carto.longitude);
@@ -260,6 +279,32 @@ export async function initAligner() {
     });
   };
   bind('yaw', 'yaw'); bind('east', 'east'); bind('north', 'north'); bind('up', 'up');
+  bind('scale', 'scale');
+
+  /**
+   * A ruler. Click two points and it reports the distance between them, on
+   * whatever was picked — the cloud or the tiles. Measuring the same feature
+   * in both is how you settle whether the map's scale is right, rather than
+   * judging it by eye, where perspective makes a cloud that sits behind
+   * something look smaller than it is.
+   */
+  const measured: Cesium.Cartesian3[] = [];
+  const ruler = viewer.entities.add({
+    polyline: {
+      positions: new Cesium.CallbackProperty(() => measured.slice(0, 2), false),
+      width: 3, material: Cesium.Color.YELLOW,
+      clampToGround: false, arcType: Cesium.ArcType.NONE
+    },
+    show: false
+  });
+  let measuring = false;
+  el('measure').addEventListener('click', (e) => {
+    measuring = !measuring;
+    measured.length = 0;
+    ruler.show = false;
+    (e.target as HTMLButtonElement).textContent = measuring ? 'Measuring… (click 2)' : 'Measure';
+    el('measureOut').textContent = measuring ? 'click two points' : '';
+  });
 
   document.querySelectorAll<HTMLButtonElement>('[data-nudge-yaw]').forEach((b) => {
     b.addEventListener('click', () => {
