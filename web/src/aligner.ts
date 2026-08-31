@@ -90,7 +90,11 @@ export async function initAligner() {
     geocoder: false, homeButton: false, sceneModePicker: false,
     navigationHelpButton: false, infoBox: false, selectionIndicator: false
   });
-  viewer.scene.globe.depthTestAgainstTerrain = true;
+  // Google's photorealistic tiles carry their own ground. Leaving the globe on
+  // draws Cesium's flat imagery over them, which looks like tiles that loaded
+  // but rendered as a smeared texture with no buildings — exactly the symptom.
+  viewer.scene.globe.show = false;
+  viewer.scene.skyAtmosphere.show = false;
 
   // The anchor is where the map's origin sits on Earth. It starts from the
   // URL (or a default) and is meant to be moved: click the ground where the
@@ -134,17 +138,47 @@ export async function initAligner() {
   // Photorealistic tiles are the whole point of using Cesium here; without a
   // token this degrades to the default imagery, which is no better than the
   // basemap we were trying to get away from. Say so rather than look broken.
+  // Reported on its own line: the status line is rewritten on every control
+  // change, so a failure written there vanishes on the first slider move and
+  // the tiles just look wrong for no stated reason.
+  const tilesNote = el<HTMLParagraphElement>('tiles');
   const assetId = Number(import.meta.env.VITE_CESIUM_ION_ASSET_ID ?? 0);
   let tileset: Cesium.Cesium3DTileset | null = null;
   if (assetId) {
     try {
       tileset = await Cesium.Cesium3DTileset.fromIonAssetId(assetId);
       viewer.scene.primitives.add(tileset);
+      await tileset.readyPromise?.catch(() => undefined);
+      tilesNote.textContent = `3D tiles: Ion asset ${assetId}`;
+      tilesNote.className = 'note ok';
     } catch (error) {
-      status.textContent = `3D tiles unavailable (${String(error)})`;
+      viewer.scene.globe.show = true;   // something to look at, at least
+      tilesNote.textContent = `3D tiles FAILED (asset ${assetId}): ${String(error).slice(0, 90)}`;
+      tilesNote.className = 'note bad';
     }
   } else {
-    status.textContent = 'no VITE_CESIUM_ION_ASSET_ID — aligning against plain imagery';
+    viewer.scene.globe.show = true;
+    tilesNote.textContent = 'no VITE_CESIUM_ION_ASSET_ID — no 3D buildings';
+    tilesNote.className = 'note bad';
+  }
+
+  // A height of 0 is 0 *above the ellipsoid*, which at Austin is about 150 m
+  // underground. Left alone the anchor, the cloud and the camera all start
+  // buried, which reads as "the tiles did not load" — the ground is simply
+  // above you. Sample the real surface and put the anchor on it.
+  if (tileset) {
+    try {
+      const sampled = await viewer.scene.clampToHeightMostDetailed([anchorCartesian.clone()]);
+      const hit = sampled[0];
+      if (Cesium.defined(hit)) {
+        anchor.height = Cesium.Cartographic.fromCartesian(hit).height;
+        anchorCartesian = Cesium.Cartesian3.fromDegrees(anchor.lon, anchor.lat, anchor.height);
+        enuToFixed = Cesium.Transforms.eastNorthUpToFixedFrame(anchorCartesian);
+        viewFrom('street');
+      }
+    } catch {
+      /* keep the supplied height; the click-to-place path still corrects it */
+    }
   }
 
   const response = await fetch(cloudUrl);

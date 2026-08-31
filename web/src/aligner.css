@@ -29,3 +29,6 @@ details { margin-top: 10px; }
 details summary { cursor: pointer; color: #8fa3bf; font-size: 11px;
   text-transform: uppercase; letter-spacing: .04em; }
 details pre { max-height: 150px; }
+.note { margin: 0 0 8px; font-size: 11px; }
+.note.ok { color: #6bbf7b; }
+.note.bad { color: #e0a458; }
