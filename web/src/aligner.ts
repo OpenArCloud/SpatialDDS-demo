@@ -75,8 +75,11 @@ function el<T extends HTMLElement>(id: string): T {
 
 export async function initAligner() {
   const params = new URLSearchParams(location.search);
-  const lat = Number(params.get('lat') ?? 30.284996);
-  const lon = Number(params.get('lon') ?? -97.739494);
+  // Littlefield Fountain, from OpenStreetMap. Previously seeded from the AR
+  // demo's start position, which is 119 m north — the other end of the South
+  // Mall lawn. A landmark's coordinates are worth looking up, not inferring.
+  const lat = Number(params.get('lat') ?? 30.2839212);
+  const lon = Number(params.get('lon') ?? -97.7396265);
   const height = Number(params.get('h') ?? 0);
   const cloudUrl = params.get('ply')
     ?? `${import.meta.env.BASE_URL}aligner/fountain2.ply`;
@@ -96,8 +99,25 @@ export async function initAligner() {
   const anchor = { lat, lon, height };
   let anchorCartesian = Cesium.Cartesian3.fromDegrees(anchor.lon, anchor.lat, anchor.height);
   let enuToFixed = Cesium.Transforms.eastNorthUpToFixedFrame(anchorCartesian);
-  viewer.camera.lookAt(
-    anchorCartesian, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-35), 120));
+  /**
+   * Street level by default: aligning a ground-level capture against façades
+   * is done from roughly where the capture was taken, not from above. The
+   * overhead view is a click away for checking footprint.
+   */
+  function viewFrom(mode: 'street' | 'overhead') {
+    if (mode === 'street') {
+      // 45 m south of the anchor and 6 m up, looking north at it: about 8
+      // degrees above horizontal, which is roughly how the capture saw it.
+      // The offset is in the target's own east-north-up frame — Cesium does
+      // that conversion, so passing a world-space difference tilts it back to
+      // near-overhead, which is what happened first time round.
+      viewer.camera.lookAt(anchorCartesian, new Cesium.Cartesian3(0, -45, 6));
+    } else {
+      viewer.camera.lookAt(
+        anchorCartesian, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-60), 160));
+    }
+  }
+  viewFrom('street');
 
   const marker = viewer.entities.add({
     position: new Cesium.CallbackProperty(() => anchorCartesian, false),
@@ -220,6 +240,18 @@ export async function initAligner() {
     tileset.show = !tileset.show;
     (e.target as HTMLButtonElement).textContent =
       tileset.show ? 'Hide 3D tiles' : 'Show 3D tiles';
+  });
+
+  el('view').addEventListener('click', (e) => {
+    const b = e.target as HTMLButtonElement;
+    const next = b.dataset.mode === 'street' ? 'overhead' : 'street';
+    b.dataset.mode = next;
+    b.textContent = next === 'street' ? 'Overhead view' : 'Street view';
+    viewFrom(next as 'street' | 'overhead');
+  });
+
+  el('recentre').addEventListener('click', () => {
+    viewFrom((el<HTMLButtonElement>('view').dataset.mode as 'street' | 'overhead') ?? 'street');
   });
 
   el('reset').addEventListener('click', () => {

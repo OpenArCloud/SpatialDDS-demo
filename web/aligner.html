@@ -31,13 +31,20 @@
       <input id="size" type="range" min="1" max="8" step="1" value="2" />
 
       <div class="row">
+        <button id="view" data-mode="street">Overhead view</button>
+        <button id="recentre">Recentre</button>
+      </div>
+      <div class="row">
         <button id="toggleTiles">Hide 3D tiles</button>
         <button id="reset">Reset</button>
       </div>
       <div class="row">
         <button id="copy" class="primary">Copy transform JSON</button>
       </div>
-      <pre id="out"></pre>
+      <details>
+        <summary>transform JSON</summary>
+        <pre id="out"></pre>
+      </details>
       <p class="hint">
         <b>Click the ground</b> to put the anchor where the map's origin
         belongs, then set yaw. Align yaw off straight edges — façades, kerbs,

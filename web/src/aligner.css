@@ -25,3 +25,7 @@ pre { margin: 10px 0 0; padding: 8px; background: #070a10; border: 1px solid #1d
   border-radius: 5px; font-size: 10.5px; line-height: 1.35; overflow-x: auto;
   color: #9fd0a0; max-height: 190px; }
 .hint { margin: 10px 0 0; color: #7f8ea6; font-size: 11px; }
+details { margin-top: 10px; }
+details summary { cursor: pointer; color: #8fa3bf; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .04em; }
+details pre { max-height: 150px; }
