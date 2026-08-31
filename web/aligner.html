@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SpatialDDS — Map Aligner</title>
+  </head>
+  <body>
+    <div id="cesiumContainer"></div>
+    <div id="panel">
+      <h1>Map aligner</h1>
+      <p class="sub" id="status">loading…</p>
+
+      <label>Yaw <span class="val" id="yawVal">0.0°</span></label>
+      <input id="yaw" type="range" min="0" max="360" step="0.1" value="0" />
+      <div class="row">
+        <button data-nudge-yaw="-1">−1°</button>
+        <button data-nudge-yaw="-0.1">−0.1°</button>
+        <button data-nudge-yaw="0.1">+0.1°</button>
+        <button data-nudge-yaw="1">+1°</button>
+      </div>
+
+      <label>East <span class="val" id="eastVal">0.0 m</span></label>
+      <input id="east" type="range" min="-40" max="40" step="0.1" value="0" />
+      <label>North <span class="val" id="northVal">0.0 m</span></label>
+      <input id="north" type="range" min="-40" max="40" step="0.1" value="0" />
+      <label>Up <span class="val" id="upVal">0.0 m</span></label>
+      <input id="up" type="range" min="-20" max="20" step="0.1" value="0" />
+
+      <label>Point size <span class="val" id="sizeVal">2</span></label>
+      <input id="size" type="range" min="1" max="8" step="1" value="2" />
+
+      <div class="row">
+        <button id="toggleTiles">Hide 3D tiles</button>
+        <button id="reset">Reset</button>
+      </div>
+      <div class="row">
+        <button id="copy" class="primary">Copy transform JSON</button>
+      </div>
+      <pre id="out"></pre>
+      <p class="hint">
+        Align yaw off straight edges — building façades, kerbs, path lines —
+        not the fountain, which is nearly rotationally symmetric. The cloud is
+        metric and level already; only yaw and position should need changing.
+      </p>
+    </div>
+    <script type="module" src="/src/aligner-main.ts"></script>
+  </body>
+</html>

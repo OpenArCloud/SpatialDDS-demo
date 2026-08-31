@@ -1,0 +1,27 @@
+:root { color-scheme: dark; }
+html, body { margin: 0; height: 100%; background: #0b0e14; color: #e6e6e6;
+  font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+#cesiumContainer { position: absolute; inset: 0; }
+#panel { position: absolute; top: 12px; left: 12px; width: 268px; z-index: 10;
+  background: rgba(12, 16, 24, 0.92); border: 1px solid #26303f; border-radius: 8px;
+  padding: 12px 14px; backdrop-filter: blur(6px); max-height: calc(100% - 24px);
+  overflow-y: auto; }
+#panel h1 { font-size: 14px; margin: 0 0 2px; letter-spacing: .01em; }
+.sub { margin: 0 0 10px; color: #8fa3bf; font-size: 11px; }
+label { display: flex; justify-content: space-between; align-items: baseline;
+  margin: 10px 0 3px; color: #b9c7da; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .04em; }
+.val { color: #e6e6e6; font-variant-numeric: tabular-nums; text-transform: none;
+  font-size: 12px; }
+input[type=range] { width: 100%; accent-color: #4c9aff; }
+.row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+button { flex: 1 1 auto; background: #182131; color: #dbe6f5; border: 1px solid #2b3648;
+  border-color: #2b3648; border-radius: 5px; padding: 5px 8px; font-size: 12px;
+  cursor: pointer; }
+button:hover { background: #1e2a3d; }
+button.primary { background: #1d4ed8; border-color: #2a5cf0; color: #fff; }
+button.primary:hover { background: #2557e0; }
+pre { margin: 10px 0 0; padding: 8px; background: #070a10; border: 1px solid #1d2635;
+  border-radius: 5px; font-size: 10.5px; line-height: 1.35; overflow-x: auto;
+  color: #9fd0a0; max-height: 190px; }
+.hint { margin: 10px 0 0; color: #7f8ea6; font-size: 11px; }

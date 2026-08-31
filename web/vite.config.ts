@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 const cesiumSource = path.resolve(__dirname, 'node_modules/cesium/Build/Cesium');
@@ -47,5 +48,15 @@ export default defineConfig({
   base,
   define: {
     CESIUM_BASE_URL: JSON.stringify(`${base}cesium/`)
+  },
+  build: {
+    rollupOptions: {
+      // Two pages: the demo, and the map aligner. Named explicitly because
+      // Vite only picks up index.html on its own.
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        aligner: resolve(__dirname, 'aligner.html')
+      }
+    }
   }
 });
