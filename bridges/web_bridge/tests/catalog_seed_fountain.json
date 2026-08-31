@@ -1,0 +1,62 @@
+[
+  {
+    "content_id": "89f2d953-076d-5c7d-9b74-1193f71685a6",
+    "kind": "model",
+    "name": "Rubber duck",
+    "coverage": [
+      {
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -97.7396465,
+          30.283820351994255,
+          -97.7396065,
+          30.283860351994253
+        ],
+        "global": false,
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
+      }
+    ],
+    "frame_ref": {
+      "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0",
+      "fqn": "map/ut-littlefield-fountain",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+    },
+    "formats": [
+      "model/gltf-binary"
+    ],
+    "updated_sec": 1769057000,
+    "href": "models/duck.glb",
+    "has_pose": true,
+    "pose": {
+      "t": [
+        11.708,
+        -14.273,
+        -1.423
+      ],
+      "q": [
+        0.0,
+        0.0,
+        -0.7071067811865475,
+        0.7071067811865476
+      ]
+    },
+    "has_asset": true,
+    "asset": {
+      "uri": "models/duck.glb",
+      "media_type": "model/gltf-binary",
+      "hash": "sha256:4f29c95860fee8da2ed2f844f90914e24ec1ca27e420b8d13def9950f5dcf8f6",
+      "meta": []
+    }
+  }
+]

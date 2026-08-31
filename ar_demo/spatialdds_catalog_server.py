@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 import os
+import uuid
 import sys
 import time
 from typing import Any, Dict, List
@@ -33,6 +35,43 @@ from spatialdds_validation import (
 )
 
 
+def _complete_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Fill the presence-flagged members a hand-authored row omits.
+
+    Same bargain as `complete_coverage_element`: the seed carries what a human
+    cares about, and the builder supplies the rest so a row that predates a
+    field still types. `pose` and `asset` were appended after the 1.7 review of
+    this response, and the tower seed does not carry either.
+    """
+    entry.setdefault("has_pose", False)
+    entry.setdefault("pose", {"t": [0.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]})
+    entry.setdefault("has_asset", False)
+    entry.setdefault("asset", {"uri": "", "media_type": "", "hash": "", "meta": []})
+    return entry
+
+
+def _absolutise(entry: Dict[str, Any], base: str) -> Dict[str, Any]:
+    """
+    Resolve the authored asset URI against the publisher's configured base.
+
+    `href` is relative and names no base, so it means one thing to a client
+    that reached the catalogue through the web bridge and another to one
+    talking to this service -- the ambiguity the spec's manifests avoid by
+    being absolute. The seed stays relative because that is what is portable
+    between deployments; the base is deployment configuration
+    (`SPATIALDDS_ASSET_BASE`), and what goes on the wire is absolute.
+
+    With no base configured the URI is left as authored, which is what the
+    local demo wants: there the page and the asset share an origin.
+    """
+    asset = entry.get("asset") or {}
+    uri = asset.get("uri", "")
+    if base and uri and not uri.startswith(("http://", "https://", "spatialdds://")):
+        asset["uri"] = f"{base.rstrip('/')}/{uri.lstrip('/')}"
+    return entry
+
+
 def _load_seed(path: str) -> List[Dict[str, Any]]:
     """
     Load the authored catalogue and complete its coverage elements.
@@ -49,11 +88,13 @@ def _load_seed(path: str) -> List[Dict[str, Any]]:
         payload = json.load(handle)
     if not isinstance(payload, list):
         raise ValueError("catalog_seed.json must be a list")
+    base = os.getenv("SPATIALDDS_ASSET_BASE", "")
     for entry in payload:
         entry["coverage"] = [
             complete_coverage_element(**element)
             for element in (entry.get("coverage") or [])
         ]
+        _absolutise(_complete_entry(entry), base)
     return payload
 
 
@@ -81,6 +122,93 @@ def _seed_coverage(dataset: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return [complete_coverage_element(**{"global": True})]
     frame_ref, element = create_coverage_bbox_earth_fixed(west, south, east, north)
     return [element]
+
+
+def _enu_to_ecef_transform(fqn: str, anchor: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    A `spatial::disco::Transform` taking a local ENU frame into earth-fixed.
+
+    A catalogue row can now say where its content sits inside a frame, which
+    is only worth anything if a consumer can find that frame. Announcing the
+    transform is what turns "the duck is at (11.7, -14.3, -1.4) in
+    map/ut-littlefield-fountain" from folklore into something a client that
+    has never seen this site can resolve. `Announce.transforms` is the slot the
+    spec already provides, so no new topic and no new reader are involved.
+
+    Per the struct's comment the pose maps FROM the local frame INTO
+    earth-fixed, i.e. ECEF metres: translation is the frame origin's ECEF
+    position, rotation is the ENU basis at that origin.
+    """
+    lat = math.radians(float(anchor["latitude"]))
+    lon = math.radians(float(anchor["longitude"]))
+    h = float(anchor.get("height", 0.0))
+
+    # WGS84.
+    a, f = 6378137.0, 1.0 / 298.257223563
+    e2 = f * (2.0 - f)
+    n = a / math.sqrt(1.0 - e2 * math.sin(lat) ** 2)
+    tx = (n + h) * math.cos(lat) * math.cos(lon)
+    ty = (n + h) * math.cos(lat) * math.sin(lon)
+    tz = (n * (1.0 - e2) + h) * math.sin(lat)
+
+    # Columns are the ENU axes expressed in ECEF.
+    sl, cl = math.sin(lon), math.cos(lon)
+    sp, cp = math.sin(lat), math.cos(lat)
+    r = [[-sl, -sp * cl, cp * cl],
+         [cl, -sp * sl, cp * sl],
+         [0.0, cp, sp]]
+
+    # Rotation matrix to quaternion (x, y, z, w), the GeoPose order.
+    trace = r[0][0] + r[1][1] + r[2][2]
+    if trace > 0.0:
+        s = math.sqrt(trace + 1.0) * 2.0
+        qw, qx = 0.25 * s, (r[2][1] - r[1][2]) / s
+        qy, qz = (r[0][2] - r[2][0]) / s, (r[1][0] - r[0][1]) / s
+    elif r[0][0] > r[1][1] and r[0][0] > r[2][2]:
+        s = math.sqrt(1.0 + r[0][0] - r[1][1] - r[2][2]) * 2.0
+        qw, qx = (r[2][1] - r[1][2]) / s, 0.25 * s
+        qy, qz = (r[0][1] + r[1][0]) / s, (r[0][2] + r[2][0]) / s
+    elif r[1][1] > r[2][2]:
+        s = math.sqrt(1.0 + r[1][1] - r[0][0] - r[2][2]) * 2.0
+        qw, qx = (r[0][2] - r[2][0]) / s, (r[0][1] + r[1][0]) / s
+        qy, qz = 0.25 * s, (r[1][2] + r[2][1]) / s
+    else:
+        s = math.sqrt(1.0 + r[2][2] - r[0][0] - r[1][1]) * 2.0
+        qw, qx = (r[1][0] - r[0][1]) / s, (r[0][2] + r[2][0]) / s
+        qy, qz = (r[1][2] + r[2][1]) / s, 0.25 * s
+
+    now = SpatialDDSValidator.now_time()
+    return {
+        "from": SpatialDDSValidator.create_frame_ref(fqn),
+        # The flag is false because ECEF is not an axis convention this enum
+        # can name. The member still carries its zero value, which happens to
+        # be ENU -- see the note in `complete_coverage_element`.
+        "to": {"uuid": str(uuid.uuid5(uuid.NAMESPACE_URL, "earth-fixed")),
+               "fqn": "earth-fixed", "has_coord_convention": False,
+               "coord_convention": "ENU"},
+        "pose": {"t": [tx, ty, tz], "q": [qx, qy, qz, qw]},
+        "stamp": now,
+        # The site is not going anywhere; an unbounded transform is the honest
+        # statement, not a window that quietly expires.
+        "has_validity": False,
+        "validity": {"from": {"sec": 0, "nanosec": 0}, "seconds": 0},
+    }
+
+
+def _frame_transforms(dataset: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Announce a transform for every local frame the catalogue places content in."""
+    path = os.getenv("SPATIALDDS_FRAME_ANCHORS", "")
+    if not path or not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as handle:
+        anchors = json.load(handle)
+    used = {
+        (entry.get("frame_ref") or {}).get("fqn", "")
+        for entry in dataset
+        if entry.get("has_pose")
+    }
+    return [_enu_to_ecef_transform(fqn, anchors[fqn])
+            for fqn in sorted(used) if fqn in anchors]
 
 
 def _catalog_announce(dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -130,7 +258,7 @@ def _catalog_announce(dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
         "coverage_frame_ref": frame_ref,
         "has_coverage_eval_time": False,
         "coverage_eval_time": SpatialDDSValidator.now_time(),
-        "transforms": [],
+        "transforms": _frame_transforms(dataset),
         "manifest_uri": os.getenv(
             "SPATIALDDS_CATALOG_MANIFEST_URI",
             "spatialdds://catalog.example.com/zone:demo/manifest:catalog",

@@ -240,16 +240,37 @@ class SpatialDDSStack(Stack):
                     "manifest_uri",
                     "spatialdds://vps.example.com/zone:austin-downtown/manifest:vps"),
             }
-            task_def.add_container(
-                "vps",
-                image=image,
-                command=["python3", "ar_demo/spatialdds_demo_server.py", "--summary-only"],
-                essential=False,
-                environment=ar_env,
-                logging=ecs.LogDriver.aws_logs(
-                    stream_prefix="vps", log_group=log_group),
-            )
-            task_def.add_container(
+            # The stand-in VPS is skipped when a real one is on the bus. Both
+            # answer the same well-known topic, and discovery results are
+            # ordered by service_id, so `svc:vps:demo/...` sorts ahead of
+            # `svc:vps:oarc/...` and the browser would take the mock every
+            # time — returning a confident synthetic pose while a real
+            # localizer sat idle beside it.
+            if not ar.get("external_vps", False):
+                task_def.add_container(
+                    "vps",
+                    image=image,
+                    command=["python3", "ar_demo/spatialdds_demo_server.py",
+                             "--summary-only"],
+                    essential=False,
+                    environment=ar_env,
+                    logging=ecs.LogDriver.aws_logs(
+                        stream_prefix="vps", log_group=log_group),
+                )
+            # The catalogue publishes absolute asset URIs and resolvable frames.
+            #
+            # `href` in a seed is relative and names no base, which means one
+            # thing to a client that came through the bridge and another to one
+            # talking to the service. The base is deployment configuration, so
+            # it is set here, where the load balancer's name is known.
+            #
+            # Frame anchors turn a row's pose into something a client can
+            # resolve: without them the announce carries no transform and
+            # content falls back to its coverage centre.
+            catalog_env = dict(ar_env)
+            if ar.get("frame_anchors"):
+                catalog_env["SPATIALDDS_FRAME_ANCHORS"] = ar["frame_anchors"]
+            catalog_container = task_def.add_container(
                 "catalog",
                 image=image,
                 command=["python3", "ar_demo/spatialdds_catalog_server.py",
@@ -257,7 +278,7 @@ class SpatialDDSStack(Stack):
                          "--seed", ar.get("catalog_seed",
                                           "bridges/web_bridge/tests/catalog_seed_austin.json")],
                 essential=False,
-                environment=ar_env,
+                environment=catalog_env,
                 logging=ecs.LogDriver.aws_logs(
                     stream_prefix="catalog", log_group=log_group),
             )
@@ -346,13 +367,22 @@ class SpatialDDSStack(Stack):
             for i, gid in enumerate(peer_security_group_ids)
         ]
 
+        catalog_container = locals().get("catalog_container")
         service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self, "Service",
             cluster=cluster,
             task_definition=task_def,
             desired_count=1,
             public_load_balancer=True,
-            assign_public_ip=False,            # task lives in private subnet
+            # A CDK-created VPC has private-with-egress subnets and the task
+            # belongs there. An adopted VPC may not — the default VPC is all
+            # public — and a task placed there without a public address has no
+            # route to ECR, so it never starts and the failure reads as a
+            # generic deployment timeout. Follow what the VPC actually offers.
+            assign_public_ip=not vpc.private_subnets,
+            task_subnets=ec2.SubnetSelection(
+                subnet_type=(ec2.SubnetType.PRIVATE_WITH_EGRESS
+                             if vpc.private_subnets else ec2.SubnetType.PUBLIC)),
             service_name=f"{construct_id}-service",
             listener_port=80,
             # Send ALB → web bridge container, port 8088.
@@ -363,6 +393,19 @@ class SpatialDDSStack(Stack):
                 *extra_groups,
             ],
         )
+
+        # The catalogue's asset base, now that the load balancer has a name.
+        #
+        # A relative `href` names no base, so it means one thing to a client
+        # that reached the catalogue through the bridge and another to one
+        # talking to the service directly. What goes on the wire is absolute;
+        # the seed stays relative because that is what ports between
+        # deployments.
+        if catalog_container is not None:
+            catalog_container.add_environment(
+                "SPATIALDDS_ASSET_BASE",
+                ar.get("asset_base",
+                       f"http://{service.load_balancer.load_balancer_dns_name}/ar"))
 
         # ── Cross-host DDS, when peers are configured ────────────────────
         # RTPS is UDP. Cyclone's default port range for domain 0 starts at

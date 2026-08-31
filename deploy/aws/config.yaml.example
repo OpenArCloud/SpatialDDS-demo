@@ -55,6 +55,11 @@ ar_demo:
   map_fqn: "map/austin"
   map_id: "austin-map"
   catalog_seed: "bridges/web_bridge/tests/catalog_seed_austin.json"
+  # Geodetic origins for the local frames the catalogue places content in.
+  # Without these a row's pose has no frame to resolve against.
+  # frame_anchors: "bridges/web_bridge/tests/frame_anchors_fountain.json"
+  # Base for relative asset URIs. Defaults to the load balancer + /ar.
+  # asset_base: "https://example.com/ar"
 
   # Cesium Ion, for photorealistic 3D tiles. Optional — without these the
   # demo uses OpenStreetMap imagery and hides the tiles toggle.

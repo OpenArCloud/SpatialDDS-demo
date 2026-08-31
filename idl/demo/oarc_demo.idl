@@ -84,6 +84,34 @@ module oarc_demo {
     sequence<string, 8> formats;
     uint64 updated_sec;
     string href;
+
+    // --- appended after the 1.7 review of this row ---
+
+    // Where the content sits inside `frame_ref`, in that frame's metres.
+    //
+    // Coverage answers "would I find this here?"; it does not place anything.
+    // Without a pose the only placement left is the convention that the
+    // asset's origin is the frame's origin, which is folklore the moment one
+    // frame carries two pieces of content — and it says nothing about which
+    // way the content faces, so orientation ends up accidental.
+    //
+    // This is deliberately NOT expressed as a geographic volume. The first
+    // attempt put longitude, latitude and ellipsoidal height into a
+    // CoverageElement's aabb, whose consumers read all three axes as metres in
+    // the declared frame: degrees in a metres field, wrong in proportion to
+    // how far from null island the content is, and wrong silently.
+    boolean has_pose;
+    spatial::core::PoseSE3 pose;
+
+    // Fetch and integrity, per the spec's own AssetRef contract: an absolute
+    // uri (`href` is relative with no stated base, so it means different
+    // things to a client talking to the bridge and one talking to the catalog
+    // service), a media type, and a `sha256:<hex>` hash.
+    //
+    // `href` and `formats` stay for consumers that already read them, and MUST
+    // agree with this when both are present.
+    boolean has_asset;
+    spatial::common::AssetRef asset;
   };
 
   @extensibility(APPENDABLE) struct CatalogResponse {

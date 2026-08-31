@@ -20,6 +20,7 @@ from spatialdds_idl import oarc_demo
 if TYPE_CHECKING:
     import builtin
     import spatial.common
+    import spatial.core
     import spatial.disco
 
 
@@ -88,6 +89,10 @@ class CatalogEntry(idl.IdlStruct, typename="oarc_demo.CatalogEntry"):
     formats: types.sequence[str, 8]
     updated_sec: types.uint64
     href: str
+    has_pose: bool
+    pose: 'spatialdds_idl.spatial.core.PoseSE3'
+    has_asset: bool
+    asset: 'spatialdds_idl.spatial.common.AssetRef'
 
 
 @dataclass

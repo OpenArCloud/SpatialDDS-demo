@@ -381,6 +381,34 @@ class BridgeEndpoints(unittest.TestCase):
         self.assertIn("initial_peers", body)
 
 
+class CatalogKindVocabulary(unittest.TestCase):
+    """
+    The bridge's default catalogue filter has to admit every kind the browser
+    can draw. It did not: `types.ts` declared "model" and the bridge filtered
+    on ["overlay", "poi", "mesh"], so a glTF item was dropped here — before
+    the catalogue saw the query — and the only symptom was results=0.
+    """
+
+    def test_default_kinds_cover_what_the_client_declares(self):
+        import re as _re
+        import pathlib as _pathlib
+        root = _pathlib.Path(__file__).resolve().parent.parent.parent
+        types_ts = (root / "web" / "src" / "types.ts").read_text()
+        declared = _re.search(r"kind: ((?:'[a-z]+'\s*\|?\s*)+);", types_ts)
+        self.assertIsNotNone(declared, "could not find CatalogItem.kind in types.ts")
+        want = set(_re.findall(r"'([a-z]+)'", declared.group(1)))
+
+        server_py = (root / "bridges" / "web_bridge" / "server.py").read_text()
+        got = set(_re.findall(r"'([a-z]+)'|\"([a-z]+)\"",
+                              _re.search(r"DEFAULT_CATALOG_KINDS = \[([^\]]*)\]",
+                                         server_py).group(1)))
+        got = {a or b for a, b in got}
+        missing = want - got
+        self.assertEqual(missing, set(),
+                         f"browser can render {sorted(missing)} but the bridge "
+                         f"filters them out; DEFAULT_CATALOG_KINDS is {sorted(got)}")
+
+
 class CrossServerParity(unittest.TestCase):
     """The two servers, asked the same thing over HTTP, answer the same thing."""
 

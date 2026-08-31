@@ -120,8 +120,18 @@ class CdkStackSynthesises(unittest.TestCase):
                 "CDK-UNAVAILABLE: pip install aws-cdk-lib. Without it a stack "
                 "that cannot even be constructed reaches a real deploy.")
 
+        # Synthesis needs a concrete account/region: adopting an existing VPC
+        # calls Vpc.from_lookup, which refuses to run without one. Real values
+        # come from `cdk deploy`; here dummies are enough, and CDK answers the
+        # lookup with placeholder context rather than calling AWS. Without
+        # this the check fails the moment a config sets vpc_id — which reads
+        # as a broken stack rather than a missing environment.
+        env = dict(os.environ,
+                   CDK_DEFAULT_ACCOUNT=os.environ.get("CDK_DEFAULT_ACCOUNT", "000000000000"),
+                   CDK_DEFAULT_REGION=os.environ.get("CDK_DEFAULT_REGION", "us-east-1"))
         result = subprocess.run([sys.executable, "app.py"], cwd=cdk_dir,
-                                capture_output=True, text=True, timeout=180)
+                                capture_output=True, text=True, timeout=180,
+                                env=env)
         self.assertEqual(
             result.returncode, 0,
             f"cdk app failed to synthesise:\n{result.stderr[-2000:]}")

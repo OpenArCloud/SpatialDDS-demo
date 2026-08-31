@@ -252,14 +252,87 @@ export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse
     body: JSON.stringify({ geopose })
   });
   const dds = payload as DdsCatalogResponse;
-  const items = (dds.results || []).map((entry) => catalogEntryToItem(entry));
+  // Frames come from the same bus: a row's pose is meaningless until the frame
+  // it names resolves. Only asked for when something in the results actually
+  // carries a pose — a catalogue of unplaced content needs no frames, and a
+  // bridge older than `/v1/frames` should not be sent a request it will 404,
+  // which the browser logs as a console error whatever the client does with
+  // the rejection. A failure here is not fatal: content falls back to its
+  // coverage centre rather than disappearing.
+  const needsFrames = (dds.results || []).some(
+    (entry: Record<string, any>) => entry?.has_pose && entry?.frame_ref?.fqn);
+  let frames: FrameMap = {};
+  if (needsFrames) {
+    try {
+      frames = ((await fetchJson('/v1/frames')) as { frames?: FrameMap }).frames || {};
+    } catch {
+      frames = {};
+    }
+  }
+  const items = (dds.results || []).map((entry) => catalogEntryToItem(entry, frames));
   return {
     query_id: dds.query_id || 'query-unknown',
     items
   };
 }
 
-export function catalogEntryToItem(entry: Record<string, any>): CatalogItem {
+/** A `spatial::disco::Transform` as the bridge serves it from `/v1/frames`. */
+export type FrameTransform = {
+  from?: { fqn?: string };
+  to?: { fqn?: string };
+  pose?: { t?: number[]; q?: number[] };
+};
+
+export type FrameMap = Record<string, FrameTransform>;
+
+/** Hamilton product, [x, y, z, w] throughout (GeoPose order). */
+function quatMultiply(a: number[], b: number[]): [number, number, number, number] {
+  const [ax, ay, az, aw] = a;
+  const [bx, by, bz, bw] = b;
+  return [
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+    aw * bw - ax * bx - ay * by - az * bz
+  ];
+}
+
+function rotate(q: number[], v: number[]): [number, number, number] {
+  const [x, y, z, w] = q;
+  const R = [
+    [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+    [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+    [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]
+  ];
+  return [0, 1, 2].map((i) => R[i][0] * v[0] + R[i][1] * v[1] + R[i][2] * v[2]) as
+    [number, number, number];
+}
+
+/** ECEF metres to geodetic degrees + ellipsoidal height, WGS84 (Bowring). */
+function ecefToGeodetic(x: number, y: number, z: number) {
+  const a = 6378137.0;
+  const f = 1 / 298.257223563;
+  const e2 = f * (2 - f);
+  const lon = Math.atan2(y, x);
+  const p = Math.hypot(x, y);
+  let lat = Math.atan2(z, p * (1 - e2));
+  let height = 0;
+  for (let i = 0; i < 8; i += 1) {
+    const n = a / Math.sqrt(1 - e2 * Math.sin(lat) ** 2);
+    height = p / Math.cos(lat) - n;
+    lat = Math.atan2(z, p * (1 - (e2 * n) / (n + height)));
+  }
+  return {
+    lat_deg: (lat * 180) / Math.PI,
+    lon_deg: (lon * 180) / Math.PI,
+    alt_m: height
+  };
+}
+
+export function catalogEntryToItem(
+  entry: Record<string, any>,
+  frames: FrameMap = {}
+): CatalogItem {
   const coverage = Array.isArray(entry.coverage) ? entry.coverage : [];
   // `has_bbox` decides, not the presence of the key. Every CoverageElement
   // carries a bbox member whatever the flag says, so testing the array alone
@@ -270,21 +343,60 @@ export function catalogEntryToItem(entry: Record<string, any>): CatalogItem {
   )?.bbox;
   const lon = bbox ? (bbox[0] + bbox[2]) / 2 : -122.4194;
   const lat = bbox ? (bbox[1] + bbox[3]) / 2 : 37.7749;
+
+  // Placement.
+  //
+  // Coverage answers "would I find this here?" — it is a search key, not a
+  // position, and the bbox centre above is only a stand-in for content that
+  // does not say where it sits. A row that carries `pose` says exactly where,
+  // inside the frame it names, and the frame resolves through the transform
+  // its service announced (see /v1/frames). That chain is what makes altitude
+  // and orientation real data rather than renderer defaults.
+  //
+  // An earlier attempt put the altitude in the coverage `aabb`, which is a
+  // metres-in-the-declared-frame field: writing degrees into it was wrong in
+  // proportion to distance from null island, and wrong silently.
+  let placed: { lat_deg: number; lon_deg: number; alt_m: number } | null = null;
+  let orientation: [number, number, number, number] | undefined;
+
+  const frame = frames[entry.frame_ref?.fqn || ''];
+  const local = entry.has_pose ? entry.pose : null;
+  if (frame && local && Array.isArray(local.t)) {
+    const ft = frame.pose?.t;
+    const fq = frame.pose?.q;
+    if (Array.isArray(ft) && Array.isArray(fq)) {
+      const [ex, ey, ez] = rotate(fq, local.t);
+      placed = ecefToGeodetic(ex + ft[0], ey + ft[1], ez + ft[2]);
+      // The content's orientation within its frame, carried into earth-fixed
+      // by the frame's own rotation.
+      const q = Array.isArray(local.q) ? local.q : [0, 0, 0, 1];
+      orientation = quatMultiply(fq, q);
+    }
+  }
+
   const nowMs = Date.now();
   const geopose: GeoPose = {
-    lat_deg: lat,
-    lon_deg: lon,
-    alt_m: 5,
+    lat_deg: placed ? placed.lat_deg : lat,
+    lon_deg: placed ? placed.lon_deg : lon,
+    // 5 m is the fallback for content that neither places itself nor names a
+    // resolvable frame: a nominal height, not a claim about the ground.
+    alt_m: placed ? placed.alt_m : 5,
     q: [0, 0, 0, 1],
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
     cov: 'COV_NONE'
   };
+
+  // `asset.uri` is absolute and carries a hash; `href` is the older relative
+  // form, kept for consumers that already read it.
+  const asset = entry.has_asset ? entry.asset : null;
 
   return {
     id: entry.content_id || entry.id || 'item-unknown',
     name: entry.name || entry.content_id || 'SpatialDDS Item',
     kind: entry.kind || 'model',
     geopose,
-    model_url: entry.href
+    orientation,
+    model_url: asset?.uri || entry.href,
+    asset_hash: asset?.hash || undefined
   };
 }

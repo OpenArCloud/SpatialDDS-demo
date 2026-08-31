@@ -1,0 +1,10 @@
+{
+  "map/ut-littlefield-fountain": {
+    "latitude": 30.28396857092828,
+    "longitude": -97.73974829101985,
+    "height": 145.083,
+    "method": "VisualFix",
+    "confidence": 0.8,
+    "note": "Origin of the OpenVPS map for this site, as stored in the map's transform.json. Established by aligning the capture's LiDAR cloud against photorealistic 3D tiles, so it is a visual fix rather than a survey; height is WGS84 ellipsoidal."
+  }
+}

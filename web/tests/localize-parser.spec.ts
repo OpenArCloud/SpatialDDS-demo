@@ -98,4 +98,67 @@ test.describe('catalog entry parser', () => {
     expect(item.geopose.lon_deg).toBeCloseTo(-122.425, 3);
     expect(item.geopose.lat_deg).toBeCloseTo(37.775, 3);
   });
+
+  test('resolves a pose through the frame its service announced', () => {
+    // The row places content inside a local ENU frame; the frame's transform
+    // carries that frame into earth-fixed. Neither is useful alone.
+    const frames = {
+      'map/ut-littlefield-fountain': {
+        from: { fqn: 'map/ut-littlefield-fountain' },
+        to: { fqn: 'earth-fixed' },
+        pose: {
+          t: [-742398.4920798013, -5462355.283318999, 3197669.647851296],
+          q: [0.49671722355450676, -0.033600407060018246,
+              -0.058532108356669665, 0.8652843448856144]
+        }
+      }
+    };
+    const item = catalogEntryToItem({
+      content_id: 'c3',
+      name: 'Rubber duck',
+      kind: 'model',
+      coverage: [{ has_bbox: true, bbox: [-97.73965, 30.28382, -97.73961, 30.28386] }],
+      frame_ref: { fqn: 'map/ut-littlefield-fountain' },
+      has_pose: true,
+      pose: { t: [11.708, -14.273, -1.423], q: [0, 0, 0, 1] }
+    }, frames as any);
+    // The fountain's water, not the coverage centre's nominal height.
+    expect(item.geopose.alt_m).toBeCloseTo(143.66, 1);
+    expect(item.geopose.lat_deg).toBeCloseTo(30.28384, 4);
+    expect(item.geopose.lon_deg).toBeCloseTo(-97.73963, 4);
+    // Identity in the frame still means something in earth-fixed.
+    expect(item.orientation).toBeDefined();
+  });
+
+  test('falls back to the coverage centre when the frame does not resolve', () => {
+    // A pose nobody can resolve must not place content at the frame origin,
+    // which for an unresolved frame is the centre of the earth.
+    const item = catalogEntryToItem({
+      content_id: 'c4',
+      name: 'Unresolvable',
+      kind: 'model',
+      coverage: [{ has_bbox: true, bbox: [-122.43, 37.77, -122.42, 37.78] }],
+      frame_ref: { fqn: 'map/nobody-announced-this' },
+      has_pose: true,
+      pose: { t: [1, 2, 3], q: [0, 0, 0, 1] }
+    });
+    expect(item.geopose.lat_deg).toBeCloseTo(37.775, 3);
+    expect(item.geopose.alt_m).toBe(5);
+    expect(item.orientation).toBeUndefined();
+  });
+
+  test('prefers the AssetRef uri and carries its hash', () => {
+    const item = catalogEntryToItem({
+      content_id: 'c5',
+      name: 'Hashed',
+      kind: 'model',
+      coverage: [{ has_bbox: true, bbox: [-122.43, 37.77, -122.42, 37.78] }],
+      href: 'models/duck.glb',
+      has_asset: true,
+      asset: { uri: 'http://example.test/ar/models/duck.glb',
+               media_type: 'model/gltf-binary', hash: 'sha256:abc123' }
+    });
+    expect(item.model_url).toBe('http://example.test/ar/models/duck.glb');
+    expect(item.asset_hash).toBe('sha256:abc123');
+  });
 });

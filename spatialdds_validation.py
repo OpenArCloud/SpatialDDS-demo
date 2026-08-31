@@ -421,7 +421,19 @@ def complete_coverage_element(**fields: Any) -> Dict[str, Any]:
         "aabb": {"min_xyz": [0.0, 0.0, 0.0], "max_xyz": [0.0, 0.0, 0.0]},
         "global": False,
         "has_frame_ref": False,
-        "frame_ref": SpatialDDSValidator.create_frame_ref("earth-fixed"),
+        # An unused frame_ref should look unused. Filling this one in with a
+        # real earth-fixed reference stamped `coord_convention: "ENU"` on an
+        # `earth-fixed` fqn -- the frame-kind conflation 1.7 deleted
+        # `frame_kind` to kill. Harmless while the flag is false, but it is the
+        # sort of noise a reader learns a convention from.
+        #
+        # The identity blanks; the convention cannot. `CoordConvention` has no
+        # "unset" member -- its zero value IS `ENU` (types.idl:37) -- so every
+        # serialized FrameRef says ENU whatever the flag says, and §2.12 tells
+        # consumers to assume ENU when the flag is false anyway. That residue
+        # is in the type, not in this builder.
+        "frame_ref": {"uuid": "", "fqn": "", "has_coord_convention": False,
+                      "coord_convention": "ENU"},
         "has_coverage_window": False,
         "coverage_window_start": {"sec": 0, "nanosec": 0},
         "coverage_window_end": {"sec": 0, "nanosec": 0},

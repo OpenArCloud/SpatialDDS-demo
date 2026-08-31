@@ -16,6 +16,9 @@ which fields a compact summary may carry.
 
 from __future__ import annotations
 
+import hashlib
+import math
+import os
 import sys
 import time
 import unittest
@@ -40,6 +43,100 @@ from spatialdds_idl.spatial.disco import Announce  # noqa: E402
 from spatialdds_validation import SpatialDDSValidator  # noqa: E402
 
 SEED = _HERE / "catalog_seed.json"
+
+
+
+FOUNTAIN_SEED = _REPO / "bridges" / "web_bridge" / "tests" / "catalog_seed_fountain.json"
+FOUNTAIN_ANCHORS = _REPO / "bridges" / "web_bridge" / "tests" / "frame_anchors_fountain.json"
+DUCK = _REPO / "web" / "public" / "models" / "duck.glb"
+
+
+class PlacedContent(unittest.TestCase):
+    """
+    The fountain catalogue places content, rather than implying a position.
+
+    Its first version leaned on coverage for both jobs: the bbox centre for
+    latitude and longitude, and an `aabb` for height. The aabb is metres in the
+    declared frame, so writing degrees into it was wrong in proportion to the
+    distance from null island, and wrong without anything failing. Placement
+    now lives in the row's pose, resolved through the transform its service
+    announces.
+    """
+
+    def test_coverage_carries_no_volume(self):
+        for entry in catalog._load_seed(str(FOUNTAIN_SEED)):
+            for element in entry["coverage"]:
+                self.assertFalse(
+                    element["has_aabb"],
+                    "coverage is a search key; a geographic aabb holds degrees "
+                    "in a metres field",
+                )
+
+    def test_an_unused_frame_ref_looks_unused(self):
+        # A flagged-off member still rides the wire. Filling it in stamped
+        # `coord_convention: ENU` on an `earth-fixed` fqn, which is the
+        # conflation 1.7 deleted `frame_kind` to kill.
+        for entry in catalog._load_seed(str(FOUNTAIN_SEED)):
+            for element in entry["coverage"]:
+                if not element["has_frame_ref"]:
+                    self.assertEqual(element["frame_ref"]["fqn"], "")
+                    self.assertFalse(element["frame_ref"]["has_coord_convention"])
+
+    def test_the_pose_resolves_to_the_water(self):
+        os.environ["SPATIALDDS_FRAME_ANCHORS"] = str(FOUNTAIN_ANCHORS)
+        try:
+            dataset = catalog._load_seed(str(FOUNTAIN_SEED))
+            transforms = catalog._frame_transforms(dataset)
+        finally:
+            os.environ.pop("SPATIALDDS_FRAME_ANCHORS", None)
+        self.assertEqual(len(transforms), 1)
+        transform = transforms[0]
+        entry = dataset[0]
+        # The row's frame and the announced transform's source must be the
+        # same frame, or a consumer has a pose and no way to place it.
+        self.assertEqual(transform["from"]["uuid"], entry["frame_ref"]["uuid"])
+
+        qx, qy, qz, qw = transform["pose"]["q"]
+        tx, ty, tz = transform["pose"]["t"]
+        vx, vy, vz = entry["pose"]["t"]
+        r = [[1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
+             [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
+             [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)]]
+        x = r[0][0] * vx + r[0][1] * vy + r[0][2] * vz + tx
+        y = r[1][0] * vx + r[1][1] * vy + r[1][2] * vz + ty
+        z = r[2][0] * vx + r[2][1] * vy + r[2][2] * vz + tz
+
+        a, f = 6378137.0, 1.0 / 298.257223563
+        e2 = f * (2.0 - f)
+        pxy = math.hypot(x, y)
+        lat = math.atan2(z, pxy * (1.0 - e2))
+        height = 0.0
+        for _ in range(8):
+            n = a / math.sqrt(1.0 - e2 * math.sin(lat) ** 2)
+            height = pxy / math.cos(lat) - n
+            lat = math.atan2(z, pxy * (1.0 - e2 * n / (n + height)))
+
+        # The fountain's water surface, measured off the photorealistic tiles.
+        self.assertAlmostEqual(height, 143.66, places=1)
+        self.assertAlmostEqual(math.degrees(lat), 30.28384, places=4)
+        self.assertAlmostEqual(math.degrees(math.atan2(y, x)), -97.73963, places=4)
+
+    def test_the_declared_hash_is_the_shipped_asset(self):
+        # An integrity hash that does not match is worse than none: it says
+        # the bytes were checked.
+        entry = catalog._load_seed(str(FOUNTAIN_SEED))[0]
+        digest = hashlib.sha256(DUCK.read_bytes()).hexdigest()
+        self.assertEqual(entry["asset"]["hash"], f"sha256:{digest}")
+        self.assertEqual(entry["asset"]["media_type"], "model/gltf-binary")
+
+    def test_the_wire_uri_is_absolute(self):
+        os.environ["SPATIALDDS_ASSET_BASE"] = "https://example.test/ar"
+        try:
+            entry = catalog._load_seed(str(FOUNTAIN_SEED))[0]
+        finally:
+            os.environ.pop("SPATIALDDS_ASSET_BASE", None)
+        self.assertEqual(entry["asset"]["uri"],
+                         "https://example.test/ar/models/duck.glb")
 
 
 class BootstrapConfig(unittest.TestCase):

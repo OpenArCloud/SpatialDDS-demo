@@ -46,6 +46,15 @@ export type CatalogItem = {
   geopose: GeoPose;
   icon?: string;
   model_url?: string;
+  /**
+   * Orientation as an earth-fixed (ECEF) quaternion [x, y, z, w], present when
+   * the catalogue placed the content with an explicit pose. Without it a model
+   * faces whatever direction the renderer picks, which is how orientation ends
+   * up accidental.
+   */
+  orientation?: [number, number, number, number];
+  /** Integrity for `model_url`, as `sha256:<hex>`, when the row carries one. */
+  asset_hash?: string;
 };
 
 export type DiscoverResponse = {

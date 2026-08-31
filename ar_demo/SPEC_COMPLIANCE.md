@@ -244,6 +244,63 @@ carry a connection block.
 - The `coverage_window_*` fields are still not emitted; see
   `idl/v1.7/discovery.idl`.
 
+## Placing content, and what coverage is not
+
+The catalogue row (`oarc_demo::CatalogEntry`) separates two jobs that an
+earlier version of the fountain seed ran together.
+
+- **Coverage answers "would I find this here?"** It is a search key. The row's
+  `coverage` is an earth-fixed bbox in degrees, and that is all it is for.
+- **`pose` answers "where does it sit, and which way does it face?"** It is
+  translation in metres plus a quaternion, in the frame `frame_ref` names.
+
+Conflating them fails quietly. The first fountain seed carried the duck's
+altitude in a `CoverageElement.aabb`, whose consumers read all three axes as
+metres in the declared frame; the element inherited an earth-fixed frame, so
+the field held longitude, latitude and ellipsoidal height. Nothing rejects
+that. An intersection test against a real query is then wrong in proportion to
+the distance from null island — the same failure family as a frame-scale
+error. Coverage has no vertical extent to lend, and the spec has no home for
+one; see the gaps note in `directions/`.
+
+**Frames resolve, or a pose is folklore.** A pose in `map/ut-littlefield-fountain`
+means nothing to a client that has never heard of that frame. The service
+publishing the content announces the frame's transform in
+`Announce.transforms` — a `disco::Transform` from the local frame into
+earth-fixed, i.e. ECEF metres — and the web bridge serves the union of those at
+`GET /v1/frames`. No new topic and no new reader: a frame stops resolving when
+its service's announce expires, which is the correct lifetime. Frame identity
+is the `FrameRef.uuid`, a UUIDv5 of the fqn, so the row and the transform
+cannot drift apart.
+
+**Units.** Nothing in the row states the asset's units, because glTF 2.0 fixes
+them: distances are metres. `formats`/`asset.media_type` carrying
+`model/gltf-binary` is therefore also the unit declaration. A format that did
+not fix its units would need one, and this row could not express it.
+
+**Orientation.** The pose's quaternion is `[x, y, z, w]`, GeoPose order,
+rotating the asset into the frame it names. glTF is Y-up and these frames are
+Z-up, so a renderer applies the Y-up-to-Z-up conversion first; an identity
+quaternion then leaves the asset's axes aligned with the frame's, which for
+this duck points its beak east. The row instead carries a quarter turn about
+Up (`q = [0, 0, -√½, √½]`) so it faces south, down the Main Mall toward where
+visitors arrive — a heading the publisher chose and stated, rather than
+whatever a renderer defaults to. Verified by rendering, not by derivation:
+the sign of that turn is easy to reason wrong.
+
+**Asset URIs are absolute on the wire.** `AssetRef{uri, media_type, hash}` is
+the spec's fetch-plus-integrity contract and the row carries one. A relative
+`href` names no base, so it resolves differently for a client that came through
+the bridge than for one talking to the catalogue service — the ambiguity the
+spec's manifests avoid by being absolute. The authored seed stays relative,
+because that is what ports between deployments; the publisher joins it to
+`SPATIALDDS_ASSET_BASE` at load. The hash is `sha256:<hex>` over the shipped
+bytes, and a test asserts it still matches the file, because a hash that has
+drifted is worse than no hash — it claims the bytes were checked.
+
+`href` and `formats` remain for consumers that already read them, and MUST
+agree with `asset` when both are present.
+
 ## Time & quaternions
 
 - Timestamps are `builtin::Time { sec, nanosec }` with `sec` now int64. JSON
