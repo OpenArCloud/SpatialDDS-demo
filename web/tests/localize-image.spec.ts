@@ -105,5 +105,16 @@ test('localize with a real scan frame', async ({ page, request }) => {
   expect(Math.abs(gotLat - lat)).toBeLessThan(0.05);
   expect(Math.abs(gotLon - lon)).toBeLessThan(0.05);
 
+  // The preview is rotated with CSS because the pipeline stores frames
+  // sideways. What is sent must remain the stored bytes — rotating those
+  // would break matching against the map they came from.
+  const sentBytes = await page.evaluate(async () => {
+    const res = await fetch('/query-frames/manifest.json');
+    const m = await res.json();
+    const img = await fetch(`/query-frames/${m.frames[0]}`);
+    return new Uint8Array(await img.arrayBuffer()).slice(0, 4).join(',');
+  });
+  expect(sentBytes.startsWith('255,216,255')).toBe(true);   // untouched JPEG SOI
+
   expect(consoleErrors).toEqual([]);
 });

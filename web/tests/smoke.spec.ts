@@ -48,11 +48,12 @@ test('smoke: cesium app loads and responds to mock endpoints', async ({ page, re
   });
   await expect
     .poll(async () => {
-      const text = (await page.locator('#readout').textContent()) || '';
+      const text = (await page.locator('#readout').getAttribute('data-geopose')) || '';
       return Number(/alt=([\d.]+)m/.exec(text)?.[1] ?? NaN);
     }, { timeout: 20_000 })
     .toBeLessThan(1000);
-  await expect(page.locator('#readout')).toContainText(/GeoPose: lat=30\.28\d+ lon=-97\.73\d+/);
+  await expect(page.locator('#readout'))
+    .toHaveAttribute('data-geopose', /GeoPose: lat=30\.28\d+ lon=-97\.73\d+/);
 
   await page.evaluate(() => {
     document.getElementById('btnDiscover')?.click();

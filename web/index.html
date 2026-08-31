@@ -13,7 +13,11 @@
         </div>
         <div id="controls">
           <button id="btnLocalize" type="button">Localize (Mock VPS)</button>
-          <button id="btnLocalizeImage" type="button" title="Send a real photograph from the scan an OpenVPS map was built from">Localize with Image</button>
+          <span id="framePick" hidden>
+            <select id="frameSelect" title="Which photograph to send to the VPS"></select>
+            <span id="framePreviewBox"><img id="framePreview" alt="selected query frame" /></span>
+          </span>
+          <button id="btnLocalizeImage" type="button" title="Send the selected photograph to the VPS">Localize with Image</button>
           <button id="btnDiscover" type="button">Discover Content (Mock Catalog)</button>
           <button id="btnToggleTiles" type="button">Photorealistic 3D Tiles: On</button>
           <button id="btnToggleDdsOverlay" type="button">DDS Messages: Off</button>

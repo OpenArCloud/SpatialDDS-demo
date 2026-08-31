@@ -3,6 +3,7 @@ import 'cesium/Build/Cesium/Widgets/widgets.css';
 import {
   loadQueryFrame,
   loadQueryFrameManifest,
+  queryFrameUrl,
   type QueryFrameManifest
 } from './query_frames';
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
@@ -16,6 +17,9 @@ import type { CatalogItem, GeoPose } from './types';
 const readoutEl = document.getElementById('readout') as HTMLPreElement | null;
 const localizeBtn = document.getElementById('btnLocalize') as HTMLButtonElement | null;
 const localizeImageBtn = document.getElementById('btnLocalizeImage') as HTMLButtonElement | null;
+const framePick = document.getElementById('framePick') as HTMLSpanElement | null;
+const frameSelect = document.getElementById('frameSelect') as HTMLSelectElement | null;
+const framePreview = document.getElementById('framePreview') as HTMLImageElement | null;
 const discoverBtn = document.getElementById('btnDiscover') as HTMLButtonElement | null;
 const toggleTilesBtn = document.getElementById('btnToggleTiles') as HTMLButtonElement | null;
 const toggleDdsOverlayBtn = document.getElementById('btnToggleDdsOverlay') as HTMLButtonElement | null;
@@ -125,12 +129,6 @@ function orientationFromGeoPose(geopose: GeoPose) {
     new Cesium.Cartesian3(0, 1, 0),
     new Cesium.Cartesian3()
   );
-  const zBodyInEnu = Cesium.Matrix3.multiplyByVector(
-    rBodyToEnu,
-    new Cesium.Cartesian3(0, 0, 1),
-    new Cesium.Cartesian3()
-  );
-
   const originEcef = Cesium.Cartesian3.fromDegrees(
     geopose.lon_deg,
     geopose.lat_deg,
@@ -139,15 +137,25 @@ function orientationFromGeoPose(geopose: GeoPose) {
   const enuToEcef = Cesium.Transforms.eastNorthUpToFixedFrame(originEcef);
   const rEnuToEcef = Cesium.Matrix4.getMatrix3(enuToEcef, new Cesium.Matrix3());
 
-  // NOTE: For this dataset, body +Y maps to forward (instead of +X).
+  // Body axes, measured from what the localizer actually returns rather than
+  // assumed: over four real poses, +X sits at +1.4 to +7.7 degrees elevation
+  // (level, as a hand-held phone is), +Y at -82 to -89 (straight down) and +Z
+  // within a couple of degrees of horizontal. So forward is +X and up is -Y.
+  //
+  // Note this disagrees with OpenVPS's own comment, which describes the output
+  // as robotics convention — X forward, Y left, Z up. X forward matches; Y and
+  // Z do not. The axes above are what the wire carries.
+  //
+  // The previous code took +Y as forward, which was right for the mock VPS's
+  // synthetic quaternions and points the camera at the ground for real ones.
   const direction = Cesium.Matrix3.multiplyByVector(
     rEnuToEcef,
-    yBodyInEnu,
+    xBodyInEnu,
     new Cesium.Cartesian3()
   );
   const up = Cesium.Matrix3.multiplyByVector(
     rEnuToEcef,
-    zBodyInEnu,
+    Cesium.Cartesian3.negate(yBodyInEnu, new Cesium.Cartesian3()),
     new Cesium.Cartesian3()
   );
   Cesium.Cartesian3.normalize(direction, direction);
@@ -179,7 +187,12 @@ function renderReadout(geopose: GeoPose | null) {
     return;
   }
   const messageLine = readoutMessage ? `\nmessage: ${readoutMessage}` : '';
-  readoutEl.textContent = `${formatGeoPose(geopose)}\nitems: ${readoutItems}${messageLine}`;
+  // The pose is no longer printed. It was the widest thing in the panel by a
+  // wide margin — a full lat/lon/alt line plus a quaternion — and it alone
+  // pushed the toolbar to roughly twice the width the controls need. It stays
+  // on the element as data, where a test or a console poke can still read it.
+  readoutEl.dataset.geopose = formatGeoPose(geopose);
+  readoutEl.textContent = `items: ${readoutItems}${messageLine}`;
 }
 
 function cameraGeoPose(activeViewer: Cesium.Viewer): GeoPose {
@@ -308,13 +321,20 @@ async function handleLocalize() {
  * position finds no VPS covering it. The cached service id is cleared for the
  * same reason — the service that answers downtown is not the one holding it.
  */
+/** Show what is about to be sent — a filename is not a photograph. */
+function showFramePreview() {
+  if (!framePreview || !frameSelect) return;
+  framePreview.src = queryFrameUrl(frameSelect.value);
+}
+
 async function handleLocalizeWithImage() {
   if (!queryFrames) {
     appLog('frame: no query-frame bundle installed (see ar_demo/README.md)');
     return;
   }
-  const file = queryFrames.frames[frameCursor % queryFrames.frames.length];
-  frameCursor += 1;
+  // The chosen frame, or the next one round if there is no picker.
+  const file = frameSelect?.value
+    || queryFrames.frames[frameCursor++ % queryFrames.frames.length];
 
   let queryImage: string;
   try {
@@ -415,6 +435,48 @@ function addItemEntity(item: CatalogItem) {
   if (!viewer) {
     return;
   }
+
+  // Content that names a glTF asset is drawn as that asset. A row carrying an
+  // AssetRef gives an absolute URI; the older relative `href` is resolved
+  // against the page so the same seed works at the dev server's root and under
+  // the deployed `/ar/` base.
+  if (item.kind === 'model' && item.model_url && /\.glb($|\?)/i.test(item.model_url)) {
+    const uri = /^(https?:)?\//i.test(item.model_url)
+      ? item.model_url
+      : `${import.meta.env.BASE_URL}${item.model_url}`;
+    const modelEntity = viewer.entities.add({
+      id: `${item.id}-model`,
+      // Absolute height, resolved from the row's pose through the frame its
+      // service announced. Clamping to the surface was the obvious alternative
+      // and the wrong one: it snaps to the topmost thing under the point,
+      // which over this plaza is the tree canopy, so the duck ended up in the
+      // branches rather than on the water.
+      position: Cesium.Cartesian3.fromDegrees(
+        item.geopose.lon_deg, item.geopose.lat_deg, item.geopose.alt_m),
+      // The publisher's orientation, in ECEF, when it stated one. Cesium
+      // applies glTF's Y-up-to-Z-up itself, so an identity rotation points the
+      // asset's authored forward (+Z) along the frame's -North.
+      orientation: item.orientation
+        ? new Cesium.Quaternion(
+            item.orientation[0], item.orientation[1],
+            item.orientation[2], item.orientation[3])
+        : undefined,
+      model: {
+        uri,
+        scale: 0.6,
+        // Keeps it findable from across the mall; without this a duck a metre
+        // long is a couple of pixels from the far end of the plaza.
+        minimumPixelSize: 64,
+        maximumScale: 4,
+        heightReference: Cesium.HeightReference.NONE
+      }
+    });
+    entityIds.add(modelEntity.id as string);
+    appLog(`content: ${item.name} -> ${uri}` +
+           (item.asset_hash ? ` (${item.asset_hash.slice(0, 14)}…)` : ''));
+    return;
+  }
+
   const boxEntity = viewer.entities.add({
     id: `${item.id}-box`,
     position: Cesium.Cartesian3.fromDegrees(item.geopose.lon_deg, item.geopose.lat_deg, item.geopose.alt_m),
@@ -732,12 +794,21 @@ async function loadSceneAssets(activeViewer: Cesium.Viewer) {
     console.warn('OSM Buildings unavailable:', error);
   }
 
-  try {
-    activeViewer.terrainProvider = await Cesium.createWorldTerrainAsync();
-    activeViewer.scene.globe.depthTestAgainstTerrain = true;
-  } catch (error) {
-    console.warn('World terrain unavailable:', error);
-  }
+  // No world terrain, deliberately.
+  //
+  // The photorealistic tiles carry their own ground, and world terrain draws a
+  // second, coarser one on top of it. At Littlefield Fountain the terrain
+  // surface sits 2.5 m above the tiles' water (146.22 m against 143.75 m,
+  // both measured from this scene), so anything placed on the water is behind
+  // the globe and simply never appears — no error, no warning, just missing
+  // content. A duck placed correctly to within 10 cm was invisible for exactly
+  // this reason.
+  //
+  // The globe itself stays: it is what the opening view of the Earth is made
+  // of. On the ellipsoid its surface is ~145 m below the tiles here, far
+  // enough not to occlude anything standing on them. `CLAMP_TO_GROUND` still
+  // resolves against the 3D tiles, so markers are unaffected.
+  activeViewer.scene.globe.depthTestAgainstTerrain = true;
 }
 
 export function initApp() {
@@ -768,6 +839,13 @@ export function initApp() {
     appLog('cesium: no Ion token — OpenStreetMap imagery, no photoreal tiles');
   }
   viewer = new Cesium.Viewer('cesiumContainer', viewerOptions);
+  // `?debug=1` publishes the viewer so a test or a console can drive the
+  // camera and inspect what was actually placed. Checking where content ended
+  // up otherwise means eyeballing a screenshot and guessing, which is how a
+  // model sitting in a tree canopy passed for correct twice.
+  if (new URLSearchParams(location.search).has('debug')) {
+    (window as unknown as Record<string, unknown>).__viewer = viewer;
+  }
 
   viewer.scene.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(START_LON, START_LAT, START_HEIGHT_M),
@@ -840,6 +918,17 @@ async function initBridgeMode() {
     if (queryFrames) {
       appLog(`frames: ${queryFrames.frames.length} installed` +
              (queryFrames.label ? ` (${queryFrames.label})` : ''));
+      if (frameSelect && framePick) {
+        for (const name of queryFrames.frames) {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name.replace(/\.jpg$/i, '');
+          frameSelect.append(option);
+        }
+        framePick.hidden = false;
+        showFramePreview();
+        frameSelect.addEventListener('change', showFramePreview);
+      }
     }
   } catch (error) {
     appLog(`frames: manifest invalid (${String(error)})`);

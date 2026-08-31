@@ -53,11 +53,12 @@ test('live 1.7 bridge: localize + discover against real DDS', async ({ page, req
   // ~2e7 m default to a ground-level value proves the VPS answered.
   await expect
     .poll(async () => {
-      const text = (await page.locator('#readout').textContent()) || '';
+      const text = (await page.locator('#readout').getAttribute('data-geopose')) || '';
       return Number(/alt=([\d.]+)m/.exec(text)?.[1] ?? NaN);
     }, { timeout: 20_000 })
     .toBeLessThan(1000);
-  await expect(page.locator('#readout')).toContainText(/GeoPose: lat=30\.28\d+ lon=-97\.73\d+/);
+  await expect(page.locator('#readout'))
+    .toHaveAttribute('data-geopose', /GeoPose: lat=30\.28\d+ lon=-97\.73\d+/);
 
   // Catalog discovery through the bridge's structured kind_in filter.
   await page.evaluate(() => document.getElementById('btnDiscover')?.click());

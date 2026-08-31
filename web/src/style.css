@@ -28,7 +28,11 @@ body {
   border-radius: 8px;
   padding: 10px 12px;
   color: #e9eef5;
-  min-width: 260px;
+  /* Sized to the widest control label rather than to whatever the readout
+     happened to print. The frame picker stacks (below) so the select and the
+     preview no longer sit side by side, which was the other half of the
+     width. */
+  width: 216px;
   backdrop-filter: blur(6px);
 }
 
@@ -154,3 +158,21 @@ body {
 #restOverlayHeader {
   color: #ffd9a0;
 }
+
+/* Query-frame picker: the image matters more than its name, so show it. */
+#framePick { display: inline-flex; align-items: center; gap: 6px; }
+#frameSelect { font: inherit; padding: 3px 4px; }
+/* Stored frames are 720x960 portrait because the mapping pipeline rotates
+   them 90 degrees clockwise; the scene inside is sideways. Rotate back for
+   display only — what gets sent to the VPS is fetched separately and must
+   stay byte-identical to the image the map was built from.
+
+   A CSS transform does not change the layout box, so the rotated image would
+   otherwise overlap its neighbours. The wrapper reserves the post-rotation
+   footprint and the image is centred inside it. */
+#framePick { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+#framePreviewBox { position: relative; width: 152px; height: 114px;
+  flex: 0 0 auto; align-self: center; border: 1px solid #2b3648; border-radius: 3px;
+  background: #0b0e14; overflow: hidden; }
+#framePreview { position: absolute; top: 50%; left: 50%; height: 152px; width: auto;
+  transform: translate(-50%, -50%) rotate(-90deg); display: block; }

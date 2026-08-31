@@ -43,7 +43,8 @@ function manifestUrl(): string {
   return `${import.meta.env.BASE_URL}${FRAMES_DIR}/manifest.json`;
 }
 
-function frameUrl(file: string): string {
+/** Exported so the UI can preview a frame before it is sent. */
+export function queryFrameUrl(file: string): string {
   return `${import.meta.env.BASE_URL}${FRAMES_DIR}/${file}`;
 }
 
@@ -89,7 +90,7 @@ export async function loadQueryFrameManifest(): Promise<QueryFrameManifest | nul
  * kind of value.
  */
 export async function loadQueryFrame(file: string): Promise<string> {
-  const response = await fetch(frameUrl(file));
+  const response = await fetch(queryFrameUrl(file));
   if (!response.ok) {
     throw new Error(`${file}: HTTP ${response.status}`);
   }

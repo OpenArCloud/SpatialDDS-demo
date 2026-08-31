@@ -84,7 +84,7 @@ test('a deployed AR demo renders, connects and localizes', async ({ page }) => {
   await page.evaluate(() => document.getElementById('btnLocalize')?.click());
   await expect
     .poll(async () => {
-      const text = (await page.locator('#readout').textContent()) || '';
+      const text = (await page.locator('#readout').getAttribute('data-geopose')) || '';
       return Number(/alt=([\d.]+)m/.exec(text)?.[1] ?? NaN);
     }, { timeout: 40_000 })
     .toBeLessThan(1000);
