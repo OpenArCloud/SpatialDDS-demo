@@ -89,9 +89,27 @@ export async function initAligner() {
   });
   viewer.scene.globe.depthTestAgainstTerrain = true;
 
-  const anchor = Cesium.Cartesian3.fromDegrees(lon, lat, height);
+  // The anchor is where the map's origin sits on Earth. It starts from the
+  // URL (or a default) and is meant to be moved: click the ground where the
+  // map's origin belongs. Guessing it from a nearby landmark is how the first
+  // attempt ended up at the wrong end of the lawn.
+  const anchor = { lat, lon, height };
+  let anchorCartesian = Cesium.Cartesian3.fromDegrees(anchor.lon, anchor.lat, anchor.height);
+  let enuToFixed = Cesium.Transforms.eastNorthUpToFixedFrame(anchorCartesian);
   viewer.camera.lookAt(
-    anchor, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-35), 120));
+    anchorCartesian, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-35), 120));
+
+  const marker = viewer.entities.add({
+    position: new Cesium.CallbackProperty(() => anchorCartesian, false),
+    point: { pixelSize: 12, color: Cesium.Color.ORANGE,
+             outlineColor: Cesium.Color.BLACK, outlineWidth: 2,
+             disableDepthTestDistance: Number.POSITIVE_INFINITY },
+    label: { text: 'anchor', font: '12px sans-serif', pixelOffset: new Cesium.Cartesian2(0, -18),
+             fillColor: Cesium.Color.ORANGE, showBackground: true,
+             backgroundColor: Cesium.Color.fromCssColorString('#0b0e14cc'),
+             disableDepthTestDistance: Number.POSITIVE_INFINITY }
+  });
+  void marker;
 
   // Photorealistic tiles are the whole point of using Cesium here; without a
   // token this degrades to the default imagery, which is no better than the
@@ -123,10 +141,10 @@ export async function initAligner() {
       pixelSize: 2
     });
   }
-  status.textContent = `${cloud.count.toLocaleString()} points · anchor ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-
-  const enuToFixed = Cesium.Transforms.eastNorthUpToFixedFrame(anchor);
   const state = { yaw: 0, east: 0, north: 0, up: 0 };
+  const describe = () =>
+    `${cloud.count.toLocaleString()} points · anchor `
+    + `${anchor.lat.toFixed(6)}, ${anchor.lon.toFixed(6)} · click ground to move it`;
 
   /** map -> ENU: basis first, then yaw about up, then the offset. */
   function mapToEnu(): Cesium.Matrix4 {
@@ -144,7 +162,23 @@ export async function initAligner() {
     el('northVal').textContent = `${state.north.toFixed(1)} m`;
     el('upVal').textContent = `${state.up.toFixed(1)} m`;
     el('out').textContent = JSON.stringify(transform(), null, 1);
+    status.textContent = describe();
   }
+
+  // Left click on the tiles moves the anchor there. Cesium reports a drag as a
+  // separate event, so this does not fire while orbiting.
+  const picker = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  picker.setInputAction((click: { position: Cesium.Cartesian2 }) => {
+    const hit = viewer.scene.pickPosition(click.position);
+    if (!Cesium.defined(hit)) return;
+    const carto = Cesium.Cartographic.fromCartesian(hit);
+    anchor.lat = Cesium.Math.toDegrees(carto.latitude);
+    anchor.lon = Cesium.Math.toDegrees(carto.longitude);
+    anchor.height = carto.height;
+    anchorCartesian = Cesium.Cartesian3.fromDegrees(anchor.lon, anchor.lat, anchor.height);
+    enuToFixed = Cesium.Transforms.eastNorthUpToFixedFrame(anchorCartesian);
+    apply();
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
   /** Exactly the shape OpenVPS stores in transform.json. */
   function transform() {
@@ -154,7 +188,8 @@ export async function initAligner() {
     for (let r = 0; r < 4; r += 1) {
       rows.push([0, 1, 2, 3].map((c) => Number(flat[c * 4 + r].toFixed(9))));
     }
-    return { latitude: lat, longitude: lon, height, matrix: rows };
+    return { latitude: anchor.lat, longitude: anchor.lon,
+             height: Number(anchor.height.toFixed(3)), matrix: rows };
   }
 
   const bind = (id: string, key: keyof typeof state) => {
