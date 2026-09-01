@@ -53,19 +53,30 @@ sequenceDiagram
     Note over UI,Cat: REST — content
     UI->>Bridge: POST /v1/catalog/query
     Bridge->>Bus: CatalogQuery — spatialdds/catalog/query/v1
-    Cat-->>Bus: CatalogResponse
+    Cat-->>Bus: CatalogResponse — a row may carry a pose and an AssetRef
     Bridge-->>UI: items[]
+    Note over UI,Bridge: A pose is placeable only if its frame resolves
+    UI->>Bridge: GET /v1/frames — only when a row carries a pose
+    Bridge-->>UI: Transform per frame, local ENU into earth-fixed,<br/>read from the transforms in cached announces
 
     Note over UI,Bridge: WebSocket — observability
     UI->>Bridge: WS /ws, subscribe to topic patterns
     Bridge-->>UI: every matching sample seen on the bus
 ```
 
-`/health`, `/.well-known/spatialdds/search`, `/v1/localize` and
-`/v1/catalog/query` are the whole REST surface the UI uses; `/ws` carries the
-DDS message window. Each REST route is a hand-written translation, which is why
-the bridge exposes four of them rather than the whole type registry — the
-WebSocket needs no such translation and carries anything on the bus.
+`/health`, `/.well-known/spatialdds/search`, `/v1/localize`,
+`/v1/catalog/query` and `/v1/frames` are the whole REST surface the UI uses;
+`/ws` carries the DDS message window. Each REST route is a hand-written
+translation, which is why the bridge exposes five of them rather than the whole
+type registry — the WebSocket needs no such translation and carries anything on
+the bus.
+
+`/v1/frames` is the newest and the least obvious. A catalogue row says where
+content sits as a pose inside a frame it names, which means nothing to a client
+that has never heard of that frame. Services announce the transform out of
+their local frame in `Announce.transforms`, and this route serves the union of
+those — so a frame stops resolving exactly when its service's announce expires,
+and no new topic or reader is involved.
 
 ### Headless client → bus
 
