@@ -193,11 +193,10 @@ python3 ../../scripts/openvps_prepare_map.py --instance <id> \
   --dataset <dataset-id> --map <map-id> --load
 ```
 
-That is also what a **restart** needs. Nothing loads a map on boot: systemd
-brings the compose stack back and the localizer comes up healthy holding
-nothing, at which point it can neither localize nor announce, so discovery
-reports no VPS at all. The same script's `--align`, `--transform` and
-`--verify` cover the rest of the map-side preparation.
+A restart needs this too. Nothing loads a map on boot, and a localizer holding
+no map neither localizes nor announces, so discovery reports no VPS at all. The
+script's `--align`, `--transform` and `--verify` cover the rest of the map-side
+preparation.
 
 **`transform.json` is not optional.** Coverage in 1.7 is entirely geographic,
 so a map with no geodetic anchor has nothing truthful to advertise and that
