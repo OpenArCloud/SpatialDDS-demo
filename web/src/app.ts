@@ -71,16 +71,28 @@ const restMessages: string[] = [];
 let ddsSocket: WebSocket | null = null;
 const ddsMessages: string[] = [];
 
-const START_LON = -97.739494;
-const START_LAT = 30.284996;
+const START_LON = -97.7396265;
+// About 20 m south of the duck, on the plaza, looking north up the Main Mall:
+// far enough back that the pool's near rim does not hide what is floating in
+// it, close enough that the fountain fills the view.
+const START_LAT = 30.283660;
 const EYE_HEIGHT_M = 1.7;
 const START_HEIGHT_M = 20_000_000.0;
 const START_HEADING_DEG = 160.0;
 const START_PITCH_DEG = -10.0;
 const START_VIEW_HEADING_DEG = 0.0;
 const START_VIEW_PITCH_DEG = -90.0;
-const START_Q: [number, number, number, number] = [0.4967, -0.0336, -0.0585, 0.8653];
-// START_Q is a body->ENU quaternion (ROS REP-103: x-forward, y-left, z-up).
+// A body->ENU quaternion (ROS REP-103: x-forward, y-left, z-up): a quarter
+// turn about up, so the camera looks north along the Main Mall, level.
+//
+// This used to hold [0.4967, -0.0336, -0.0585, 0.8653], which is not a body
+// orientation at all -- it is bit-for-bit the ENU->ECEF rotation for this
+// latitude and longitude, i.e. the frame's own basis mistaken for a pose in
+// it. Read as body->ENU it rolls the camera onto its side. Only the mock
+// prior uses this; the real VPS path takes its prior from the query-frame
+// manifest and is unaffected.
+const START_Q: [number, number, number, number] =
+  [0, 0, 0.7071067811865476, 0.7071067811865476];
 
 const ENV = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env;
 const HAS_ION_TOKEN = Boolean(ENV.VITE_CESIUM_ION_TOKEN);
@@ -95,12 +107,45 @@ function appLog(message: string) {
   console.log(message);
 }
 
-function seedPriorGeopose(): GeoPose {
+/**
+ * Height of the rendered surface under a point, ellipsoidal.
+ *
+ * Falls back to 0 — the ellipsoid — which is exactly right when nothing else
+ * is loaded, and is what a viewer with no Ion token sees.
+ */
+async function surfaceHeightAt(lon: number, lat: number): Promise<number> {
+  if (!viewer) {
+    return 0;
+  }
+  try {
+    const hits = await viewer.scene.clampToHeightMostDetailed(
+      [Cesium.Cartesian3.fromDegrees(lon, lat, 0)]);
+    const hit = hits[0];
+    if (!Cesium.defined(hit)) {
+      return 0;
+    }
+    const height = Cesium.Cartographic.fromCartesian(hit).height;
+    return Number.isFinite(height) ? height : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function seedPriorGeopose(): Promise<GeoPose> {
   const nowMs = Date.now();
+  // Altitude is sampled, not hardcoded.
+  //
+  // `alt_m` is ellipsoidal, and a literal cannot be right for every viewer:
+  // with the photorealistic tiles loaded the plaza here is near 144 m, on the
+  // bare ellipsoid it is 0, and the two differ by more than the whole scene.
+  // A fixed number put the camera either underground or a hundred metres
+  // above the map, depending on what had loaded. Asking the scene what is
+  // under the start point is right in both cases, and in any third one.
+  const alt = (await surfaceHeightAt(START_LON, START_LAT)) + EYE_HEIGHT_M;
   return {
     lat_deg: START_LAT,
     lon_deg: START_LON,
-    alt_m: 18,
+    alt_m: alt,
     q: START_Q,
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
     cov: 'COV_NONE'
@@ -304,7 +349,7 @@ function captureQueryImage(): string | null {
 }
 
 async function handleLocalize() {
-  const prior = seedPriorGeopose();
+  const prior = await seedPriorGeopose();
   const queryImage = bridgeActive ? captureQueryImage() : null;
   if (queryImage) {
     appLog(`capture: ${Math.round((queryImage.length * 3) / 4 / 1024)} KB query frame`);

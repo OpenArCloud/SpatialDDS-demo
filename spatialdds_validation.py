@@ -469,7 +469,8 @@ def create_coverage_bbox_earth_fixed(
     return frame_ref, element
 
 
-def demo_geo_pose(lat: float, lon: float, alt: float) -> Dict[str, Any]:
+def demo_geo_pose(lat: float, lon: float, alt: float,
+                  q: Optional[List[float]] = None) -> Dict[str, Any]:
     """
     Create a simple GeoPose with a unit quaternion.
 
@@ -478,7 +479,7 @@ def demo_geo_pose(lat: float, lon: float, alt: float) -> Dict[str, Any]:
     the encoded position (OGC GeoPose), so there is nothing left to
     declare. The demo only ever used ENU, so this is a pure deletion.
     """
-    q = [0.0, 0.0, 0.0, 1.0]
+    q = list(q) if q is not None else [0.0, 0.0, 0.0, 1.0]
     SpatialDDSValidator.validate_quaternion_xyzw(q)
     return {
         "lat_deg": lat,

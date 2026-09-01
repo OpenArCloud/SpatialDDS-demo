@@ -52,6 +52,11 @@ def _env_flag(name: str) -> bool:
     return os.getenv(name, "0").lower() in {"1", "true", "yes"}
 
 
+
+# Body->ENU for a level camera facing north, in the convention the web
+# client reads: forward is +X, up is -Y.
+LEVEL_LOOKING_NORTH = [-0.5, -0.5, 0.5, 0.5]
+
 class SpatialDDSLogger:
     """Logger for detailed message tracking"""
 
@@ -413,10 +418,17 @@ class VPSServiceV15:
             ),
         }
 
+        # A level camera looking north, rather than the identity quaternion
+        # this used to return. Identity means "body axes are the ENU axes",
+        # which as a camera pose reads as forward=East, up=North -- and the
+        # client, which follows the real VPS's convention of forward=+X and
+        # up=-Y, renders that on its side. Nothing was wrong with identity as
+        # a GeoPose; it was never a plausible orientation for a device.
         geopose = demo_geo_pose(
             request["prior_geopose"]["lat_deg"] + random.uniform(-0.00005, 0.00005),
             request["prior_geopose"]["lon_deg"] + random.uniform(-0.00005, 0.00005),
             request["prior_geopose"]["alt_m"] + random.uniform(-1.0, 1.0),
+            q=LEVEL_LOOKING_NORTH,
         )
 
         node_geo = {
