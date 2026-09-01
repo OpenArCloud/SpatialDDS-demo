@@ -15,7 +15,8 @@ source — the IDL this repo vendors, the prose, and the release tags — at
 
 ## Run one
 
-Both need Docker; nothing else has prerequisites.
+Both need Docker. The AR demo's browser UI also needs Node, for Vite; nothing
+else has prerequisites.
 
 **AR demo** — bootstrap, discovery, localization, catalogue, on a Cesium globe.
 
@@ -28,6 +29,27 @@ Turn on **REST Messages** and **DDS Messages**, then click Localize: the REST
 panel shows the two HTTP calls the browser makes, the DDS panel the five bus
 messages they cause. That pairing is the demo's point — a browser using the
 spec's HTTP binding while everything behind it is DDS.
+
+**With a real VPS.** The bundled localizer returns the prior plus a few metres
+of jitter — the request path is real, the pose is not. Swap it for
+[OpenVPS](https://github.com/OpenArCloud/openvps) on its
+[`spatialdds`](https://github.com/OpenArCloud/openvps/tree/spatialdds) branch,
+which carries the SpatialDDS binding: the localizer announces itself on the
+well-known discovery topic and serves `VpsRequest` off the bus, so **nothing in
+this repo changes** — discovery simply finds a different VPS covering the map.
+The same button then returns a pose computed from the pixels, in a few seconds
+on a T4.
+
+[openvps-deploy](https://github.com/OpenArCloud/openvps-deploy) stands that up
+on AWS with the `spatialdds` variant, and
+[`deploy/aws/README.md`](deploy/aws/README.md#running-against-a-real-openvps)
+has the recipe plus what has to line up between the two — one VPC, the DDS peer
+list, and a map carrying a `transform.json`, without which the binding declines
+to announce it.
+
+The screenshot at the top of this page is that deployment: a real localisation
+against a LiDAR map of UT Austin's Littlefield Fountain, with catalogue content
+placed on the water by the pose its row carries.
 
 **Multi-operator fusion** — three fleet operators and a 6G base station
 sharing detections; a fuser publishing unified tracks. Dashboard on :8088,
@@ -68,7 +90,7 @@ with the demo in both directions.
 | Multi-operator fusion *(flagship)* | [`multi_operator_fusion/`](multi_operator_fusion/README.md) | Three AV fleet operators and a 6G base station share `Detection3D` observations; a platform fuser publishes unified `FusedTrack`s. Rerun or a browser dashboard. |
 | nuScenes → Rerun | [`nuscenes/`](nuscenes/README.md) | nuScenes v1.0-mini as typed samples: ego pose, 6 cameras, LiDAR, 5 radars, 3D annotations. |
 | DeepSense 6G → Rerun | [`deepsense/`](deepsense/README.md) | DeepSense Scenario 9 V2I: 60 GHz beam, FMCW radar, camera, GPS, 2D lidar. |
-| AR demo | [`ar_demo/`](ar_demo/README.md) | Bootstrap → discovery → coverage query → localization → catalog → anchor, plus a Cesium web UI. |
+| AR demo | [`ar_demo/`](ar_demo/README.md) | Bootstrap → discovery → coverage query → localization → catalog → anchor, plus a Cesium web UI. Runs against the bundled localizer, or against real [OpenVPS](https://github.com/OpenArCloud/openvps/tree/spatialdds) with no change to this repo. |
 | Benchmarks | [`benchmarks/`](benchmarks/README.md) | Latency, discovery, multi-operator and coverage-query scripts, with plotting. |
 
 New here? Start with multi-operator fusion: it is the one that exercises
