@@ -126,6 +126,18 @@ DISCOVERY_QUERY = QosProfile(
 PROFILES[DISCOVERY_ANNOUNCE.name] = DISCOVERY_ANNOUNCE
 PROFILES[DISCOVERY_QUERY.name] = DISCOVERY_QUERY
 
+# --- world model (demo-local, non-normative) ---------------------------------
+# The same bargain as the announce lane, and for the same reason: entities and
+# relationships are keyed, so KEEP_LAST(1) is per instance and TRANSIENT_LOCAL
+# means a client that opens a tab five minutes from now is handed the whole
+# model without asking anyone for it. That is what makes late-join work, and
+# it is the property the layer is being prototyped to demonstrate.
+MODEL_LATCHED = QosProfile(
+    "MODEL_LATCHED", reliable=True, deadline_ms=None, latched=True, keep_last=1,
+    note="RELIABLE + TRANSIENT_LOCAL + KEEP_LAST(1) per key",
+)
+PROFILES[MODEL_LATCHED.name] = MODEL_LATCHED
+
 
 class UnknownQosProfile(KeyError):
     """Raised for a profile name that is neither registered nor a documented extension."""

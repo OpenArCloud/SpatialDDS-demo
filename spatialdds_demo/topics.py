@@ -10,6 +10,12 @@ TOPIC_BOOTSTRAP_QUERY_V1 = "spatialdds/bootstrap/query/v1"
 TOPIC_BOOTSTRAP_RESPONSE_V1 = "spatialdds/bootstrap/response/v1"
 TOPIC_DDS_ENVELOPE_V1 = "spatialdds/envelope/v1"
 
+# --- world model (demo-local `oarc_model`, non-normative) --------------
+# One topic per record kind. Per-layer splitting waits for a FAST tier:
+# Entity.layer is carried but informational today.
+TOPIC_MODEL_ENTITY_V1 = "spatialdds/model/entity/v1"
+TOPIC_MODEL_RELATIONSHIP_V1 = "spatialdds/model/relationship/v1"
+
 
 def TOPIC_ANCHORS_DELTA(zone: str) -> str:
     return f"spatialdds/anchors/{zone}/delta/v1"

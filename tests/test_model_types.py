@@ -41,9 +41,9 @@ ZERO_EXTENT = Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0])
 DUCK = Entity(
     entity_id="ent:duck:1",
     basis=Basis.AUTHORED,
-    # Wikidata: Q1121722 rubber duck, Q483453 fountain. Borrowed
-    # vocabulary, per the proposal -- the layer mints no types of its own.
-    type_uris=["https://www.wikidata.org/wiki/Q1121722"],
+    # Borrowed vocabulary, per the proposal -- the layer mints no types
+    # of its own. Q851478 is Wikidata's rubber duck; Q483453 is fountain.
+    type_uris=["http://www.wikidata.org/entity/Q851478"],
     layer=ModelLayer.SLOW,
     frame_ref=VENUE,
     has_pose=True,
@@ -63,7 +63,7 @@ DUCK = Entity(
 FOUNTAIN = Entity(
     entity_id="ent:fountain",
     basis=Basis.OBSERVED,
-    type_uris=["https://www.wikidata.org/wiki/Q483453"],
+    type_uris=["http://www.wikidata.org/entity/Q483453"],
     layer=ModelLayer.STATIC,
     frame_ref=VENUE,
     has_pose=True,

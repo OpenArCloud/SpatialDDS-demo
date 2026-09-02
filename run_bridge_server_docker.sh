@@ -49,16 +49,21 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
   -e SPATIALDDS_DEMO_MANIFEST_URI="spatialdds://vps.example.com/zone:austin-downtown/manifest:vps" \
   -e SPATIALDDS_CATALOG_SEED="${SPATIALDDS_CATALOG_SEED:-/app/bridges/web_bridge/tests/catalog_seed_fountain.json}" \
   -e SPATIALDDS_FRAME_ANCHORS="${SPATIALDDS_FRAME_ANCHORS:-/app/bridges/web_bridge/tests/frame_anchors_fountain.json}" \
+  -e SPATIALDDS_MODEL_LAYER="${SPATIALDDS_MODEL_LAYER:-0}" \
   -v "${PWD}:/app" \
   cyclonedds-python bash -lc "\
     set -e; \
     mkdir -p \"\$BRIDGE_LOG_DIR\"; \
     vps_log=\"\$BRIDGE_LOG_DIR/vps_server_\$BRIDGE_LOG_BTS.log\"; \
     catalog_log=\"\$BRIDGE_LOG_DIR/catalog_server_\$BRIDGE_LOG_BTS.log\"; \
+    model_log=\"\$BRIDGE_LOG_DIR/model_server_\$BRIDGE_LOG_BTS.log\"; \
     bridge_log=\"\$BRIDGE_LOG_DIR/bridge_server_\$BRIDGE_LOG_BTS.log\"; \
     python3 -m pip install -r /app/requirements.txt -r /app/bridges/web_bridge/requirements.txt; \
     python3 ar_demo/spatialdds_demo_server.py --detailed >\"\$vps_log\" 2>&1 &\
     python3 ar_demo/spatialdds_catalog_server.py --detailed >\"\$catalog_log\" 2>&1 &\
+    if [ \"\$SPATIALDDS_MODEL_LAYER\" = \"1\" ]; then \
+      python3 -m spatialdds_demo.model_service >\"\$model_log\" 2>&1 &\
+    fi; \
     python3 bridges/web_bridge/server.py >\"\$bridge_log\" 2>&1\
   " >/dev/null 2>&1 &
 
