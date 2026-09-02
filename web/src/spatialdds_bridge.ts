@@ -387,6 +387,7 @@ export function resolveInFrame(
 export type ModelEntity = {
   entity_id: string;
   properties?: { key: string; value: string }[];
+  external_refs?: { key: string; value: string }[];
   state_reason?: string;
   source_id?: string;
   stamp?: { sec: number; nanosec: number };

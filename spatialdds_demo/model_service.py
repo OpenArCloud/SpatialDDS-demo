@@ -130,10 +130,19 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         properties=[KV(key="demo.label", value="Littlefield Fountain"),
                     KV(key="demo.note",
                        value="Memorial fountain at the south entrance to the Main Mall. The map this demo localizes into was built from a phone LiDAR capture of it.")],
-        # Empty in Part 1. A GERS or OSM id belongs here, but only a verified
-        # one -- inventing an identifier that resolves to something else is
-        # worse than carrying none.
-        external_refs=[],
+        # Verified, not guessed. Wikidata Q6652941 gives its coordinates as
+        # 30.28389, -97.73969 -- about 6 m from this entity's pose, well
+        # inside a basin 28 m across -- and OSM way 201514442 is tagged
+        # `name=Littlefield Fountain, amenity=fountain, wikidata=Q6652941`,
+        # so the two references corroborate each other rather than resting on
+        # a name match. `amenity=fountain` is also the concept Q483453 in
+        # type_uris names, so the type and the reference agree.
+        #
+        # An identifier that resolves to the wrong thing is worse than none,
+        # which is why these waited for a check rather than shipping on a
+        # plausible-looking search result.
+        external_refs=[KV(key="wikidata", value="Q6652941"),
+                       KV(key="osm", value="way/201514442")],
         # The fountain has no asset: it is already in the photorealistic tiles.
         content_refs=[],
         state=LifecycleState.ACTIVE,

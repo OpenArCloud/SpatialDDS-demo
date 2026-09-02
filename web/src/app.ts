@@ -664,6 +664,20 @@ function describeEntity(item: CatalogItem): string | undefined {
   if (item.asset_hash) {
     rows.push(['Integrity', item.asset_hash]);
   }
+  // External references, linked where the namespace is one we know how to
+  // resolve. An unknown namespace is shown as-is rather than guessed at: the
+  // point of a reference is that it resolves, and a fabricated URL does not.
+  const refUrl = (ns: string, id: string): string | null => {
+    if (ns === 'wikidata') return `https://www.wikidata.org/wiki/${id}`;
+    if (ns === 'osm') return `https://www.openstreetmap.org/${id}`;
+    return null;
+  };
+  for (const kv of entity.external_refs || []) {
+    const url = refUrl(kv.key, kv.value);
+    rows.push([`Also known as`, url
+      ? `<a href="${url}" target="_blank" rel="noopener">${kv.key}:${kv.value}</a>`
+      : `${kv.key}:${kv.value}`]);
+  }
   rows.push(['Published by', String(entity.source_id)]);
   if (entity.stamp) {
     rows.push(['Stamp', new Date(entity.stamp.sec * 1000).toISOString()]);
@@ -761,9 +775,13 @@ function addItemEntity(item: CatalogItem) {
         item.extent.orientation[2], item.extent.orientation[3]),
       box: {
         dimensions: new Cesium.Cartesian3(sx, sy, sz),
-        material: Cesium.Color.fromCssColorString('rgba(95, 196, 205, 0.10)'),
+        // Wireframe, not a translucent solid. A filled volume big enough to
+        // bound a fountain is also big enough to swallow every click aimed at
+        // something inside it -- the ducks became unselectable. Edges alone
+        // say the same thing and leave the contents reachable.
+        fill: false,
         outline: true,
-        outlineColor: Cesium.Color.fromCssColorString('rgba(95, 196, 205, 0.85)'),
+        outlineColor: Cesium.Color.fromCssColorString('rgba(95, 196, 205, 0.9)'),
         outlineWidth: 2
       }
     });
