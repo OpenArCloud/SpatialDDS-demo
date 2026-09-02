@@ -348,6 +348,39 @@ protocol — flows this demo needs and the spec does not describe.
 | `oarc.catalog_response` | `oarc_demo::CatalogResponse` | as above |
 | `oarc.bootstrap_query` | `oarc_demo::BootstrapQuery` | No bootstrap exchange. A participant is assumed to know its domain id and QoS profile already, which is exactly what a fresh device does not |
 | `oarc.bootstrap_response` | `oarc_demo::BootstrapResponse` | as above |
+| `oarc.model_entity` | `oarc_model::Entity` | **Demo-local, non-normative.** No world-model layer. The catalogue says what content exists; nothing says what is *there* — entities with identity, type, extent and relationships, pointing at catalogue content when they have an asset |
+| `oarc.model_relationship` | `oarc_model::Relationship` | as above — a keyed edge, so it can retire independently of the things it joins |
+
+Five, down from twelve — plus two carrying the world-model prototype, which
+is a different kind of entry and is marked as such.
+
+### `oarc_model` — demo-local, candidate for `spatial.model`
+
+`idl/demo/oarc_model.idl` prototypes the Open World Model layer: `Entity` and
+`Relationship` on `spatialdds/model/entity/v1` and
+`spatialdds/model/relationship/v1`, latched TRANSIENT_LOCAL so a late joiner
+gets the whole model without asking. It exists to be argued against a running
+demo before anything is proposed for the spec.
+
+**Guard rails, deliberately.** Demo-local module, header comment pointing at
+the OWM proposal sketch, no registry row, no `/1.7` identifiers, and no change
+to any spec type. Graduation is earned by evidence: informative example first,
+provisional only on deployment experience.
+
+What it separates is asset from instance. A catalogue row is an asset — one
+`duck.glb`, one checksum, one URI. Entities are the things in the world, and
+several may render from the same row, which a catalogue carrying its own pose
+cannot express. Placement moves to the entity; the catalogue keeps the asset.
+
+**A gap this exposed.** `content_refs` uses `catalog:<content_id>` to point at
+a catalogue row, and the demo's catalogue has no way to answer it: `CatalogQuery`
+filters on coverage and `kind_in` only, so **reference-by-id exists and
+lookup-by-id does not**. A client can resolve the reference only if it has
+already coverage-queried the right area and cached the result. That is fine for
+one row in one plaza and wrong at any scale — the reference would be unusable
+by a client that knows the id and not the place. Recorded here rather than
+fixed: the catalogue is demo protocol, and adding an id lane is a protocol
+decision, not a bug fix.
 
 Five, down from twelve. The seven that went away, and what replaced them:
 

@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: MIT
+//
+// Open World Model — a demo-local world-model layer.
+//
+// **Demo-local and non-normative.** This is not SpatialDDS 1.7 and has no
+// registry row. It exists so the shape can be argued against a running demo
+// before anything is proposed for the spec. See the OWM proposal sketch
+// (`owm-proposal-sketch.md`, §5.1) for the design and §10 for the guard
+// rails; SPEC_COMPLIANCE lists it as demo-local, candidate for
+// `spatial.model`.
+//
+// The layer answers a question the catalogue cannot: the catalogue says what
+// content exists and where you would find it, one row per thing. A model says
+// what is *there* — entities with identity, poses, types and relationships —
+// and points at catalogue content when an entity happens to have an asset.
+// One duck.glb in the catalogue, three ducks in the world.
+//
+// Almost everything here is borrowed. Frames, poses, extents, key/value bags
+// and time are all SpatialDDS types; only the join is new.
+
+#ifndef OARC_MODEL_INCLUDED
+#define OARC_MODEL_INCLUDED
+
+#ifndef SPATIAL_CORE_INCLUDED
+#define SPATIAL_CORE_INCLUDED
+#include "core.idl"
+#endif
+
+#ifndef SPATIAL_COMMON_TYPES_INCLUDED
+#define SPATIAL_COMMON_TYPES_INCLUDED
+#include "types.idl"
+#endif
+
+module oarc_model {
+
+  const string MODULE_ID = "oarc.model/0.1";
+
+  typedef builtin::Time Time;
+
+  // How fast a thing is expected to change. Carried in Part 1 but
+  // informational: per-layer topic splitting waits for a FAST tier.
+  enum ModelLayer { @value(0) STATIC, @value(1) SLOW, @value(2) FAST };
+
+  // Where the claim comes from. A surveyed bollard, a bollard someone typed
+  // in, and a bollard inferred from a point cloud are different assertions,
+  // and a consumer is entitled to treat them differently.
+  enum Basis { @value(0) OBSERVED, @value(1) DECLARED,
+               @value(2) AUTHORED, @value(3) DERIVED };
+
+  // UNOBSERVED is a state, not a removal: "it was here and nothing can
+  // currently see it" is different from "it is gone".
+  enum LifecycleState { @value(0) ACTIVE, @value(1) UNOBSERVED,
+                        @value(2) RETIRED, @value(3) SUPERSEDED };
+
+  @extensibility(APPENDABLE) struct Entity {
+    @key string entity_id;                  // model-minted UUID
+    Basis basis;
+    sequence<string, 4> type_uris;          // borrowed vocabularies only
+    ModelLayer layer;
+    spatial::common::FrameRef frame_ref;
+
+    boolean has_pose;
+    spatial::core::PoseSE3 pose;
+    boolean has_extent;
+    spatial::core::Aabb3 extent;
+
+    sequence<spatial::common::KV, 32> properties;     // namespaced
+    sequence<spatial::common::KV, 8>  external_refs;  // e.g. "gers" -> id
+    // References into content this entity is rendered from. Part 1 uses
+    // `catalog:<content_id>`; a spatialdds:// manifest URI is the eventual
+    // form. Many entities may share one reference -- that asset-vs-instance
+    // split is the point of the layer.
+    sequence<string, 8> content_refs;
+
+    LifecycleState state;
+    string state_reason;
+    string source_id;
+    Time   stamp;
+  };
+
+  // Relationships are their own keyed instances, so an edge can retire
+  // independently of the things it joins.
+  @extensibility(APPENDABLE) struct Relationship {
+    @key string rel_id;
+    string kind;                  // "contains" | "adjacent" | "bound-to" | URI
+    string from_entity_id;
+    string to_entity_id;
+    sequence<spatial::common::KV, 16> properties;
+    string source_id;
+    Time   stamp;
+  };
+
+};
+
+#endif // OARC_MODEL_INCLUDED
