@@ -87,6 +87,46 @@ New here? Start with multi-operator fusion: it is the one that exercises
 discovery, per-type QoS and keyed instances together, and it runs with no
 dataset to download.
 
+## World model (prototype, demo-local)
+
+An **Open World Model** layer, prototyped here before anything is proposed for
+the spec. `oarc_model` is demo-local and non-normative: no registry row, no
+`/1.7` identifiers, no spec type touched. See
+[`ar_demo/SPEC_COMPLIANCE.md`](ar_demo/SPEC_COMPLIANCE.md) for its status and
+the gaps it has surfaced.
+
+The catalogue says what content *exists* — one `duck.glb`, one checksum, one
+URI. The model says what is *there*: entities with identity, pose, type and
+relationships, pointing back at catalogue content when they have an asset. One
+asset, three ducks. A catalogue row carrying its own pose can place a duck
+exactly once, which is the limitation this removes.
+
+```bash
+SPATIALDDS_MODEL_LAYER=1 ./run_bridge_server_docker.sh   # off by default
+curl localhost:8088/v1/model                             # the whole model
+python3 scripts/move_duck.py ent:duck:west 9.0 -12.0     # and watch it move
+```
+
+Two topics — `spatialdds/model/entity/v1` and
+`spatialdds/model/relationship/v1` — both TRANSIENT_LOCAL, KEEP_LAST(1) per
+key. That is what makes late join work: a client opening a tab is handed the
+whole model by the middleware, unrequested, with no replay code anywhere.
+Measured across processes at 0.14 s.
+
+`GET /v1/model` serves the same view to clients that have no DDS participant.
+**The bridge's cache is a mirror, not a store — it holds nothing the bus does
+not, because an HTTP client is not a reader.** Anything that would make it the
+source of truth for state the bus does not carry is the wrong change.
+
+Entities name their frame by the **UUIDv5 of its fqn**, the same derivation
+the catalogue row and the announced frame transform use, so all three name one
+frame rather than three that merely look alike.
+
+Nothing switches the client between paths: if `/v1/model` returns entities it
+renders from them and the catalogue contributes only the asset each one points
+at, suppressed per `content_id` so the two cannot both draw the same duck.
+`?catalogpose=1` forces the legacy path for comparison.
+
 ## Bridges
 
 Bridges live under [`bridges/`](bridges/) and work with every demo above without

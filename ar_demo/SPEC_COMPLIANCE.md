@@ -367,6 +367,18 @@ the OWM proposal sketch, no registry row, no `/1.7` identifiers, and no change
 to any spec type. Graduation is earned by evidence: informative example first,
 provisional only on deployment experience.
 
+**What Part 1 surfaced.** Three findings, recorded rather than fixed, so a
+later brief can cite one place for all of them:
+
+| Finding | Where | Shape of it |
+|---|---|---|
+| Reference-by-id exists, lookup-by-id does not | below, "A gap this exposed" | `content_refs` names a catalogue row by id; `CatalogQuery` filters on coverage and `kind_in` only |
+| No `ServiceKind` fits a world model | below, "Model layer discovery" | The publisher is deliberately silent, so the layer has no discovery story yet |
+| `test_bridge_http.py` is container-bound | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
+
+The first two belong with the `spatial.model` graduation discussion; the third
+is a housekeeping note so it is not rediscovered.
+
 What it separates is asset from instance. A catalogue row is an asset — one
 `duck.glb`, one checksum, one URI. Entities are the things in the world, and
 several may render from the same row, which a catalogue carrying its own pose
