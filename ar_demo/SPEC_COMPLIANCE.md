@@ -372,6 +372,23 @@ What it separates is asset from instance. A catalogue row is an asset — one
 several may render from the same row, which a catalogue carrying its own pose
 cannot express. Placement moves to the entity; the catalogue keeps the asset.
 
+**Model layer discovery: nothing announces it.** The publisher is deliberately
+silent, so a client has to know the two topics exist. That is fine on a mocked
+demo where the client is written alongside the publisher, and wrong as an end
+state — discovery is how everything else on this bus is found.
+
+The cause is not laziness: `ServiceKind` has no value that fits. A world model
+is not `SENSING` (it produces no sensor data), not `FUSION` (it fuses no
+inputs), and not `CONTENT` as the demo already uses it (that is the catalogue,
+which serves assets). `OTHER` would technically pass and would tell a consumer
+nothing. Announcing under a wrong kind is worse than not announcing: it puts a
+service in everyone's discovery results under a label that misdescribes it,
+and existing clients filtering by kind would either miss it or mis-handle it.
+
+So Part 1 stays silent, and the announce-kind question travels with the
+`spatial.model` graduation discussion rather than being settled by whichever
+enum value was least inconvenient.
+
 **A gap this exposed.** `content_refs` uses `catalog:<content_id>` to point at
 a catalogue row, and the demo's catalogue has no way to answer it: `CatalogQuery`
 filters on coverage and `kind_in` only, so **reference-by-id exists and
