@@ -281,6 +281,88 @@ GET /api/topics?stale_threshold_s=120
 GET /api/stats            → { uptime_s, clients_connected, total_dispatched, topics_active, dds_domain, publish_enabled }
 ```
 
+## World model (`/v1/model`) — demo-local
+
+Prototype surface for the Open World Model layer. **Demo-local and
+non-normative:** `oarc_model` is not SpatialDDS 1.7 and has no registry row —
+see `ar_demo/SPEC_COMPLIANCE.md`. Off unless the publisher is running
+(`SPATIALDDS_MODEL_LAYER=1`); with nothing publishing, the endpoint returns an
+empty model rather than an error, so its shape never depends on a flag.
+
+Two topics, both TRANSIENT_LOCAL with KEEP_LAST(1) per key:
+
+| Logical topic | `msg_type` | Type |
+|---|---|---|
+| `spatialdds/model/entity/v1` | `oarc.model_entity` | `oarc_model::Entity` |
+| `spatialdds/model/relationship/v1` | `oarc.model_relationship` | `oarc_model::Relationship` |
+
+Both are subscribable on `/ws` like any other topic — same `subscribe`
+message, same `data` envelope, same typed-in/JSON-out conventions:
+
+```json
+{"type": "subscribe", "id": "m1", "pattern": "spatialdds/model/*"}
+```
+
+`GET /v1/model` returns the bridge's latched mirror of both lanes.
+
+**It is a mirror, not a store.** DDS already hands a late-joining *reader* the
+whole model; this exists because an HTTP client is not a reader — a browser
+has no participant and no history to be replayed into. It holds nothing the
+bus does not, and a bridge restarted mid-session refills itself from the
+publisher's history within a poll or two rather than starting empty. Anything
+that would make it the source of truth for state the bus does not carry is
+the wrong change.
+
+
+```json
+{
+  "entities": [
+    {
+      "entity_id": "ent:duck:west",
+      "basis": "AUTHORED",
+      "type_uris": ["http://www.wikidata.org/entity/Q851478"],
+      "layer": "SLOW",
+      "frame_ref": {"uuid": "faab95ac-…", "fqn": "map/ut-littlefield-fountain",
+                    "has_coord_convention": true, "coord_convention": "ENU"},
+      "has_pose": true,
+      "pose": {"t": [6.5, -8.0, -1.423], "q": [0.0, 0.0, 0.0, 1.0]},
+      "has_extent": false,
+      "extent": {"min_xyz": [0.0, 0.0, 0.0], "max_xyz": [0.0, 0.0, 0.0]},
+      "properties": [], "external_refs": [],
+      "content_refs": ["catalog:89f2d953-076d-5c7d-9b74-1193f71685a6"],
+      "state": "ACTIVE", "state_reason": "",
+      "source_id": "svc:model:demo/venue",
+      "stamp": {"sec": 1788400000, "nanosec": 0}
+    }
+  ],
+  "relationships": [
+    {"rel_id": "rel:contains:west", "kind": "contains",
+     "from_entity_id": "ent:fountain:littlefield", "to_entity_id": "ent:duck:west",
+     "properties": [], "source_id": "svc:model:demo/venue",
+     "stamp": {"sec": 1788400000, "nanosec": 0}}
+  ],
+  "stamp": {"sec": 1788400000, "nanosec": 0}
+}
+```
+
+Conventions, all the same as everywhere else on this bridge: snake_case
+fields, enums as identifiers (`"AUTHORED"`, not `2`), and presence flags as
+`has_*` immediately before the member they guard. **Read the flag.** A member
+guarded by a false flag is still present and zeroed, so `pose` on an entity
+with `has_pose: false` is the frame origin and means nothing — absent and
+present-but-zero are identical bytes.
+
+`content_refs` uses the scheme `catalog:<content_id>`, naming a row from the
+catalogue. Several entities may carry the same reference: that is the point —
+the catalogue row is an *asset*, the entities are instances of it. Resolve it
+against catalogue results the client already has, because the catalogue
+filters on coverage and kind only and cannot be queried by id. That gap is
+written up in `ar_demo/SPEC_COMPLIANCE.md`.
+
+**No pagination.** The seeded model is four entities and three relationships;
+when that stops being true, this endpoint is the first thing that has to
+change.
+
 ## Browser client library
 
 [`static/spatialdds-ws-client.js`](static/spatialdds-ws-client.js) is a ~120-line

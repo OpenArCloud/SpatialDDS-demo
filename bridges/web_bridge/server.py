@@ -73,6 +73,7 @@ for p in (str(_HERE), str(_BRIDGES)):
 from topic_router import TopicRouter  # noqa: E402
 from client_manager import ClientManager  # noqa: E402
 from announce_cache import AnnounceCache  # noqa: E402
+from model_cache import ModelCache  # noqa: E402
 
 DEFAULT_LAT = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LAT", "30.284996"))
 DEFAULT_LON = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LON", "-97.739494"))
@@ -553,6 +554,7 @@ client_mgr = ClientManager(TopicRouter())
 _event_loop: Optional[asyncio.AbstractEventLoop] = None
 _publisher = None  # _BrowserPublisher (lazy)
 _envelope_sub = None  # _StreamPump (typed readers, discovered from announces)
+_model_sub = None     # _ModelPump (typed readers on the model lanes)
 _total_dispatched = 0
 _start_time_ns = time.time_ns()
 ALLOW_PUBLISH = os.getenv("SPATIALDDS_BRIDGE_ALLOW_PUBLISH", "1") not in ("0", "false", "no")
@@ -739,6 +741,102 @@ class _StreamPump:
             self._thread.join(timeout=2)
 
 
+# The world model lanes. Demo-local `oarc_model`, off unless the publisher is
+# running -- see SPATIALDDS_MODEL_LAYER in run_bridge_server_docker.sh.
+model_cache = ModelCache()
+
+# `/ws` msg_type values, matching the rows in SPEC_COMPLIANCE. The stream
+# protocol's msg_type has always been the announced 3.3.2 type name; these
+# lanes are not announced, so the demo-local extension names stand in.
+MODEL_ENTITY_TYPE = "oarc.model_entity"
+MODEL_RELATIONSHIP_TYPE = "oarc.model_relationship"
+
+
+class _ModelPump:
+    """
+    Typed readers on the two model topics, feeding the cache and `/ws`.
+
+    Separate from `_StreamPump` because that one discovers its lanes from
+    announces, and the model publisher deliberately does not announce: there
+    is no MODEL in `ServiceKind`, and inventing a service to carry two topics
+    would change what discovery returns for every existing client. So the
+    lanes are opened directly, the way the announce cache opens its own.
+
+    Every live sample is handed to `_stream_callback`, the bridge's single
+    JSON edge, so model records reach `/ws` subscribers by exactly the path
+    every other topic uses -- no second serialisation, no separate protocol.
+    """
+
+    def __init__(self, domain_id: int, poll_interval: float = 0.05):
+        from cyclonedds.domain import DomainParticipant
+
+        from spatialdds_demo import typed_transport as tt
+        from spatialdds_demo.qos_profiles import MODEL_LATCHED
+        from spatialdds_demo.topics import (
+            TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_RELATIONSHIP_V1,
+        )
+        from spatialdds_idl.oarc_model import Entity, Relationship
+
+        self._tt = tt
+        self._interval = poll_interval
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        participant = DomainParticipant(domain_id)
+        self._participant = participant
+        self._entity_reader = tt.make_reader(
+            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        self._relationship_reader = tt.make_reader(
+            participant, TOPIC_MODEL_RELATIONSHIP_V1, Relationship,
+            MODEL_LATCHED.name)
+        self._entity_topic = TOPIC_MODEL_ENTITY_V1
+        self._relationship_topic = TOPIC_MODEL_RELATIONSHIP_V1
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def poll_once(self) -> int:
+        """Drain both readers. Returns how many live samples were applied."""
+        applied = 0
+        stamp_ns = time.time_ns()
+        for sample in self._tt.take_with_state(self._entity_reader):
+            if sample.data is not None:
+                model_cache.admit_entity(sample.data, sample.instance_handle)
+                _stream_callback(MODEL_ENTITY_TYPE, self._entity_topic,
+                                 to_json(sample.data), stamp_ns)
+                applied += 1
+            else:
+                model_cache.dispose_entity(sample.instance_handle)
+        for sample in self._tt.take_with_state(self._relationship_reader):
+            if sample.data is not None:
+                model_cache.admit_relationship(sample.data, sample.instance_handle)
+                _stream_callback(MODEL_RELATIONSHIP_TYPE, self._relationship_topic,
+                                 to_json(sample.data), stamp_ns)
+                applied += 1
+            else:
+                model_cache.dispose_relationship(sample.instance_handle)
+        return applied
+
+    def _run(self) -> None:
+        failures = 0
+        while not self._stop.is_set():
+            try:
+                self.poll_once()
+            except Exception as error:
+                # One bad sample must not take the lane down -- but a lane
+                # that is failing every poll and saying nothing is worse than
+                # one that stops. Report the first, then every hundredth.
+                failures += 1
+                if failures == 1 or failures % 100 == 0:
+                    print(f"model: poll failed ({failures}): {error!r}", flush=True)
+            self._stop.wait(self._interval)
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+
+
 def _ensure_publisher():
     """Lazily build the typed writer pool for browser->DDS publishing."""
     global _publisher
@@ -769,6 +867,13 @@ def on_startup() -> None:
     # request/reply pairs correlate themselves, on their own typed topics.
     _envelope_sub = _StreamPump(domain_id)
     _envelope_sub.start()
+
+    # The model lanes are always read. With no publisher running the readers
+    # simply stay empty, and `/v1/model` reports an empty model rather than
+    # failing -- so the endpoint's shape does not depend on a flag.
+    global _model_sub
+    _model_sub = _ModelPump(domain_id)
+    _model_sub.start()
 
 
 @app.on_event("shutdown")
@@ -872,6 +977,26 @@ def frames() -> Dict[str, Any]:
     return {"frames": out}
 
 
+@app.get("/v1/model")
+def model_snapshot() -> Dict[str, Any]:
+    """
+    The whole world model, from the bridge's latched mirror.
+
+    A DDS client does not need this: both model topics are TRANSIENT_LOCAL, so
+    a late-joining reader is handed the model by the middleware. This is the
+    same view for clients that have no participant -- a browser, or curl.
+
+    Shape: `{"entities": [...], "relationships": [...], "stamp": {...}}`, with
+    entities and relationships in the typed-in/JSON-out form used everywhere
+    else on this bridge -- snake_case fields, enums as identifiers, presence
+    flags as `has_*` beside the member they guard.
+
+    No pagination. The model is four entities; when that stops being true this
+    is the first thing that has to change.
+    """
+    return model_cache.snapshot(SpatialDDSValidator.now_time())
+
+
 @app.get("/api/topics")
 def api_topics(stale_threshold_s: float = 30.0) -> Dict[str, Any]:
     """Topics seen on the bus within ``stale_threshold_s`` seconds."""
@@ -900,6 +1025,7 @@ def api_stats() -> Dict[str, Any]:
         "dds_domain": bridge._domain_id,
         "publish_enabled": ALLOW_PUBLISH,
         "announce_cache": bridge.announce_stats(),
+        "model_cache": model_cache.stats(),
     }
 
 
