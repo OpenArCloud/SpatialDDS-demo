@@ -726,13 +726,20 @@ class _StreamPump:
         self._thread.start()
 
     def _run(self) -> None:
+        failures = 0
         while not self._stop.is_set():
             try:
                 self._sub.poll(stamp_ns=time.time_ns())
-            except Exception:
+            except Exception as error:
                 # One malformed sample must not take the bridge's whole
-                # stream down; the next poll continues.
-                pass
+                # stream down; the next poll continues. But a lane failing
+                # every poll and saying nothing is worse than one that stops:
+                # every browser goes quiet and the bridge looks healthy. Report
+                # the first failure, then every hundredth, so a persistent
+                # fault is visible without a flood.
+                failures += 1
+                if failures == 1 or failures % 100 == 0:
+                    print(f"stream: poll failed ({failures}): {error!r}", flush=True)
             self._stop.wait(self._interval)
 
     def stop(self) -> None:
