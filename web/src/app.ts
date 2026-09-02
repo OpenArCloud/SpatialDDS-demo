@@ -743,6 +743,41 @@ function addItemEntity(item: CatalogItem) {
     return;
   }
 
+  // An entity that declares an extent gets that extent drawn.
+  //
+  // The alternative was the placeholder below: a 1.2 m orange cube, which for
+  // a fountain is both wrong and uninformative -- a solid block sitting in
+  // the water, telling you nothing the label did not. The model already says
+  // how big the thing is, so draw that: a translucent volume with its edges
+  // picked out, which reads as a claim about extent rather than as an object.
+  if (item.extent) {
+    const [sx, sy, sz] = item.extent.size;
+    const extentEntity = viewer.entities.add({
+      id: `${item.id}-extent`,
+      position: Cesium.Cartesian3.fromDegrees(
+        item.extent.lon_deg, item.extent.lat_deg, item.extent.alt_m),
+      orientation: new Cesium.Quaternion(
+        item.extent.orientation[0], item.extent.orientation[1],
+        item.extent.orientation[2], item.extent.orientation[3]),
+      box: {
+        dimensions: new Cesium.Cartesian3(sx, sy, sz),
+        material: Cesium.Color.fromCssColorString('rgba(95, 196, 205, 0.10)'),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString('rgba(95, 196, 205, 0.85)'),
+        outlineWidth: 2
+      }
+    });
+    if (description) {
+      extentEntity.description = new Cesium.ConstantProperty(description);
+      extentEntity.name = item.name;
+    }
+    entityIds.add(extentEntity.id as string);
+    appLog(`content: ${item.name} extent ${sx.toFixed(1)}x${sy.toFixed(1)}x${sz.toFixed(1)} m`);
+    return;
+  }
+
+  // Content that neither draws itself nor says how big it is. The cube is a
+  // stand-in for "something is here", and nothing more.
   const boxEntity = viewer.entities.add({
     id: `${item.id}-box`,
     position: Cesium.Cartesian3.fromDegrees(item.geopose.lon_deg, item.geopose.lat_deg, item.geopose.alt_m),

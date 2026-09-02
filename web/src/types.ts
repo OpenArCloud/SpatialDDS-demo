@@ -56,6 +56,15 @@ export type CatalogItem = {
   /** Integrity for `model_url`, as `sha256:<hex>`, when the row carries one. */
   asset_hash?: string;
   /**
+   * The volume the model claims this thing occupies, already resolved to
+   * earth-fixed. Drawn instead of a placeholder when present.
+   */
+  extent?: {
+    lat_deg: number; lon_deg: number; alt_m: number;
+    size: [number, number, number];
+    orientation: [number, number, number, number];
+  };
+  /**
    * The world-model entity this item came from, when it came from one. Kept
    * so the renderer can show what the model says rather than paraphrasing it.
    */

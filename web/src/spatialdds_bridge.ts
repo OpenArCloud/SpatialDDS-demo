@@ -451,6 +451,26 @@ export async function bridgeModelSnapshot(): Promise<ModelSnapshot> {
  * whose frame does not resolve: better to draw nothing than to draw it at the
  * centre of the earth.
  */
+/** The entity's extent as a placed box, or undefined if it declares none. */
+function extentOf(entity: ModelEntity, frames: FrameMap) {
+  if (!entity.has_extent || !entity.extent?.min_xyz || !entity.extent?.max_xyz) {
+    return undefined;
+  }
+  const min = entity.extent.min_xyz;
+  const max = entity.extent.max_xyz;
+  const size: [number, number, number] = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+  if (size.some((v) => !(v > 0))) {
+    return undefined;
+  }
+  const centre = [0, 1, 2].map((i) => (min[i] + max[i]) / 2);
+  const placed = resolveInFrame(frames[entity.frame_ref?.fqn || ''],
+                                { t: centre, q: [0, 0, 0, 1] });
+  if (!placed) {
+    return undefined;
+  }
+  return { ...placed.placed, size, orientation: placed.orientation };
+}
+
 export function modelEntityToItem(
   entity: ModelEntity,
   frames: FrameMap,
@@ -481,6 +501,11 @@ export function modelEntityToItem(
       cov: 'COV_NONE'
     },
     orientation: resolved.orientation,
+    // The declared extent, resolved so a renderer can draw the volume the
+    // model actually claims instead of a placeholder. Its centre is derived
+    // from min/max rather than assumed to be the pose: an extent need not be
+    // centred on the thing it bounds.
+    extent: extentOf(entity, frames),
     model_url: asset?.uri,
     asset_hash: asset?.hash,
     // Carried so the renderer can show what the model actually says about
