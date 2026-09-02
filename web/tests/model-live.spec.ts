@@ -51,16 +51,28 @@ test('a model entity moved on the bus moves in an open browser', async ({ page, 
 
   await page.goto('/?debug=1');
   await page.waitForFunction(() => (window as any).__viewer, null, { timeout: 60_000 });
-  await page.waitForTimeout(12_000);
   // A tile-load error panel intercepts pointer events; it is not the subject.
   const clear = async () => page.evaluate(() =>
     document.querySelectorAll('.cesium-widget-errorPanel').forEach((e) => e.remove()));
   await clear();
+
+  // Wait on conditions, not on the clock. Fixed sleeps were long enough when
+  // this spec ran alone and too short when the whole suite had been working
+  // the same bridge, which failed as "the duck was never rendered" -- a real
+  // symptom with an unrelated cause.
   await page.evaluate(() => document.getElementById('btnLocalize')?.click());
-  await page.waitForTimeout(9_000);
+  await expect
+    .poll(async () => Number(/alt=([\d.]+)m/.exec(
+      (await page.locator('#readout').getAttribute('data-geopose')) || '')?.[1] ?? NaN),
+    { timeout: 40_000 })
+    .toBeLessThan(1000);
+
   await clear();
   await page.evaluate(() => document.getElementById('btnDiscover')?.click());
-  await page.waitForTimeout(12_000);
+  await page.waitForFunction(() => {
+    const v = (window as any).__viewer;
+    return v && v.entities.values.some((e: any) => String(e.id).startsWith('ent:duck'));
+  }, null, { timeout: 40_000 });
 
   const target = 'ent:duck:east';
   const read = () => page.evaluate((id) => {

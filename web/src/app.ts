@@ -268,14 +268,23 @@ function cameraGeoPose(activeViewer: Cesium.Viewer): GeoPose {
   };
 }
 
-function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string) {
+/**
+ * A pin for an item, or just its name.
+ *
+ * `labelOnly` is for content that draws itself. A glTF model with a billboard
+ * pinned to the same position wears its own icon: the orange square sits over
+ * the duck and hides the thing it is pointing at. The label still earns its
+ * place -- three ducks that look identical need telling apart.
+ */
+function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
+                   labelOnly = false) {
   if (!viewer) {
     return;
   }
   const entity = viewer.entities.add({
     id,
     position: Cesium.Cartesian3.fromDegrees(geopose.lon_deg, geopose.lat_deg, geopose.alt_m),
-    billboard: {
+    billboard: labelOnly ? undefined : {
       image: imageUrl,
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
@@ -290,8 +299,11 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string)
       outlineColor: Cesium.Color.BLACK,
       outlineWidth: 2,
       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-      verticalOrigin: Cesium.VerticalOrigin.TOP,
-      pixelOffset: new Cesium.Cartesian2(0, -36),
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      // Clear of whatever is below it. A pin is 32 px tall, but a model draws
+      // itself at minimumPixelSize 64, and the offset tuned for the pin left
+      // the name sitting across the duck's back.
+      pixelOffset: new Cesium.Cartesian2(0, labelOnly ? -44 : -36),
       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
       disableDepthTestDistance: 0
     }
@@ -611,7 +623,9 @@ function moveItemEntity(item: CatalogItem) {
 }
 
 function addItemEntity(item: CatalogItem) {
-  addMarker(item.id, item.name, item.geopose, itemUrl);
+  const drawsItself = item.kind === 'model' && !!item.model_url
+    && /\.glb($|\?)/i.test(item.model_url);
+  addMarker(item.id, item.name, item.geopose, itemUrl, drawsItself);
   if (!viewer) {
     return;
   }
@@ -813,7 +827,14 @@ const DDS_OVERLAY_PATTERNS = [
   'spatialdds/discovery/*',              // CoverageQuery and the replies
   'spatialdds/*/discovery/announce/v1',  // services arriving and departing
   'spatialdds/vps/*',                    // localize request and reply
-  'spatialdds/catalog/*'                 // content query and reply
+  'spatialdds/catalog/*',                // content query and reply
+  // The world model lanes. Nothing appears here at start-up even though the
+  // model is already on the bus: both topics are latched, so the seed was
+  // delivered to the bridge's reader when *it* joined, and a browser opening
+  // later is a new subscriber to the bridge, not to DDS. What shows up here
+  // is what crosses the bus while you are watching -- an entity republished
+  // by scripts/move_duck.py, for instance.
+  'spatialdds/model/*'
 ];
 
 function connectDdsOverlay() {
