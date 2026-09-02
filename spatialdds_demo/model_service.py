@@ -72,12 +72,17 @@ BASIN_DOWN, BASIN_UP = 1.0, 4.0
 # Three ducks on the water. The first reuses the catalogue row's own pose, so
 # switching the client from catalogue placement to model placement does not
 # move anything on screen -- the point being demonstrated is the extra two.
-DUCKS: List[Tuple[str, Tuple[float, float, float], List[float]]] = [
-    ("ent:duck:catalog-pose", (11.708, -14.273, -1.423),
+#
+# The id is the stable key and says where the duck came from; the name is for
+# people. They are separate on purpose -- renaming a duck must not create a
+# second one, and `ent:duck:catalog-pose` earns its id by sitting exactly
+# where the catalogue row would have put it.
+DUCKS: List[Tuple[str, str, Tuple[float, float, float], List[float]]] = [
+    ("ent:duck:catalog-pose", "Waddles", (11.708, -14.273, -1.423),
      [0.0, 0.0, -0.7071067811865475, 0.7071067811865476]),   # facing south
-    ("ent:duck:west", (6.5, -8.0, -1.423),
+    ("ent:duck:west", "Bobbin", (6.5, -8.0, -1.423),
      [0.0, 0.0, 0.0, 1.0]),                                   # facing east
-    ("ent:duck:east", (16.5, -10.5, -1.423),
+    ("ent:duck:east", "Skipper", (16.5, -10.5, -1.423),
      [0.0, 0.0, 0.3826834323650898, 0.9238795325112867]),     # facing north-east
 ]
 
@@ -122,7 +127,9 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         has_extent=True,
         extent=Aabb3(min_xyz=[cx - BASIN_HALF_EW, cy - BASIN_HALF_NS, cz - BASIN_DOWN],
                      max_xyz=[cx + BASIN_HALF_EW, cy + BASIN_HALF_NS, cz + BASIN_UP]),
-        properties=[KV(key="demo.label", value="Littlefield Fountain")],
+        properties=[KV(key="demo.label", value="Littlefield Fountain"),
+                    KV(key="demo.note",
+                       value="Memorial fountain at the south entrance to the Main Mall. The map this demo localizes into was built from a phone LiDAR capture of it.")],
         # Empty in Part 1. A GERS or OSM id belongs here, but only a verified
         # one -- inventing an identifier that resolves to something else is
         # worse than carrying none.
@@ -148,7 +155,10 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
             pose=PoseSE3(t=list(translation), q=list(rotation)),
             has_extent=False,
             extent=zero_extent,
-            properties=[],
+            # `demo.label` is what a client shows a person. Namespaced,
+            # because properties is a shared bag and an unqualified "label"
+            # would collide with the first other producer to want one.
+            properties=[KV(key="demo.label", value=name)],
             external_refs=[],
             # All three, the same row. One asset, three instances.
             content_refs=[f"catalog:{DUCK_CONTENT_ID}"],
@@ -157,7 +167,7 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
             source_id=SOURCE_ID,
             stamp=stamp,
         )
-        for entity_id, translation, rotation in DUCKS
+        for entity_id, name, translation, rotation in DUCKS
     ]
     return [fountain] + ducks
 

@@ -386,6 +386,11 @@ export function resolveInFrame(
  */
 export type ModelEntity = {
   entity_id: string;
+  properties?: { key: string; value: string }[];
+  state_reason?: string;
+  source_id?: string;
+  stamp?: { sec: number; nanosec: number };
+  extent?: { min_xyz?: number[]; max_xyz?: number[] };
   basis?: string;
   layer?: string;
   type_uris?: string[];
@@ -401,6 +406,11 @@ export type ModelSnapshot = {
   entities: ModelEntity[];
   relationships: Record<string, any>[];
 };
+
+/** A namespaced property, or undefined. */
+export function modelProperty(entity: ModelEntity, key: string): string | undefined {
+  return (entity.properties || []).find((kv) => kv.key === key)?.value;
+}
 
 /** `catalog:<content_id>` is the Part 1 scheme; anything else is ignored. */
 export function catalogRefId(entity: ModelEntity): string | null {
@@ -456,10 +466,11 @@ export function modelEntityToItem(
   const nowMs = Date.now();
   return {
     id: entity.entity_id,
-    // A thing in the world is named for what it is, not for the asset it
-    // happens to be drawn with -- three ducks share one glb and one name
-    // would be three identical labels.
-    name: entity.entity_id.split(':').slice(-1)[0] || entity.entity_id,
+    // The publisher's own label if it set one. Falling back to the id's last
+    // segment keeps something readable on screen for an entity that carries
+    // no name, without the client inventing one.
+    name: modelProperty(entity, 'demo.label')
+      || entity.entity_id.split(':').slice(-1)[0] || entity.entity_id,
     kind: asset?.uri ? 'model' : 'poi',
     geopose: {
       lat_deg: resolved.placed.lat_deg,
@@ -471,7 +482,10 @@ export function modelEntityToItem(
     },
     orientation: resolved.orientation,
     model_url: asset?.uri,
-    asset_hash: asset?.hash
+    asset_hash: asset?.hash,
+    // Carried so the renderer can show what the model actually says about
+    // this thing, rather than a description the client made up.
+    entity
   };
 }
 

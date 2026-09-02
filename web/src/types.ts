@@ -55,6 +55,11 @@ export type CatalogItem = {
   orientation?: [number, number, number, number];
   /** Integrity for `model_url`, as `sha256:<hex>`, when the row carries one. */
   asset_hash?: string;
+  /**
+   * The world-model entity this item came from, when it came from one. Kept
+   * so the renderer can show what the model says rather than paraphrasing it.
+   */
+  entity?: Record<string, any>;
 };
 
 export type DiscoverResponse = {

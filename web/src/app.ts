@@ -294,11 +294,15 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
     },
     label: {
       text: name,
-      font: '14px sans-serif',
+      // A filled plate, not outlined text. Outlined white over photorealistic
+      // tiles is legible against the sky and nothing else; over water and
+      // stonework it disappears into whatever is behind it.
+      font: 'bold 15px system-ui, -apple-system, "Segoe UI", sans-serif',
       fillColor: Cesium.Color.WHITE,
-      outlineColor: Cesium.Color.BLACK,
-      outlineWidth: 2,
-      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      showBackground: true,
+      backgroundColor: Cesium.Color.fromCssColorString('rgba(10, 16, 24, 0.78)'),
+      backgroundPadding: new Cesium.Cartesian2(8, 5),
+      style: Cesium.LabelStyle.FILL,
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
       // Clear of whatever is below it. A pin is 32 px tall, but a model draws
       // itself at minimumPixelSize 64, and the offset tuned for the pin left
@@ -622,12 +626,76 @@ function moveItemEntity(item: CatalogItem) {
   }
 }
 
+/**
+ * What the model says about a thing, as an info panel.
+ *
+ * Every line is read off the entity. Nothing here is authored by the client,
+ * which is the point: if the panel is wrong the model is wrong, and there is
+ * no second description to drift away from the first.
+ */
+function describeEntity(item: CatalogItem): string | undefined {
+  const entity = item.entity;
+  if (!entity) {
+    return undefined;
+  }
+  const rows: [string, string][] = [];
+  const note = (entity.properties || [])
+    .find((kv: any) => kv.key === 'demo.note')?.value;
+  for (const uri of entity.type_uris || []) {
+    rows.push(['Type', `<a href="${uri}" target="_blank" rel="noopener">${uri}</a>`]);
+  }
+  rows.push(['Basis', `${entity.basis} — how the claim was arrived at`]);
+  rows.push(['Layer', `${entity.layer} — how fast it is expected to change`]);
+  rows.push(['State', entity.state_reason
+    ? `${entity.state} (${entity.state_reason})` : String(entity.state)]);
+  rows.push(['Frame', `${entity.frame_ref?.fqn} (${entity.frame_ref?.uuid})`]);
+  if (entity.has_pose && entity.pose?.t) {
+    const [x, y, z] = entity.pose.t;
+    rows.push(['Pose', `${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)} m in that frame`]);
+  }
+  if (entity.has_extent && entity.extent?.min_xyz && entity.extent?.max_xyz) {
+    const size = [0, 1, 2].map(
+      (i) => (entity.extent.max_xyz[i] - entity.extent.min_xyz[i]).toFixed(1));
+    rows.push(['Extent', `${size[0]} × ${size[1]} × ${size[2]} m (bounding box)`]);
+  }
+  for (const ref of entity.content_refs || []) {
+    rows.push(['Content', `${ref}${item.model_url ? ` → ${item.model_url}` : ''}`]);
+  }
+  if (item.asset_hash) {
+    rows.push(['Integrity', item.asset_hash]);
+  }
+  rows.push(['Published by', String(entity.source_id)]);
+  if (entity.stamp) {
+    rows.push(['Stamp', new Date(entity.stamp.sec * 1000).toISOString()]);
+  }
+  rows.push(['Entity id', `<code>${entity.entity_id}</code>`]);
+
+  return `<div style="font:13px system-ui,sans-serif;line-height:1.5">
+    ${note ? `<p style="margin:0 0 10px">${note}</p>` : ''}
+    <table style="border-collapse:collapse">${rows.map(([k, v]) =>
+      `<tr><td style="padding:2px 10px 2px 0;vertical-align:top;opacity:.65;
+        white-space:nowrap">${k}</td><td style="padding:2px 0">${v}</td></tr>`).join('')}
+    </table>
+    <p style="margin:10px 0 0;opacity:.6">From the world model layer
+      (<code>oarc_model</code>, demo-local) — every field above is read off the
+      entity, not authored here.</p>
+  </div>`;
+}
+
 function addItemEntity(item: CatalogItem) {
   const drawsItself = item.kind === 'model' && !!item.model_url
     && /\.glb($|\?)/i.test(item.model_url);
   addMarker(item.id, item.name, item.geopose, itemUrl, drawsItself);
   if (!viewer) {
     return;
+  }
+  const description = describeEntity(item);
+  if (description) {
+    const marker = viewer.entities.getById(item.id);
+    if (marker) {
+      marker.description = new Cesium.ConstantProperty(description);
+      marker.name = item.name;
+    }
   }
 
   // Content that names a glTF asset is drawn as that asset. A row carrying an
@@ -665,6 +733,10 @@ function addItemEntity(item: CatalogItem) {
         heightReference: Cesium.HeightReference.NONE
       }
     });
+    if (description) {
+      modelEntity.description = new Cesium.ConstantProperty(description);
+      modelEntity.name = item.name;
+    }
     entityIds.add(modelEntity.id as string);
     appLog(`content: ${item.name} -> ${uri}` +
            (item.asset_hash ? ` (${item.asset_hash.slice(0, 14)}…)` : ''));
