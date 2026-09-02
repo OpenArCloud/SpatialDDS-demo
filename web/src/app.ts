@@ -9,9 +9,9 @@ import {
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  observeRest
+  bridgeModelSnapshot, catalogRefId, modelEntityToItem, observeRest
 } from './spatialdds_bridge';
-import type { RestExchange } from './spatialdds_bridge';
+import type { ModelEntity, RestExchange } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
 
 const readoutEl = document.getElementById('readout') as HTMLPreElement | null;
@@ -69,6 +69,15 @@ let ddsOverlayVisible = false;
 let restOverlayVisible = false;
 const restMessages: string[] = [];
 let ddsSocket: WebSocket | null = null;
+
+// --- world model layer (demo-local oarc_model) -------------------------------
+// Present only when something is publishing; see handleDiscover.
+let modelSocket: WebSocket | null = null;
+const modelItems = new Map<string, CatalogItem>();
+// The frames and catalogue rows the last discovery resolved against, kept so a
+// live entity update can be placed without re-querying anything.
+let lastFrames: Record<string, any> = {};
+let lastAssets: Record<string, { uri?: string; hash?: string }> = {};
 const ddsMessages: string[] = [];
 
 const START_LON = -97.7396265;
@@ -468,11 +477,137 @@ async function handleDiscover() {
     await ensureContentService(currentPose);
   }
   const response = bridgeActive ? await bridgeDiscover(currentPose) : await mockDiscover(currentPose);
-  response.items.forEach((item) => addItemEntity(item));
-  readoutItems = response.items.length;
+
+  // The world model, when one is publishing.
+  //
+  // No flag switches this on. The layer announces itself by existing: if
+  // `/v1/model` returns entities, they are what gets placed, and the
+  // catalogue contributes only the asset each one points at. If nothing is
+  // publishing the call returns an empty model and everything below behaves
+  // exactly as it did before, which is what keeps the existing demo intact.
+  //
+  // `?catalogpose=1` forces the legacy path for side-by-side comparison.
+  const forceCatalogPose = new URLSearchParams(location.search).has('catalogpose');
+  const model = (bridgeActive && !forceCatalogPose)
+    ? await bridgeModelSnapshot() : { entities: [], relationships: [] };
+
+  // Suppression is per content_id, not wholesale. A catalogue row that no
+  // entity references still places itself -- only the rows the model has
+  // taken responsibility for are skipped, so the two paths cannot both draw
+  // the same duck and nothing else is silently dropped.
+  const claimed = new Set<string>();
+  for (const entity of model.entities) {
+    const ref = catalogRefId(entity);
+    if (ref) {
+      claimed.add(ref);
+    }
+  }
+
+  const fromCatalog = response.items.filter((item) => !claimed.has(item.id));
+  fromCatalog.forEach((item) => addItemEntity(item));
+
+  const frames = response.frames || {};
+  const assets = response.assets || {};
+  lastFrames = frames;
+  lastAssets = assets;
+  let placed = 0;
+  for (const entity of model.entities) {
+    const item = modelEntityToItem(entity, frames, (id) => assets[id]);
+    if (!item) {
+      appLog(`model:unresolved ${entity.entity_id} — frame ${entity.frame_ref?.fqn}`);
+      continue;
+    }
+    modelItems.set(entity.entity_id, item);
+    addItemEntity(item);
+    placed += 1;
+  }
+
+  readoutItems = fromCatalog.length + placed;
   readoutMessage = '';
   renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
-  appLog(`discover:items ${response.items.length}`);
+  if (model.entities.length) {
+    appLog(`discover:model ${placed} entities, ${model.relationships.length} ` +
+           `relationships; ${claimed.size} catalog row(s) superseded`);
+    connectModelStream();
+  }
+  appLog(`discover:items ${readoutItems}`);
+}
+
+/**
+ * Live model updates.
+ *
+ * The snapshot is a starting point, not the state: an entity republished with
+ * a new pose has to move what is already on screen. Latching means the two
+ * agree -- whatever a fresh client would be handed is what a connected client
+ * has been kept at.
+ */
+function connectModelStream() {
+  if (modelSocket || !bridgeActive) {
+    return;
+  }
+  const wsUrl = `${wsUrlFromBridgeUrl(BRIDGE_URL)}/ws`;
+  try {
+    modelSocket = new WebSocket(wsUrl);
+  } catch (error) {
+    appLog(`model:ws failed (${String(error)})`);
+    modelSocket = null;
+    return;
+  }
+  modelSocket.onopen = () => {
+    modelSocket?.send(JSON.stringify({
+      type: 'subscribe', id: 'model', pattern: 'spatialdds/model/*'
+    }));
+    appLog('model:ws watching spatialdds/model/*');
+  };
+  modelSocket.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data as string) as {
+        type?: string; msg_type?: string; payload?: ModelEntity;
+      };
+      if (msg.type !== 'data' || msg.msg_type !== 'oarc.model_entity') {
+        return;
+      }
+      const entity = msg.payload;
+      if (!entity?.entity_id) {
+        return;
+      }
+      const known = modelItems.get(entity.entity_id);
+      const item = modelEntityToItem(
+        entity, lastFrames, (id) => lastAssets[id]);
+      if (!item || !known) {
+        return;
+      }
+      modelItems.set(entity.entity_id, item);
+      moveItemEntity(item);
+      appLog(`model:moved ${entity.entity_id} -> ` +
+             `${item.geopose.lat_deg.toFixed(6)}, ${item.geopose.lon_deg.toFixed(6)}`);
+    } catch {
+      // A malformed frame is not worth tearing the socket down for.
+    }
+  };
+  modelSocket.onclose = () => { modelSocket = null; };
+}
+
+/** Move an already-rendered entity rather than rebuilding it. */
+function moveItemEntity(item: CatalogItem) {
+  if (!viewer) {
+    return;
+  }
+  const position = Cesium.Cartesian3.fromDegrees(
+    item.geopose.lon_deg, item.geopose.lat_deg, item.geopose.alt_m);
+  const model = viewer.entities.getById(`${item.id}-model`);
+  if (model) {
+    model.position = new Cesium.ConstantPositionProperty(position);
+    if (item.orientation) {
+      model.orientation = new Cesium.ConstantProperty(new Cesium.Quaternion(
+        item.orientation[0], item.orientation[1],
+        item.orientation[2], item.orientation[3]));
+    }
+  }
+  const marker = viewer.entities.getById(item.id);
+  if (marker) {
+    marker.position = new Cesium.ConstantPositionProperty(position);
+  }
 }
 
 function addItemEntity(item: CatalogItem) {
@@ -538,6 +673,7 @@ function addItemEntity(item: CatalogItem) {
 
 function handleClear() {
   clearEntities();
+  modelItems.clear();
   currentPose = null;
   readoutItems = 0;
   readoutMessage = 'cleared';

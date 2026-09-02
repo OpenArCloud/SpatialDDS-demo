@@ -270,9 +270,26 @@ export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse
     }
   }
   const items = (dds.results || []).map((entry) => catalogEntryToItem(entry, frames));
+
+  // The catalogue rows themselves, keyed by content_id. The model layer
+  // resolves `catalog:<content_id>` against these -- a lookup over results
+  // the client already has, because the catalogue cannot be queried by id.
+  const assets: Record<string, { uri?: string; hash?: string }> = {};
+  for (const entry of dds.results || []) {
+    const id = (entry as Record<string, any>).content_id;
+    const asset = (entry as Record<string, any>).has_asset
+      ? (entry as Record<string, any>).asset : null;
+    if (id) {
+      assets[id] = { uri: asset?.uri || (entry as Record<string, any>).href,
+                     hash: asset?.hash };
+    }
+  }
+
   return {
     query_id: dds.query_id || 'query-unknown',
-    items
+    items,
+    assets,
+    frames
   };
 }
 
@@ -329,6 +346,135 @@ function ecefToGeodetic(x: number, y: number, z: number) {
   };
 }
 
+/**
+ * A pose in a local frame, carried into earth-fixed by that frame's transform.
+ *
+ * Shared by the catalogue path and the model path deliberately: both are
+ * saying the same thing — a pose in a named frame — and if the two resolved it
+ * separately they could disagree about where the same duck is, which is
+ * exactly the class of bug this layer exists to remove.
+ */
+export function resolveInFrame(
+  frame: FrameTransform | undefined,
+  local: { t?: number[]; q?: number[] } | null
+): { placed: { lat_deg: number; lon_deg: number; alt_m: number };
+     orientation: [number, number, number, number] } | null {
+  if (!frame || !local || !Array.isArray(local.t)) {
+    return null;
+  }
+  const ft = frame.pose?.t;
+  const fq = frame.pose?.q;
+  if (!Array.isArray(ft) || !Array.isArray(fq)) {
+    return null;
+  }
+  const [ex, ey, ez] = rotate(fq, local.t);
+  const q = Array.isArray(local.q) ? local.q : [0, 0, 0, 1];
+  return {
+    placed: ecefToGeodetic(ex + ft[0], ey + ft[1], ez + ft[2]),
+    // The content's orientation within its frame, carried into earth-fixed by
+    // the frame's own rotation.
+    orientation: quatMultiply(fq, q)
+  };
+}
+
+/**
+ * The world model layer — demo-local `oarc_model`, non-normative.
+ *
+ * The catalogue says what content exists: one duck.glb, one checksum, one
+ * URI. The model says what is *there* — entities with identity, each pointing
+ * back at a catalogue row when it has an asset. Three ducks, one glb.
+ */
+export type ModelEntity = {
+  entity_id: string;
+  basis?: string;
+  layer?: string;
+  type_uris?: string[];
+  frame_ref?: { fqn?: string };
+  has_pose?: boolean;
+  pose?: { t?: number[]; q?: number[] };
+  has_extent?: boolean;
+  content_refs?: string[];
+  state?: string;
+};
+
+export type ModelSnapshot = {
+  entities: ModelEntity[];
+  relationships: Record<string, any>[];
+};
+
+/** `catalog:<content_id>` is the Part 1 scheme; anything else is ignored. */
+export function catalogRefId(entity: ModelEntity): string | null {
+  for (const ref of entity.content_refs || []) {
+    if (ref.startsWith('catalog:')) {
+      return ref.slice('catalog:'.length);
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether a model layer is present at all.
+ *
+ * Returns an empty model rather than throwing when the bridge predates the
+ * endpoint or nothing is publishing — "no model" and "no model layer" lead to
+ * the same client behaviour, which is to fall back to catalogue placement.
+ */
+export async function bridgeModelSnapshot(): Promise<ModelSnapshot> {
+  try {
+    const payload = await fetchJson('/v1/model') as Partial<ModelSnapshot>;
+    return {
+      entities: Array.isArray(payload.entities) ? payload.entities : [],
+      relationships: Array.isArray(payload.relationships) ? payload.relationships : []
+    };
+  } catch {
+    return { entities: [], relationships: [] };
+  }
+}
+
+/**
+ * A model entity as something the renderer can draw.
+ *
+ * `assetFor` resolves `catalog:<content_id>` against catalogue rows the client
+ * already has. It has to be a lookup over cached results rather than a query,
+ * because the catalogue filters on coverage and kind and cannot be asked for a
+ * row by id — see the gap noted in SPEC_COMPLIANCE. Returns null for an entity
+ * whose frame does not resolve: better to draw nothing than to draw it at the
+ * centre of the earth.
+ */
+export function modelEntityToItem(
+  entity: ModelEntity,
+  frames: FrameMap,
+  assetFor: (contentId: string) => { uri?: string; hash?: string } | undefined
+): CatalogItem | null {
+  const resolved = resolveInFrame(
+    frames[entity.frame_ref?.fqn || ''], entity.has_pose ? entity.pose || null : null);
+  if (!resolved) {
+    return null;
+  }
+  const contentId = catalogRefId(entity);
+  const asset = contentId ? assetFor(contentId) : undefined;
+  const nowMs = Date.now();
+  return {
+    id: entity.entity_id,
+    // A thing in the world is named for what it is, not for the asset it
+    // happens to be drawn with -- three ducks share one glb and one name
+    // would be three identical labels.
+    name: entity.entity_id.split(':').slice(-1)[0] || entity.entity_id,
+    kind: asset?.uri ? 'model' : 'poi',
+    geopose: {
+      lat_deg: resolved.placed.lat_deg,
+      lon_deg: resolved.placed.lon_deg,
+      alt_m: resolved.placed.alt_m,
+      q: [0, 0, 0, 1],
+      stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
+      cov: 'COV_NONE'
+    },
+    orientation: resolved.orientation,
+    model_url: asset?.uri,
+    asset_hash: asset?.hash
+  };
+}
+
 export function catalogEntryToItem(
   entry: Record<string, any>,
   frames: FrameMap = {}
@@ -356,23 +502,10 @@ export function catalogEntryToItem(
   // An earlier attempt put the altitude in the coverage `aabb`, which is a
   // metres-in-the-declared-frame field: writing degrees into it was wrong in
   // proportion to distance from null island, and wrong silently.
-  let placed: { lat_deg: number; lon_deg: number; alt_m: number } | null = null;
-  let orientation: [number, number, number, number] | undefined;
-
-  const frame = frames[entry.frame_ref?.fqn || ''];
-  const local = entry.has_pose ? entry.pose : null;
-  if (frame && local && Array.isArray(local.t)) {
-    const ft = frame.pose?.t;
-    const fq = frame.pose?.q;
-    if (Array.isArray(ft) && Array.isArray(fq)) {
-      const [ex, ey, ez] = rotate(fq, local.t);
-      placed = ecefToGeodetic(ex + ft[0], ey + ft[1], ez + ft[2]);
-      // The content's orientation within its frame, carried into earth-fixed
-      // by the frame's own rotation.
-      const q = Array.isArray(local.q) ? local.q : [0, 0, 0, 1];
-      orientation = quatMultiply(fq, q);
-    }
-  }
+  const resolved = resolveInFrame(
+    frames[entry.frame_ref?.fqn || ''], entry.has_pose ? entry.pose : null);
+  const placed = resolved?.placed ?? null;
+  const orientation = resolved?.orientation;
 
   const nowMs = Date.now();
   const geopose: GeoPose = {

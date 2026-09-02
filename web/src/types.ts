@@ -60,4 +60,12 @@ export type CatalogItem = {
 export type DiscoverResponse = {
   query_id: string;
   items: CatalogItem[];
+  /**
+   * Catalogue rows by content_id — what the model layer's
+   * `catalog:<content_id>` references resolve against. A lookup over results
+   * already fetched, because the catalogue cannot be queried by id.
+   */
+  assets?: Record<string, { uri?: string; hash?: string }>;
+  /** Frame transforms fetched alongside, so the model path need not refetch. */
+  frames?: Record<string, any>;
 };
