@@ -277,7 +277,7 @@ function cameraGeoPose(activeViewer: Cesium.Viewer): GeoPose {
  * place -- three ducks that look identical need telling apart.
  */
 function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
-                   labelOnly = false) {
+                   labelOnly = false, clampToGround = true) {
   if (!viewer) {
     return;
   }
@@ -287,8 +287,14 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
     billboard: labelOnly ? undefined : {
       image: imageUrl,
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: 0,
+      heightReference: clampToGround
+        ? Cesium.HeightReference.CLAMP_TO_GROUND
+        : Cesium.HeightReference.NONE,
+      // Draw over the scene rather than inside it. Depth-tested, the fountain
+      // pin sat within the fountain's own geometry: invisible, and therefore
+      // unclickable -- the info panel it opens had no reachable target left
+      // once the extent stopped being a solid.
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
       height: 32,
       width: 32
     },
@@ -308,8 +314,10 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
       // itself at minimumPixelSize 64, and the offset tuned for the pin left
       // the name sitting across the duck's back.
       pixelOffset: new Cesium.Cartesian2(0, labelOnly ? -44 : -36),
-      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: 0
+      heightReference: clampToGround
+        ? Cesium.HeightReference.CLAMP_TO_GROUND
+        : Cesium.HeightReference.NONE,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY
     }
   });
 
@@ -699,7 +707,19 @@ function describeEntity(item: CatalogItem): string | undefined {
 function addItemEntity(item: CatalogItem) {
   const drawsItself = item.kind === 'model' && !!item.model_url
     && /\.glb($|\?)/i.test(item.model_url);
-  addMarker(item.id, item.name, item.geopose, itemUrl, drawsItself);
+
+  // A thing with a declared extent gets its pin on top of that volume rather
+  // than clamped to the ground under it. Clamped, the fountain's pin landed
+  // inside the fountain -- invisible, and with the extent drawn as a
+  // wireframe there was then nothing left to click to open its details. The
+  // name should sit above the thing it names.
+  const markerPose: GeoPose = item.extent
+    ? { ...item.geopose,
+        lat_deg: item.extent.lat_deg,
+        lon_deg: item.extent.lon_deg,
+        alt_m: item.extent.alt_m + item.extent.size[2] / 2 }
+    : item.geopose;
+  addMarker(item.id, item.name, markerPose, itemUrl, drawsItself, !item.extent);
   if (!viewer) {
     return;
   }
