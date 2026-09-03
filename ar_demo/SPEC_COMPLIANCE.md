@@ -374,6 +374,7 @@ later brief can cite one place for all of them:
 |---|---|---|
 | Reference-by-id exists, lookup-by-id does not | below, "A gap this exposed" | `content_refs` names a catalogue row by id; `CatalogQuery` filters on coverage and `kind_in` only |
 | No `ServiceKind` fits a world model | below, "Model layer discovery" | The publisher is deliberately silent, so the layer has no discovery story yet |
+| An ephemeral writer's update does not outlive it | below, "Two writers, one instance" | TRANSIENT_LOCAL history is writer-scoped, so a late joiner sees the seed rather than the move |
 | `test_bridge_http.py` is container-bound | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
 
 The first two belong with the `spatial.model` graduation discussion; the third
@@ -400,6 +401,36 @@ and existing clients filtering by kind would either miss it or mis-handle it.
 So Part 1 stays silent, and the announce-kind question travels with the
 `spatial.model` graduation discussion rather than being settled by whichever
 enum value was least inconvenient.
+
+### Two writers, one instance
+
+`move_duck.py` writes an update for an entity the publisher also writes, from
+a separate short-lived process. Two consequences, both measured:
+
+**A fresh reader sees the seed, not the move.** TRANSIENT_LOCAL durability is
+scoped to the writer that published the sample. The mover writes, exits, and
+its history goes with it, while the long-lived publisher's original sample
+stays latched. So a client connected at the time sees the move, the bridge's
+cache sees the move, and a client joining afterwards is handed the original
+pose. Tested three times, consistently. That undercuts the late-join
+guarantee the moment anything moves.
+
+It also means "where is the duck now" has two answers: the mover, reading the
+bus, gets the publisher's seed; `/v1/model`, reading the bridge's cache, gets
+the accumulated result. Relative moves computed from one and applied against
+the other drift apart -- which is exactly how the live test walked a duck from
+(16.5, -10.5) to (40.5, -34.5) over eight runs before it was made absolute.
+
+**An update published shortly after a subscriber attaches is sometimes not
+delivered to it** -- roughly one run in three. The socket is open, the client
+has logged that it is watching, the writer reports success, and nothing
+arrives; a second publish of the same sample always lands. The live test
+republishes once and says so when it has to, rather than hiding it.
+
+The fix for both is the same and belongs to Part 2: the publisher should own
+the state it latches, with moves applied through it rather than written around
+it by whoever happens to have a writer. An operator tool should ask the
+authority to move something, not race it.
 
 **A gap this exposed.** `content_refs` uses `catalog:<content_id>` to point at
 a catalogue row, and the demo's catalogue has no way to answer it: `CatalogQuery`

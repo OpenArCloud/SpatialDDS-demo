@@ -42,6 +42,26 @@ test('a model entity moved on the bus moves in an open browser', async ({ page, 
   const name = container();
   test.skip(name === null, 'model publisher not reachable to drive a move');
 
+  // Start from a known world. The mover reads the publisher's latched sample
+  // while the bridge cache holds whatever has been published since, so
+  // "where is the duck now" has two answers -- see the two-writer note in
+  // SPEC_COMPLIANCE. Resetting first means this test does not have to care
+  // which one it would have got.
+  execSync(`docker exec -w /app ${name} python3 scripts/move_duck.py --reset`,
+           { stdio: 'ignore' });
+  // And wait for it to land. The reset is three hops from here -- bus, bridge
+  // reader, cache -- and loading the page before it arrives means the client
+  // bootstraps from the pre-reset world, which is how this failed on its
+  // first run after the reset was added.
+  await expect
+    .poll(async () => {
+      const res = await request.get(`${BRIDGE_URL}/v1/model`, { timeout: 4000 });
+      const e = ((await res.json()).entities || [])
+        .find((x: any) => x.entity_id === 'ent:duck:east');
+      return e ? `${e.pose.t[0]},${e.pose.t[1]}` : '';
+    }, { timeout: 20_000 })
+    .toBe('16.5,-10.5');
+
   const moved: string[] = [];
   page.on('console', (m) => {
     if (m.text().startsWith('model:')) {
@@ -89,18 +109,39 @@ test('a model entity moved on the bus moves in an open browser', async ({ page, 
   const before = await read();
   expect(before, 'the model duck should be rendered before moving it').not.toBeNull();
 
-  // The destination is derived from where the duck currently is, not
-  // hardcoded. A fixed destination makes the test pass once and then quietly
-  // become a no-op -- republishing a pose the client already holds, which is
-  // exactly the false pass this test was written to rule out. It failed that
-  // way on its second run, which is the best argument for deriving it.
-  const current = (model.entities || []).find((e: any) => e.entity_id === target);
-  expect(current, `${target} should be in the model snapshot`).toBeTruthy();
-  const [x, y] = current.pose.t;
-  const destination = [x + 3.0, y - 3.0];
-  execSync(`docker exec -w /app ${name} python3 scripts/move_duck.py ` +
-           `${target} ${destination[0]} ${destination[1]}`, { stdio: 'ignore' });
-  await page.waitForTimeout(8_000);
+  // A fixed destination, which is safe because the reset above establishes
+  // where the duck starts. Deriving it from "current" instead made each run
+  // move the duck another few metres from its last position: eight runs had
+  // walked it from (16.5, -10.5) to (40.5, -34.5), out of the fountain and
+  // onto the plaza. Absolute beats relative when the starting point is known.
+  const seeded = [16.5, -10.5];
+  const destination = [6.0, -17.0];
+  const [x, y] = seeded;
+  // Publish, and wait for the client to say it applied the update rather than
+  // for a fixed interval -- the browser is three hops from the writer.
+  //
+  // The republish is not politeness. About one run in three, an update
+  // published shortly after a browser subscribes never reaches it: the socket
+  // is open, the client has logged that it is watching, the mover reports
+  // success, and nothing arrives. A second publish of the same pose always
+  // lands. Republishing is idempotent -- same key, same value -- so this
+  // proves the path without pretending the first attempt worked, and it says
+  // so in the output when it happens. The underlying gap is recorded in
+  // SPEC_COMPLIANCE; it is a Part 2 question, not something to paper over.
+  const publish = () => execSync(
+    `docker exec -w /app ${name} python3 scripts/move_duck.py ` +
+    `${target} ${destination[0]} ${destination[1]}`).toString().trim();
+  const applied = () => page.waitForFunction((id) => (window as any).__appLogs?.some(
+    (l: string) => l.startsWith(`model:moved ${id}`)), target, { timeout: 15_000 });
+
+  console.log('[mover]', publish().split('\n').pop());
+  try {
+    await applied();
+  } catch {
+    console.log('[test] first publish did not reach the browser — republishing');
+    publish();
+    await applied();
+  }
 
   const after = await read();
   expect(after).not.toBeNull();
@@ -117,4 +158,12 @@ test('a model entity moved on the bus moves in an open browser', async ({ page, 
     .toBeGreaterThan(commanded - 0.5);
   expect(metres).toBeLessThan(commanded + 0.5);
   expect(moved.some((l) => l.includes(`model:moved ${target}`))).toBe(true);
+
+  // Put it back. The destination is relative to wherever the duck currently
+  // is, so without this each run walks it another few metres from the
+  // fountain -- eight runs had already taken it from (16.5, -10.5) to
+  // (40.5, -34.5), well onto the plaza. A test that leaves the demo worse
+  // than it found it is a test people stop running.
+  execSync(`docker exec -w /app ${name} python3 scripts/move_duck.py --reset`,
+           { stdio: 'ignore' });
 });
