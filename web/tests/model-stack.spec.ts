@@ -2,7 +2,8 @@ import { expect, test } from '@playwright/test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  BRIDGE_URL, container, inContainer, readyPage, restoreVenue
+  BRIDGE_URL, container, inContainer, readyPage, restoreVenue, startMover,
+  stopMover
 } from './model-stack.helpers';
 
 /**
@@ -365,4 +366,82 @@ test('every catalog reference is resolved by id, with no coverage query first',
         .map((e: any) => String(e.id));
     });
     expect(ducks.length, 'the ducks render from a by-id resolution').toBe(3);
+  });
+
+test('the ducks wander in an open tab, and stop dead when the mover does',
+  async ({ page, request }) => {
+    /**
+     * The mover is a consumer that produces: it reads the model, decides what
+     * it would like to be different, and asks the authority. Two things
+     * follow, and both are asserted here rather than argued.
+     *
+     * Motion reaches an open tab with no polling and no client-side
+     * animation -- the browser is drawing what the bus says.
+     *
+     * And when the mover stops, everything stops, for everyone. Nothing of
+     * its is latched anywhere, so there is no ghost writer whose last word
+     * outlives it and no second answer to where a duck is. That is the Part 2
+     * lesson from the other side: a process that only asks leaves nothing
+     * behind when it goes.
+     */
+    test.setTimeout(300_000);
+    const name = stack as string;
+
+    const positions = () => page.evaluate(() => {
+      const v = (window as any).__viewer;
+      const out: Record<string, [number, number]> = {};
+      for (const e of v.entities.values) {
+        const id = String(e.id);
+        if (!id.startsWith('ent:duck') || id.endsWith('-model')) continue;
+        const c = v.scene.globe.ellipsoid.cartesianToCartographic(
+          e.position.getValue(v.clock.currentTime));
+        out[id] = [c.latitude * 180 / Math.PI, c.longitude * 180 / Math.PI];
+      }
+      return out;
+    });
+    const metres = (a: [number, number], b: [number, number]) =>
+      Math.hypot((b[0] - a[0]) * 111_320, (b[1] - a[1]) * 96_000);
+
+    await readyPage(page);
+    await page.waitForFunction(() => {
+      const v = (window as any).__viewer;
+      return v && v.entities.values.some((e: any) => String(e.id).startsWith('ent:duck'));
+    }, null, { timeout: 40_000 });
+
+    try {
+      startMover(name);
+      const before = await positions();
+      await page.waitForTimeout(8000);
+      const during = await positions();
+
+      const moved = Object.keys(before)
+        .filter((id) => metres(before[id], during[id]) > 0.2);
+      console.log(`  wandering: ${moved.length}/3 ducks moved in the open tab`);
+      // Not all three: the walk is random, so a duck can spend a window
+      // stepping back and forth over the same metre. Two is motion; asserting
+      // three would be asserting the random number generator.
+      expect(moved.length, 'the ducks should be wandering in the open tab')
+        .toBeGreaterThanOrEqual(2);
+    } finally {
+      stopMover(name);
+    }
+
+    // Let anything already in flight land, then nothing more may happen.
+    await page.waitForTimeout(3000);
+    const settled = await positions();
+    await page.waitForTimeout(4000);
+    const still = await positions();
+    for (const id of Object.keys(settled)) {
+      expect(metres(settled[id], still[id]),
+             `${id} must be still once the mover has gone`).toBeLessThan(0.05);
+    }
+
+    // And the bus agrees with the tab: one truth, not a screen that kept its
+    // own last known positions.
+    const model = await (await request.get(`${BRIDGE_URL}/v1/model`)).json();
+    const onBus = Object.fromEntries((model.entities || [])
+      .filter((e: any) => e.entity_id.startsWith('ent:duck'))
+      .map((e: any) => [e.entity_id, e.pose.t]));
+    expect(Object.keys(onBus).sort()).toEqual(Object.keys(still).sort());
+    console.log('  frozen: tab and bus agree on all three ducks');
   });

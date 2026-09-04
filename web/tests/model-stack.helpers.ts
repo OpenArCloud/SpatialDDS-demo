@@ -93,3 +93,26 @@ export async function readyPage(page: any, url = '/?debug=1'): Promise<void> {
     null, { timeout: 40_000 });
   await clear();
 }
+
+/**
+ * The mover, started and stopped inside the test that wants it.
+ *
+ * It is off in the stack by default and must stay that way: every other test
+ * here asserts where a duck *is*, and a service quietly moving them would
+ * turn the whole file into a coin toss. Anything that needs motion starts it
+ * and is responsible for stopping it, including when it fails.
+ */
+export function startMover(name: string): void {
+  execSync(`docker exec -d -w /app ${name} python3 -m spatialdds_demo.duck_mover`,
+           { stdio: 'ignore' });
+}
+
+export function stopMover(name: string): void {
+  try {
+    execSync(`docker exec ${name} pkill -f spatialdds_demo.duck_mover`,
+             { stdio: 'ignore' });
+  } catch {
+    // pkill exits non-zero when there was nothing to kill, which is fine:
+    // this runs in cleanup paths where the mover may already be gone.
+  }
+}

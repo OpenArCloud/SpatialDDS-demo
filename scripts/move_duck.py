@@ -51,7 +51,7 @@ from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
 from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1
 from spatialdds_idl.builtin import Time
 from spatialdds_idl.oarc_model import Entity, ModelCommand
-from spatialdds_idl.spatial.core import PoseSE3
+from spatialdds_idl.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "tool:move_duck"
 
@@ -86,6 +86,8 @@ def send(participant: DomainParticipant, verb: str, entity_id: str = "",
         command_id=str(uuid.uuid4()), verb=verb, subject_id=entity_id, reason="",
         requester_id=REQUESTER_ID, has_pose=pose is not None,
         pose=pose or PoseSE3(t=[0.0, 0.0, 0.0], q=[0.0, 0.0, 0.0, 1.0]),
+        has_extent=False,
+        extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0]),
         stamp=Time(sec=int(now), nanosec=int((now % 1) * 1e9)))
     # The command lane is VOLATILE: a writer with nobody attached drops the
     # sample on the floor. The service is long-lived, so this is a discovery

@@ -120,7 +120,8 @@ module oarc_model {
   // per instance -- and a request id is a thing a request should have anyway.
   @extensibility(APPENDABLE) struct ModelCommand {
     @key string command_id;
-    string verb;             // "retire" | "move" | "dispose_edge" | "restore"
+    string verb;             // "retire" | "move" | "set_extent"
+                             // | "dispose_edge" | "restore"
 
     // The thing being acted on, entity or relationship. One field rather than
     // an entity_id beside a rel_id, because the verb already determines which
@@ -137,6 +138,12 @@ module oarc_model {
     // sometimes meaningless is worse than one that says when it is.
     boolean has_pose;
     spatial::core::PoseSE3 pose;
+
+    // Likewise for "set_extent". A command that arrives without the thing it
+    // is meant to set is declined rather than applied as zeroes -- an empty
+    // Aabb3 is a perfectly well-formed request to shrink the pond to a point.
+    boolean has_extent;
+    spatial::core::Aabb3 extent;
     Time   stamp;
   };
 

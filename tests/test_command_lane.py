@@ -29,7 +29,7 @@ from spatialdds_demo.qos_profiles import MODEL_COMMAND  # noqa: E402
 from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1  # noqa: E402
 from spatialdds_idl.builtin import Time  # noqa: E402
 from spatialdds_idl.oarc_model import ModelCommand  # noqa: E402
-from spatialdds_idl.spatial.core import PoseSE3  # noqa: E402
+from spatialdds_idl.spatial.core import Aabb3, PoseSE3  # noqa: E402
 
 DOMAIN = 52
 
@@ -48,6 +48,8 @@ def _command(command_id: str) -> ModelCommand:
         command_id=command_id, verb="retire", subject_id="ent:duck:east",
         reason="winter", requester_id="tool:test", has_pose=False,
         pose=PoseSE3(t=[0.0, 0.0, 0.0], q=[0.0, 0.0, 0.0, 1.0]),
+        has_extent=False,
+        extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0]),
         stamp=Time(sec=int(now), nanosec=0))
 
 

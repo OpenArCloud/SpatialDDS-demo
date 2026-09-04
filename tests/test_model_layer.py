@@ -52,15 +52,17 @@ def _participant(domain_id: int):
         raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
 
 
-def _command(verb, entity_id="", reason="", pose=None):
+def _command(verb, entity_id="", reason="", pose=None, extent=None):
     """A ModelCommand, with the guarded pose left empty unless one is given."""
     from spatialdds_idl.oarc_model import ModelCommand
-    from spatialdds_idl.spatial.core import PoseSE3
+    from spatialdds_idl.spatial.core import Aabb3, PoseSE3
     now = time.time()
     return ModelCommand(
         command_id=f"cmd-{verb}", verb=verb, subject_id=entity_id, reason=reason,
         requester_id="tool:test", has_pose=pose is not None,
         pose=pose or PoseSE3(t=[0.0, 0.0, 0.0], q=[0.0, 0.0, 0.0, 1.0]),
+        has_extent=extent is not None,
+        extent=extent or Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0]),
         stamp=Time(sec=int(now), nanosec=int((now % 1) * 1e9)))
 
 
@@ -285,6 +287,73 @@ class Hierarchy(unittest.TestCase):
         for rel_id in (r.rel_id for r in seed_relationships(seed_entities())):
             with self.subTest(rel_id=rel_id):
                 self.assertRegex(rel_id, r"^rel:contains:[a-z]+-[a-z]+-[a-z-]+$")
+
+
+class SetExtent(unittest.TestCase):
+    """
+    Changing what an entity claims its bounds are.
+
+    The verb exists so the pond can be reshaped at runtime, which is how the
+    demo shows that a consumer following the model needs no code about ponds.
+    """
+
+    def _publisher(self, domain):
+        participant = _participant(domain)
+        publisher = ModelPublisher(participant)
+        for entity in seed_entities():
+            publisher.publish_entity(entity)
+        return participant, publisher
+
+    def test_bounds_change_and_nothing_else_does(self):
+        from spatialdds_idl.spatial.core import Aabb3
+        participant, publisher = self._publisher(DOMAIN + 13)
+        smaller = Aabb3(min_xyz=[11.0, -16.0, -2.0], max_xyz=[15.0, -12.0, -1.0])
+        try:
+            before = to_json(publisher._published["ent:pond:littlefield"])
+            line = publisher.handle_command(
+                _command("set_extent", "ent:pond:littlefield", extent=smaller))
+            self.assertIn("set_extent", line)
+            after = to_json(publisher._published["ent:pond:littlefield"])
+            self.assertEqual(after["extent"]["min_xyz"], [11.0, -16.0, -2.0])
+            self.assertEqual(after["extent"]["max_xyz"], [15.0, -12.0, -1.0])
+            for field in set(before) - {"extent", "stamp"}:
+                with self.subTest(field=field):
+                    self.assertEqual(before[field], after[field])
+        finally:
+            publisher.close()
+
+    def test_a_set_extent_with_no_extent_is_declined(self):
+        """
+        A zeroed Aabb3 is a well-formed request to shrink the pond to a point.
+
+        Applying the guarded member without checking the guard would turn a
+        malformed command into a catastrophic-looking but perfectly valid
+        one -- the ducks would all crowd to a single coordinate and the demo
+        would look like it was working. Declining is the only reading that
+        cannot be mistaken for obedience.
+        """
+        participant, publisher = self._publisher(DOMAIN + 14)
+        try:
+            line = publisher.handle_command(
+                _command("set_extent", "ent:pond:littlefield"))
+            self.assertIn("declined", line)
+            self.assertIn("no extent", line)
+            pond = publisher._published["ent:pond:littlefield"]
+            self.assertEqual(pond.extent.min_xyz, [9.5, -18.0, -2.0],
+                             "a declined command must not have touched anything")
+        finally:
+            publisher.close()
+
+    def test_set_extent_for_something_we_do_not_own_is_declined(self):
+        from spatialdds_idl.spatial.core import Aabb3
+        participant, publisher = self._publisher(DOMAIN + 15)
+        try:
+            line = publisher.handle_command(_command(
+                "set_extent", "ent:gnome:visitor",
+                extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[1.0, 1.0, 1.0])))
+            self.assertIn("declined", line)
+        finally:
+            publisher.close()
 
 
 class EdgeDisposal(unittest.TestCase):

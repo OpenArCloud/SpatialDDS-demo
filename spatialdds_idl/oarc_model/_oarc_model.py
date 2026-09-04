@@ -92,6 +92,8 @@ class ModelCommand(idl.IdlStruct, typename="oarc_model.ModelCommand"):
     requester_id: str
     has_pose: bool
     pose: 'spatialdds_idl.spatial.core.PoseSE3'
+    has_extent: bool
+    extent: 'spatialdds_idl.spatial.core.Aabb3'
     stamp: 'spatialdds_idl.oarc_model.Time'
 
 

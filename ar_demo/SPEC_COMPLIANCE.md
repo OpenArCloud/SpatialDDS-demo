@@ -385,6 +385,30 @@ The two open `oarc_model` items and the two new ones belong with the
 `spatial.model` graduation discussion; the container-bound test is a
 housekeeping note so it is not rediscovered.
 
+### Why guarded members are declined rather than defaulted
+
+**Declining is the only reading that cannot be mistaken for obedience.**
+
+`ModelCommand` carries two guarded members -- a pose for `move`, an extent for
+`set_extent` -- and a command that arrives without the thing it is meant to
+set is refused rather than applied as zeroes. The reason is not tidiness. A
+zeroed `Aabb3` is a *well-formed* request to shrink the pond to a point: apply
+it and the mover dutifully crowds every duck onto a single coordinate, the bus
+is consistent, the client renders it, and the demo looks like it is working.
+A zeroed `PoseSE3` is a well-formed request to move a duck to the frame
+origin. Neither failure announces itself.
+
+The general shape: **when the null value of a field is inside the domain of
+valid requests, absence and zero cannot be distinguished after the fact, so
+they must be distinguished at the boundary.** A guard flag makes that
+possible; declining on a false guard is what makes it useful. Anything that
+defaults instead is choosing the one interpretation guaranteed not to raise.
+
+Sibling to the Part 2 rules -- a typo'd basis must not read as a claim about
+the venue, silent truncation must not read as "not found", "moved" must not
+be printed when you mean "asked". All four are the same instinct: the failure
+mode to design against is the one that looks like success.
+
 ### Declaring bounds judges what is already there
 
 **Every entity that declares an extent is implicitly an audit of everything

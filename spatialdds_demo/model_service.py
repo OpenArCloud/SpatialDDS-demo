@@ -402,6 +402,26 @@ class ModelPublisher:
         self._relationships.dispose(edge)
         return True
 
+    def set_extent(self, entity_id: str, extent: Aabb3) -> Tuple[List[float], List[float]]:
+        """
+        Change what an entity claims its bounds are. Returns the old ones.
+
+        The same read-modify-write as `move`, on our own latched copy, for the
+        same reason: a boundary written by anyone else lasts exactly as long
+        as that writer. Consumers reading bounds -- the mover is one -- get
+        the new ones from the latch and from the stream both.
+        """
+        entity = self._published.get(entity_id)
+        if entity is None:
+            raise KeyError(entity_id)
+        was = (list(entity.extent.min_xyz), list(entity.extent.max_xyz))
+        entity.has_extent = True
+        entity.extent = Aabb3(min_xyz=list(extent.min_xyz),
+                              max_xyz=list(extent.max_xyz))
+        entity.stamp = _now()
+        self._entities.write(entity)
+        return was
+
     def restore_seed(self) -> int:
         """Re-publish the seed, proving a retired id is not burned."""
         entities = seed_entities()
@@ -416,6 +436,23 @@ class ModelPublisher:
         if command.verb == "restore":
             count = self.restore_seed()
             return f"restore from {command.requester_id}: re-seeded {count} entities"
+        if command.verb == "set_extent":
+            if not command.has_extent:
+                # A zeroed Aabb3 is a well-formed request to shrink something
+                # to a point. Declining is the only reading that cannot be
+                # mistaken for obedience.
+                return f"declined: set_extent for {command.subject_id} carried no extent"
+            if not self.owns(command.subject_id):
+                return (f"declined: {command.subject_id} is not ours "
+                        f"(asked by {command.requester_id})")
+            was = self.set_extent(command.subject_id, command.extent)
+            now = command.extent
+            return (f"set_extent {command.subject_id} "
+                    f"x {was[0][0]:.1f}..{was[1][0]:.1f} -> "
+                    f"x {now.min_xyz[0]:.1f}..{now.max_xyz[0]:.1f}, "
+                    f"y {was[0][1]:.1f}..{was[1][1]:.1f} -> "
+                    f"y {now.min_xyz[1]:.1f}..{now.max_xyz[1]:.1f} "
+                    f"(asked by {command.requester_id})")
         if command.verb == "dispose_edge":
             if self.dispose_edge(command.subject_id, command.reason):
                 # The only place the reason survives.
