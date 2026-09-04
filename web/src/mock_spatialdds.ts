@@ -14,18 +14,7 @@ const BASE_GEOPOSE: GeoPose = {
   cov: 'COV_NONE'
 };
 
-const METERS_TO_LAT = 1e-5;
-const METERS_TO_LON = 1e-5 * Math.cos((BASE_GEOPOSE.lat_deg * Math.PI) / 180);
 
-function offsetGeoPose(base: GeoPose, north_m: number, east_m: number, alt_m = base.alt_m): GeoPose {
-  return {
-    ...base,
-    lat_deg: base.lat_deg + north_m * METERS_TO_LAT,
-    lon_deg: base.lon_deg + east_m * METERS_TO_LON,
-    alt_m,
-    stamp: FIXED_STAMP
-  };
-}
 
 export async function mockLocalize(): Promise<LocalizeResponse> {
   return {

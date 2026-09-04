@@ -73,6 +73,23 @@ run "host suite" python3 -m pytest -q \
 
 run "ar_demo protocol" bash -c 'cd ar_demo && PYTHONPATH=.. python3 spatialdds_demo_tests.py'
 
+# TypeScript, actually type-checked.
+#
+# `npm run build` is esbuild: it strips types without looking at them, so a
+# call with the wrong number of arguments builds perfectly. That was silently
+# true for several parts of the OWM work before anyone noticed -- a
+# three-argument call to a two-argument function shipped and ran. Build
+# success is not a type check, so the type check is here.
+#
+# Skipped rather than failed when node_modules is absent: a Python-only
+# checkout should not be told its TypeScript is broken.
+if [ -d web/node_modules ]; then
+  run "web typecheck" bash -c 'cd web && npx tsc --noEmit'
+else
+  echo "  (skipping web typecheck — run npm install in web/ first)"
+fi
+
+
 if [ "$TIER" = "fast" ]; then
   :
 else

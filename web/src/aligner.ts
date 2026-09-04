@@ -103,7 +103,10 @@ export async function initAligner() {
   // draws Cesium's flat imagery over them, which looks like tiles that loaded
   // but rendered as a smeared texture with no buildings — exactly the symptom.
   viewer.scene.globe.show = false;
-  viewer.scene.skyAtmosphere.show = false;
+  // Optional in this Cesium version; absent when the globe is off.
+  if (viewer.scene.skyAtmosphere) {
+    viewer.scene.skyAtmosphere.show = false;
+  }
 
   // The anchor is where the map's origin sits on Earth. It starts from the
   // URL (or a default) and is meant to be moved: click the ground where the
@@ -133,7 +136,9 @@ export async function initAligner() {
   viewFrom('street');
 
   const marker = viewer.entities.add({
-    position: new Cesium.CallbackProperty(() => anchorCartesian, false),
+    // CallbackPositionProperty, not CallbackProperty: an entity's
+    // position needs the reference-frame half of the interface.
+    position: new Cesium.CallbackPositionProperty(() => anchorCartesian, false),
     point: { pixelSize: 12, color: Cesium.Color.ORANGE,
              outlineColor: Cesium.Color.BLACK, outlineWidth: 2,
              disableDepthTestDistance: Number.POSITIVE_INFINITY },
@@ -157,7 +162,8 @@ export async function initAligner() {
     try {
       tileset = await Cesium.Cesium3DTileset.fromIonAssetId(assetId);
       viewer.scene.primitives.add(tileset);
-      await tileset.readyPromise?.catch(() => undefined);
+      // `readyPromise` was removed from Cesium3DTileset; fromIonAssetId
+      // already resolves once the tileset is ready.
       tilesNote.textContent = `3D tiles: Ion asset ${assetId}`;
       tilesNote.className = 'note ok';
     } catch (error) {
