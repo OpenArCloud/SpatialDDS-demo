@@ -52,7 +52,7 @@ def send(participant: DomainParticipant, verb: str,
     writer = tt.make_writer(
         participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
     command = ModelCommand(
-        command_id=str(uuid.uuid4()), verb=verb, entity_id=entity_id,
+        command_id=str(uuid.uuid4()), verb=verb, subject_id=entity_id,
         reason=reason, requester_id=REQUESTER_ID,
         # Retirement carries no pose. The member is guarded rather than
         # optional, so it is present and ignored.
@@ -96,6 +96,27 @@ def watch(participant: DomainParticipant, entity_id: str,
     return seen
 
 
+def dispose_edge(rel_id: str, reason: str, domain_id: Optional[int] = None) -> int:
+    """
+    Ask the service to drop one edge.
+
+    There is no tombstone to watch for: `Relationship` has no lifecycle state,
+    so an edge cannot announce its own removal or say why. This reports what
+    it asked and what the bus shows afterwards -- absence, which is all the
+    edge is able to say.
+    """
+    domain_id = require_dds_env() if domain_id is None else domain_id
+    participant = DomainParticipant(domain_id)
+    print(f"retire: asking the model service to dispose {rel_id}")
+    print(f"retire: reason {reason!r} — kept in the log only; an edge has "
+          f"nowhere to carry it")
+    send(participant, "dispose_edge", rel_id, reason)
+    time.sleep(2.0)
+    print(f"retire: asked. The edge can only stop being there, so absence "
+          f"from /v1/model is the whole of the evidence.")
+    return 0
+
+
 def run(entity_id: str, reason: str, restore: bool,
         domain_id: Optional[int] = None) -> int:
     domain_id = require_dds_env() if domain_id is None else domain_id
@@ -133,8 +154,14 @@ def main() -> int:
                         help="carried into state_reason and shown to clients")
     parser.add_argument("--restore", action="store_true",
                         help="ask the service to re-seed the venue")
+    parser.add_argument("--edge", metavar="REL_ID", default=None,
+                        help="dispose one relationship instead of an entity")
     parser.add_argument("--domain", type=int, default=None)
     args = parser.parse_args()
+    if args.edge:
+        if not args.entity_id:
+            parser.error("give a reason with --edge, e.g. --edge rel:x \"why\"")
+        return dispose_edge(args.edge, args.entity_id, args.domain)
     if not args.restore and not (args.entity_id and args.reason):
         parser.error("give an entity_id and a reason, or --restore")
     return run(args.entity_id or "", args.reason, args.restore, args.domain)

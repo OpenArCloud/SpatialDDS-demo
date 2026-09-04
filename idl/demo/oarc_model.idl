@@ -120,8 +120,17 @@ module oarc_model {
   // per instance -- and a request id is a thing a request should have anyway.
   @extensibility(APPENDABLE) struct ModelCommand {
     @key string command_id;
-    string verb;             // "retire" | "move" | "restore"
-    string entity_id;        // the subject; ignored by "restore"
+    string verb;             // "retire" | "move" | "dispose_edge" | "restore"
+
+    // The thing being acted on, entity or relationship. One field rather than
+    // an entity_id beside a rel_id, because the verb already determines which
+    // kind it names and a field that is empty for every other verb is a worse
+    // lie than a general one. Ids say what they are -- `ent:` or `rel:` -- so
+    // nothing has to be guessed. Ignored by "restore".
+    //
+    // Named entity_id until Part 3, when "dispose_edge" arrived and made that
+    // name false for one of the verbs.
+    string subject_id;
     string reason;           // why, carried into state_reason by "retire"
     string requester_id;     // who asked, for the log
     // Guarded because only "move" carries one, and a pose field that is

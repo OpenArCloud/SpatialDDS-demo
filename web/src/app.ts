@@ -918,6 +918,26 @@ function describeEntity(item: CatalogItem): string | undefined {
   </div>`;
 }
 
+/**
+ * An extent's colour says how the claim was arrived at.
+ *
+ * Deliberately not a per-entity palette: the point of drawing two boxes over
+ * one pond is that a viewer can see *why* they differ, and "the blue one is
+ * the pond entity" would not survive a second opinion arriving.
+ */
+function extentColour(basis: string | undefined): Cesium.Color {
+  switch (basis) {
+    case 'OBSERVED':                            // measured; the tiles saw it
+      return Cesium.Color.fromCssColorString('rgba(95, 196, 205, 0.9)');
+    case 'DECLARED':                            // asserted by the venue
+      return Cesium.Color.fromCssColorString('rgba(240, 196, 78, 0.9)');
+    case 'DERIVED':                             // computed by somebody
+      return Cesium.Color.fromCssColorString('rgba(197, 128, 240, 0.9)');
+    default:                                    // AUTHORED, or unstated
+      return Cesium.Color.fromCssColorString('rgba(200, 200, 200, 0.75)');
+  }
+}
+
 function addItemEntity(item: CatalogItem) {
   const drawsItself = item.kind === 'model' && !!item.model_url
     && /\.glb($|\?)/i.test(item.model_url);
@@ -1027,7 +1047,11 @@ function addItemEntity(item: CatalogItem) {
         // say the same thing and leave the contents reachable.
         fill: false,
         outline: true,
-        outlineColor: Cesium.Color.fromCssColorString('rgba(95, 196, 205, 0.9)'),
+        // Coloured by basis, not by which entity it is. Two volumes over the
+        // same water -- the venue's declared bounds and a service's observed
+        // ones -- have to be told apart by what kind of claim they are, and a
+        // palette keyed to entity ids would say nothing when a third turns up.
+        outlineColor: extentColour(item.entity?.basis),
         outlineWidth: 2
       }
     });

@@ -40,8 +40,8 @@ class SnapshotShape(unittest.TestCase):
     def test_top_level_shape(self):
         snapshot = _loaded().snapshot(STAMP)
         self.assertEqual(set(snapshot), {"entities", "relationships", "stamp"})
-        self.assertEqual(len(snapshot["entities"]), 4)
-        self.assertEqual(len(snapshot["relationships"]), 3)
+        self.assertEqual(len(snapshot["entities"]), 5)
+        self.assertEqual(len(snapshot["relationships"]), 4)
         self.assertEqual(snapshot["stamp"], STAMP)
 
     def test_entity_fields_match_the_documented_shape(self):
@@ -158,14 +158,14 @@ class Mirroring(unittest.TestCase):
         removed = cache.dispose_entity(101)
         self.assertIsNotNone(removed)
         snapshot = cache.snapshot(STAMP)
-        self.assertEqual(len(snapshot["entities"]), 3)
+        self.assertEqual(len(snapshot["entities"]), 4)
         self.assertNotIn(removed, [e["entity_id"] for e in snapshot["entities"]])
         self.assertEqual(cache.stats()["evicted"], 1)
 
     def test_disposing_an_unknown_handle_is_harmless(self):
         cache = _loaded()
         self.assertIsNone(cache.dispose_entity(9999))
-        self.assertEqual(len(cache.snapshot(STAMP)["entities"]), 4)
+        self.assertEqual(len(cache.snapshot(STAMP)["entities"]), 5)
 
     def test_an_empty_cache_still_answers_with_the_documented_shape(self):
         """No publisher running is not an error; it is an empty world."""
@@ -180,7 +180,7 @@ class Mirroring(unittest.TestCase):
         cache.admit_entity(entity, instance_handle=101)
         by_id = {e["entity_id"]: e for e in cache.snapshot(STAMP)["entities"]}
         self.assertEqual(by_id[entity.entity_id]["pose"]["t"], [1.0, 2.0, 3.0])
-        self.assertEqual(len(cache.snapshot(STAMP)["entities"]), 4)
+        self.assertEqual(len(cache.snapshot(STAMP)["entities"]), 5)
 
 
 class Retirement(unittest.TestCase):
@@ -198,11 +198,11 @@ class Retirement(unittest.TestCase):
         duck = next(e for e in entities if e.entity_id == "ent:duck:east")
         duck.state = LifecycleState.RETIRED
         duck.state_reason = "taken in for the winter"
-        cache.admit_entity(duck, instance_handle=103)
+        cache.admit_entity(duck, instance_handle=104)
 
         snapshot = cache.snapshot(STAMP)
         by_id = {e["entity_id"]: e for e in snapshot["entities"]}
-        self.assertEqual(len(snapshot["entities"]), 4, "still present, still counted")
+        self.assertEqual(len(snapshot["entities"]), 5, "still present, still counted")
         self.assertEqual(by_id["ent:duck:east"]["state"], "RETIRED")
         self.assertEqual(by_id["ent:duck:east"]["state_reason"],
                          "taken in for the winter")
@@ -211,19 +211,21 @@ class Retirement(unittest.TestCase):
 
     def test_the_dispose_evicts_and_the_snapshot_forgets_it(self):
         cache = _loaded()
-        removed = cache.dispose_entity(103)
+        removed = cache.dispose_entity(104)
         self.assertEqual(removed, "ent:duck:east")
         snapshot = cache.snapshot(STAMP)
-        self.assertEqual(len(snapshot["entities"]), 3)
+        self.assertEqual(len(snapshot["entities"]), 4)
         self.assertNotIn("ent:duck:east",
                          [e["entity_id"] for e in snapshot["entities"]])
 
     def test_the_cascade_removes_the_edge_and_leaves_the_others(self):
         cache = _loaded()
         # seed_relationships is ordered as the ducks are: catalog-pose, west, east.
-        self.assertEqual(cache.dispose_relationship(202), "rel:contains:east")
+        self.assertEqual(cache.dispose_relationship(203), "rel:contains:pond-duck-east")
         rel_ids = [r["rel_id"] for r in cache.snapshot(STAMP)["relationships"]]
-        self.assertEqual(rel_ids, ["rel:contains:catalog-pose", "rel:contains:west"])
+        self.assertEqual(rel_ids, ["rel:contains:fountain-pond-littlefield",
+                                   "rel:contains:pond-duck-catalog-pose",
+                                   "rel:contains:pond-duck-west"])
 
     def test_a_dispose_reports_what_it_removed_so_clients_can_be_told(self):
         """

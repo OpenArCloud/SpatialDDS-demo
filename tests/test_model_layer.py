@@ -39,8 +39,8 @@ from spatialdds_idl.oarc_model import Entity, Relationship  # noqa: E402
 
 # High enough to stay clear of the demo stack's own domains.
 DOMAIN = 43
-SEEDED_ENTITIES = 4
-SEEDED_RELATIONSHIPS = 3
+SEEDED_ENTITIES = 5      # fountain, pond, three ducks
+SEEDED_RELATIONSHIPS = 4  # fountain>pond, pond>each duck
 
 
 def _participant(domain_id: int):
@@ -58,7 +58,7 @@ def _command(verb, entity_id="", reason="", pose=None):
     from spatialdds_idl.spatial.core import PoseSE3
     now = time.time()
     return ModelCommand(
-        command_id=f"cmd-{verb}", verb=verb, entity_id=entity_id, reason=reason,
+        command_id=f"cmd-{verb}", verb=verb, subject_id=entity_id, reason=reason,
         requester_id="tool:test", has_pose=pose is not None,
         pose=pose or PoseSE3(t=[0.0, 0.0, 0.0], q=[0.0, 0.0, 0.0, 1.0]),
         stamp=Time(sec=int(now), nanosec=int((now % 1) * 1e9)))
@@ -218,6 +218,134 @@ class SecondPublisher(unittest.TestCase):
             publisher.close()
 
 
+class Hierarchy(unittest.TestCase):
+    """
+    Fountain contains pond, pond contains each duck.
+
+    Part 1 had the fountain containing the ducks directly. That was true and
+    shallow: the ducks are on the water, and the water is part of the
+    fountain. The shape is borrowed rather than invented -- Wikidata says
+    Q810524 (basin) is `part of` Q483453 (fountain), which is exactly the edge
+    the seeder publishes between the two entities carrying those types.
+    """
+
+    def test_the_pond_is_declared_with_bounds_inside_the_water(self):
+        pond = next(e for e in seed_entities()
+                    if e.entity_id == "ent:pond:littlefield")
+        self.assertEqual(pond.basis.name, "DECLARED")
+        self.assertEqual(pond.layer.name, "STATIC")
+        self.assertTrue(pond.has_extent)
+        self.assertEqual(pond.type_uris, ["http://www.wikidata.org/entity/Q810524"])
+
+        # Inside the waterline measured off the tiles (x 5..20, y -10..-18),
+        # and clear of the sculpture at x ~ 8. A declared boundary that is a
+        # little small keeps whatever trusts it wet.
+        self.assertGreaterEqual(pond.extent.min_xyz[0], 9.0)
+        self.assertLessEqual(pond.extent.max_xyz[0], 20.0)
+        self.assertGreaterEqual(pond.extent.min_xyz[1], -18.0)
+        self.assertLessEqual(pond.extent.max_xyz[1], -10.0)
+
+    def test_every_duck_sits_inside_the_declared_pond(self):
+        """The seed has to be consistent with itself, or the mover starts
+        out of bounds in P3.2."""
+        entities = {e.entity_id: e for e in seed_entities()}
+        pond = entities["ent:pond:littlefield"]
+        for entity_id, entity in entities.items():
+            if not entity_id.startswith("ent:duck"):
+                continue
+            with self.subTest(duck=entity_id):
+                for axis in (0, 1):
+                    self.assertGreaterEqual(entity.pose.t[axis],
+                                            pond.extent.min_xyz[axis])
+                    self.assertLessEqual(entity.pose.t[axis],
+                                         pond.extent.max_xyz[axis])
+
+    def test_the_hierarchy_is_two_levels_and_names_both_ends(self):
+        entities = seed_entities()
+        edges = {r.rel_id: r for r in seed_relationships(entities)}
+        self.assertEqual(len(edges), 4)
+        self.assertEqual(edges["rel:contains:fountain-pond-littlefield"].from_entity_id,
+                         "ent:fountain:littlefield")
+        self.assertEqual(edges["rel:contains:fountain-pond-littlefield"].to_entity_id,
+                         "ent:pond:littlefield")
+        for duck in ("catalog-pose", "west", "east"):
+            edge = edges[f"rel:contains:pond-duck-{duck}"]
+            self.assertEqual(edge.from_entity_id, "ent:pond:littlefield")
+            self.assertEqual(edge.to_entity_id, f"ent:duck:{duck}")
+        # Nothing contains a duck directly any more.
+        self.assertFalse(
+            [r for r in edges.values()
+             if r.from_entity_id == "ent:fountain:littlefield"
+             and r.to_entity_id.startswith("ent:duck")])
+
+    def test_the_edge_ids_say_which_end_is_which(self):
+        """`rel:contains:fountain-littlefield` was the first attempt: the
+        child's last segment is the venue name, so the id read as though the
+        fountain contained itself."""
+        for rel_id in (r.rel_id for r in seed_relationships(seed_entities())):
+            with self.subTest(rel_id=rel_id):
+                self.assertRegex(rel_id, r"^rel:contains:[a-z]+-[a-z]+-[a-z-]+$")
+
+
+class EdgeDisposal(unittest.TestCase):
+    """
+    `dispose_edge`, and why it is not called `retire`.
+
+    An edge has no `LifecycleState`. It cannot retire, and it cannot say why
+    it went -- only stop being there. Naming the verb `retire` would have
+    contradicted the design note published in Part 2.
+    """
+
+    def _publisher(self, domain):
+        participant = _participant(domain)
+        publisher = ModelPublisher(participant)
+        entities = seed_entities()
+        for entity in entities:
+            publisher.publish_entity(entity)
+        for relationship in seed_relationships(entities):
+            publisher.publish_relationship(relationship)
+        return participant, publisher
+
+    def test_an_edge_can_be_disposed_without_touching_either_end(self):
+        participant, publisher = self._publisher(DOMAIN + 10)
+        target = "rel:contains:pond-duck-west"
+        try:
+            line = publisher.handle_command(_command("dispose_edge", target,
+                                                     reason="superseded by hierarchy"))
+            self.assertIn("disposed edge", line)
+            self.assertIn("superseded by hierarchy", line)
+            # Both ends are still there. Only the claim between them went.
+            self.assertTrue(publisher.owns("ent:duck:west"))
+            self.assertTrue(publisher.owns("ent:pond:littlefield"))
+        finally:
+            publisher.close()
+
+    def test_the_reason_exists_only_in_the_log(self):
+        """
+        The gap, demonstrated rather than papered over.
+
+        A retired entity carries its reason in `state_reason` for one sample.
+        An edge has nowhere to put one, so the operator's reason reaches a
+        human through the service log and nothing else -- and the line says
+        so, rather than implying the edge announced itself.
+        """
+        participant, publisher = self._publisher(DOMAIN + 11)
+        try:
+            line = publisher.handle_command(_command(
+                "dispose_edge", "rel:contains:pond-duck-east", reason="winter"))
+            self.assertIn("carries no reason", line)
+        finally:
+            publisher.close()
+
+    def test_disposing_an_edge_that_is_not_ours_is_declined(self):
+        participant, publisher = self._publisher(DOMAIN + 12)
+        try:
+            line = publisher.handle_command(_command("dispose_edge", "rel:nope:nope"))
+            self.assertIn("declined", line)
+        finally:
+            publisher.close()
+
+
 class Retirement(unittest.TestCase):
     """
     Tombstone, then dispose -- and it has to stick.
@@ -291,7 +419,7 @@ class Retirement(unittest.TestCase):
         participant, publisher = self._publisher(DOMAIN + 4)
         target = "ent:duck:east"
         cascaded = publisher.retire(target, "taken in for the winter", settle=0.2)
-        self.assertEqual(cascaded, ["rel:contains:east"],
+        self.assertEqual(cascaded, ["rel:contains:pond-duck-east"],
                          "retiring an entity should take its edges with it")
         time.sleep(0.5)
 
@@ -304,7 +432,7 @@ class Retirement(unittest.TestCase):
                                Relationship, MODEL_LATCHED.name),
                 SEEDED_ENTITIES - 1, SEEDED_RELATIONSHIPS - 1, timeout=6.0)
             self.assertNotIn(target, entities)
-            self.assertNotIn("rel:contains:east", relationships)
+            self.assertNotIn("rel:contains:pond-duck-east", relationships)
             # And nothing else went with it.
             self.assertEqual(len(entities), SEEDED_ENTITIES - 1)
             self.assertEqual(len(relationships), SEEDED_RELATIONSHIPS - 1)
@@ -335,7 +463,7 @@ class Retirement(unittest.TestCase):
             self.assertEqual(entities[target].state.name, "ACTIVE")
             self.assertEqual(entities[target].state_reason, "",
                              "a restored entity should not still be explaining itself")
-            self.assertIn("rel:contains:east", relationships)
+            self.assertIn("rel:contains:pond-duck-east", relationships)
         finally:
             publisher.close()
 
@@ -478,7 +606,7 @@ class Mover(unittest.TestCase):
             # The guard exists so a zeroed pose is never mistaken for a
             # request to put the duck at the frame origin.
             self.assertEqual(
-                tuple(publisher._published["ent:duck:west"].pose.t[:2]), (6.5, -8.0))
+                tuple(publisher._published["ent:duck:west"].pose.t[:2]), (10.5, -13.0))
         finally:
             publisher.close()
 

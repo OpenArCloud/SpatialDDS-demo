@@ -488,7 +488,11 @@ export type ModelSnapshot = {
  */
 export const TYPE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   'http://www.wikidata.org/entity/Q483453': 'Fountain',
-  'http://www.wikidata.org/entity/Q851478': 'Rubber duck'
+  'http://www.wikidata.org/entity/Q851478': 'Rubber duck',
+  // "element of a fountain where water is poured into" -- and `part of`
+  // (P361) Q483453, the fountain above, so the vocabulary states the
+  // hierarchy the model publishes rather than the demo inventing it.
+  'http://www.wikidata.org/entity/Q810524': 'Basin'
 });
 
 /**

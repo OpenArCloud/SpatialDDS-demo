@@ -377,12 +377,42 @@ recorded; Part 2 either closed or sharpened.
 | No `ServiceKind` fits a world model | open | below, "Model layer discovery" | The publisher is deliberately silent, so the layer has no discovery story yet |
 | `Relationship` is under-specified relative to `Entity` | **new in Part 2** | below, "What an edge cannot say" | No `LifecycleState` and no `basis`: an edge cannot say why it went, or how the claim was arrived at |
 | A retirement cascade is a local courtesy, not a rule | **new in Part 2** | below, "What an edge cannot say" | A dangling edge across a federation boundary is valid; one left by a local tool is mess |
+| A DECLARED entity audits everything already in the model | **new in Part 3** | below, "Declaring bounds judges what is already there" | Bounds arriving late make existing state right or wrong retroactively; nothing else changed |
 | A command channel's type must be keyed | **new in Part 3** | below, "An unkeyed command topic kills its readers" | An exiting client delivers an invalid sample; deserializing the key of an unkeyed type raises inside `take()`, before any user code sees it |
 | `test_bridge_http.py` is container-bound | open | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
 
 The two open `oarc_model` items and the two new ones belong with the
 `spatial.model` graduation discussion; the container-bound test is a
 housekeeping note so it is not rediscovered.
+
+### Declaring bounds judges what is already there
+
+**Every entity that declares an extent is implicitly an audit of everything
+already in the model.** Nothing about the existing state changes; what changes
+is whether it can be described as correct.
+
+Met here at rubber-duck scale. `ent:duck:west` had sat at (6.5, -8.0) since
+Part 1, and nothing was wrong with it: no entity said where the water was, so
+"on the water" was not a claim anything could contradict. The moment the venue
+declared a pond at x 9.5..20, y -10..-18, that duck was on the rim -- not
+because it moved, but because something finally said where the edge was.
+
+The seed was corrected before the mover existed, deliberately. A mover reading
+the pond's bounds would have found the duck outside them and walked it in on
+its first tick, and a demo whose opening move is correcting itself is teaching
+that the model is unreliable rather than that it is authoritative. The guard
+is `test_every_duck_sits_inside_the_declared_pond`, which fails at seed time
+rather than at run time.
+
+At larger scale this is the ordinary case rather than a demo curiosity: a
+venue that surveys a boundary, a fusion service that publishes a footprint, a
+regulator that declares an exclusion zone -- each one retroactively sorts
+existing entities into compliant and not. The model has no opinion about which
+of the two claims is wrong, and should not: the pose was published in good
+faith and so was the boundary. What a consumer needs is enough information to
+decide, which is what `basis` is for. Part 3's second pond meets the same
+property one level up, where two services disagree about where the water is
+and nothing in the model crowns either.
 
 ### An unkeyed command topic kills its readers
 

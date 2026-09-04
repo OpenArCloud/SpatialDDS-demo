@@ -45,7 +45,7 @@ def _participant(domain_id: int):
 def _command(command_id: str) -> ModelCommand:
     now = time.time()
     return ModelCommand(
-        command_id=command_id, verb="retire", entity_id="ent:duck:east",
+        command_id=command_id, verb="retire", subject_id="ent:duck:east",
         reason="winter", requester_id="tool:test", has_pose=False,
         pose=PoseSE3(t=[0.0, 0.0, 0.0], q=[0.0, 0.0, 0.0, 1.0]),
         stamp=Time(sec=int(now), nanosec=0))

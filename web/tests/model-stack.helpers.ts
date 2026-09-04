@@ -14,8 +14,8 @@ import { expect } from '@playwright/test';
 
 export const BRIDGE_URL =
   process.env.VITE_SPATIALDDS_BRIDGE_URL || 'http://localhost:8088';
-export const SEEDED_ENTITIES = 5;      // fountain, three ducks, the gnome
-export const SEEDED_RELATIONSHIPS = 3;
+export const SEEDED_ENTITIES = 6;      // fountain, pond, three ducks, the gnome
+export const SEEDED_RELATIONSHIPS = 4;
 
 export function container(): string | null {
   try {
@@ -65,7 +65,7 @@ export async function restoreVenue(request: any, name: string): Promise<void> {
 // As seeded in spatialdds_demo/model_service.py.
 export const SEED_POSES: Record<string, [number, number]> = {
   'ent:duck:catalog-pose': [11.708, -14.273],
-  'ent:duck:west': [6.5, -8.0],
+  'ent:duck:west': [10.5, -13.0],
   'ent:duck:east': [16.5, -10.5]
 };
 

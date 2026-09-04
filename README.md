@@ -151,9 +151,25 @@ Nothing switches the client between paths: if `/v1/model` returns entities it
 renders from them and the catalogue contributes only the asset each one points
 at, suppressed per `content_id` so the two cannot both draw the same duck.
 `?catalogpose=1` forces the legacy path for comparison, and
-`?basis=observed` (or `authored`, comma-lists accepted) filters the view to
-how each claim was arrived at — a view, not a subscription: the client still
-receives the whole model and says in the readout how much it is hiding.
+`?basis=observed` (or `declared`, `authored`, `derived`; comma-lists accepted)
+filters the view to how each claim was arrived at — a view, not a
+subscription: the client still receives the whole model and says in the
+readout how much it is hiding.
+
+Anything that declares an extent draws it as a wireframe, **coloured by how
+the claim was arrived at** rather than by which entity it is:
+
+| | Basis | Means |
+|---|---|---|
+| 🟦 cyan | `OBSERVED` | something measured it — the fountain is in the LiDAR capture the map was built from |
+| 🟨 amber | `DECLARED` | the venue asserts it — the pond's bounds are stated, not surveyed |
+| 🟪 violet | `DERIVED` | computed by a service from something else |
+| ⬜ grey | `AUTHORED` | somebody put it there |
+
+The colours are keyed to basis on purpose. Two services can publish two
+volumes over the same water, and what a viewer needs to see is not *which
+entity is which* but *what kind of claim each one is* — a palette keyed to
+entity ids would say nothing the moment a second opinion arrived.
 
 A `catalog:<content_id>` reference is resolved against the rows the coverage
 query already returned, and by a direct `content_id_in` query when it is not

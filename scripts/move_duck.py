@@ -6,9 +6,12 @@ Move one thing in the world model, and watch every connected client follow.
     scripts/move_duck.py ent:duck:west 9.0 -12.0 -1.5
     scripts/move_duck.py --reset            # everything back to its seeded pose
 
-The pool, measured off the tiles in these coordinates: water is roughly
-x 5..20, y -10..-18. Beyond that is rim and plaza -- y=-2 and y=-22 are about
-a metre higher -- and x~8 is the sculpture in the middle.
+The water, measured off the tiles, is roughly x 5..20, y -10..-18; beyond that
+is rim and plaza (y=-2 and y=-22 are about a metre higher) and x~8 is the
+sculpture in the middle. Since Part 3 the venue *declares* a pond with bounds
+inside that -- x 9.5..20, y -10..-18, clear of the sculpture -- which is what
+the mover reads and what a duck should stay within. This tool does not check:
+an operator asking for a spot on the plaza gets it.
 
 Coordinates are metres in the entity's own frame -- the venue frame the client
 localizes into -- so they are the same numbers the publisher seeded with, not
@@ -80,7 +83,7 @@ def send(participant: DomainParticipant, verb: str, entity_id: str = "",
         participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
     now = time.time()
     command = ModelCommand(
-        command_id=str(uuid.uuid4()), verb=verb, entity_id=entity_id, reason="",
+        command_id=str(uuid.uuid4()), verb=verb, subject_id=entity_id, reason="",
         requester_id=REQUESTER_ID, has_pose=pose is not None,
         pose=pose or PoseSE3(t=[0.0, 0.0, 0.0], q=[0.0, 0.0, 0.0, 1.0]),
         stamp=Time(sec=int(now), nanosec=int((now % 1) * 1e9)))

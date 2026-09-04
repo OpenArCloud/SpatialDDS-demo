@@ -150,6 +150,7 @@ test('the basis pair partitions the venue, and a stranger is placed either way',
     test.setTimeout(300_000);
     const all = await capture(page, '/?debug=1', 'default-all');
     const observed = await capture(page, '/?debug=1&basis=observed', 'basis-observed');
+    const declared = await capture(page, '/?debug=1&basis=declared', 'basis-declared');
     const authored = await capture(page, '/?debug=1&basis=authored', 'basis-authored');
 
     // The stranger, in the default view: placed, named from its type URI
@@ -180,18 +181,22 @@ test('the basis pair partitions the venue, and a stranger is placed either way',
       }
     }
 
-    // The pair.
+    // The triptych. One venue, three kinds of claim about it.
     expect(observed.ids).toEqual(['ent:fountain:littlefield']);
+    expect(declared.ids).toEqual(['ent:pond:littlefield']);
     expect(authored.ids).toEqual(
       ['ent:duck:catalog-pose', 'ent:duck:east', 'ent:duck:west', 'ent:gnome:visitor']);
-    // Disjoint and complete: every entity is in exactly one of the two views,
-    // and between them they account for the whole model.
-    expect([...observed.ids, ...authored.ids].sort()).toEqual(all.ids);
+    // Disjoint and complete: every entity is in exactly one view, and between
+    // them they account for the whole model. When the observed pond arrives
+    // in P3.5 this becomes four, and the same assertion has to keep holding.
+    expect([...observed.ids, ...declared.ids, ...authored.ids].sort())
+      .toEqual(all.ids);
 
     // A filtered scene says so, rather than presenting a partial world as
     // the whole one.
-    expect(observed.readout).toContain('basis=OBSERVED — 4 hidden');
-    expect(authored.readout).toContain('basis=AUTHORED — 1 hidden');
+    expect(observed.readout).toContain('basis=OBSERVED — 5 hidden');
+    expect(declared.readout).toContain('basis=DECLARED — 5 hidden');
+    expect(authored.readout).toContain('basis=AUTHORED — 2 hidden');
     expect(all.readout).not.toContain('hidden');
   });
 
@@ -232,7 +237,10 @@ test('a model entity moved on the bus moves in an open browser', async ({ page }
   // from its last position: eight runs had walked it from (16.5, -10.5) to
   // (40.5, -34.5), out of the fountain and onto the plaza.
   const seeded = [16.5, -10.5];
-  const destination = [6.0, -17.0];
+  // Inside the pond the venue declares (x 9.5..20, y -10..-18). The old
+  // destination (6.0, -17.0) predates the pond and would now park a duck on
+  // the sculpture -- harmless to the assertion, and a bad picture.
+  const destination = [11.0, -16.0];
   const [x, y] = seeded;
 
   // The republish is not politeness. About one run in three, an update

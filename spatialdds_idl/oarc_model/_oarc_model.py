@@ -87,7 +87,7 @@ class ModelCommand(idl.IdlStruct, typename="oarc_model.ModelCommand"):
     command_id: str
     annotate.key("command_id")
     verb: str
-    entity_id: str
+    subject_id: str
     reason: str
     requester_id: str
     has_pose: bool

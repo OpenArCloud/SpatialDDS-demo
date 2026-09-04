@@ -64,6 +64,16 @@ TOMBSTONE_SETTLE_S = 1.5
 TYPE_FOUNTAIN = "http://www.wikidata.org/entity/Q483453"   # fountain
 TYPE_RUBBER_DUCK = "http://www.wikidata.org/entity/Q851478"  # rubber duck
 
+# "basin" -- element of a fountain where water is poured into. Verified
+# 2026-09-03, and it corroborates the hierarchy rather than merely fitting it:
+# the item carries `part of` (P361) -> Q483453, which is the type already on
+# the fountain. The containment this seeder publishes is therefore borrowed
+# from the vocabulary, not invented by the demo.
+#
+# Q1328914 ("reflecting pool") was the near miss: its definition requires
+# water undisturbed by fountain jets, which this basin is not.
+TYPE_BASIN = "http://www.wikidata.org/entity/Q810524"
+
 # Venue-frame metres. The frame's origin is the OpenVPS map anchor, which sits
 # on the plaza north-west of the basin, so the fountain itself is a short walk
 # from the origin rather than at it.
@@ -72,6 +82,19 @@ FOUNTAIN_CENTRE = (11.708, -5.23, -1.42)
 # The basin, coarsely: about 28 m across and 33 m along the mall.
 BASIN_HALF_EW, BASIN_HALF_NS = 14.1, 16.25
 BASIN_DOWN, BASIN_UP = 1.0, 4.0
+
+# The pond: the water itself, as a thing rather than as a property of the
+# fountain. Bounds are the waterline measured off the photorealistic tiles,
+# then pulled in past the memorial sculpture at x ~ 8.
+#
+# Deliberately conservative rather than accurate. The venue *declares* these
+# bounds; it has not surveyed them, and a declared boundary that is a little
+# smaller than the water is safe in the way that matters -- anything trusting
+# it stays wet. Being visibly coarse is also useful: when a second service
+# publishes its own observed opinion of the same water, the two disagree for
+# a reason a person can see rather than by a rounding error.
+POND_MIN = (9.5, -18.0, -2.0)
+POND_MAX = (20.0, -10.0, -1.0)
 
 # Three ducks on the water. The first reuses the catalogue row's own pose, so
 # switching the client from catalogue placement to model placement does not
@@ -84,7 +107,13 @@ BASIN_DOWN, BASIN_UP = 1.0, 4.0
 DUCKS: List[Tuple[str, str, Tuple[float, float, float], List[float]]] = [
     ("ent:duck:catalog-pose", "Waddles", (11.708, -14.273, -1.423),
      [0.0, 0.0, -0.7071067811865475, 0.7071067811865476]),   # facing south
-    ("ent:duck:west", "Bobbin", (6.5, -8.0, -1.423),
+    # Moved onto the water in Part 3. It had been at (6.5, -8.0) since Part 1,
+    # which was fine while nothing said where the water was and wrong the
+    # moment the pond declared its bounds -- x 6.5 is past the western edge
+    # and y -8.0 is up on the rim. The seed has to be consistent with itself
+    # or the mover starts out of bounds and corrects on its first tick, which
+    # would look like the demo fixing a mistake it should not have made.
+    ("ent:duck:west", "Bobbin", (10.5, -13.0, -1.423),
      [0.0, 0.0, 0.0, 1.0]),                                   # facing east
     ("ent:duck:east", "Skipper", (16.5, -10.5, -1.423),
      [0.0, 0.0, 0.3826834323650898, 0.9238795325112867]),     # facing north-east
@@ -159,6 +188,31 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         stamp=stamp,
     )
 
+    px = [(POND_MIN[i] + POND_MAX[i]) / 2 for i in range(3)]
+    pond = Entity(
+        entity_id="ent:pond:littlefield",
+        # DECLARED: the venue asserts these bounds. Nothing measured them into
+        # the model and nobody surveyed them -- which is exactly what DECLARED
+        # is for, and why the observed service's opinion is allowed to differ.
+        basis=Basis.DECLARED,
+        type_uris=[TYPE_BASIN],
+        layer=ModelLayer.STATIC,
+        frame_ref=frame,
+        has_pose=True,
+        pose=PoseSE3(t=px, q=[0.0, 0.0, 0.0, 1.0]),
+        has_extent=True,
+        extent=Aabb3(min_xyz=list(POND_MIN), max_xyz=list(POND_MAX)),
+        properties=[KV(key="demo.label", value="Pond"),
+                    KV(key="demo.note",
+                       value="The water, as its own entity. Bounds are declared by the venue and deliberately a little inside the waterline.")],
+        external_refs=[],
+        content_refs=[],
+        state=LifecycleState.ACTIVE,
+        state_reason="",
+        source_id=SOURCE_ID,
+        stamp=stamp,
+    )
+
     ducks = [
         Entity(
             entity_id=entity_id,
@@ -186,27 +240,48 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         )
         for entity_id, name, translation, rotation in DUCKS
     ]
-    return [fountain] + ducks
+    return [fountain, pond] + ducks
 
 
 def seed_relationships(entities: List[Entity],
                        stamp: Optional[Time] = None) -> List[Relationship]:
-    """`contains`, fountain to each duck. Keyed separately from the entities,
-    so an edge can retire without either end retiring."""
+    """
+    The hierarchy: fountain contains pond, pond contains each duck.
+
+    Part 1 had the fountain containing the ducks directly, which was true and
+    shallow -- the ducks are on the water, and the water is part of the
+    fountain. Wikidata says the same thing about the types (Q810524 is
+    `part of` Q483453), so the shape is borrowed rather than invented.
+
+    Ids name both ends because there are now two levels and
+    `rel:contains:west` no longer says which parent is meant. The Part 1 ids
+    are superseded, not renamed: an operator disposes them through the
+    command lane, since an edge cannot be updated into a different edge.
+    """
     stamp = stamp or _now()
-    fountain = entities[0]
-    return [
-        Relationship(
-            rel_id=f"rel:contains:{duck.entity_id.split(':')[-1]}",
+    by_id = {entity.entity_id: entity for entity in entities}
+    fountain = by_id["ent:fountain:littlefield"]
+    pond = by_id["ent:pond:littlefield"]
+
+    def edge(parent: Entity, child: Entity) -> Relationship:
+        return Relationship(
+            # Both ends, by kind and name. Taking only the child's last
+            # segment read fine for ducks and produced
+            # `rel:contains:fountain-littlefield` for the pond, whose last
+            # segment is the venue. An id that needs you to know which end is
+            # which is not an id.
+            rel_id=(f"rel:contains:{parent.entity_id.split(':')[1]}-"
+                    f"{child.entity_id.split(':', 1)[1].replace(':', '-')}"),
             kind="contains",
-            from_entity_id=fountain.entity_id,
-            to_entity_id=duck.entity_id,
+            from_entity_id=parent.entity_id,
+            to_entity_id=child.entity_id,
             properties=[],
             source_id=SOURCE_ID,
             stamp=stamp,
         )
-        for duck in entities[1:]
-    ]
+
+    ducks = [e for e in entities if e.entity_id.startswith("ent:duck")]
+    return [edge(fountain, pond)] + [edge(pond, duck) for duck in ducks]
 
 
 class ModelPublisher:
@@ -308,6 +383,25 @@ class ModelPublisher:
         self._entities.write(entity)
         return was
 
+    def dispose_edge(self, rel_id: str, reason: str) -> bool:
+        """
+        Remove one edge. Not "retire" it -- it cannot be retired.
+
+        `Relationship` has no `LifecycleState`, so an edge has no way to say
+        why it went; it can only stop being there. The reason is carried in
+        this service's log and the operator tool's output and nowhere on the
+        wire, which is the gap recorded in SPEC_COMPLIANCE made visible one
+        more time rather than papered over with a field that does not exist.
+
+        Calling this verb `retire` would have contradicted that finding four
+        commits after publishing it.
+        """
+        edge = self._edges.pop(rel_id, None)
+        if edge is None:
+            return False
+        self._relationships.dispose(edge)
+        return True
+
     def restore_seed(self) -> int:
         """Re-publish the seed, proving a retired id is not burned."""
         entities = seed_entities()
@@ -322,28 +416,37 @@ class ModelPublisher:
         if command.verb == "restore":
             count = self.restore_seed()
             return f"restore from {command.requester_id}: re-seeded {count} entities"
+        if command.verb == "dispose_edge":
+            if self.dispose_edge(command.subject_id, command.reason):
+                # The only place the reason survives.
+                return (f"disposed edge {command.subject_id} — "
+                        f"{command.reason!r} (asked by {command.requester_id}); "
+                        f"the edge itself carries no reason, it can only stop "
+                        f"being there")
+            return (f"declined: no edge {command.subject_id} here "
+                    f"(asked by {command.requester_id})")
         if command.verb == "move":
             if not command.has_pose:
-                return f"declined: move for {command.entity_id} carried no pose"
-            if not self.owns(command.entity_id):
-                return (f"declined: {command.entity_id} is not ours "
+                return f"declined: move for {command.subject_id} carried no pose"
+            if not self.owns(command.subject_id):
+                return (f"declined: {command.subject_id} is not ours "
                         f"(asked by {command.requester_id})")
-            was = self.move(command.entity_id, command.pose)
+            was = self.move(command.subject_id, command.pose)
             now = command.pose.t
-            return (f"moved {command.entity_id} "
+            return (f"moved {command.subject_id} "
                     f"({was[0]:.2f}, {was[1]:.2f}) -> ({now[0]:.2f}, {now[1]:.2f}) "
                     f"(asked by {command.requester_id})")
         if command.verb != "retire":
             return f"ignored: unknown verb {command.verb!r} from {command.requester_id}"
-        if not self.owns(command.entity_id):
+        if not self.owns(command.subject_id):
             # Refusing is the honest answer. This process can only retire what
             # it latches; pretending otherwise would publish a tombstone that
             # some other writer's sample immediately contradicts.
-            return (f"declined: {command.entity_id} is not ours "
+            return (f"declined: {command.subject_id} is not ours "
                     f"(asked by {command.requester_id})")
-        cascaded = self.retire(command.entity_id, command.reason)
+        cascaded = self.retire(command.subject_id, command.reason)
         edges = f", cascaded {len(cascaded)} edge(s)" if cascaded else ""
-        return (f"retired {command.entity_id} — {command.reason!r}"
+        return (f"retired {command.subject_id} — {command.reason!r}"
                 f"{edges} (asked by {command.requester_id})")
 
     def close(self) -> None:
@@ -424,7 +527,7 @@ def run_server(domain_id: Optional[int] = None) -> int:
                 # A bad command must not take the service down with it; the
                 # world it is holding is worth more than the request.
                 print(f"model: command failed ({command.verb} "
-                      f"{command.entity_id}): {error!r}", flush=True)
+                      f"{command.subject_id}): {error!r}", flush=True)
         time.sleep(0.1)
 
     print("model: disposing instances and exiting")
