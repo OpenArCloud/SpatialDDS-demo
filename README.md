@@ -123,6 +123,30 @@ Entities name their frame by the **UUIDv5 of its fqn**, the same derivation
 the catalogue row and the announced frame transform use, so all three name one
 frame rather than three that merely look alike.
 
+### Two publishers, one model
+
+`scripts/gnome_publisher.py` is a second, independent process writing to the
+same latched topics under its own `source_id`. A consumer sees one world of
+five things, not two feeds to reconcile — which is the situation the layer has
+to survive in the field, where you do not get one authority, one vocabulary or
+one deployment.
+
+It carries a type nothing here can resolve (`https://example.org/vocab/garden-gnome`,
+deliberately fictional) and no `demo.label`, because a stranger has no reason
+to speak this demo's property conventions. **An unknown type must still
+render.** A client that draws only what it recognises hides the world from its
+user; the honest behaviour is to place it correctly, name it from what little
+was published, and say plainly that the vocabulary is unfamiliar. The name
+falls back through `demo.label` → a known type label → the type URI's tail →
+the id's tail, each step saying less and none inventing anything.
+
+The client's type-URI → label table is `TYPE_LABELS` in
+[`web/src/spatialdds_bridge.ts`](web/src/spatialdds_bridge.ts) — an explicit
+exported map, not incidental code, because its *miss* path is a behaviour the
+demo depends on. A Python test reads it back and fails if the seeder publishes
+a type the client cannot label, which is unusual and deliberate: the
+alternative is two lists that drift while nothing fails.
+
 Nothing switches the client between paths: if `/v1/model` returns entities it
 renders from them and the catalogue contributes only the asset each one points
 at, suppressed per `content_id` so the two cannot both draw the same duck.

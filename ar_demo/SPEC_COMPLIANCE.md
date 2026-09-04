@@ -367,18 +367,53 @@ the OWM proposal sketch, no registry row, no `/1.7` identifiers, and no change
 to any spec type. Graduation is earned by evidence: informative example first,
 provisional only on deployment experience.
 
-**What Part 1 surfaced.** Three findings, recorded rather than fixed, so a
-later brief can cite one place for all of them:
+**What the two parts surfaced.** One place to cite for all of it. Part 1
+recorded; Part 2 either closed or sharpened.
 
-| Finding | Where | Shape of it |
-|---|---|---|
-| Reference-by-id exists, lookup-by-id does not | below, "A gap this exposed" | `content_refs` names a catalogue row by id; `CatalogQuery` filters on coverage and `kind_in` only |
-| No `ServiceKind` fits a world model | below, "Model layer discovery" | The publisher is deliberately silent, so the layer has no discovery story yet |
-| An ephemeral writer's update does not outlive it | below, "Two writers, one instance" | TRANSIENT_LOCAL history is writer-scoped, so a late joiner sees the seed rather than the move |
-| `test_bridge_http.py` is container-bound | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
+| Finding | Status | Where | Shape of it |
+|---|---|---|---|
+| Reference-by-id exists, lookup-by-id does not | **closed in Part 2** | below, "A gap this exposed" | `CatalogFilter` gained `content_id_in`, bounded at 16, intersecting with `kind_in` |
+| An ephemeral writer's update does not outlive it | **closed in Part 2** | below, "Two writers, one instance" | Writes moved behind a command channel; the owner is the only writer |
+| No `ServiceKind` fits a world model | open | below, "Model layer discovery" | The publisher is deliberately silent, so the layer has no discovery story yet |
+| `Relationship` is under-specified relative to `Entity` | **new in Part 2** | below, "What an edge cannot say" | No `LifecycleState` and no `basis`: an edge cannot say why it went, or how the claim was arrived at |
+| A retirement cascade is a local courtesy, not a rule | **new in Part 2** | below, "What an edge cannot say" | A dangling edge across a federation boundary is valid; one left by a local tool is mess |
+| `test_bridge_http.py` is container-bound | open | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
 
-The first two belong with the `spatial.model` graduation discussion; the third
-is a housekeeping note so it is not rediscovered.
+The two open `oarc_model` items and the two new ones belong with the
+`spatial.model` graduation discussion; the container-bound test is a
+housekeeping note so it is not rediscovered.
+
+### What an edge cannot say
+
+A design note for R3, and two halves of one problem.
+
+**`Relationship` is under-specified relative to `Entity`, twice over.** An
+entity carries `LifecycleState` and `state_reason`, so it can retire and say
+why; and `basis`, so a consumer can tell an observation from an assertion. A
+relationship carries neither. The IDL comment above it used to claim an edge
+"can retire independently of the things it joins" -- it cannot retire at all.
+It can only be disposed, which is a claim that it is gone and nothing more.
+
+That asymmetry is visible in the demo: retiring `ent:duck:east` publishes a
+tombstone carrying "taken in for the winter", and then silently disposes
+`rel:contains:east`. Anyone watching learns why the duck left and nothing
+about why the edge did. Whether edges should gain both fields, one, or neither
+is a question for the sketch (§11), not something the demo should decide by
+adding fields to a type it does not own.
+
+**And the cascade itself is a courtesy, not a rule.** When an entity retires,
+the operator tool disposes every edge incident to it -- in one action, from
+the authority that owns them. This is deliberately *not* proposed as protocol
+behaviour. A dangling edge pointing at an entity nobody in your federation
+publishes is the ordinary federated case and perfectly valid: you may hold an
+edge to something you cannot see. An edge left dangling by a tool that had
+both ends in its own hands is just mess. The rule the demo follows is
+therefore about tools, not about the model: *clean up what you can reach.*
+
+The naive-retirement counter-example makes the distinction concrete. Run from
+a writer that owned nothing, it disposed the entity in the bridge's cache and
+left `rel:contains:west` pointing at it -- a local dangle produced locally,
+which is exactly what the cascade exists to prevent.
 
 What it separates is asset from instance. A catalogue row is an asset — one
 `duck.glb`, one checksum, one URI. Entities are the things in the world, and
@@ -427,10 +462,37 @@ has logged that it is watching, the writer reports success, and nothing
 arrives; a second publish of the same sample always lands. The live test
 republishes once and says so when it has to, rather than hiding it.
 
-The fix for both is the same and belongs to Part 2: the publisher should own
-the state it latches, with moves applied through it rather than written around
-it by whoever happens to have a writer. An operator tool should ask the
-authority to move something, not race it.
+**Closed in Part 2, both of them.** The publisher owns the state it latches,
+and nothing writes to the model topics but the publisher that owns them.
+`move_duck.py` and `retire_entity.py` publish a `ModelCommand` on
+`spatialdds/model/command/v1` (RELIABLE, VOLATILE, KEEP_LAST(16), unkeyed --
+a command is an event, not state) and the service applies it. An operator tool
+asks the authority; it does not race it.
+
+Measured after the change: move `ent:duck:west` to (3.00, -19.00), and a fresh
+reader and the bridge cache now agree. Before it, they did not -- fresh reader
+(6.50, -8.00), cache (3.00, -19.00), one duck with two positions.
+
+Two things this is worth knowing for:
+
+**The bug had been made invisible without being made false.** An earlier fix
+had stabilised the flaky live-move test by resetting the venue before each
+run. That was correct, and it meant no test ever asked what a reader joining
+*afterwards* would see -- which is the only question a writer-scoped-durability
+bug answers wrongly. Resetting before each test is precisely how a durability
+bug hides from a deterministic suite. The guard added afterwards says so in
+its name: `test_a_move_outlives_the_tool_that_asked_for_it`.
+
+**The counter-example is kept runnable**, at
+`directions/p2-acceptance/naive_retire.py`. It retires an entity the obvious
+way -- read it, write `state = RETIRED`, dispose, exit -- and a fresh reader
+gets the duck back. A paragraph explaining why the indirection exists is worth
+less than a script that demonstrates the alternative failing.
+
+The second symptom (one update in three not reaching a just-attached
+subscriber) is unchanged: it is a discovery race, not a durability one, and
+both operator tools now wait for `publication_matched` before writing rather
+than publishing into a lane with nobody on it.
 
 **A gap this exposed.** `content_refs` uses `catalog:<content_id>` to point at
 a catalogue row, and the demo's catalogue has no way to answer it: `CatalogQuery`
@@ -438,9 +500,20 @@ filters on coverage and `kind_in` only, so **reference-by-id exists and
 lookup-by-id does not**. A client can resolve the reference only if it has
 already coverage-queried the right area and cached the result. That is fine for
 one row in one plaza and wrong at any scale — the reference would be unusable
-by a client that knows the id and not the place. Recorded here rather than
-fixed: the catalogue is demo protocol, and adding an id lane is a protocol
-decision, not a bug fix.
+by a client that knows the id and not the place.
+
+**Closed in Part 2.** `CatalogFilter` gained `content_id_in`: bounded at 16
+per query, intersecting with `kind_in` rather than overriding it, and answered
+without requiring a coverage box, because a client resolving a reference may
+not know where the thing is. The client tries its cached results first and
+queries by id on a miss, still declining to render when both fail rather than
+inventing a URI.
+
+The demo could not previously tell the two paths apart — the duck's catalogue
+row and the duck's entity are in the same plaza, so the cached lookup always
+hit and reference-by-id was never actually exercised. `?noassetcache=1`
+discards the cached rows so the by-id path is the only one left; with it on,
+all three ducks still render.
 
 Five, down from twelve. The seven that went away, and what replaced them:
 
