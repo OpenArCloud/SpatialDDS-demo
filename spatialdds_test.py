@@ -22,6 +22,7 @@ from spatialdds_validation import (
     create_coverage_bbox_earth_fixed,
     demo_geo_pose,
 )
+from spatialdds_demo.catalog_semantics import matches_catalog_filter
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
@@ -745,30 +746,6 @@ def _manifest_list(raw: str) -> List[str]:
     if not raw:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
-
-
-def matches_catalog_filter(entry: Dict[str, Any], query: Dict[str, Any]) -> bool:
-    """
-    Demo-local catalog filter (not spec CoverageQuery.filter, which is
-    CoverageFilter). An empty list in either lane means "match all" in that
-    lane, mirroring the discovery filter's empty-array semantics; the lanes
-    intersect. `content_id_in` is lookup-by-id.
-    """
-    if not query.get("has_filter"):
-        return True
-    filters = query.get("filter") or {}
-
-    # An id list, when given, is the narrowest thing in the query: it names
-    # exactly the rows the caller wants. It intersects with kind_in rather
-    # than overriding it -- an id list is not a way around a kind filter.
-    ids = filters.get("content_id_in") or []
-    if ids and entry.get("content_id") not in ids:
-        return False
-
-    kinds = filters.get("kind_in") or []
-    if kinds and entry.get("kind") not in kinds:
-        return False
-    return True
 
 
 def _catalog_response(

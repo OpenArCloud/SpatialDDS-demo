@@ -1,11 +1,16 @@
 """
 The demo-local catalogue filter, in both places it is implemented.
 
-There are two copies of this matcher -- the AR demo's catalogue server and the
-conformance harness -- and they are supposed to agree. They are tested through
-one parameterised suite for that reason: a filter that means different things
-on two servers is worse than a filter that is wrong on both, because only one
-of those gets noticed.
+There used to be two copies of this matcher -- the AR demo's catalogue server
+and the conformance harness -- in the same language, differing only in how
+they grew. A parameterised suite policing their agreement was the immediate
+guard; the actual fix was to delete one, so both now import
+`spatialdds_demo.catalog_semantics`.
+
+The suite still runs every case through both call sites, and adds the check
+that matters after consolidation: that neither has quietly grown a local copy
+again. `is` rather than `==`, because a re-implementation that happens to
+agree today is exactly what drifts tomorrow.
 
 `content_id_in` is lookup-by-id, added in Part 2. Before it, the catalogue
 could answer "what is near here" and not "what is this id", so a
@@ -66,6 +71,21 @@ class CatalogFilter(unittest.TestCase):
         self.assertEqual(len(set(answers.values())), 1,
                          f"implementations disagree: {answers}")
         return next(iter(answers.values()))
+
+    def test_neither_call_site_has_its_own_copy(self):
+        """
+        The consolidation, guarded.
+
+        A second implementation that agrees on today's cases is not a
+        different outcome from a shared one -- until someone edits one of
+        them. Identity is the only assertion that catches the re-introduction
+        rather than its consequences.
+        """
+        from spatialdds_demo.catalog_semantics import matches_catalog_filter
+        for name, fn in self.matchers.items():
+            with self.subTest(call_site=name):
+                self.assertIs(fn, matches_catalog_filter,
+                              f"{name} has its own matcher again")
 
     def test_no_filter_matches_everything(self):
         for entry in ENTRIES:

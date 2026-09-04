@@ -76,6 +76,23 @@ docker run --rm -v "$PWD:/app" -w /app -e PYTHONPATH=/app \
   python3 -m unittest tests.test_interop
 ```
 
+### Switches for exercising a path deliberately
+
+Some paths only run when the demo cannot take a shortcut, and the shortcut is
+usually a coincidence of the seed data rather than a design. Each of these
+turns one off so a test proves the thing it claims to:
+
+| Switch | Turns off | So that |
+|---|---|---|
+| `?noassetcache=1` | the catalogue rows the coverage query returned | `catalog:<id>` references must resolve through `content_id_in`. The duck's row and the duck's entity are in the same plaza, so the cached lookup always hits and the by-id path is otherwise never exercised |
+| `?catalogpose=1` | model placement | the legacy catalogue-pose path can be compared side by side |
+| `?basis=…` | entities whose basis is not named | a filtered view can be captured without editing what is published |
+
+Add one whenever a demo works for a reason you cannot otherwise
+distinguish from the reason you intend. Future content — the pond, Part W's
+SCG nodes — will want the same switch as the model layer grows and more
+references point outside the area a client happens to have queried.
+
 ### A guard isn't done until it has been seen to fail
 
 A new test that asserts something important should be watched failing before
@@ -113,6 +130,53 @@ Two related traps, both of which cost real time here:
   projects the entity's *stated* position while the primitive draws at the
   clamped one, so a probe can confidently report on-screen coordinates for
   something that is not on screen.
+
+### A suite that finds a server it did not start will test that one
+
+`run_bridge_http_tests.py` starts a VPS, a catalogue and a bridge, then talks
+to `http://localhost:8088`. It never checked that the thing answering was the
+thing it started. With a bridge left running from
+`./run_bridge_server_docker.sh`, the suite bound its own servers to a port
+already taken, then happily tested the *other* bridge: health ok, localize ok,
+and a catalogue query returning a different deployment's content.
+
+The failure that produced was specific, plausible and pointed at the wrong
+place — `catalog missing expected content: [two ids]`, immediately after a
+change to the catalogue filter, which was fine. It survived a bisect against
+an older commit, because the stray bridge was still running for that too.
+
+The suite now refuses to start when the port is occupied, and says which
+command to run. Two habits are worth keeping from this:
+
+- **Check what is listening before believing a live-stack failure.**
+  `docker ps` and `curl localhost:8088/health` cost nothing.
+- **Reproducing an "it fails here too" on an older commit proves nothing if
+  the contamination is in the environment rather than the tree.** Bisecting
+  found the same failure at the previous commit and I read that as
+  "pre-existing" when it meant "still running".
+
+### A determinism fix can hide a bug instead of fixing it
+
+The live move test was made deterministic by resetting the venue before each
+run, which was the right change and had a side effect nobody looked for: the
+bug it was flaking over was a *durability* bug, and resetting first meant no
+test ever asked what a reader joining later would see.
+
+The move survived only as long as the tool that published it. Written from a
+short-lived process, the new pose died with its writer while the service's
+seed stayed latched, so a browser open at the time followed the duck and the
+next one to load got it back at its starting position. Measured: fresh reader
+`(6.50, -8.00)`, bridge cache `(3.00, -19.00)`. One duck, two positions, and a
+green suite for weeks.
+
+Resetting before each test is exactly how a durability bug hides from a
+deterministic suite: both make the world reproducible, and only one of them
+makes it correct. When a test is stabilised by controlling the starting state,
+ask separately what a participant that *arrives afterwards* would observe --
+that question is not asked by any test that begins by putting things back.
+
+The guard added afterwards says it in its name:
+`test_a_move_outlives_the_tool_that_asked_for_it`.
 
 ### Things that look like failures but aren't
 

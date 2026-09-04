@@ -142,7 +142,38 @@ def _assert_close(actual: float, expected: float, eps: float, label: str) -> Non
         raise AssertionError(f"{label} expected {expected}±{eps}, got {actual}")
 
 
+def _refuse_a_bridge_we_did_not_start() -> Optional[str]:
+    """
+    Bail out if something is already answering on the bridge port.
+
+    This suite starts its own VPS, catalogue and bridge, then talks to a URL.
+    It never checked that the URL was the one it started, so a bridge left
+    running from `run_bridge_server_docker.sh` would answer instead: health
+    ok, localize ok, and then a catalogue query returning somebody else's
+    content. The failure it produced was specific and plausible --
+    "catalog missing expected content: [two ids]" -- and pointed at the
+    filter, which was fine. Half an hour went into the wrong file.
+
+    A test that silently accepts a different system under test is worse than
+    one that cannot run.
+    """
+    try:
+        with urllib.request.urlopen(f"{BRIDGE_URL}/health", timeout=2) as response:
+            json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return None      # nothing there: the normal case.
+    return (f"something is already serving {BRIDGE_URL} — this suite starts "
+            f"its own bridge and would test that one instead.\n"
+            f"Stop it first (./stop_bridge_server_docker.sh), or point this "
+            f"at another port with SPATIALDDS_BRIDGE_URL.")
+
+
 def main() -> int:
+    occupied = _refuse_a_bridge_we_did_not_start()
+    if occupied:
+        print(f"bridge HTTP tests aborted: {occupied}", file=sys.stderr)
+        return 2
+
     env = _env_for_dds()
     vps = None
     catalog = None

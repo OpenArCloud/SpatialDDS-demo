@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 
 from cyclonedds.domain import DomainParticipant
 
+from spatialdds_demo.catalog_semantics import matches_catalog_filter
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.discovery_bus import AnnouncePublisher
 from spatialdds_demo.json_mapping import from_json, to_json
@@ -303,31 +304,10 @@ def _parse_page_token(token: str) -> int:
     return 0
 
 
-def _matches_filter(entry: Dict[str, Any], query: Dict[str, Any]) -> bool:
-    """
-    Demo-local catalog filter — NOT spec CoverageQuery.filter (which is a
-    CoverageFilter of type_in/qos_profile_in/module_id_in). The catalog is a
-    demo-specific protocol; it carries a structured filter in the same
-    has_filter + `*_in` style so both query surfaces share one vocabulary.
-    An empty list in either lane means "match all" in that lane; the lanes
-    intersect. `content_id_in` is lookup-by-id, which the catalogue could not
-    answer before -- see SPEC_COMPLIANCE.
-    """
-    if not query.get("has_filter"):
-        return True
-    filters = query.get("filter") or {}
-
-    # An id list, when given, is the narrowest thing in the query: it names
-    # exactly the rows the caller wants. It intersects with kind_in rather
-    # than overriding it -- an id list is not a way around a kind filter.
-    ids = filters.get("content_id_in") or []
-    if ids and entry.get("content_id") not in ids:
-        return False
-
-    kinds = filters.get("kind_in") or []
-    if kinds and entry.get("kind") not in kinds:
-        return False
-    return True
+# The matcher lives in spatialdds_demo.catalog_semantics so this server and
+# the conformance harness cannot drift apart. Kept under the old name because
+# it is the name this file's callers use.
+_matches_filter = matches_catalog_filter
 
 
 def _ttl_ok(stamp: Dict[str, Any], ttl_sec: int) -> bool:
