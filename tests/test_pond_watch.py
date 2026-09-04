@@ -107,11 +107,11 @@ class NothingJoinsThem(unittest.TestCase):
         """
         Deliberate, and the reason is in the type.
 
-        Saying "these are the same water" is a claim with a source and an
-        evidence basis. Relationship carries neither, so an edge asserting it
-        would be unqualifiable -- the reader could not tell whether the venue
-        said it, the fusion service said it, or the demo assumed it. Recorded
-        for R10 rather than improvised.
+        Relationship carries source_id, so an edge could say who claimed
+        identity. It has no basis, so it could not say whether identity was
+        asserted, computed or assumed -- which for an identity claim is the
+        half that decides what a consumer should do with it. Recorded for R10
+        rather than improvised.
         """
         source = (REPO / "spatialdds_demo" / "pond_watch.py").read_text()
         # The claim is about what it publishes, not about what it mentions:

@@ -50,6 +50,16 @@ in_image() {
 export PYTHONDONTWRITEBYTECODE=1
 
 # ── fast: host only ─────────────────────────────────────────────────────────
+# `tests/` covers everything under it. Six files under it were also named
+# individually, added one at a time across Parts 2 and 3 by someone (me) who
+# had not noticed the directory was already listed. pytest deduplicates, so
+# nothing ran twice and no count was inflated -- but the list taught the wrong
+# habit, that a new test file has to be registered by hand. It does not.
+#
+# Do not put comments inside the argument list below. A `#` after a
+# line-continuation eats the rest of the logical line: the first attempt at
+# this note dropped `tests/` and 158 tests, and the only thing that said so
+# was the count.
 run "host suite" python3 -m pytest -q \
   ar_demo/test_ar_demo_services.py \
   multi_operator_fusion \
@@ -62,12 +72,7 @@ run "host suite" python3 -m pytest -q \
   bridges/web_bridge/test_discovery_http.py \
   bridges/web_bridge/test_wellknown_endpoints.py \
   bridges/web_bridge/test_model_cache.py \
-  tests/test_catalog_filter.py \
-  tests/test_command_lane.py \
-  tests/test_autostart_gating.py \
-  tests/test_duck_mover.py \
-  tests/test_fast_tier.py \
-  tests/test_pond_watch.py \
+  bridges/web_bridge/test_ws_integration.py \
   bridges/mcap_bridge \
   tests/ \
   nuscenes/test_nuscenes_shapes.py \

@@ -29,7 +29,7 @@ for _p in (str(_HERE), str(_REPO)):
 
 import bridge_node  # noqa: E402
 from spatialdds_demo import blob  # noqa: E402
-from test_mocks import (  # noqa: E402
+from ros2_mocks import (  # noqa: E402
     make_test_compressed_image, make_test_imu, make_test_pose_stamped,
 )
 from frame_mapping import FrameMapper  # noqa: E402

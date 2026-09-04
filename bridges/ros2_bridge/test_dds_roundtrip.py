@@ -51,7 +51,7 @@ from spatialdds_to_ros2 import (  # noqa: E402
     msg_type_to_decoder,
     vision_frame_blob_id,
 )
-from test_mocks import (  # noqa: E402
+from ros2_mocks import (  # noqa: E402
     make_test_compressed_image,
     make_test_detection3d_array,
     make_test_imu,

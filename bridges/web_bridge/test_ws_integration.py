@@ -1,5 +1,17 @@
 """WebSocket integration test for the generic protocol.
 
+Named `test_ws_integration` and not `test_integration`, which is what it was
+called until Part 3 -- and why nothing ran it. `multi_operator_fusion` has a
+`test_integration.py` too, and with no `__init__.py` in either directory
+pytest imports test modules by basename, so collecting both is an error:
+
+    import file mismatch: imported module 'test_integration' has this
+    __file__ attribute: .../multi_operator_fusion/test_integration.py
+
+Whoever hit that first solved it by leaving this file out of the canonical
+list, where it sat for months passing four tests nobody ran. A unique
+basename is the fix pytest itself suggests.
+
 We don't spin up a real CycloneDDS bus here — the conversion + routing logic
 between an envelope arriving and a WebSocket client receiving a message is
 purely in-process. We drive ``ClientManager.dispatch(...)`` directly from

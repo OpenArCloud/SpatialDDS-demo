@@ -1,5 +1,10 @@
 """Mock ROS 2 message classes — zero ROS 2 dependencies.
 
+Named `ros2_mocks` and not `test_mocks`, which is what it was called until
+Part 3. It contains no tests: pytest collected it, found nothing, and counted
+it as a passing file, so the name promised coverage that did not exist. A
+helper that looks like a suite is worse than one with an awkward name.
+
 The conversion layer is duck-typed: it operates on objects with the same
 field names as real ROS 2 messages, so these mocks can stand in for
 ``sensor_msgs/PoseStamped`` etc. in unit tests.

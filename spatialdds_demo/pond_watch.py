@@ -17,11 +17,11 @@ Run it against the other bounds and the ducks roam differently, which is the
 whole demonstration.
 
 **No edge joins the two.** They are visibly about the same water and nothing
-in the model says so, because saying it honestly needs a relationship that
-can carry a basis -- "these are the same thing, *asserted by whom, on what
-evidence*" -- and `Relationship` has neither state nor basis. Inventing an
-edge here would be asserting a fact the type cannot qualify. That is the R10
-conversation; see SPEC_COMPLIANCE.
+in the model says so. `Relationship` carries `source_id`, so an edge could say
+who claimed it; what it cannot carry is a `basis`, so it could not say whether
+identity was asserted, computed, or assumed. For an identity claim that is the
+load-bearing half, and an edge that cannot express it launders an assumption
+into the model. That is the R10 conversation; see SPEC_COMPLIANCE.
 
 Why they differ, concretely: the venue declared bounds a little inside the
 waterline, conservatively, so that anything trusting them stays wet. This
@@ -107,7 +107,7 @@ def observation(rng: random.Random, stamp: Optional[Time] = None) -> Entity:
         extent=extent,
         properties=[KV(key="demo.label", value="Pond"),
                     KV(key="demo.note",
-                       value="The same water as ent:pond:littlefield, measured rather than declared. Nothing in the model says the two are the same thing -- an edge that could say so honestly would have to carry a basis, and Relationship has none.")],
+                       value="The same water as ent:pond:littlefield, measured rather than declared. Nothing in the model says the two are the same thing: an edge could say who claimed it, but not whether identity was asserted, computed or assumed, and Relationship has no basis to carry that.")],
         external_refs=[],
         content_refs=[],
         state=LifecycleState.ACTIVE,

@@ -379,7 +379,7 @@ recorded; Part 2 either closed or sharpened.
 | A retirement cascade is a local courtesy, not a rule | **new in Part 2** | below, "What an edge cannot say" | A dangling edge across a federation boundary is valid; one left by a local tool is mess |
 | Borrowing has a boundary: honour the meaning, not the shape | **new in Part 3** | below, "The borrowing rule has a boundary" | `POSE_RT` matched the shape and declared a 33 ms deadline this publisher will not meet |
 | "Idle" is only meaningful relative to an entity's own cadence | **new in Part 3** | below, "The latch converges to the stream on idle" | A fixed threshold below the update interval makes every gap look like a stop |
-| Two accounts of one thing cannot be joined honestly | **new in Part 3** | below, "Surface both, attribute both, join neither" | An edge saying "these are the same" has a source and an evidence basis; `Relationship` carries neither |
+| Two accounts of one thing cannot be joined honestly | **new in Part 3** | below, "Surface both, attribute both, join neither" | An identity edge needs an evidence basis; `Relationship` has `source_id` but no `basis` |
 | A DECLARED entity audits everything already in the model | **new in Part 3** | below, "Declaring bounds judges what is already there" | Bounds arriving late make existing state right or wrong retroactively; nothing else changed |
 | A command channel's type must be keyed | **new in Part 3** | below, "An unkeyed command topic kills its readers" | An exiting client delivers an invalid sample; deserializing the key of an unkeyed type raises inside `take()`, before any user code sees it |
 | `test_bridge_http.py` is container-bound | open | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
@@ -550,14 +550,21 @@ Part 3 puts two entities on the bus describing the same water:
 about a metre, and the model does not settle it.
 
 **No relationship joins them, and that is a finding rather than an omission.**
-"These are the same water" is a claim like any other: somebody asserts it, on
-some evidence, and a consumer needs to know which somebody before deciding
-what to do about it. `Relationship` has no `basis` and no `state`, so an edge
-carrying that claim could not say who made it or how -- a reader could not
-distinguish the venue asserting identity, the fusion service asserting it, or
-the demo assuming it while nobody had. Publishing an unattributable claim
-about identity is worse than publishing none: it launders an assumption into
-the model.
+
+Be precise about which half is missing. `Relationship` *does* carry
+`source_id` and `stamp`, so an edge can say who published it and when;
+attribution is not the gap. What it cannot carry is **basis** -- how the claim
+was arrived at. And for an identity claim that is exactly the load-bearing
+part: "these are the same water" *asserted* by the venue, *computed* by a
+fusion service from overlapping bounds, or *assumed* by whoever wrote the
+seeder are three different statements with three different weights, and on
+this type they would be indistinguishable. A consumer deciding whether to
+merge two entities needs the difference; a consumer deciding whether to trust
+a merge someone else made needs it more.
+
+Publishing an identity claim whose epistemic status cannot be expressed is
+worse than publishing none: it launders an assumption into the model, where
+it is thereafter indistinguishable from a measurement.
 
 **The placeholder rule the demo follows, until R10 settles it: surface both,
 attribute both, join neither.** Both are published, each carries its
@@ -566,18 +573,22 @@ and qualifies the colliding names, and choosing whom to trust is left to the
 consumer -- the mover takes `--bounds declared|derived` for exactly that
 reason.
 
-This is the same gap as "What an edge cannot say", met from the other
-direction. There it cost a retired edge its reason; here it costs the model
-its ability to state a same-as. Both point at the same fix.
+This is the same gap as "What an edge cannot say", met from a third
+direction, and all three want the same field. Missing `LifecycleState` costs a
+retired edge its reason. Missing `basis` costs a consumer the ability to weigh
+an edge it did not publish -- which for a containment edge is a nicety and for
+an identity edge is the whole claim. One under-specified type, three symptoms.
 
 ### What an edge cannot say
 
 A design note for R3, and two halves of one problem.
 
-**`Relationship` is under-specified relative to `Entity`, twice over.** An
-entity carries `LifecycleState` and `state_reason`, so it can retire and say
-why; and `basis`, so a consumer can tell an observation from an assertion. A
-relationship carries neither. The IDL comment above it used to claim an edge
+**`Relationship` is under-specified relative to `Entity`, twice over.** It
+carries `source_id` and `stamp`, so an edge can say who published it and
+when; attribution is not what is missing. What an entity has and an edge does
+not is `LifecycleState` with `state_reason`, so it can retire and say why, and
+`basis`, so a consumer can tell an observation from an assertion. An edge has
+neither of those two. The IDL comment above it used to claim an edge
 "can retire independently of the things it joins" -- it cannot retire at all.
 It can only be disposed, which is a claim that it is gone and nothing more.
 

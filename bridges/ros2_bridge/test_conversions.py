@@ -50,7 +50,7 @@ from spatialdds_to_ros2 import (  # noqa: E402
     msg_type_to_decoder,
     vision_frame_to_compressed_image,
 )
-from test_mocks import (  # noqa: E402
+from ros2_mocks import (  # noqa: E402
     BoundingBox3D,
     Detection3D,
     Detection3DArray,

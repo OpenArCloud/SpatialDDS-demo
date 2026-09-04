@@ -206,13 +206,15 @@ Same mover, same ducks, different account of the water — and the ducks are
 allowed in different places. Measured: trusting the venue, a duck may not go
 west of x = 10.5; trusting the observation, it may stand at 9.87.
 
-**Nothing joins the two entities**, deliberately. Saying "these are the same
-water" is a claim with a source and an evidence basis, and `Relationship`
-carries neither — no `basis`, no `LifecycleState` — so an edge asserting it
-could not be attributed or qualified. A reader could not tell whether the
-venue said it, the fusion service said it, or the demo assumed it. **The
-placeholder rule until R10 settles it: surface both, attribute both, join
-neither.** Recorded in
+**Nothing joins the two entities**, deliberately. `Relationship` does carry
+`source_id`, so an edge could say *who* published the claim. What it cannot
+say is **how the claim was arrived at** — there is no `basis` on an edge — and
+for an identity claim that is the part that matters: "these are the same
+water" asserted by the venue, computed by a fusion service, or assumed by
+whoever wrote the seeder are three different statements that would look
+identical on the wire. An identity edge whose epistemic status cannot be
+expressed launders an assumption into the model. **The placeholder rule until
+R10 settles it: surface both, attribute both, join neither.** Recorded in
 [`SPEC_COMPLIANCE.md`](ar_demo/SPEC_COMPLIANCE.md).
 
 ### The command channel — how anything gets changed

@@ -155,6 +155,26 @@ command to run. Two habits are worth keeping from this:
   found the same failure at the previous commit and I read that as
   "pre-existing" when it meant "still running".
 
+### Two test files with the same basename silently disable one
+
+pytest imports test modules by basename unless the directory is a package, so
+`multi_operator_fusion/test_integration.py` and
+`bridges/web_bridge/test_integration.py` cannot be collected in the same run:
+
+    import file mismatch: imported module 'test_integration' has this
+    __file__ attribute: .../multi_operator_fusion/test_integration.py
+
+Whoever hit that first solved it by leaving one file out of the canonical
+list, where it sat passing four tests that nobody ran. The failure mode is
+nasty because the suite stays green and the count is plausible -- nothing
+reports the absence of tests that were never asked for.
+
+Give test files unique basenames across the repo, which is the fix pytest's
+own hint suggests. And **don't name a helper `test_*`**: `test_mocks.py`
+contained no tests at all, so pytest collected it, found nothing, and counted
+it among the passing files. A helper that looks like a suite is worse than one
+with an awkward name; it is now `ros2_mocks.py`.
+
 ### Assert the settled state, not the race to it
 
 Three tests in this repo asserted something adjacent to what they meant, and

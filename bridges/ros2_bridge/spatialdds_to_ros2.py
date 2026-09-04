@@ -18,9 +18,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 from frame_mapping import FrameMapper
 
-# Default factories: mock classes from test_mocks. The bridge node injects
+# Default factories: mock classes from ros2_mocks. The bridge node injects
 # real rclpy classes at runtime by passing a different ``factories`` dict.
-from test_mocks import (  # noqa: E402
+from ros2_mocks import (  # noqa: E402
     BoundingBox3D,
     CompressedImage,
     Detection3D,

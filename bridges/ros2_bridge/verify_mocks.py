@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One-time mock fidelity check — run inside a ROS 2 environment.
 
-The Tier-1 tests use mock dataclasses in ``test_mocks.py`` so they can run
+The Tier-1 tests use mock dataclasses in ``ros2_mocks.py`` so they can run
 without ``rclpy``. This script imports the *real* ROS 2 message classes
 and the mocks side-by-side, and verifies that every field name the
 conversion layer reads is present on both.
@@ -26,7 +26,7 @@ from typing import Set, Type
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 
-import test_mocks as M  # noqa: E402
+import ros2_mocks as M  # noqa: E402
 
 
 def _ros2_field_set(cls) -> Set[str]:
@@ -99,7 +99,7 @@ def main() -> int:
               "bridge actually reads.")
     else:
         print("\nSome mocks have fields the real ROS 2 messages don't expose. "
-              "Update test_mocks.py or the converter accordingly.")
+              "Update ros2_mocks.py or the converter accordingly.")
     return rc
 
 
