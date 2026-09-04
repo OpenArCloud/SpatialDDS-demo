@@ -50,6 +50,7 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
   -e SPATIALDDS_CATALOG_SEED="${SPATIALDDS_CATALOG_SEED:-/app/bridges/web_bridge/tests/catalog_seed_fountain.json}" \
   -e SPATIALDDS_FRAME_ANCHORS="${SPATIALDDS_FRAME_ANCHORS:-/app/bridges/web_bridge/tests/frame_anchors_fountain.json}" \
   -e SPATIALDDS_MODEL_LAYER="${SPATIALDDS_MODEL_LAYER:-0}" \
+  -e PYTHONDONTWRITEBYTECODE=1 \
   -v "${PWD}:/app" \
   cyclonedds-python bash -lc "\
     set -e; \

@@ -40,6 +40,15 @@ in_image() {
     -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml cyclonedds-python "$@"
 }
 
+# The repo is bind-mounted into the demo image, and the host and container run
+# different Python versions. Bytecode written by one has twice now been read by
+# the other as a truncated .pyc -- once killing the model publisher inside the
+# container with `EOFError: EOF read where object expected`, once producing a
+# spurious test failure on the host after a module was edited mid-run. Neither
+# had anything to do with the code under test. Not writing it at all costs a
+# few milliseconds per run and removes the whole class.
+export PYTHONDONTWRITEBYTECODE=1
+
 # ── fast: host only ─────────────────────────────────────────────────────────
 run "host suite" python3 -m pytest -q \
   ar_demo/test_ar_demo_services.py \

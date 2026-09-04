@@ -76,7 +76,24 @@ docker run --rm -v "$PWD:/app" -w /app -e PYTHONPATH=/app \
   python3 -m unittest tests.test_interop
 ```
 
+### A guard isn't done until it has been seen to fail
+
+A new test that asserts something important should be watched failing before
+it is kept: break the thing it guards, confirm it goes red, put the thing
+back. Mutation testing by hand, and the difference between a test and a
+decoration — several checks in this repo were written, passed immediately,
+and only later turned out to assert nothing. The cheapest moment to find that
+out is while you still have the change in your head.
+
 ### Things that look like failures but aren't
+
+- **Stale `.pyc` files across the host/container boundary.** The repo is
+  bind-mounted into the demo image and the two run different Pythons, so
+  bytecode written by one used to be read by the other as truncated — once as
+  `EOFError: EOF read where object expected` from a service that was fine,
+  once as a test failure that vanished on re-run. Both runners now set
+  `PYTHONDONTWRITEBYTECODE=1`. If you invoke pytest directly and see something
+  inexplicable after editing a module, clear `__pycache__` before believing it.
 
 - **Don't run `pytest bridges` wholesale.** `test_integration.py` exists under
   both `multi_operator_fusion/` and `bridges/web_bridge/`. Both pass when run
