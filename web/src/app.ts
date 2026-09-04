@@ -9,8 +9,9 @@ import {
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  BASIS_VALUES, bridgeModelSnapshot, displayName, matchesBasis,
-  modelEntityToItem, observeRest, parseBasisFilter, planModelRender, typeLabel
+  BASIS_VALUES, bridgeModelSnapshot, catalogRefId, displayName, matchesBasis,
+  modelEntityToItem, observeRest, parseBasisFilter, planModelRender,
+  resolveContentIds, typeLabel
 } from './spatialdds_bridge';
 import type { ModelEntity, RestExchange } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
@@ -541,6 +542,41 @@ async function handleDiscover() {
 
   const frames = response.frames || {};
   const assets = response.assets || {};
+
+  // `?noassetcache=1` throws away the rows the coverage query returned, so
+  // every `catalog:` reference has to be resolved by id. It exists because
+  // the demo cannot otherwise tell the two paths apart: the duck's row and
+  // the duck's entity are in the same plaza, so the cached lookup always hits
+  // and the by-id path is never exercised by accident. Same family as
+  // `?catalogpose=1` -- a switch for showing that a thing works for the
+  // reason claimed.
+  if (new URLSearchParams(location.search).has('noassetcache')) {
+    for (const key of Object.keys(assets)) {
+      delete assets[key];
+    }
+    appLog('catalog:by-id cache bypassed — references must resolve by id');
+  }
+
+  // References the coverage query did not answer. Before the catalogue could
+  // be queried by id this was the end of the road, and the demo only worked
+  // because the duck's row happened to be in the same plaza as the duck.
+  const unresolved = model.entities
+    .map((entity) => catalogRefId(entity))
+    .filter((id): id is string => !!id && !assets[id]);
+  if (unresolved.length) {
+    const wanted = [...new Set(unresolved)];
+    const found = await resolveContentIds(wanted);
+    Object.assign(assets, found);
+    const missing = wanted.filter((id) => !found[id]);
+    // References and ids counted separately, because they are not the same
+    // number and saying "asked for 3, resolved 1" invites the reading that
+    // two failed. Three ducks share one row: that is the asset-versus-
+    // instance split the layer exists to express, showing up in a log line.
+    appLog(`catalog:by-id ${unresolved.length} reference(s) over ` +
+           `${wanted.length} id(s); resolved ${Object.keys(found).length}` +
+           (missing.length ? `, unresolved ${missing.join(', ')}` : ''));
+  }
+
   lastFrames = frames;
   lastAssets = assets;
   let placed = 0;

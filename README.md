@@ -105,6 +105,7 @@ exactly once, which is the limitation this removes.
 SPATIALDDS_MODEL_LAYER=1 ./run_bridge_server_docker.sh   # off by default
 curl localhost:8088/v1/model                             # the whole model
 python3 scripts/move_duck.py ent:duck:west 9.0 -12.0     # and watch it move
+python3 scripts/retire_entity.py ent:duck:east "winter"   # tombstone, then gone
 ```
 
 Two topics — `spatialdds/model/entity/v1` and
@@ -125,7 +126,54 @@ frame rather than three that merely look alike.
 Nothing switches the client between paths: if `/v1/model` returns entities it
 renders from them and the catalogue contributes only the asset each one points
 at, suppressed per `content_id` so the two cannot both draw the same duck.
-`?catalogpose=1` forces the legacy path for comparison.
+`?catalogpose=1` forces the legacy path for comparison, and
+`?basis=observed` (or `authored`, comma-lists accepted) filters the view to
+how each claim was arrived at — a view, not a subscription: the client still
+receives the whole model and says in the readout how much it is hiding.
+
+A `catalog:<content_id>` reference is resolved against the rows the coverage
+query already returned, and by a direct `content_id_in` query when it is not
+among them. `?noassetcache=1` discards the cached rows so the by-id path is
+the only one left — the demo otherwise cannot tell the two apart, because the
+duck's row and the duck's entity are in the same plaza.
+
+### The command channel — how anything gets changed
+
+Nothing writes to the model topics except the publisher that owns them.
+`move_duck.py` and `retire_entity.py` publish a `ModelCommand` on
+`spatialdds/model/command/v1` and the model service applies it.
+
+| | |
+|---|---|
+| Topic | `spatialdds/model/command/v1` |
+| QoS | `MODEL_COMMAND` — RELIABLE, **VOLATILE**, KEEP_LAST(16), unkeyed |
+| Verbs | `move` (guarded pose), `retire` (reason), `restore` |
+
+VOLATILE and unkeyed because a command is an event, not state: a client
+joining tomorrow has no business replaying today's retirements. That has one
+consequence worth knowing — **a writer with no matched reader drops the sample
+on the floor**, so both tools wait for `publication_matched` before writing.
+It is a discovery wait, not a retry.
+
+This indirection is not ceremony. TRANSIENT_LOCAL history is scoped to the
+writer that published it, so a pose or a tombstone written by a short-lived
+tool dies with the tool while the service's sample stays latched: a browser
+open at the time follows along, and the next one to load is handed the old
+world. It was measured both ways —
+[`SPEC_COMPLIANCE.md`](ar_demo/SPEC_COMPLIANCE.md), "Two writers, one
+instance" — and the counter-example is kept runnable.
+
+Both tools therefore **report what the bus showed, not what they sent.** A
+tool that prints "moved" when it means "asked" sends you debugging the wrong
+process.
+
+**Retirement** is a tombstone — the entity's last sample, carrying
+`state = RETIRED` and the reason — then a dispose of the instance, cascading
+to every edge touching it. The order matters: a dispose alone says a thing is
+gone and nothing about why, and after it there is nothing left to ask. The
+demo leaves a pause between the two so a person can read the reason; **both
+samples are valid back-to-back and no consumer may rely on that gap existing.**
+It is presentation pacing, not protocol semantics.
 
 ## Bridges
 

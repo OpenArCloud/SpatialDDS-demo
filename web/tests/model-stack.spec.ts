@@ -272,3 +272,38 @@ test('a retired entity states its reason, then leaves the map', async ({ page })
   // stated cause.
   expect(logs.indexOf(retired[0])).toBeLessThan(logs.indexOf(disposed[0]));
 });
+
+test('a catalog reference resolves by id when the coverage results are gone',
+  async ({ page }) => {
+    /**
+     * The coincidence, removed.
+     *
+     * The duck's catalogue row and the duck's entity are in the same plaza,
+     * so the cached lookup always hit and the demo never proved that
+     * reference-by-id worked -- only that both happened to be nearby.
+     * `?noassetcache=1` discards the coverage results before resolution, so
+     * the only way the glTF can appear is `content_id_in`.
+     */
+    test.setTimeout(240_000);
+    await readyPage(page, '/?debug=1&noassetcache=1');
+    await page.waitForFunction(
+      () => (window as any).__appLogs?.some((l: string) =>
+        l.startsWith('catalog:by-id 3 reference')), null, { timeout: 40_000 });
+
+    const logs: string[] = await page.evaluate(() => (window as any).__appLogs || []);
+    expect(logs).toContain('catalog:by-id cache bypassed — references must resolve by id');
+    const line = logs.find((l) => l.startsWith('catalog:by-id 3 reference'))!;
+    // Three ducks, one row: every distinct id resolved, and the line says so
+    // without implying two lookups failed.
+    expect(line, 'every id should have resolved')
+      .toMatch(/3 reference\(s\) over 1 id\(s\); resolved 1$/);
+
+    // And the duck is on screen, drawn from the asset that lookup returned.
+    const ducks = await page.evaluate(() => {
+      const v = (window as any).__viewer;
+      return v.entities.values
+        .filter((e: any) => String(e.id).startsWith('ent:duck') && !!e.model)
+        .map((e: any) => String(e.id));
+    });
+    expect(ducks.length, 'the ducks should render from a by-id resolution').toBe(3);
+  });

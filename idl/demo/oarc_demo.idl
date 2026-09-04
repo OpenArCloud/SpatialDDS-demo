@@ -60,6 +60,18 @@ module oarc_demo {
   // catalogue by area, and no per-result row type.
   @extensibility(APPENDABLE) struct CatalogFilter {
     sequence<string, 16> kind_in;      // "mesh", "poi", "overlay", ...
+
+    // Lookup by id, so a `catalog:<content_id>` reference can be resolved by
+    // a client that knows the id and not the place. Without it, reference-by-
+    // id existed and lookup-by-id did not: a client could only resolve a ref
+    // by having already coverage-queried the right area and cached the
+    // result, which is fine for one row in one plaza and unusable at scale.
+    //
+    // Bounded at 16 for the same reason every other sequence here is: an
+    // unbounded id list is a request to enumerate the catalogue one query at
+    // a time. When both this and kind_in are given they intersect -- an id
+    // list is not a way around a kind filter.
+    sequence<string, 16> content_id_in;
   };
 
   @extensibility(APPENDABLE) struct CatalogQuery {

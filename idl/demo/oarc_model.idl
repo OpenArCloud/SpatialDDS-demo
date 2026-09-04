@@ -78,8 +78,13 @@ module oarc_model {
     Time   stamp;
   };
 
-  // Relationships are their own keyed instances, so an edge can retire
-  // independently of the things it joins.
+  // Relationships are their own keyed instances, so an edge can be disposed
+  // without disposing either end. It cannot *retire* independently, or at
+  // all: there is no LifecycleState here, so an edge can only stop being
+  // there -- it has no way to say why it went, and no `basis` to say how the
+  // claim was arrived at. Both are Entity's, and both are missing here.
+  // Under-specified relative to Entity, twice over; an R3 question, not a
+  // demo one.
   @extensibility(APPENDABLE) struct Relationship {
     @key string rel_id;
     string kind;                  // "contains" | "adjacent" | "bound-to" | URI
@@ -105,10 +110,14 @@ module oarc_model {
   // late joiner has no business replaying yesterday's retirements.
   @extensibility(APPENDABLE) struct ModelCommand {
     string command_id;
-    string verb;             // "retire" | "restore"
+    string verb;             // "retire" | "move" | "restore"
     string entity_id;        // the subject; ignored by "restore"
-    string reason;           // why, carried into state_reason
+    string reason;           // why, carried into state_reason by "retire"
     string requester_id;     // who asked, for the log
+    // Guarded because only "move" carries one, and a pose field that is
+    // sometimes meaningless is worse than one that says when it is.
+    boolean has_pose;
+    spatial::core::PoseSE3 pose;
     Time   stamp;
   };
 

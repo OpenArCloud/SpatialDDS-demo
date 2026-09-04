@@ -309,14 +309,25 @@ def _matches_filter(entry: Dict[str, Any], query: Dict[str, Any]) -> bool:
     CoverageFilter of type_in/qos_profile_in/module_id_in). The catalog is a
     demo-specific protocol; it carries a structured filter in the same
     has_filter + `*_in` style so both query surfaces share one vocabulary.
-    An empty kind_in means "match all".
+    An empty list in either lane means "match all" in that lane; the lanes
+    intersect. `content_id_in` is lookup-by-id, which the catalogue could not
+    answer before -- see SPEC_COMPLIANCE.
     """
     if not query.get("has_filter"):
         return True
-    kinds = (query.get("filter") or {}).get("kind_in") or []
-    if not kinds:
-        return True
-    return entry.get("kind") in kinds
+    filters = query.get("filter") or {}
+
+    # An id list, when given, is the narrowest thing in the query: it names
+    # exactly the rows the caller wants. It intersects with kind_in rather
+    # than overriding it -- an id list is not a way around a kind filter.
+    ids = filters.get("content_id_in") or []
+    if ids and entry.get("content_id") not in ids:
+        return False
+
+    kinds = filters.get("kind_in") or []
+    if kinds and entry.get("kind") not in kinds:
+        return False
+    return True
 
 
 def _ttl_ok(stamp: Dict[str, Any], ttl_sec: int) -> bool:

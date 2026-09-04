@@ -27,6 +27,7 @@ if str(REPO) not in sys.path:
 
 from spatialdds_demo import typed_transport as tt  # noqa: E402
 from spatialdds_demo.json_mapping import to_json  # noqa: E402
+from spatialdds_idl.builtin import Time  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
     DUCK_CONTENT_ID, ModelPublisher, seed_entities, seed_relationships,
 )
@@ -49,6 +50,18 @@ def _participant(domain_id: int):
         return DomainParticipant(domain_id)
     except Exception as exc:
         raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
+
+
+def _command(verb, entity_id="", reason="", pose=None):
+    """A ModelCommand, with the guarded pose left empty unless one is given."""
+    from spatialdds_idl.oarc_model import ModelCommand
+    from spatialdds_idl.spatial.core import PoseSE3
+    now = time.time()
+    return ModelCommand(
+        command_id=f"cmd-{verb}", verb=verb, entity_id=entity_id, reason=reason,
+        requester_id="tool:test", has_pose=pose is not None,
+        pose=pose or PoseSE3(t=[0.0, 0.0, 0.0], q=[0.0, 0.0, 0.0, 1.0]),
+        stamp=Time(sec=int(now), nanosec=int((now % 1) * 1e9)))
 
 
 def _drain(entity_reader, relationship_reader, want_e, want_r, timeout=10.0):
@@ -335,13 +348,10 @@ class Retirement(unittest.TestCase):
         next reader to join gets that one instead. The gnome is exactly this
         case -- a real entity on the same topics, owned by another process.
         """
-        from spatialdds_idl.oarc_model import ModelCommand
         participant, publisher = self._publisher(DOMAIN + 6)
         try:
-            line = publisher.handle_command(ModelCommand(
-                command_id="c1", verb="retire", entity_id="ent:gnome:visitor",
-                reason="not mine to retire", requester_id="tool:test",
-                stamp=seed_entities()[0].stamp))
+            line = publisher.handle_command(_command(
+                "retire", "ent:gnome:visitor", reason="not mine to retire"))
             self.assertIn("declined", line)
             self.assertTrue(publisher.owns("ent:duck:east"),
                             "a declined command must not disturb what we do own")
@@ -349,13 +359,9 @@ class Retirement(unittest.TestCase):
             publisher.close()
 
     def test_an_unknown_verb_is_ignored_rather_than_guessed_at(self):
-        from spatialdds_idl.oarc_model import ModelCommand
         participant, publisher = self._publisher(DOMAIN + 7)
         try:
-            line = publisher.handle_command(ModelCommand(
-                command_id="c2", verb="delete", entity_id="ent:duck:east",
-                reason="", requester_id="tool:test",
-                stamp=seed_entities()[0].stamp))
+            line = publisher.handle_command(_command("delete", "ent:duck:east"))
             self.assertIn("unknown verb", line)
             self.assertTrue(publisher.owns("ent:duck:east"))
         finally:
@@ -364,21 +370,25 @@ class Retirement(unittest.TestCase):
 
 class Mover(unittest.TestCase):
     """
-    `scripts/move_duck.py` changes the pose and the stamp and nothing else.
+    A move changes the pose and the stamp and nothing else -- and it lasts.
 
-    Asserted by comparing every other field before and after, rather than by
-    trusting the read-modify-write to have been written correctly. An operator
+    Both halves were once false. The mover used to write the new pose from
+    its own writer, which worked until it exited: TRANSIENT_LOCAL history is
+    writer-scoped, so the service's seed stayed latched and the next reader to
+    join got the duck back at its starting position. Measured on the running
+    stack -- fresh reader (6.50, -8.00), bridge cache (3.00, -19.00), one duck
+    with two positions. It now asks the service, the same way retirement does.
+
+    The field-by-field comparison is asserted rather than trusted: an operator
     tool that quietly reverted a field someone had edited would be worse than
     no tool.
     """
 
     @staticmethod
-    def _load_mover():
-        path = REPO / "scripts" / "move_duck.py"
-        spec = importlib.util.spec_from_file_location("move_duck", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
+    def _command(entity_id, x, y, q):
+        from spatialdds_idl.spatial.core import PoseSE3
+        return _command("move", entity_id,
+                        pose=PoseSE3(t=[x, y, -1.423], q=list(q)))
 
     def test_only_pose_and_stamp_change(self):
         participant = _participant(DOMAIN + 1)
@@ -397,16 +407,8 @@ class Mover(unittest.TestCase):
         new_xy = (before.pose.t[0] + 4.0, before.pose.t[1] - 3.0)
         self.assertNotEqual((before.pose.t[0], before.pose.t[1]), new_xy)
 
-        from spatialdds_idl.builtin import Time
-        from spatialdds_idl.spatial.core import PoseSE3
-        moved = mover.read_entity(participant, target)
-        now = time.time()
-        moved.pose = PoseSE3(t=[new_xy[0], new_xy[1], before.pose.t[2]],
-                             q=list(before.pose.q))
-        moved.stamp = Time(sec=int(now), nanosec=int((now % 1) * 1e9))
-        writer = tt.make_writer(
-            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
-        writer.write(moved)
+        publisher.handle_command(
+            self._command(target, new_xy[0], new_xy[1], before.pose.q))
         time.sleep(0.8)
 
         after = mover.read_entity(_participant(DOMAIN + 1), target)
@@ -425,6 +427,68 @@ class Mover(unittest.TestCase):
             self.assertEqual(before_json["pose"]["q"], after_json["pose"]["q"])
         finally:
             publisher.close()
+
+    def test_a_move_outlives_the_tool_that_asked_for_it(self):
+        """
+        The guard for the bug that made this a request instead of a write.
+
+        A reader created after the move must see the moved pose, not the seed.
+        That holds only because the service -- the writer whose history a late
+        joiner reads -- is the one that applied it.
+        """
+        participant = _participant(DOMAIN + 8)
+        publisher = ModelPublisher(participant)
+        for entity in seed_entities():
+            publisher.publish_entity(entity)
+        target, destination = "ent:duck:west", (3.0, -19.0)
+        seeded = next(e for e in seed_entities() if e.entity_id == target)
+        self.assertNotEqual((seeded.pose.t[0], seeded.pose.t[1]), destination)
+
+        publisher.handle_command(
+            self._command(target, destination[0], destination[1], seeded.pose.q))
+        time.sleep(0.5)
+
+        try:
+            subscriber = _participant(DOMAIN + 8)
+            reader = tt.make_reader(
+                subscriber, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+            got = {}
+            deadline = time.time() + 10
+            while time.time() < deadline and target not in got:
+                for sample in tt.take_samples(reader) or []:
+                    got[sample.entity_id] = sample
+                time.sleep(0.02)
+            self.assertIn(target, got)
+            self.assertAlmostEqual(got[target].pose.t[0], destination[0], places=3)
+            self.assertAlmostEqual(got[target].pose.t[1], destination[1], places=3)
+            print(f"\n  a late joiner sees the moved pose "
+                  f"({destination[0]}, {destination[1]}), not the seed "
+                  f"({seeded.pose.t[0]}, {seeded.pose.t[1]})")
+        finally:
+            publisher.close()
+
+    def test_a_move_without_a_pose_is_declined(self):
+        participant = _participant(DOMAIN + 9)
+        publisher = ModelPublisher(participant)
+        for entity in seed_entities():
+            publisher.publish_entity(entity)
+        try:
+            line = publisher.handle_command(_command("move", "ent:duck:west"))
+            self.assertIn("declined", line)
+            # The guard exists so a zeroed pose is never mistaken for a
+            # request to put the duck at the frame origin.
+            self.assertEqual(
+                tuple(publisher._published["ent:duck:west"].pose.t[:2]), (6.5, -8.0))
+        finally:
+            publisher.close()
+
+    @staticmethod
+    def _load_mover():
+        path = REPO / "scripts" / "move_duck.py"
+        spec = importlib.util.spec_from_file_location("move_duck", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
 
 
 if __name__ == "__main__":

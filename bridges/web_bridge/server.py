@@ -302,6 +302,7 @@ class SpatialDDSBridge:
         geopose: Dict[str, Any],
         kind_in: Optional[List[str]] = None,
         limit: int = 20,
+        content_id_in: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         _lock(self._request_lock)
         try:
@@ -312,7 +313,8 @@ class SpatialDDSBridge:
                     self._announce_participant, TOPIC_CATALOG_REPLIES(client_id))
             reply_topic = self._catalog.reply_topic
             query = self._create_catalog_query(
-                geopose, reply_topic, limit=limit, kind_in=kind_in
+                geopose, reply_topic, limit=limit, kind_in=kind_in,
+                content_id_in=content_id_in
             )
 
             typed = self._catalog.query(from_json(TypedCatalogQuery, query), timeout=6)
@@ -418,6 +420,7 @@ class SpatialDDSBridge:
         limit: int = 20,
         page_token: str = "",
         kind_in: Optional[List[str]] = None,
+        content_id_in: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Build a demo-local catalog query.
@@ -436,14 +439,20 @@ class SpatialDDSBridge:
             geopose.get("lat_deg", DEFAULT_LAT) + padding,
         )
         kinds = list(kind_in if kind_in is not None else DEFAULT_CATALOG_KINDS)
+        ids = list(content_id_in or [])
+        # A lookup by id is not a lookup by place. The coverage box is still
+        # sent because the query type requires one, but the server does not
+        # narrow on it when ids are named -- a client resolving a
+        # `catalog:<id>` reference knows the id and may know nothing about
+        # where the thing is, which was the whole gap.
         return {
             "query_id": query_id,
             "reply_topic": reply_topic,
             "coverage": [coverage_elem],
             "coverage_frame_ref": coverage_frame_ref,
             "has_coverage_eval_time": False,
-            "has_filter": bool(kinds),
-            "filter": {"kind_in": kinds},
+            "has_filter": bool(kinds or ids),
+            "filter": {"kind_in": kinds, "content_id_in": ids},
             "limit": limit,
             "page_token": page_token,
             "stamp": SpatialDDSValidator.now_time(),
@@ -945,8 +954,14 @@ def localize(payload: Dict[str, Any]) -> Dict[str, Any]:
 @app.post("/v1/catalog/query")
 def catalog_query(payload: Dict[str, Any]) -> Dict[str, Any]:
     geopose = payload.get("geopose") if isinstance(payload, dict) else None
-    if not geopose:
+    # A query by id needs no place. Requiring one would re-create the gap this
+    # closes: a client that holds `catalog:<id>` and nothing else could not
+    # ask. It falls back to the demo's default position purely because the
+    # query type carries a coverage box it cannot leave out.
+    if not geopose and not (isinstance(payload, dict) and payload.get("content_id_in")):
         raise HTTPException(status_code=400, detail="geopose required")
+    if not geopose:
+        geopose = {"lat_deg": DEFAULT_LAT, "lon_deg": DEFAULT_LON, "alt_m": DEFAULT_ALT}
     if "expr" in payload:
         raise HTTPException(
             status_code=400,
@@ -956,9 +971,22 @@ def catalog_query(payload: Dict[str, Any]) -> Dict[str, Any]:
             ),
         )
     kind_in = payload.get("kind_in")
+    content_id_in = payload.get("content_id_in")
+    if content_id_in is not None:
+        if not isinstance(content_id_in, list) or not all(
+                isinstance(i, str) for i in content_id_in):
+            raise HTTPException(status_code=400,
+                                detail="content_id_in must be a list of strings")
+        # Bounded here as well as in the IDL, so a caller gets a 400 rather
+        # than a truncated answer that looks like "not found".
+        if len(content_id_in) > 16:
+            raise HTTPException(
+                status_code=400,
+                detail="content_id_in is bounded at 16 ids per query")
     limit = int(payload.get("limit", 20) or 20)
     try:
-        return bridge.catalog_query(geopose, kind_in=kind_in, limit=limit)
+        return bridge.catalog_query(geopose, kind_in=kind_in, limit=limit,
+                                    content_id_in=content_id_in)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

@@ -289,6 +289,25 @@ class ModelPublisher:
         del self._published[entity_id]
         return cascaded
 
+    def move(self, entity_id: str, pose: PoseSE3) -> Tuple[float, float, float]:
+        """
+        Change the pose and the stamp of an entity we own, and nothing else.
+
+        Read-modify-write on our own latched copy, the discipline the mover
+        script used to apply from outside. Doing it here is what makes it
+        last: written from any other writer, the new pose lives only as long
+        as that writer does, and the next reader to join is handed the pose we
+        are still latching. Returns where it was.
+        """
+        entity = self._published.get(entity_id)
+        if entity is None:
+            raise KeyError(entity_id)
+        was = tuple(entity.pose.t)
+        entity.pose = PoseSE3(t=list(pose.t), q=list(pose.q))
+        entity.stamp = _now()
+        self._entities.write(entity)
+        return was
+
     def restore_seed(self) -> int:
         """Re-publish the seed, proving a retired id is not burned."""
         entities = seed_entities()
@@ -303,6 +322,17 @@ class ModelPublisher:
         if command.verb == "restore":
             count = self.restore_seed()
             return f"restore from {command.requester_id}: re-seeded {count} entities"
+        if command.verb == "move":
+            if not command.has_pose:
+                return f"declined: move for {command.entity_id} carried no pose"
+            if not self.owns(command.entity_id):
+                return (f"declined: {command.entity_id} is not ours "
+                        f"(asked by {command.requester_id})")
+            was = self.move(command.entity_id, command.pose)
+            now = command.pose.t
+            return (f"moved {command.entity_id} "
+                    f"({was[0]:.2f}, {was[1]:.2f}) -> ({now[0]:.2f}, {now[1]:.2f}) "
+                    f"(asked by {command.requester_id})")
         if command.verb != "retire":
             return f"ignored: unknown verb {command.verb!r} from {command.requester_id}"
         if not self.owns(command.entity_id):

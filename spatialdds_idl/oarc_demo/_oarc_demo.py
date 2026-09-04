@@ -58,6 +58,7 @@ class BootstrapResponse(idl.IdlStruct, typename="oarc_demo.BootstrapResponse"):
 @annotate.autoid("sequential")
 class CatalogFilter(idl.IdlStruct, typename="oarc_demo.CatalogFilter"):
     kind_in: types.sequence[str, 16]
+    content_id_in: types.sequence[str, 16]
 
 
 @dataclass

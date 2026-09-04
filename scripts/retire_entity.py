@@ -37,6 +37,7 @@ from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
 from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1
 from spatialdds_idl.builtin import Time
 from spatialdds_idl.oarc_model import Entity, ModelCommand
+from spatialdds_idl.spatial.core import PoseSE3
 
 REQUESTER_ID = "tool:retire_entity"
 
@@ -52,7 +53,12 @@ def send(participant: DomainParticipant, verb: str,
         participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
     command = ModelCommand(
         command_id=str(uuid.uuid4()), verb=verb, entity_id=entity_id,
-        reason=reason, requester_id=REQUESTER_ID, stamp=_now())
+        reason=reason, requester_id=REQUESTER_ID,
+        # Retirement carries no pose. The member is guarded rather than
+        # optional, so it is present and ignored.
+        has_pose=False,
+        pose=PoseSE3(t=[0.0, 0.0, 0.0], q=[0.0, 0.0, 0.0, 1.0]),
+        stamp=_now())
     # A VOLATILE writer with nobody attached drops the sample on the floor.
     # The service is long-lived, so this is a discovery wait, not a retry.
     deadline = time.time() + 5.0

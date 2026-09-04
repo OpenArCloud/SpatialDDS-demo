@@ -272,8 +272,8 @@ export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse
   const items = (dds.results || []).map((entry) => catalogEntryToItem(entry, frames));
 
   // The catalogue rows themselves, keyed by content_id. The model layer
-  // resolves `catalog:<content_id>` against these -- a lookup over results
-  // the client already has, because the catalogue cannot be queried by id.
+  // resolves `catalog:<content_id>` against these first; on a miss it asks
+  // the catalogue directly -- see resolveContentIds.
   const assets: Record<string, { uri?: string; hash?: string }> = {};
   for (const entry of dds.results || []) {
     const id = (entry as Record<string, any>).content_id;
@@ -291,6 +291,52 @@ export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse
     assets,
     frames
   };
+}
+
+/**
+ * Resolve `catalog:<content_id>` references the coverage query did not return.
+ *
+ * Until the catalogue gained `content_id_in`, this was impossible: a client
+ * could resolve a reference only if it had already queried the right area and
+ * happened to have the row cached. The demo worked because the duck's row and
+ * the duck's entity were in the same plaza -- a coincidence, and one that
+ * would not survive a model referencing content from anywhere else.
+ *
+ * Returns only what came back. A reference that resolves to nothing stays
+ * unresolved, and the caller declines to render rather than inventing a URI.
+ */
+export async function resolveContentIds(
+  ids: string[]
+): Promise<Record<string, { uri?: string; hash?: string }>> {
+  const wanted = [...new Set(ids)].filter(Boolean);
+  if (!wanted.length) {
+    return {};
+  }
+  const resolved: Record<string, { uri?: string; hash?: string }> = {};
+  // The filter is bounded at 16 ids; ask in pages rather than sending a
+  // request the server will reject.
+  for (let i = 0; i < wanted.length; i += 16) {
+    const page = wanted.slice(i, i + 16);
+    try {
+      const payload = await fetchJson('/v1/catalog/query', {
+        method: 'POST',
+        body: JSON.stringify({ content_id_in: page, limit: page.length })
+      }) as DdsCatalogResponse;
+      for (const entry of payload.results || []) {
+        const row = entry as Record<string, any>;
+        if (row.content_id) {
+          resolved[row.content_id] = {
+            uri: row.has_asset ? row.asset?.uri : row.href,
+            hash: row.has_asset ? row.asset?.hash : undefined
+          };
+        }
+      }
+    } catch {
+      // A bridge that predates `content_id_in` answers 400 or 502. That is a
+      // miss, not a failure: the caller already handles unresolved refs.
+    }
+  }
+  return resolved;
 }
 
 /** A `spatial::disco::Transform` as the bridge serves it from `/v1/frames`. */
