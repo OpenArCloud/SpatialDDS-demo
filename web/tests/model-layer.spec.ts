@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
-  TYPE_LABELS, catalogEntryToItem, catalogRefId, modelEntityToItem,
-  resolveInFrame, typeLabel
+  TYPE_LABELS, catalogEntryToItem, catalogRefId, displayName, hasUnknownType,
+  modelEntityToItem, resolveInFrame, typeLabel
 } from '../src/spatialdds_bridge';
 
 /**
@@ -205,5 +205,86 @@ test.describe('borrowed vocabulary', () => {
     // Frozen on purpose: a display convenience that a caller could edit would
     // make "what does this type mean" depend on load order.
     expect(Object.isFrozen(TYPE_LABELS)).toBe(true);
+  });
+});
+
+test.describe("a stranger's entity", () => {
+  /**
+   * The case the layer exists to survive: a publisher we have never met,
+   * using a vocabulary we do not carry, speaking none of this demo's property
+   * conventions. It must render — correctly placed and honestly labelled —
+   * and change nothing about what was already on screen.
+   */
+  const GNOME = {
+    entity_id: 'ent:gnome:visitor',
+    type_uris: ['https://example.org/vocab/garden-gnome'],
+    frame_ref: { fqn: VENUE },
+    has_pose: true,
+    pose: { t: [20.0, -21.0, -0.98], q: [0, 0, 0, 1] },
+    content_refs: [],
+    properties: [],
+    source_id: 'svc:model:visitor/garden-ornaments'
+  };
+
+  test('an unknown type is reported, not hidden', () => {
+    expect(hasUnknownType(GNOME)).toBe(true);
+    expect(typeLabel(GNOME.type_uris[0])).toBeUndefined();
+  });
+
+  test('it is named from the URI tail — poor, and accurate', () => {
+    // No demo.label, no known type. The tail is what this publisher claimed
+    // the thing is, which beats both a made-up name and no name at all.
+    expect(displayName(GNOME)).toBe('garden-gnome');
+  });
+
+  test('the naming fallback stops at the first thing that is true', () => {
+    const withLabel = { ...GNOME, properties: [{ key: 'demo.label', value: 'Gnorman' }] };
+    expect(displayName(withLabel)).toBe('Gnorman');
+
+    const knownType = { ...GNOME, type_uris: ['http://www.wikidata.org/entity/Q483453'] };
+    expect(displayName(knownType)).toBe('Fountain');
+
+    const nothingButAnId = { ...GNOME, type_uris: [] };
+    expect(displayName(nothingButAnId)).toBe('visitor');
+  });
+
+  test('it is placed, and placed correctly', () => {
+    const item = modelEntityToItem(GNOME, FRAMES as any, () => undefined);
+    expect(item).not.toBeNull();
+    // Beside the basin, not in it: south-east of the fountain's centre.
+    expect(item!.geopose.lat_deg).toBeCloseTo(30.28378, 4);
+    expect(item!.geopose.lon_deg).toBeCloseTo(-97.73954, 4);
+  });
+
+  test('it draws as a marker, not as content it never claimed', () => {
+    const item = modelEntityToItem(GNOME, FRAMES as any, () => undefined)!;
+    expect(item.kind).toBe('poi');       // no asset
+    expect(item.model_url).toBeUndefined();
+    expect(item.extent).toBeUndefined(); // declared no size, so none is drawn
+  });
+
+  test('a known entity is unaffected by the stranger', () => {
+    // The regression that would matter: adding an unknown type changing how
+    // the things we do understand are treated.
+    const duck = {
+      entity_id: 'ent:duck:west',
+      type_uris: ['http://www.wikidata.org/entity/Q851478'],
+      properties: [{ key: 'demo.label', value: 'Bobbin' }],
+      frame_ref: { fqn: VENUE }, has_pose: true, pose: POSE,
+      content_refs: [`catalog:${DUCK_CONTENT_ID}`]
+    };
+    expect(hasUnknownType(duck)).toBe(false);
+    expect(displayName(duck)).toBe('Bobbin');
+    const item = modelEntityToItem(duck, FRAMES as any,
+      () => ({ uri: 'http://example.test/duck.glb' }))!;
+    expect(item.kind).toBe('model');
+    expect(item.model_url).toBe('http://example.test/duck.glb');
+  });
+
+  test('an entity with no types at all is not treated as unknown', () => {
+    // "Says nothing about its type" and "says something we cannot resolve"
+    // are different claims; only the second is worth flagging to a user.
+    expect(hasUnknownType({ entity_id: 'ent:x', type_uris: [] })).toBe(false);
+    expect(hasUnknownType({ entity_id: 'ent:x' })).toBe(false);
   });
 });

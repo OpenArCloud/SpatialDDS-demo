@@ -501,6 +501,43 @@ function extentOf(entity: ModelEntity, frames: FrameMap) {
   return { ...placed.placed, size, orientation: placed.orientation };
 }
 
+/**
+ * The best honest name for an entity.
+ *
+ * Ordered by how much the publisher actually told us, and stopping at the
+ * first thing that is true. A URI tail is a poor name and an accurate one: it
+ * is what this publisher said the thing is, in a vocabulary nobody here can
+ * resolve, which is exactly the situation worth showing rather than hiding.
+ */
+export function displayName(entity: ModelEntity): string {
+  const label = modelProperty(entity, 'demo.label');
+  if (label) {
+    return label;
+  }
+  for (const uri of entity.type_uris || []) {
+    const known = typeLabel(uri);
+    if (known) {
+      return known;
+    }
+  }
+  const uri = (entity.type_uris || [])[0];
+  if (uri) {
+    // "…/vocab/garden-gnome" -> "garden-gnome". Trailing slashes and empty
+    // segments are dropped so a tidy URI and an untidy one read the same.
+    const tail = uri.split(/[/#]/).filter(Boolean).pop();
+    if (tail) {
+      return tail;
+    }
+  }
+  return entity.entity_id.split(':').filter(Boolean).pop() || entity.entity_id;
+}
+
+/** True when nothing in `type_uris` is a vocabulary this client carries. */
+export function hasUnknownType(entity: ModelEntity): boolean {
+  const uris = entity.type_uris || [];
+  return uris.length > 0 && uris.every((uri) => typeLabel(uri) === undefined);
+}
+
 export function modelEntityToItem(
   entity: ModelEntity,
   frames: FrameMap,
@@ -516,11 +553,15 @@ export function modelEntityToItem(
   const nowMs = Date.now();
   return {
     id: entity.entity_id,
-    // The publisher's own label if it set one. Falling back to the id's last
-    // segment keeps something readable on screen for an entity that carries
-    // no name, without the client inventing one.
-    name: modelProperty(entity, 'demo.label')
-      || entity.entity_id.split(':').slice(-1)[0] || entity.entity_id,
+    // What to call it, in descending order of how much the publisher told us.
+    //
+    // A stranger's entity has no reason to speak this demo's property
+    // conventions, so the label may be absent; it may also use a vocabulary
+    // this client cannot resolve. Each step down says less, and none of them
+    // invents anything: the publisher's own name, then the type if we happen
+    // to know it, then the tail of the type URI -- which at least reports what
+    // the publisher claimed -- then the tail of the id.
+    name: displayName(entity),
     kind: asset?.uri ? 'model' : 'poi',
     geopose: {
       lat_deg: resolved.placed.lat_deg,

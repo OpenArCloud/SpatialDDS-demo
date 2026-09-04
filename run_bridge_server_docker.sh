@@ -64,6 +64,7 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
     python3 ar_demo/spatialdds_catalog_server.py --detailed >\"\$catalog_log\" 2>&1 &\
     if [ \"\$SPATIALDDS_MODEL_LAYER\" = \"1\" ]; then \
       python3 -m spatialdds_demo.model_service >\"\$model_log\" 2>&1 &\
+      python3 scripts/gnome_publisher.py >\"\$BRIDGE_LOG_DIR/gnome_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
     fi; \
     python3 bridges/web_bridge/server.py >\"\$bridge_log\" 2>&1\
   " >/dev/null 2>&1 &

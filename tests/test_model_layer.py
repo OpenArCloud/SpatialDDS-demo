@@ -127,6 +127,84 @@ class AssetVersusInstance(unittest.TestCase):
         self.assertTrue(fountain.has_extent)
 
 
+class SecondPublisher(unittest.TestCase):
+    """
+    Two writers, one model.
+
+    The gnome comes from its own process with its own source_id, on the same
+    latched topics. A subscriber should see one world containing five things,
+    not two feeds it has to reconcile -- and the entity of an unknown type has
+    to arrive on the same terms as everything else, because a consumer that
+    only accepts vocabularies it knows cannot federate with anyone.
+    """
+
+    @staticmethod
+    def _load_gnome_publisher():
+        path = REPO / "scripts" / "gnome_publisher.py"
+        spec = importlib.util.spec_from_file_location("gnome_publisher", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_the_stranger_declares_what_it_should_and_nothing_more(self):
+        gnome = self._load_gnome_publisher().gnome()
+        self.assertEqual(gnome.entity_id, "ent:gnome:visitor")
+        self.assertEqual(gnome.basis.name, "AUTHORED")
+        self.assertEqual(gnome.layer.name, "SLOW")
+        self.assertTrue(gnome.has_pose)
+        # No size, no content, no label, no external identity: everything the
+        # client has to degrade around.
+        self.assertFalse(gnome.has_extent)
+        self.assertEqual(list(gnome.content_refs), [])
+        self.assertEqual(list(gnome.properties), [])
+        self.assertEqual(list(gnome.external_refs), [])
+        # A different publisher, and it says so.
+        self.assertNotEqual(gnome.source_id, seed_entities()[0].source_id)
+
+    def test_it_names_the_same_frame_so_it_can_be_placed(self):
+        """A stranger who names the frame correctly is placeable. One who does
+        not is declined by the client rather than guessed at."""
+        gnome = self._load_gnome_publisher().gnome()
+        self.assertEqual(gnome.frame_ref.uuid, seed_entities()[0].frame_ref.uuid)
+        self.assertEqual(gnome.frame_ref.fqn, seed_entities()[0].frame_ref.fqn)
+
+    def test_a_late_joiner_gets_both_publishers(self):
+        module = self._load_gnome_publisher()
+        publisher_participant = _participant(DOMAIN + 2)
+        publisher = ModelPublisher(publisher_participant)
+        entities = seed_entities()
+        for entity in entities:
+            publisher.publish_entity(entity)
+
+        # A second, independent writer on the same topic.
+        gnome_writer = tt.make_writer(
+            publisher_participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        gnome_writer.write(module.gnome())
+
+        time.sleep(0.5)
+        started = time.time()
+        subscriber = _participant(DOMAIN + 2)
+        entity_reader = tt.make_reader(
+            subscriber, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        got = {}
+        deadline = time.time() + 10
+        while time.time() < deadline and len(got) < SEEDED_ENTITIES + 1:
+            for sample in tt.take_samples(entity_reader) or []:
+                got[sample.entity_id] = sample
+            time.sleep(0.02)
+        elapsed = time.time() - started
+
+        try:
+            self.assertEqual(len(got), SEEDED_ENTITIES + 1)
+            self.assertIn("ent:gnome:visitor", got)
+            sources = {e.source_id for e in got.values()}
+            self.assertEqual(len(sources), 2, "should be two distinct publishers")
+            print(f"\n  late-join with two publishers: {len(got)} entities from "
+                  f"{len(sources)} sources in {elapsed:.3f}s")
+        finally:
+            publisher.close()
+
+
 class Mover(unittest.TestCase):
     """
     `scripts/move_duck.py` changes the pose and the stamp and nothing else.

@@ -655,7 +655,8 @@ function describeEntity(item: CatalogItem): string | undefined {
     const label = typeLabel(uri);
     rows.push(['Type', label
       ? `${label} <a href="${uri}" target="_blank" rel="noopener" style="opacity:.65">${uri}</a>`
-      : `<a href="${uri}" target="_blank" rel="noopener">${uri}</a>`]);
+      : `<a href="${uri}" target="_blank" rel="noopener">${uri}</a>` +
+        ` <span style="opacity:.6">— not a vocabulary this client carries</span>`]);
   }
   rows.push(['Basis', `${entity.basis} — how the claim was arrived at`]);
   rows.push(['Layer', `${entity.layer} — how fast it is expected to change`]);
@@ -819,8 +820,18 @@ function addItemEntity(item: CatalogItem) {
     return;
   }
 
-  // Content that neither draws itself nor says how big it is. The cube is a
-  // stand-in for "something is here", and nothing more.
+  // A model entity that declares neither an asset nor an extent is left as
+  // its marker: pin, name, and the details panel. The placeholder cube below
+  // would be the client asserting a size the publisher never claimed, which
+  // is the same mistake the fountain's 1.2 m box was -- and for a stranger's
+  // entity of an unknown type it would be inventing twice over.
+  if (item.entity) {
+    appLog(`content: ${item.name} — marker only (no asset, no extent)`);
+    return;
+  }
+
+  // Legacy catalogue content, which has no entity to have declared anything.
+  // The cube is a stand-in for "something is here", and nothing more.
   const boxEntity = viewer.entities.add({
     id: `${item.id}-box`,
     position: Cesium.Cartesian3.fromDegrees(item.geopose.lon_deg, item.geopose.lat_deg, item.geopose.alt_m),
