@@ -379,6 +379,7 @@ recorded; Part 2 either closed or sharpened.
 | A retirement cascade is a local courtesy, not a rule | **new in Part 2** | below, "What an edge cannot say" | A dangling edge across a federation boundary is valid; one left by a local tool is mess |
 | Borrowing has a boundary: honour the meaning, not the shape | **new in Part 3** | below, "The borrowing rule has a boundary" | `POSE_RT` matched the shape and declared a 33 ms deadline this publisher will not meet |
 | "Idle" is only meaningful relative to an entity's own cadence | **new in Part 3** | below, "The latch converges to the stream on idle" | A fixed threshold below the update interval makes every gap look like a stop |
+| Two accounts of one thing cannot be joined honestly | **new in Part 3** | below, "Surface both, attribute both, join neither" | An edge saying "these are the same" has a source and an evidence basis; `Relationship` carries neither |
 | A DECLARED entity audits everything already in the model | **new in Part 3** | below, "Declaring bounds judges what is already there" | Bounds arriving late make existing state right or wrong retroactively; nothing else changed |
 | A command channel's type must be keyed | **new in Part 3** | below, "An unkeyed command topic kills its readers" | An exiting client delivers an invalid sample; deserializing the key of an unkeyed type raises inside `take()`, before any user code sees it |
 | `test_bridge_http.py` is container-bound | open | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
@@ -540,6 +541,34 @@ mirror.
 Guarded by `tests/test_command_lane.py`, which runs four short-lived writers
 past one long-lived reader -- the shape of every operator-tool invocation --
 and asserts the reader survives. Removing the key turns it red.
+
+### Surface both, attribute both, join neither
+
+Part 3 puts two entities on the bus describing the same water:
+`ent:pond:littlefield` (DECLARED, by the venue) and `ent:pond:observed`
+(DERIVED, by `svc:fusion:demo/pondwatch`). They disagree about the edges by
+about a metre, and the model does not settle it.
+
+**No relationship joins them, and that is a finding rather than an omission.**
+"These are the same water" is a claim like any other: somebody asserts it, on
+some evidence, and a consumer needs to know which somebody before deciding
+what to do about it. `Relationship` has no `basis` and no `state`, so an edge
+carrying that claim could not say who made it or how -- a reader could not
+distinguish the venue asserting identity, the fusion service asserting it, or
+the demo assuming it while nobody had. Publishing an unattributable claim
+about identity is worse than publishing none: it launders an assumption into
+the model.
+
+**The placeholder rule the demo follows, until R10 settles it: surface both,
+attribute both, join neither.** Both are published, each carries its
+`source_id` and `basis`, the client draws them in basis-coloured wireframes
+and qualifies the colliding names, and choosing whom to trust is left to the
+consumer -- the mover takes `--bounds declared|derived` for exactly that
+reason.
+
+This is the same gap as "What an edge cannot say", met from the other
+direction. There it cost a retired edge its reason; here it costs the model
+its ability to state a same-as. Both point at the same fix.
 
 ### What an edge cannot say
 

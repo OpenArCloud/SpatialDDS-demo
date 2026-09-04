@@ -179,6 +179,42 @@ it is the only way an entity's asset is found. The switches that exist to
 exercise a path deliberately are in
 [CONTRIBUTING](CONTRIBUTING.md#switches-for-exercising-a-path-deliberately).
 
+### Two accounts of one pond
+
+Run the stack with `SPATIALDDS_POND_WATCH=1` and a second service,
+`svc:fusion:demo/pondwatch`, publishes `ent:pond:observed`: its own entity,
+in the same frame, describing the same water the venue declares — and
+disagreeing about where its edges are. The venue declared bounds a little
+inside the waterline so anything trusting them stays wet; the observer
+reports what it measures, which is slightly more pond, with a wobble on it.
+
+**The model carries both and crowns neither.** Each says who published it and
+how the claim was arrived at, and the wireframes are coloured by basis so the
+difference is visible rather than a puzzle. Where two entities claim the same
+name, the map qualifies them — *Pond (declared)* and *Pond (derived)* — rather
+than renaming somebody else's thing or hiding the disagreement.
+
+Choosing whom to believe is a **consumer policy**, which is why it is a flag
+and not a constant:
+
+```bash
+python3 -m spatialdds_demo.duck_mover --bounds declared   # the venue
+python3 -m spatialdds_demo.duck_mover --bounds derived    # the observation
+```
+
+Same mover, same ducks, different account of the water — and the ducks are
+allowed in different places. Measured: trusting the venue, a duck may not go
+west of x = 10.5; trusting the observation, it may stand at 9.87.
+
+**Nothing joins the two entities**, deliberately. Saying "these are the same
+water" is a claim with a source and an evidence basis, and `Relationship`
+carries neither — no `basis`, no `LifecycleState` — so an edge asserting it
+could not be attributed or qualified. A reader could not tell whether the
+venue said it, the fusion service said it, or the demo assumed it. **The
+placeholder rule until R10 settles it: surface both, attribute both, join
+neither.** Recorded in
+[`SPEC_COMPLIANCE.md`](ar_demo/SPEC_COMPLIANCE.md).
+
 ### The command channel — how anything gets changed
 
 Nothing writes to the model topics except the publisher that owns them.

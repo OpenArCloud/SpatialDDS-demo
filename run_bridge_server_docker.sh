@@ -44,6 +44,7 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
   -e SPATIALDDS_VPS_COVERAGE_BBOX="${SPATIALDDS_VPS_COVERAGE_BBOX:--97.75,30.27,-97.72,30.29}" \
   -e SPATIALDDS_VPS_MAP_FQN="${SPATIALDDS_VPS_MAP_FQN:-map/austin}" \
   -e SPATIALDDS_VPS_MAP_ID="${SPATIALDDS_VPS_MAP_ID:-austin-map}" \
+  -e SPATIALDDS_POND_WATCH="${SPATIALDDS_POND_WATCH:-0}" \
   -e SPATIALDDS_DUCK_MOVER="${SPATIALDDS_DUCK_MOVER:-0}" \
   -e SPATIALDDS_VPS_SERVICE_ID="${SPATIALDDS_VPS_SERVICE_ID:-svc:vps:demo/austin-downtown}" \
   -e SPATIALDDS_VPS_SERVICE_NAME="${SPATIALDDS_VPS_SERVICE_NAME:-MockVPS-Austin}" \
@@ -66,6 +67,9 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
     if [ \"\$SPATIALDDS_MODEL_LAYER\" = \"1\" ]; then \
       python3 -m spatialdds_demo.model_service >\"\$model_log\" 2>&1 &\
       python3 scripts/gnome_publisher.py >\"\$BRIDGE_LOG_DIR/gnome_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
+      if [ \"\$SPATIALDDS_POND_WATCH\" = \"1\" ]; then \
+        python3 -m spatialdds_demo.pond_watch >\"\$BRIDGE_LOG_DIR/pondwatch_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
+      fi; \
       if [ \"\$SPATIALDDS_DUCK_MOVER\" = \"1\" ]; then \
         python3 -m spatialdds_demo.duck_mover >\"\$BRIDGE_LOG_DIR/mover_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
       fi; \

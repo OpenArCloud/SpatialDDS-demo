@@ -9,8 +9,8 @@ import {
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  BASIS_VALUES, bridgeFrames, bridgeModelSnapshot, catalogRefId, displayName,
-  matchesBasis, modelEntityToItem, observeRest, parseBasisFilter,
+  BASIS_VALUES, bridgeFrames, bridgeModelSnapshot, catalogRefId, disambiguate,
+  displayName, matchesBasis, modelEntityToItem, observeRest, parseBasisFilter,
   planModelRender, resolveContentIds, resolveInFrame, typeLabel
 } from './spatialdds_bridge';
 import type { ModelEntity, RestExchange } from './spatialdds_bridge';
@@ -657,12 +657,21 @@ async function bootstrapModel(): Promise<void> {
     appLog(`model:basis-unstated ${entity.entity_id} — hidden by the filter`);
   }
 
+  // Two services can describe one thing and give it the same name. Qualify
+  // the collisions before drawing, so the map says which claim is which.
+  const names = disambiguate(plan.visible);
   modelPlaced = 0;
   for (const entity of plan.visible) {
     const item = modelEntityToItem(entity, frames, (id) => assets[id]);
     if (!item) {
       appLog(`model:unresolved ${entity.entity_id} — frame ${entity.frame_ref?.fqn}`);
       continue;
+    }
+    const qualified = names.get(entity.entity_id);
+    if (qualified && qualified !== item.name) {
+      appLog(`model:name ${entity.entity_id} shown as ${qualified} — ` +
+             `another entity claims the same name`);
+      item.name = qualified;
     }
     modelItems.set(entity.entity_id, item);
     addItemEntity(item);

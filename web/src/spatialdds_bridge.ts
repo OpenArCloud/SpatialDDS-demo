@@ -577,6 +577,35 @@ function extentOf(entity: ModelEntity, frames: FrameMap) {
  * is what this publisher said the thing is, in a vocabulary nobody here can
  * resolve, which is exactly the situation worth showing rather than hiding.
  */
+/**
+ * Distinguish things that claim the same name.
+ *
+ * Two services describe this venue's water and both call it "Pond", which is
+ * correct of each and useless of the pair. Renaming one would be the client
+ * editing a publisher's label; showing them identically would be the client
+ * hiding a disagreement. So the name is kept and qualified by *how the claim
+ * was arrived at* -- "Pond (declared)" and "Pond (observed)" -- which is the
+ * thing a viewer actually needs in order to ask why they differ.
+ *
+ * Only applied on collision. One pond stays "Pond".
+ */
+export function disambiguate(entities: ModelEntity[]): Map<string, string> {
+  const byName = new Map<string, ModelEntity[]>();
+  for (const entity of entities) {
+    const name = displayName(entity);
+    byName.set(name, [...(byName.get(name) || []), entity]);
+  }
+  const out = new Map<string, string>();
+  for (const [name, sharing] of byName) {
+    for (const entity of sharing) {
+      out.set(entity.entity_id, sharing.length === 1
+        ? name
+        : `${name} (${(entity.basis || 'unstated').toLowerCase()})`);
+    }
+  }
+  return out;
+}
+
 export function displayName(entity: ModelEntity): string {
   const label = modelProperty(entity, 'demo.label');
   if (label) {

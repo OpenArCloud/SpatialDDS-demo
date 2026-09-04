@@ -123,6 +123,7 @@ test('the basis pair partitions the venue, and a stranger is placed either way',
     const observed = await capture(page, '/?debug=1&basis=observed', 'basis-observed');
     const declared = await capture(page, '/?debug=1&basis=declared', 'basis-declared');
     const authored = await capture(page, '/?debug=1&basis=authored', 'basis-authored');
+    const derived = await capture(page, '/?debug=1&basis=derived', 'basis-derived');
 
     // The stranger, in the default view: placed, named from its type URI
     // because it published no label, and drawn as nothing more than it
@@ -152,23 +153,37 @@ test('the basis pair partitions the venue, and a stranger is placed either way',
       }
     }
 
-    // The triptych. One venue, three kinds of claim about it.
+    // The quartet. One venue, four kinds of claim about it -- including two
+    // about the same water, which is the pair the model refuses to settle.
     expect(observed.ids).toEqual(['ent:fountain:littlefield']);
     expect(declared.ids).toEqual(['ent:pond:littlefield']);
+    expect(derived.ids).toEqual(['ent:pond:observed']);
     expect(authored.ids).toEqual(
       ['ent:duck:catalog-pose', 'ent:duck:east', 'ent:duck:west', 'ent:gnome:visitor']);
     // Disjoint and complete: every entity is in exactly one view, and between
-    // them they account for the whole model. When the observed pond arrives
-    // in P3.5 this becomes four, and the same assertion has to keep holding.
-    expect([...observed.ids, ...declared.ids, ...authored.ids].sort())
+    // them they account for the whole model.
+    expect([...observed.ids, ...declared.ids, ...derived.ids, ...authored.ids].sort())
       .toEqual(all.ids);
 
     // A filtered scene says so, rather than presenting a partial world as
     // the whole one.
-    expect(observed.readout).toContain('basis=OBSERVED — 5 hidden');
-    expect(declared.readout).toContain('basis=DECLARED — 5 hidden');
-    expect(authored.readout).toContain('basis=AUTHORED — 2 hidden');
+    expect(observed.readout).toContain('basis=OBSERVED — 6 hidden');
+    expect(declared.readout).toContain('basis=DECLARED — 6 hidden');
+    expect(derived.readout).toContain('basis=DERIVED — 6 hidden');
+    expect(authored.readout).toContain('basis=AUTHORED — 3 hidden');
     expect(all.readout).not.toContain('hidden');
+
+    // Both ponds are drawn, and the map says which claim is which rather
+    // than showing two things called "Pond".
+    const names = all.drawn
+      .filter((d: any) => d.id.startsWith('ent:pond'))
+      .map((d: any) => d.label)
+      .filter(Boolean)
+      .sort();
+    // "derived", not "observed": the qualifier is the entity's own basis,
+    // and pondwatch computes its bounds rather than having seen them. A
+    // client that relabelled it would be editing somebody else's claim.
+    expect(names).toEqual(['Pond (declared)', 'Pond (derived)']);
   });
 
 test('a model entity moved on the bus moves in an open browser', async ({ page }) => {

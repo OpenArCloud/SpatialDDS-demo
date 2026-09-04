@@ -67,6 +67,7 @@ run "host suite" python3 -m pytest -q \
   tests/test_autostart_gating.py \
   tests/test_duck_mover.py \
   tests/test_fast_tier.py \
+  tests/test_pond_watch.py \
   bridges/mcap_bridge \
   tests/ \
   nuscenes/test_nuscenes_shapes.py \

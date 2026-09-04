@@ -14,7 +14,7 @@ import { expect } from '@playwright/test';
 
 export const BRIDGE_URL =
   process.env.VITE_SPATIALDDS_BRIDGE_URL || 'http://localhost:8088';
-export const SEEDED_ENTITIES = 6;      // fountain, pond, three ducks, the gnome
+export const SEEDED_ENTITIES = 7;      // + the observed pond
 export const SEEDED_RELATIONSHIPS = 4;
 
 export function container(): string | null {
@@ -102,9 +102,9 @@ export async function readyPage(page: any, url = '/?debug=1'): Promise<void> {
  * turn the whole file into a coin toss. Anything that needs motion starts it
  * and is responsible for stopping it, including when it fails.
  */
-export function startMover(name: string): void {
-  execSync(`docker exec -d -w /app ${name} python3 -m spatialdds_demo.duck_mover`,
-           { stdio: 'ignore' });
+export function startMover(name: string, bounds: 'declared' | 'derived' = 'declared'): void {
+  execSync(`docker exec -d -w /app ${name} python3 -m spatialdds_demo.duck_mover `
+           + `--bounds ${bounds}`, { stdio: 'ignore' });
 }
 
 export function stopMover(name: string): void {

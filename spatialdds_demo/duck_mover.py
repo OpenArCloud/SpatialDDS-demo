@@ -53,7 +53,18 @@ REQUESTER_ID = "svc:mover:demo/ducks"
 # type, because "which water are these ducks on" is a question the model
 # cannot answer yet: there is no `on` relationship, and Part 3 leaves
 # computed containment alone until Relationship can carry a basis.
-DEFAULT_BOUNDS_ENTITY = "ent:pond:littlefield"
+#
+# Two entities describe this water: the venue's declared bounds and a fusion
+# service's observed ones. They disagree, and the model does not settle it --
+# it carries both, each saying who published it and how it was arrived at.
+# **Which one to believe is a policy this consumer holds**, which is why it is
+# a command-line flag and not a constant. Run the mover against the other and
+# the ducks roam differently; nothing else changes.
+BOUNDS_ENTITIES = {
+    "declared": "ent:pond:littlefield",     # the venue says so
+    "derived": "ent:pond:observed",         # a service measured it
+}
+DEFAULT_BOUNDS_ENTITY = BOUNDS_ENTITIES["declared"]
 
 # Kept off the declared edge. The pond's bounds are where the water stops, and
 # a duck is not a point -- placing one exactly on the boundary puts half of it
@@ -126,6 +137,8 @@ class DuckMover:
         self._rng = rng or random.Random()
         self._entities: Dict[str, Entity] = {}
         self._counter = 0
+        self._matched = False
+        self._warned_unheard = False
 
     # --- reading the world -------------------------------------------------
 
@@ -167,7 +180,40 @@ class DuckMover:
             q=heading_quaternion(x - duck.pose.t[0], y - duck.pose.t[1],
                                  duck.pose.q))
 
+    def _wait_until_somebody_is_listening(self, timeout: float = 5.0) -> bool:
+        """
+        The command lane is VOLATILE: a sample written before a reader has
+        matched is dropped on the floor, not queued.
+
+        Both operator tools already wait for this and the mover did not, which
+        cost nothing in the running demo -- it asks again half a second later,
+        forever -- and cost a test everything, because a mover started, asked
+        thirty times and had its first commands land in a void. A service
+        that silently loses its opening move is the same bug as a tool that
+        reports success without looking; it is just quieter about it.
+
+        Once only: after the first match there is a reader, and losing it is
+        the service's problem to notice, not this loop's to re-check.
+        """
+        if self._matched:
+            return True
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._commands.get_publication_matched_status().current_count:
+                self._matched = True
+                return True
+            time.sleep(0.05)
+        return False
+
     def ask_move(self, entity_id: str, pose: PoseSE3) -> None:
+        if not self._wait_until_somebody_is_listening():
+            # Nothing is reading commands. Saying so once is better than
+            # asking into silence for the rest of the process's life.
+            if not self._warned_unheard:
+                self._warned_unheard = True
+                print("mover: nothing is reading the command lane — is the "
+                      "model service running?", flush=True)
+            return
         self._counter += 1
         self._commands.write(ModelCommand(
             command_id=f"mover-{self._counter}",
@@ -254,10 +300,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Wander the ducks inside whatever bounds the model declares")
     parser.add_argument("--domain", type=int, default=None)
-    parser.add_argument("--bounds-entity", default=DEFAULT_BOUNDS_ENTITY,
-                        help="whose extent to stay inside")
+    parser.add_argument("--bounds", choices=sorted(BOUNDS_ENTITIES),
+                        default="declared",
+                        help="whose account of the water to trust "
+                             "(declared: the venue; derived: pondwatch)")
+    parser.add_argument("--bounds-entity", default=None,
+                        help="or name an entity directly")
     args = parser.parse_args()
-    return run(args.domain, args.bounds_entity)
+    entity = args.bounds_entity or BOUNDS_ENTITIES[args.bounds]
+    return run(args.domain, entity)
 
 
 if __name__ == "__main__":
