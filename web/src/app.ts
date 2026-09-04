@@ -283,8 +283,30 @@ function cameraGeoPose(activeViewer: Cesium.Viewer): GeoPose {
  * the duck and hides the thing it is pointing at. The label still earns its
  * place -- three ducks that look identical need telling apart.
  */
+// A plate is 15 px of bold text with 5 px of padding above and below, so it
+// occupies about 25 px. Rungs closer than that overlap, which the first
+// attempt at 19 px demonstrated: Bobbin and Waddles were legible only
+// separately. Two pixels of air is enough to read them as distinct.
+const LABEL_RUNG_PX = 27;
+
+/**
+ * Which rung of the label stack an entity sits on: 0, 1 or 2.
+ *
+ * A stable hash of the id, so a name keeps its height for as long as the
+ * thing exists. Three rungs because that is what the venue needs when the
+ * pond shrinks; a fourth thing in the same spot would still collide, and the
+ * honest answer then is a wider camera rather than a taller stack.
+ */
+function labelRung(id: string): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) {
+    hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % 3;
+}
+
 function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
-                   labelOnly = false, clampToGround = true) {
+                   labelOnly = false, clampToGround = true, isArea = false) {
   if (!viewer) {
     return;
   }
@@ -317,10 +339,28 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
       backgroundPadding: new Cesium.Cartesian2(8, 5),
       style: Cesium.LabelStyle.FILL,
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-      // Clear of whatever is below it. A pin is 32 px tall, but a model draws
-      // itself at minimumPixelSize 64, and the offset tuned for the pin left
-      // the name sitting across the duck's back.
-      pixelOffset: new Cesium.Cartesian2(0, labelOnly ? -44 : -36),
+      // Clear of whatever is below it, and clear of its neighbours.
+      //
+      // A pin is 32 px tall, but a model draws itself at minimumPixelSize 64,
+      // and the offset tuned for the pin left the name across the duck's
+      // back. The second term is the harder problem: things in a world get
+      // close together. Shrinking the pond puts three ducks and the pond's
+      // own label within a few metres, and four names at one screen point is
+      // one unreadable smear.
+      //
+      // The stagger is deterministic per id, not per index -- an index would
+      // reshuffle every time an entity arrived or left, so the names would
+      // dance while the things stood still. Same id, same rung, always.
+      // Cesium can declutter a LabelCollection, but that hides names rather
+      // than placing them, and a demo whose point is "these are the things
+      // and this is what they are called" should not hide the names.
+      // An area's name floats clear of everything inside it. Rungs separate
+      // the points from each other; this separates the container from its
+      // contents, which no hash can do reliably because they are always in
+      // the same place by definition.
+      pixelOffset: new Cesium.Cartesian2(
+        0, (labelOnly ? -44 : -36) - labelRung(id) * LABEL_RUNG_PX
+           - (isArea ? 2.5 * LABEL_RUNG_PX : 0)),
       heightReference: clampToGround
         ? Cesium.HeightReference.CLAMP_TO_GROUND
         : Cesium.HeightReference.NONE,
@@ -1032,7 +1072,8 @@ function addItemEntity(item: CatalogItem) {
   // and the clamp resolved, then silently dropped underground: visible in
   // every quick screenshot and absent from every patient one, which is how it
   // survived this long.
-  addMarker(item.id, item.name, markerPose, itemUrl, drawsItself, false);
+  addMarker(item.id, item.name, markerPose, itemUrl, drawsItself, false,
+            !!item.extent);
   if (!viewer) {
     return;
   }

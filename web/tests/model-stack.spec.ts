@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   BRIDGE_URL, container, inContainer, readyPage, restoreVenue, startMover,
-  stopMover
+  stopMover, look
 } from './model-stack.helpers';
 
 /**
@@ -91,39 +91,9 @@ test('a fresh tab shows the venue with no clicks at all', async ({ page }) => {
     .toContain("is the demo's mock");
 });
 
-// South-east of the basin, high enough to hold the whole model in frame.
-const VIEW = { lon: -97.73920, lat: 30.28345, height: 205, heading: 327, pitch: -36 };
-
 async function capture(page: any, url: string, name: string) {
   await readyPage(page, url);
-  const clear = async () => page.evaluate(() =>
-    document.querySelectorAll('.cesium-widget-errorPanel').forEach((e: any) => e.remove()));
-
-  // The demo starts the camera at the localized prior, which is eye level in
-  // the basin: right for the demo, useless for a capture.
-  await page.evaluate((v: any) => {
-    const viewer = (window as any).__viewer;
-    // Cesium is bundled, not global; borrow Cartesian3 off a live instance.
-    const Cartesian3: any = viewer.camera.position.constructor;
-    const rad = (deg: number) => deg * Math.PI / 180;
-    viewer.camera.setView({
-      destination: Cartesian3.fromDegrees(v.lon, v.lat, v.height),
-      orientation: { heading: rad(v.heading), pitch: rad(v.pitch), roll: 0 }
-    });
-  }, VIEW);
-  await page.waitForFunction(() => {
-    const v = (window as any).__viewer;
-    const prims = v.scene.primitives;
-    for (let i = 0; i < prims.length; i += 1) {
-      const p: any = prims.get(i);
-      if (p && 'tilesLoaded' in p && !p.tilesLoaded) {
-        return false;
-      }
-    }
-    return true;
-  }, null, { timeout: 90_000 });
-  await page.waitForTimeout(2500);
-  await clear();
+  await look(page);
 
   const drawn = await page.evaluate(() => {
     const v = (window as any).__viewer;
@@ -462,3 +432,116 @@ test('the ducks wander in an open tab, and stop dead when the mover does',
     expect(Object.keys(onBus).sort()).toEqual(Object.keys(still).sort());
     console.log('  frozen: tab and bus agree on all three ducks');
   });
+
+test('shrinking the pond crowds the ducks on every open tab', async ({ browser }) => {
+  /**
+   * The demonstration the whole part exists for.
+   *
+   * Two tabs, one command, and the ducks end up somewhere else on both --
+   * because a service that has never heard of ducks-and-water read a box off
+   * the model and clamped into it. Nothing in `reshape_pond.py` mentions a
+   * duck; nothing in `duck_mover.py` mentions a pond beyond the id whose
+   * extent it follows. An application that moved the water *and* the ducks
+   * would prove nothing; this proves that the model is the interface.
+   *
+   * Two tabs rather than one because "every open tab" is the claim. A single
+   * client could be running its own animation and nobody would know.
+   */
+  test.setTimeout(420_000);
+  const name = stack as string;
+  const first = await browser.newPage();
+  const second = await browser.newPage();
+
+  const bounds = async () => {
+    const model = await (await first.request.get(`${BRIDGE_URL}/v1/model`)).json();
+    const pond = (model.entities || []).find(
+      (e: any) => e.entity_id === 'ent:pond:littlefield');
+    return { min: pond.extent.min_xyz, max: pond.extent.max_xyz };
+  };
+  const ducksOn = (page: any) => page.evaluate(() => {
+    const v = (window as any).__viewer;
+    const out: Record<string, [number, number]> = {};
+    for (const e of v.entities.values) {
+      const id = String(e.id);
+      if (!id.startsWith('ent:duck') || id.endsWith('-model')) continue;
+      const c = v.scene.globe.ellipsoid.cartesianToCartographic(
+        e.position.getValue(v.clock.currentTime));
+      out[id] = [c.latitude * 180 / Math.PI, c.longitude * 180 / Math.PI];
+    }
+    return out;
+  });
+
+  try {
+    for (const page of [first, second]) {
+      await readyPage(page);
+      await page.waitForFunction(() => {
+        const v = (window as any).__viewer;
+        return v && v.entities.values.some((e: any) => String(e.id).startsWith('ent:duck'));
+      }, null, { timeout: 40_000 });
+      await look(page);
+    }
+    startMover(name);
+    await first.waitForTimeout(4000);
+
+    const wide = await bounds();
+    const beforeA = await ducksOn(first);
+    const beforeB = await ducksOn(second);
+    expect(Object.keys(beforeA).length).toBe(3);
+    expect(Object.keys(beforeB).length).toBe(3);
+    await first.screenshot({ path: join(OUT, 'shrink-1-before.png') });
+
+    // 0.4 rather than 0.5: at half scale the crowding is real but reads as
+    // a small nudge in a still frame, and this capture is the part's whole
+    // argument. 10.5 x 8.0 m becomes 4.2 x 3.2 m -- still comfortably above
+    // the 2 m the mover's inset needs, so the ducks crowd inside the water
+    // rather than sitting on its rim.
+    inContainer(name, 'python3 scripts/reshape_pond.py --shrink 0.4');
+    const small = await bounds();
+    expect(small.max[0] - small.min[0]).toBeLessThan(wide.max[0] - wide.min[0]);
+
+    // The bus decides when this is true, not a timer.
+    await expect.poll(async () => {
+      const model = await (await first.request.get(`${BRIDGE_URL}/v1/model`)).json();
+      return (model.entities || [])
+        .filter((e: any) => e.entity_id.startsWith('ent:duck'))
+        .every((e: any) => e.pose.t[0] >= small.min[0] && e.pose.t[0] <= small.max[0]
+                        && e.pose.t[1] >= small.min[1] && e.pose.t[1] <= small.max[1]);
+    }, { timeout: 60_000 }).toBe(true);
+
+    await first.waitForTimeout(2500);
+    const afterA = await ducksOn(first);
+    const afterB = await ducksOn(second);
+    await first.screenshot({ path: join(OUT, 'shrink-2-after.png') });
+    await second.screenshot({ path: join(OUT, 'shrink-2-after-second-tab.png') });
+
+    // Both tabs moved, and they agree with each other.
+    for (const [tab, before, after] of
+         [['first', beforeA, afterA], ['second', beforeB, afterB]] as const) {
+      const moved = Object.keys(before).filter((id) =>
+        Math.hypot((after[id][0] - before[id][0]) * 111_320,
+                   (after[id][1] - before[id][1]) * 96_000) > 0.3);
+      console.log(`  ${tab} tab: ${moved.length}/3 ducks ended up somewhere else`);
+      expect(moved.length, `${tab} tab should show the crowding`).toBeGreaterThanOrEqual(2);
+    }
+    // Do the two tabs agree? Only once the world stops. Sampled while the
+    // mover is running they legitimately differ by one in-flight update --
+    // the first attempt at this compared them mid-motion and called a 0.19 m
+    // gap a disagreement, which is asserting that two windows can read the
+    // same clock at the same instant rather than that they converge.
+    stopMover(name);
+    await first.waitForTimeout(3000);
+    const restA = await ducksOn(first);
+    const restB = await ducksOn(second);
+    for (const id of Object.keys(restA)) {
+      expect(Math.abs(restA[id][0] - restB[id][0])).toBeLessThan(1e-9);
+      expect(Math.abs(restA[id][1] - restB[id][1])).toBeLessThan(1e-9);
+    }
+    console.log('  once still, both tabs agree on every duck to 1e-9 degrees '
+                + '— one model, two windows');
+  } finally {
+    stopMover(name);
+    inContainer(name, 'python3 scripts/reshape_pond.py --restore');
+    await first.close();
+    await second.close();
+  }
+});

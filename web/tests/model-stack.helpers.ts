@@ -116,3 +116,34 @@ export function stopMover(name: string): void {
     // this runs in cleanup paths where the mover may already be gone.
   }
 }
+
+/** The capture viewpoint, shared so screenshots across tests are comparable. */
+export const VIEW = { lon: -97.73920, lat: 30.28345, height: 205,
+                      heading: 327, pitch: -36 };
+
+export async function look(page: any, view = VIEW): Promise<void> {
+  await page.evaluate((v: any) => {
+    const viewer = (window as any).__viewer;
+    const Cartesian3: any = viewer.camera.position.constructor;
+    const rad = (deg: number) => deg * Math.PI / 180;
+    viewer.camera.setView({
+      destination: Cartesian3.fromDegrees(v.lon, v.lat, v.height),
+      orientation: { heading: rad(v.heading), pitch: rad(v.pitch), roll: 0 }
+    });
+    if (viewer.navigationHelpButton) {
+      viewer.navigationHelpButton.viewModel.showInstructions = false;
+    }
+  }, view);
+  await page.waitForFunction(() => {
+    const v = (window as any).__viewer;
+    const prims = v.scene.primitives;
+    for (let i = 0; i < prims.length; i += 1) {
+      const p: any = prims.get(i);
+      if (p && 'tilesLoaded' in p && !p.tilesLoaded) {
+        return false;
+      }
+    }
+    return true;
+  }, null, { timeout: 90_000 });
+  await page.waitForTimeout(2000);
+}
