@@ -382,11 +382,29 @@ recorded; Part 2 either closed or sharpened.
 | Two accounts of one thing cannot be joined honestly | **new in Part 3** | below, "Surface both, attribute both, join neither" | An identity edge needs an evidence basis; `Relationship` has `source_id` but no `basis` |
 | A DECLARED entity audits everything already in the model | **new in Part 3** | below, "Declaring bounds judges what is already there" | Bounds arriving late make existing state right or wrong retroactively; nothing else changed |
 | A command channel's type must be keyed | **new in Part 3** | below, "An unkeyed command topic kills its readers" | An exiting client delivers an invalid sample; deserializing the key of an unkeyed type raises inside `take()`, before any user code sees it |
+| Two test files sharing a basename disable one silently | **new in Part 3** | `CONTRIBUTING.md` | pytest imports by basename without `__init__.py`; the collision was "solved" by omitting a file, which then passed four tests nobody ran |
 | `test_bridge_http.py` is container-bound | open | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
 
 The two open `oarc_model` items and the two new ones belong with the
 `spatial.model` graduation discussion; the container-bound test is a
 housekeeping note so it is not rediscovered.
+
+### What Part 3 added, in one place
+
+Five findings, three of them about the model and two about the tools that
+exercise it. Each is written up below.
+
+| | |
+|---|---|
+| **Borrowing has a boundary** | Honour the meaning, not the shape. `POSE_RT` matched the tempo lane's shape and declared a deadline the publisher will not meet |
+| **A command channel's type must be keyed** | An exiting client delivers an invalid sample; deserializing the key of an unkeyed type raises inside `take()`, where no reader can filter it |
+| **The latch converges to the stream on idle** — and "idle" is only meaningful relative to an entity's own cadence | The two rules of a two-tier model; the second is what makes the first implementable |
+| **A DECLARED entity audits everything already in the model** | Bounds arriving late make existing state right or wrong retroactively |
+| **Two accounts of one thing cannot be joined honestly** | An identity edge needs an evidence basis; `Relationship` has `source_id` but no `basis` |
+
+The last two are the ones the OWM sketch should take first: both are about
+what a world model does when its publishers disagree, which is the condition
+it will spend its life in.
 
 ### The borrowing rule has a boundary
 

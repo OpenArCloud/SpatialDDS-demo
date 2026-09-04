@@ -34,6 +34,14 @@ scripts/run_tests.sh standard   # + DDS    ~3min   adds the container suites
 scripts/run_tests.sh full       # + ROS 2  ~25min  adds the ROS 2 and MQTT tiers
 ```
 
+**Watch the count, not just the colour.** Every part of this work reports
+passed/skipped totals per commit, which reads like bookkeeping until it isn't.
+Cleaning up the canonical list in Part 3 put a comment inside a
+line-continuation, where `#` ate the rest of the logical line along with
+`tests/` and 158 tests. The tier printed `3 passed, 0 failed` and was telling
+the truth about what it ran. The only witness that a third of the suite had
+vanished was the total dropping from 477 to 319.
+
 Run `standard` before pushing anything that touches `spatialdds_demo/`, a
 bridge, or the IDL — three minutes covers every class of failure the host
 suite structurally cannot see. Run `full` after touching the ROS 2 bridge.
@@ -165,9 +173,13 @@ pytest imports test modules by basename unless the directory is a package, so
     __file__ attribute: .../multi_operator_fusion/test_integration.py
 
 Whoever hit that first solved it by leaving one file out of the canonical
-list, where it sat passing four tests that nobody ran. The failure mode is
-nasty because the suite stays green and the count is plausible -- nothing
-reports the absence of tests that were never asked for.
+list, where it sat passing four tests that nobody ran.
+
+The failure mode is nasty because the suite stays green and the count is
+plausible. **Nothing announces the absence of tests that were never asked
+for.** Every other kind of breakage shows up as red; this one shows up as
+nothing at all, which is why the only defence is looking at what the run
+actually collected rather than at whether it passed.
 
 Give test files unique basenames across the repo, which is the fix pytest's
 own hint suggests. And **don't name a helper `test_*`**: `test_mocks.py`

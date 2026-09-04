@@ -179,6 +179,67 @@ it is the only way an entity's asset is found. The switches that exist to
 exercise a path deliberately are in
 [CONTRIBUTING](CONTRIBUTING.md#switches-for-exercising-a-path-deliberately).
 
+### The ducks wander — a consumer that produces
+
+`spatialdds_demo/duck_mover.py` is the first thing here that both reads the
+model and changes it, and it is a service rather than a script because that
+distinction is the point: a script run by a person is easy to special-case in
+your head, and a service asking continuously is the real shape of the
+single-writer rule.
+
+```bash
+SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_DUCK_MOVER=1 ./run_bridge_server_docker.sh
+```
+
+It **writes nothing on the model topics**. It reads the model like any client,
+decides what it would like to be different, and asks the authority on the
+command lane. Three properties worth knowing, each of them guarded by a test:
+
+- **It selects by type**, not by an id list, so a fourth rubber duck published
+  by anybody starts swimming without editing it.
+- **It reads the pond's bounds from the model** and re-reads them on every
+  update. Its only geometry is a clamp that knows nothing about ponds or
+  water — it knows that something published a box and a thing should be in it.
+  That is why `scripts/reshape_pond.py` can crowd the ducks into a smaller
+  pool with no duck-to-pond code anywhere.
+- **Stopping it freezes the ducks for everyone**, including a reader that
+  arrives afterwards. Nothing of the mover's is latched, so there is no ghost
+  writer whose last word outlives it.
+
+### Two tiers, because a duck drifting is not news
+
+A duck moving 0.45 m changes one field. Republishing its identity, type,
+extent, references and lifecycle to say so is the wrong shape at any rate
+worth calling fast, so the layer has a second topic:
+
+| Topic | QoS | Carries |
+|---|---|---|
+| `spatialdds/model/entity/v1` | RELIABLE + TRANSIENT_LOCAL, KEEP_LAST(1) | the whole entity — the rest state |
+| `spatialdds/model/pose/v1` | BEST_EFFORT + VOLATILE, KEEP_LAST(1) | a bare pose — where it was last seen going |
+
+An entity's own `layer` decides which treatment it gets, which is what that
+field is for. A `FAST` entity's every move goes out on the pose lane and its
+entity record is refreshed every fifth move, so a client joining mid-animation
+is **at most four moves stale** and converges on the next pose. Measured: 60
+poses to 12 records over ten seconds, staleness at join exactly four moves.
+
+Two rules make that safe, and the second is what makes the first
+implementable:
+
+> **The latch converges to the stream on idle.** A fast lane may lag the truth
+> while things are moving. It may not leave a wrong answer lying around once
+> they have stopped.
+
+> **"Idle" is only meaningful relative to an entity's own cadence.** A fixed
+> threshold shorter than the update interval makes every gap between updates
+> look like a stop.
+
+The demo learned the second one the hard way: a fixed one-second threshold
+against a mover giving each duck a turn every 1.5 s produced 94 "it stopped
+moving" flushes while nothing had stopped, republishing the expensive record
+as often as the cheap one. The threshold is derived now, and the latch
+converges **1.69 s** after motion stops.
+
 ### Two accounts of one pond
 
 Run the stack with `SPATIALDDS_POND_WATCH=1` and a second service,
