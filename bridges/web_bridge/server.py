@@ -771,6 +771,11 @@ MODEL_ENTITY_TYPE = "oarc.model_entity"
 # whether the missing fields mean "gone" or "not sent".
 MODEL_ENTITY_DISPOSED_TYPE = "oarc.model_entity_disposed"
 MODEL_RELATIONSHIP_DISPOSED_TYPE = "oarc.model_relationship_disposed"
+# The tempo lane. Forwarded live and deliberately *not* folded into the cache:
+# `/v1/model` answers "what is here", which is the latched record, and a
+# client that wants the current position of something moving subscribes.
+# Mixing the two would make the snapshot fresher than the thing it mirrors.
+MODEL_POSE_TYPE = "oarc.model_pose"
 MODEL_RELATIONSHIP_TYPE = "oarc.model_relationship"
 
 
@@ -793,11 +798,12 @@ class _ModelPump:
         from cyclonedds.domain import DomainParticipant
 
         from spatialdds_demo import typed_transport as tt
-        from spatialdds_demo.qos_profiles import MODEL_LATCHED
+        from spatialdds_demo.qos_profiles import MODEL_FAST, MODEL_LATCHED
         from spatialdds_demo.topics import (
-            TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_RELATIONSHIP_V1,
+            TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
+            TOPIC_MODEL_RELATIONSHIP_V1,
         )
-        from spatialdds_idl.oarc_model import Entity, Relationship
+        from spatialdds_idl.oarc_model import Entity, ModelPose, Relationship
 
         self._tt = tt
         self._interval = poll_interval
@@ -810,8 +816,11 @@ class _ModelPump:
         self._relationship_reader = tt.make_reader(
             participant, TOPIC_MODEL_RELATIONSHIP_V1, Relationship,
             MODEL_LATCHED.name)
+        self._pose_reader = tt.make_reader(
+            participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
         self._entity_topic = TOPIC_MODEL_ENTITY_V1
         self._relationship_topic = TOPIC_MODEL_RELATIONSHIP_V1
+        self._pose_topic = TOPIC_MODEL_POSE_V1
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -835,6 +844,17 @@ class _ModelPump:
                 if removed:
                     _stream_callback(MODEL_ENTITY_DISPOSED_TYPE, self._entity_topic,
                                      {"entity_id": removed}, stamp_ns)
+        # Poses first: they are the cheapest and the most perishable, and a
+        # tick that spent its time on entity records before forwarding them
+        # would add latency to the only lane that cares about it.
+        for sample in self._tt.take_with_state(self._pose_reader):
+            if sample.data is not None:
+                _stream_callback(MODEL_POSE_TYPE, self._pose_topic,
+                                 to_json(sample.data), stamp_ns)
+                applied += 1
+            # A dispose on this lane carries no entity_id the cache could use
+            # and means nothing on its own: the entity's existence is the
+            # entity topic's business, and its disposal is announced there.
         for sample in self._tt.take_with_state(self._relationship_reader):
             if sample.data is not None:
                 model_cache.admit_relationship(sample.data, sample.instance_handle)

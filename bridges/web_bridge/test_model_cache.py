@@ -65,7 +65,7 @@ class SnapshotShape(unittest.TestCase):
         by_id = {e["entity_id"]: e for e in _loaded().snapshot(STAMP)["entities"]}
         duck = by_id["ent:duck:west"]
         self.assertEqual(duck["basis"], "AUTHORED")
-        self.assertEqual(duck["layer"], "SLOW")
+        self.assertEqual(duck["layer"], "FAST")
         self.assertEqual(duck["state"], "ACTIVE")
         # A guarded member is present and zeroed rather than absent, which is
         # exactly why a client has to read the flag.

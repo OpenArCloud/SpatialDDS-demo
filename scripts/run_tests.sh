@@ -66,6 +66,7 @@ run "host suite" python3 -m pytest -q \
   tests/test_command_lane.py \
   tests/test_autostart_gating.py \
   tests/test_duck_mover.py \
+  tests/test_fast_tier.py \
   bridges/mcap_bridge \
   tests/ \
   nuscenes/test_nuscenes_shapes.py \
@@ -88,7 +89,6 @@ if [ -d web/node_modules ]; then
 else
   echo "  (skipping web typecheck — run npm install in web/ first)"
 fi
-
 
 if [ "$TIER" = "fast" ]; then
   :

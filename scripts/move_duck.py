@@ -41,16 +41,20 @@ Like `retire_entity.py`, this reports what the bus showed, not what it sent.
 import argparse
 import sys
 import time
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
-from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1
+from spatialdds_demo.qos_profiles import (
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
+)
+from spatialdds_demo.topics import (
+    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
+)
 from spatialdds_idl.builtin import Time
-from spatialdds_idl.oarc_model import Entity, ModelCommand
+from spatialdds_idl.oarc_model import Entity, ModelCommand, ModelPose
 from spatialdds_idl.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "tool:move_duck"
@@ -100,16 +104,34 @@ def send(participant: DomainParticipant, verb: str, entity_id: str = "",
 
 
 def await_pose(participant: DomainParticipant, entity_id: str,
-               target: Tuple[float, float], timeout: float = 10.0) -> Optional[Entity]:
-    """Watch until the bus agrees, so this reports what happened rather than
-    what was asked for."""
+               target: Tuple[float, float], timeout: float = 10.0
+               ) -> Optional[List[float]]:
+    """
+    Watch until the bus agrees, so this reports what happened rather than what
+    was asked for.
+
+    **Both lanes**, because since Part 3 a FAST entity's move shows up on the
+    pose topic immediately and in its latched record only every fifth move or
+    once it goes idle. Watching only the latch made this tool print "the
+    service did not move it" for a move the service had already made and
+    published -- a false negative from looking in the slower of two places.
+
+    The pose lane answers first when something is moving; the latch answers
+    for anything that is not FAST, and for the entity's rest state.
+    """
+    poses = tt.make_reader(
+        participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
     deadline = time.time() + timeout
     while time.time() < deadline:
-        current = read_entity(participant, entity_id, timeout=0.5)
+        for sample in tt.take_samples(poses) or []:
+            if sample.entity_id == entity_id and all(
+                    abs(a - b) < 0.01 for a, b in zip(sample.pose.t[:2], target)):
+                return list(sample.pose.t)
+        current = read_entity(participant, entity_id, timeout=0.2)
         if current is not None and all(
                 abs(a - b) < 0.01 for a, b in zip(current.pose.t[:2], target)):
-            return current
-        time.sleep(0.1)
+            return list(current.pose.t)
+        time.sleep(0.05)
     return None
 
 
@@ -137,7 +159,7 @@ def reset(domain_id: Optional[int] = None) -> int:
                   f"({entity.pose.t[0]:.2f}, {entity.pose.t[1]:.2f})")
             ok = False
         else:
-            print(f"{entity_id}: ({landed.pose.t[0]:.2f}, {landed.pose.t[1]:.2f})")
+            print(f"{entity_id}: ({landed[0]:.2f}, {landed[1]:.2f})")
     return 0 if ok else 1
 
 
@@ -162,7 +184,7 @@ def move(entity_id: str, x: float, y: float, z: Optional[float] = None,
               f"entity?", file=sys.stderr)
         return 1
     print(f"{entity_id}: ({was[0]:.2f}, {was[1]:.2f}, {was[2]:.2f}) -> "
-          f"({landed.pose.t[0]:.2f}, {landed.pose.t[1]:.2f}, {landed.pose.t[2]:.2f})")
+          f"({landed[0]:.2f}, {landed[1]:.2f}, {landed[2]:.2f})")
     return 0
 
 

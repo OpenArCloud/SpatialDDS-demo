@@ -6,5 +6,6 @@ LifecycleState
 MODULE_ID
 ModelCommand
 ModelLayer
+ModelPose
 Relationship
 Time

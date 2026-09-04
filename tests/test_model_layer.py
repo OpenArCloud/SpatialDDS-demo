@@ -29,7 +29,8 @@ from spatialdds_demo import typed_transport as tt  # noqa: E402
 from spatialdds_demo.json_mapping import to_json  # noqa: E402
 from spatialdds_idl.builtin import Time  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
-    DUCK_CONTENT_ID, ModelPublisher, seed_entities, seed_relationships,
+    DUCK_CONTENT_ID, IDLE_FLUSH_S, LATCH_EVERY_N_MOVES, ModelPublisher,
+    seed_entities, seed_relationships,
 )
 from spatialdds_demo.qos_profiles import MODEL_LATCHED  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
@@ -608,6 +609,18 @@ class Mover(unittest.TestCase):
             self._command(target, new_xy[0], new_xy[1], before.pose.q))
         time.sleep(0.8)
 
+        # A duck is FAST, so one move goes out on the pose topic and the
+        # latched record is not rewritten yet. That is the fast tier working,
+        # not a bug -- and the reason the flush below exists.
+        mid = mover.read_entity(_participant(DOMAIN + 1), target)
+        self.assertEqual(list(mid.pose.t), before_json["pose"]["t"],
+                         "a single fast move should not have rewritten the latch")
+
+        # Once it stops moving, the latch has to catch up exactly.
+        time.sleep(IDLE_FLUSH_S)
+        self.assertEqual(publisher.flush_idle(), [target])
+        time.sleep(0.5)
+
         after = mover.read_entity(_participant(DOMAIN + 1), target)
         self.assertIsNotNone(after)
         after_json = to_json(after)
@@ -643,6 +656,10 @@ class Mover(unittest.TestCase):
 
         publisher.handle_command(
             self._command(target, destination[0], destination[1], seeded.pose.q))
+        # Stop, wait, flush: the state a late joiner must be handed is the
+        # rest state, and the rest state is exact by construction.
+        time.sleep(IDLE_FLUSH_S)
+        publisher.flush_idle()
         time.sleep(0.5)
 
         try:

@@ -377,6 +377,8 @@ recorded; Part 2 either closed or sharpened.
 | No `ServiceKind` fits a world model | open | below, "Model layer discovery" | The publisher is deliberately silent, so the layer has no discovery story yet |
 | `Relationship` is under-specified relative to `Entity` | **new in Part 2** | below, "What an edge cannot say" | No `LifecycleState` and no `basis`: an edge cannot say why it went, or how the claim was arrived at |
 | A retirement cascade is a local courtesy, not a rule | **new in Part 2** | below, "What an edge cannot say" | A dangling edge across a federation boundary is valid; one left by a local tool is mess |
+| Borrowing has a boundary: honour the meaning, not the shape | **new in Part 3** | below, "The borrowing rule has a boundary" | `POSE_RT` matched the shape and declared a 33 ms deadline this publisher will not meet |
+| "Idle" is only meaningful relative to an entity's own cadence | **new in Part 3** | below, "The latch converges to the stream on idle" | A fixed threshold below the update interval makes every gap look like a stop |
 | A DECLARED entity audits everything already in the model | **new in Part 3** | below, "Declaring bounds judges what is already there" | Bounds arriving late make existing state right or wrong retroactively; nothing else changed |
 | A command channel's type must be keyed | **new in Part 3** | below, "An unkeyed command topic kills its readers" | An exiting client delivers an invalid sample; deserializing the key of an unkeyed type raises inside `take()`, before any user code sees it |
 | `test_bridge_http.py` is container-bound | open | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
@@ -385,7 +387,30 @@ The two open `oarc_model` items and the two new ones belong with the
 `spatial.model` graduation discussion; the container-bound test is a
 housekeeping note so it is not rediscovered.
 
-### Why guarded members are declined rather than defaulted
+### The borrowing rule has a boundary
+
+**A QoS contract the publisher has no intention of meeting is a worse kind of
+borrowing than none.**
+
+The layer mints nothing it can borrow -- Wikidata types rather than invented
+ones, `PoseSE3` and `Aabb3` and `FrameRef` rather than new geometry, the
+registered profiles rather than new ones. Part 3's tempo lane looked like the
+easiest case yet: `POSE_RT` is a registered 1.7 profile of very nearly the
+right shape, BEST_EFFORT and KEEP_LAST(1).
+
+It was not adopted, because it declares a **33 ms deadline** and this
+publisher runs at a few hertz. Taking it would have meant announcing a
+contract the demo has no intention of keeping, to readers that might rely on
+it -- a QoS profile is a promise about delivery, not a label describing
+intent. The demo-local `MODEL_FAST` says what is actually true instead.
+
+The general form, which the borrowing rule needed: **borrow the thing whose
+meaning you can honour, not the thing whose shape you match.** Where the two
+diverge, minting locally and saying why is the honest move -- and the
+divergence is itself a finding, because a registry that has no profile for
+"cheap, unreliable, and slow" is telling you something about the profiles.
+
+### Why guarded members are declined rather than defaulted### Why guarded members are declined rather than defaulted
 
 **Declining is the only reading that cannot be mistaken for obedience.**
 
@@ -409,7 +434,45 @@ the venue, silent truncation must not read as "not found", "moved" must not
 be printed when you mean "asked". All four are the same instinct: the failure
 mode to design against is the one that looks like success.
 
-### Declaring bounds judges what is already there
+### The latch converges to the stream on idle
+
+Two rules, and the second is what makes the first implementable. Both are for
+R7; the fast tier does not work without either.
+
+**The latch converges to the stream on idle.** A fast lane may lag the truth
+while things are moving -- that is what it is for. It may not leave a wrong
+answer lying around once they have stopped, because a reader arriving
+afterwards has nothing coming to correct it. In this demo a FAST entity's
+every move goes out as a bare pose and its latched record is refreshed every
+fifth move, so a late joiner is at most four moves stale and converges on the
+next pose. Once motion stops, the service writes the record and the two lanes
+agree exactly.
+
+**"Idle" is only meaningful relative to an entity's own cadence.** This was
+learned the hard way. The flush was first written with a fixed one-second
+threshold, against a mover giving each duck a turn every 1.5 s: every gap
+between moves looked like a stop, and the service logged 94 "it stopped
+moving" flushes while nothing had stopped. The expensive record was being
+republished as often as the cheap one -- the fast tier collapsed back into the
+slow tier, with every test still passing, because the tests checked behaviour
+and the regression was economic.
+
+The threshold is therefore derived: a floor, or a multiple of the smoothed
+interval at which that entity is actually being updated, whichever is larger.
+A thing moving every 100 ms is idle after a beat; a thing moving every ten
+seconds is not idle after eleven.
+
+One honest cost, kept rather than patched around: the first gap has nothing to
+compare against, so a slow entity gets one flush before the service has
+learned how slow it is. That write is correct, merely uneconomical.
+
+**Measured**, 2026-09-04: staleness at join mid-animation exactly four moves
+(0.40 m against a 0.45 m step); 60 poses to 12 entity records over ten
+seconds, a ratio of 5.0 against a cadence target of 5; convergence 1.69 s
+after motion stopped, against a derived threshold of 1.5 s plus the service
+tick.
+
+### Declaring bounds judges what is already there### Declaring bounds judges what is already there
 
 **Every entity that declares an extent is implicitly an audit of everything
 already in the model.** Nothing about the existing state changes; what changes

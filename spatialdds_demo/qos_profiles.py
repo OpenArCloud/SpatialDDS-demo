@@ -146,6 +146,21 @@ MODEL_COMMAND = QosProfile(
 )
 PROFILES[MODEL_COMMAND.name] = MODEL_COMMAND
 
+# The fast pose lane. BEST_EFFORT because a pose that missed its moment is
+# worth less than the next one, VOLATILE because a late joiner should read the
+# latched entity rather than a pose from before it existed.
+#
+# `POSE_RT` is a registered 1.7 profile of nearly this shape and was the
+# obvious thing to borrow -- the layer mints nothing it can borrow. It is not
+# used here because it declares a 33 ms deadline, and this demo publishes at
+# about 2 Hz: adopting it would have been a QoS contract the publisher has no
+# intention of meeting, which is a worse kind of borrowing than none.
+MODEL_FAST = QosProfile(
+    "MODEL_FAST", reliable=False, deadline_ms=None, latched=False, keep_last=1,
+    note="BEST_EFFORT + VOLATILE + KEEP_LAST(1) per key -- the tempo lane",
+)
+PROFILES[MODEL_FAST.name] = MODEL_FAST
+
 
 class UnknownQosProfile(KeyError):
     """Raised for a profile name that is neither registered nor a documented extension."""

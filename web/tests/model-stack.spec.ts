@@ -253,8 +253,21 @@ test('a model entity moved on the bus moves in an open browser', async ({ page }
   // recorded in SPEC_COMPLIANCE.
   const publish = () => inContainer(
     name, `python3 scripts/move_duck.py ${target} ${destination[0]} ${destination[1]}`);
-  const applied = () => page.waitForFunction((id) => (window as any).__appLogs?.some(
-    (l: string) => l.startsWith(`model:moved ${id}`)), target, { timeout: 15_000 });
+  // Wait on the thing itself, not on a log line about it. The log was a
+  // proxy and stopped being a true one in P3.3: a FAST entity's move arrives
+  // on the tempo lane, which is applied silently because six lines a second
+  // would drown the panel. The position is what the test is actually about.
+  const applied = () => page.waitForFunction(([id, lat, lon]) => {
+    const v = (window as any).__viewer;
+    const e = v.entities.values.find((x: any) => String(x.id) === `${id}-model`);
+    if (!e) {
+      return false;
+    }
+    const c = v.scene.globe.ellipsoid.cartesianToCartographic(
+      e.position.getValue(v.clock.currentTime));
+    return Math.abs(c.latitude * 180 / Math.PI - (lat as number)) > 1e-7
+      || Math.abs(c.longitude * 180 / Math.PI - (lon as number)) > 1e-7;
+  }, [target, before![0], before![1]] as const, { timeout: 15_000 });
 
   console.log('[mover]', publish().split('\n').pop());
   try {
@@ -280,7 +293,11 @@ test('a model entity moved on the bus moves in an open browser', async ({ page }
   expect(metres, 'the duck should move the distance it was told to')
     .toBeGreaterThan(commanded - 0.5);
   expect(metres).toBeLessThan(commanded + 0.5);
-  expect(moved.some((l) => l.includes(`model:moved ${target}`))).toBe(true);
+  // The client said, once, which lane it is following.
+  const logs: string[] = await page.evaluate(() => (window as any).__appLogs || []);
+  expect(logs.some((l) => l.startsWith(`model:tempo ${target}`))
+         || moved.some((l) => l.includes(`model:moved ${target}`)),
+         'the client should report how the move reached it').toBe(true);
 });
 
 test('a retired entity states its reason, then leaves the map', async ({ page }) => {

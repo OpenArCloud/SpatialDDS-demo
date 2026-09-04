@@ -11,7 +11,7 @@ import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
   BASIS_VALUES, bridgeFrames, bridgeModelSnapshot, catalogRefId, displayName,
   matchesBasis, modelEntityToItem, observeRest, parseBasisFilter,
-  planModelRender, resolveContentIds, typeLabel
+  planModelRender, resolveContentIds, resolveInFrame, typeLabel
 } from './spatialdds_bridge';
 import type { ModelEntity, RestExchange } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
@@ -82,6 +82,7 @@ const modelItems = new Map<string, CatalogItem>();
 // already claimed without re-fetching. `null` means "not loaded yet", which
 // is different from "loaded and empty" and drives the retry in handleDiscover.
 let lastModel: { entities: ModelEntity[]; relationships: unknown[] } | null = null;
+const tempoAnnounced = new Set<string>();
 let modelPlaced = 0;
 let catalogPlaced = 0;
 let lastFrames: Record<string, any> = {};
@@ -95,8 +96,6 @@ const START_LON = -97.7396265;
 const START_LAT = 30.283660;
 const EYE_HEIGHT_M = 1.7;
 const START_HEIGHT_M = 20_000_000.0;
-const START_HEADING_DEG = 160.0;
-const START_PITCH_DEG = -10.0;
 const START_VIEW_HEADING_DEG = 0.0;
 const START_VIEW_PITCH_DEG = -90.0;
 // A body->ENU quaternion (ROS REP-103: x-forward, y-left, z-up): a quarter
@@ -745,6 +744,17 @@ function connectModelStream() {
         }
         return;
       }
+      // The tempo lane: a bare pose for something already on screen. It
+      // carries no identity, type or extent, because none of those changed --
+      // which is the whole reason it exists as a separate message.
+      if (msg.msg_type === 'oarc.model_pose') {
+        const fast = msg.payload as unknown as
+          { entity_id?: string; pose?: { t: number[]; q: number[] } };
+        if (fast?.entity_id && fast.pose) {
+          applyFastPose(fast.entity_id, fast.pose);
+        }
+        return;
+      }
       if (msg.msg_type !== 'oarc.model_entity') {
         return;
       }
@@ -814,6 +824,63 @@ function moveItemEntity(item: CatalogItem) {
   const marker = viewer.entities.getById(item.id);
   if (marker) {
     marker.position = new Cesium.ConstantPositionProperty(position);
+  }
+}
+
+/**
+ * Move something already on screen, from a pose and nothing else.
+ *
+ * The snapshot placed it and said what it is; this says only where it is now.
+ * A client that has not seen the entity ignores the pose rather than
+ * inventing one from it -- a position with no identity, type or asset is not
+ * enough to draw anything honestly, and the entity record will arrive on its
+ * own schedule.
+ *
+ * Filtered like everything else: a duck hidden by `?basis=authored` does not
+ * come back because it moved.
+ */
+function applyFastPose(entityId: string, pose: { t: number[]; q: number[] }) {
+  const known = modelItems.get(entityId);
+  const entity = known?.entity as ModelEntity | undefined;
+  if (!known || !entity) {
+    return;
+  }
+  const filter = parseBasisFilter(
+    new URLSearchParams(location.search).get('basis'));
+  if (!matchesBasis(entity, filter)) {
+    return;
+  }
+  const fqn = entity.frame_ref?.fqn;
+  const placed = fqn ? resolveInFrame(lastFrames[fqn], pose) : null;
+  if (!placed) {
+    return;
+  }
+  const nowMs = Date.now();
+  const item: CatalogItem = {
+    ...known,
+    geopose: {
+      ...placed.placed,
+      // The pose lane carries an orientation, and it is applied to the model
+      // below; the GeoPose's own q stays identity for the same reason the
+      // catalogue path leaves it identity -- it describes the observer's
+      // frame convention, not the thing's facing.
+      q: [0, 0, 0, 1],
+      stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
+      cov: 'COV_NONE'
+    },
+    orientation: placed.orientation
+  };
+  modelItems.set(entityId, item);
+  moveItemEntity(item);
+
+  // Said once per entity, not once per pose. At six a second a line each
+  // would drown the panel and tell a reader nothing they could not see by
+  // watching the duck; saying nothing at all would leave no trace that the
+  // tempo lane is what is driving the motion. The DDS overlay carries the
+  // traffic itself for anyone who wants it.
+  if (!tempoAnnounced.has(entityId)) {
+    tempoAnnounced.add(entityId);
+    appLog(`model:tempo ${entityId} — following ${'spatialdds/model/pose/v1'}`);
   }
 }
 
@@ -1372,7 +1439,10 @@ function enableFpsControls(activeViewer: Cesium.Viewer) {
   });
 
   activeViewer.clock.onTick.addEventListener(() => {
-    const dt = activeViewer.clock.deltaTime || 0.016;
+    // Cesium's Clock has no public deltaTime in these typings; the
+    // fixed step is what this used in practice anyway, since the
+    // clock is paused for a static scene.
+    const dt = 0.016;
     const moveSpeed = 2.0;
     const step = moveSpeed * dt;
     const turnSpeed = 1.2;

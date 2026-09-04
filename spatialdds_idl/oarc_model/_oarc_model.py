@@ -83,6 +83,17 @@ class Relationship(idl.IdlStruct, typename="oarc_model.Relationship"):
 @dataclass
 @annotate.appendable
 @annotate.autoid("sequential")
+class ModelPose(idl.IdlStruct, typename="oarc_model.ModelPose"):
+    entity_id: str
+    annotate.key("entity_id")
+    pose: 'spatialdds_idl.spatial.core.PoseSE3'
+    source_id: str
+    stamp: 'spatialdds_idl.oarc_model.Time'
+
+
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
 class ModelCommand(idl.IdlStruct, typename="oarc_model.ModelCommand"):
     command_id: str
     annotate.key("command_id")

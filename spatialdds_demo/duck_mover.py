@@ -60,11 +60,14 @@ DEFAULT_BOUNDS_ENTITY = "ent:pond:littlefield"
 # on the rim. One metre is about a duck.
 INSET_M = 1.0
 
-# How far a duck travels per move, and how often any duck moves. Two moves a
-# second across the whole pond is a slow drift at human scale, which is what
-# ducks do; it is also gentle on the command lane and on the browser.
-STEP_M = 0.9
-MOVES_PER_SECOND = 2.0
+# How far a duck travels per move, and how often any duck moves. Six moves a
+# second shared between three ducks is a turn each every half second, at
+# 0.45 m a step -- a slow drift at human scale, which is what ducks do. Small
+# and often reads better than large and rare, and it keeps each entity's
+# update interval well inside the idle threshold that decides when the
+# service considers it stopped.
+STEP_M = 0.45
+MOVES_PER_SECOND = 6.0
 
 
 def _now() -> Time:

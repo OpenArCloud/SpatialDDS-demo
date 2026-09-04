@@ -34,13 +34,17 @@ from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
+from spatialdds_demo.qos_profiles import (
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
+)
 from spatialdds_demo.topics import (
-    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_RELATIONSHIP_V1,
+    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
+    TOPIC_MODEL_RELATIONSHIP_V1,
 )
 from spatialdds_idl.builtin import Time
 from spatialdds_idl.oarc_model import (
-    Basis, Entity, LifecycleState, ModelCommand, ModelLayer, Relationship,
+    Basis, Entity, LifecycleState, ModelCommand, ModelLayer, ModelPose,
+    Relationship,
 )
 from spatialdds_idl.spatial.common import CoordConvention, FrameRef, KV
 from spatialdds_idl.spatial.core import Aabb3, PoseSE3
@@ -58,6 +62,42 @@ SOURCE_ID = "svc:model:demo/venue"
 # Between a tombstone and the dispose that follows it. For people, not for
 # delivery -- see ModelPublisher.retire.
 TOMBSTONE_SETTLE_S = 1.5
+
+# The fast tier's two numbers.
+#
+# A FAST entity's every move goes out on the pose topic; its latched entity
+# record is refreshed every Nth move, so a late joiner is at most N-1 moves
+# behind and converges on the next pose that arrives.
+LATCH_EVERY_N_MOVES = 5
+
+# And the flush that makes rest state exact. When a thing stops moving, the
+# stream stops carrying it and the latch is whatever it was at the last
+# refresh -- so a reader arriving after the motion ended would be handed a
+# pose from up to four moves before the end, with nothing coming to correct
+# it. The every-Nth cadence answers "how stale while moving"; only this
+# answers "how stale once stopped", and the answer has to be "not at all".
+#
+# The general rule, for R7: **the latch converges to the stream on idle.** A
+# fast lane may lag the truth while things are moving. It may not leave a
+# wrong answer lying around once they have stopped.
+#
+# **"Idle" is only meaningful relative to an entity's own cadence**, which the
+# first version of this got wrong and the demo caught within a minute. A fixed
+# one-second threshold against a mover giving each duck a turn every 1.5 s
+# meant every duck looked idle in every gap: 94 "it stopped moving" flushes
+# while nothing had stopped, and an entity record republished as often as the
+# pose it was supposed to be cheaper than. The fast tier had quietly become
+# the slow one.
+#
+# So the threshold is derived: a floor, and a multiple of the interval the
+# entity is actually being updated at. A thing moving every 100 ms is idle
+# after a beat; a thing moving every ten seconds is not idle after eleven.
+IDLE_FLUSH_S = 1.0
+IDLE_FLUSH_FACTOR = 3.0
+# How much of the observed interval survives each new measurement. Low enough
+# to follow a cadence change within a few updates, high enough that one late
+# sample does not convince it everything stopped.
+GAP_SMOOTHING = 0.7
 
 # Borrowed vocabulary. The layer mints no types of its own: Wikidata's
 # canonical entity URIs, in the http:// form Wikidata publishes.
@@ -219,8 +259,11 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
             # AUTHORED: somebody put it there. Nothing observed these.
             basis=Basis.AUTHORED,
             type_uris=[TYPE_RUBBER_DUCK],
-            # SLOW: they move, but not at frame rate -- see move_duck.py.
-            layer=ModelLayer.SLOW,
+            # FAST since Part 3: a mover service wanders them continuously,
+            # so their pose changes on the tempo lane and their entity record
+            # is refreshed periodically. The field is not decoration -- it is
+            # what `move` branches on.
+            layer=ModelLayer.FAST,
             frame_ref=frame,
             has_pose=True,
             pose=PoseSE3(t=list(translation), q=list(rotation)),
@@ -302,8 +345,18 @@ class ModelPublisher:
             participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
         self._relationships = tt.make_writer(
             participant, TOPIC_MODEL_RELATIONSHIP_V1, Relationship, MODEL_LATCHED.name)
+        self._poses = tt.make_writer(
+            participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
         self._published: Dict[str, Entity] = {}
         self._edges: Dict[str, Relationship] = {}
+        # Per FAST entity: moves since the latched record was last refreshed,
+        # and when its last fast pose went out. Both exist only for the fast
+        # tier; a SLOW entity is latched on every move as it always was.
+        self._since_latch: Dict[str, int] = {}
+        self._last_fast: Dict[str, float] = {}
+        # Smoothed interval between an entity's poses, which is what "idle"
+        # has to be measured against.
+        self._gap: Dict[str, float] = {}
 
     def publish_entity(self, entity: Entity) -> None:
         self._entities.write(entity)
@@ -373,6 +426,13 @@ class ModelPublisher:
         last: written from any other writer, the new pose lives only as long
         as that writer does, and the next reader to join is handed the pose we
         are still latching. Returns where it was.
+
+        How it is published depends on the entity's own `layer`, which is
+        exactly what that field is for. A SLOW thing is latched on every move.
+        A FAST one goes out on the pose topic every time and is latched every
+        `LATCH_EVERY_N_MOVES`, so the expensive record is not rewritten to say
+        a duck drifted 0.9 m -- with `flush_idle` closing the gap once it
+        stops.
         """
         entity = self._published.get(entity_id)
         if entity is None:
@@ -380,8 +440,72 @@ class ModelPublisher:
         was = tuple(entity.pose.t)
         entity.pose = PoseSE3(t=list(pose.t), q=list(pose.q))
         entity.stamp = _now()
-        self._entities.write(entity)
+
+        if entity.layer != ModelLayer.FAST:
+            self._entities.write(entity)
+            return was
+
+        self._poses.write(ModelPose(
+            entity_id=entity_id,
+            pose=PoseSE3(t=list(pose.t), q=list(pose.q)),
+            source_id=SOURCE_ID,
+            stamp=entity.stamp))
+        now = time.time()
+        previous = self._last_fast.get(entity_id)
+        if previous is not None:
+            gap = now - previous
+            known = self._gap.get(entity_id)
+            self._gap[entity_id] = (gap if known is None
+                                    else GAP_SMOOTHING * known
+                                    + (1 - GAP_SMOOTHING) * gap)
+        self._last_fast[entity_id] = now
+        count = self._since_latch.get(entity_id, 0) + 1
+        if count >= LATCH_EVERY_N_MOVES:
+            self._entities.write(entity)
+            self._since_latch[entity_id] = 0
+        else:
+            self._since_latch[entity_id] = count
         return was
+
+    def idle_threshold(self, entity_id: str) -> float:
+        """How long without a pose means this entity has stopped.
+
+        Derived from its own cadence, because a gap is only evidence of
+        stopping if it is longer than the gaps that thing normally has."""
+        gap = self._gap.get(entity_id)
+        if gap is None:
+            return IDLE_FLUSH_S
+        return max(IDLE_FLUSH_S, IDLE_FLUSH_FACTOR * gap)
+
+    def flush_idle(self, now: Optional[float] = None) -> List[str]:
+        """
+        Bring the latch up to date for anything that has stopped moving.
+
+        A fast lane is allowed to lag the truth while things are moving. It is
+        not allowed to leave a wrong answer lying around once they have
+        stopped: a reader arriving after the motion ended has nothing coming
+        to correct it, and would be handed a pose from up to four moves before
+        the end -- one duck, two positions, which is the failure Part 2 closed.
+
+        Cheap by construction: it writes only entities that have both moved
+        since their last refresh and gone quiet since.
+        """
+        now = time.time() if now is None else now
+        flushed = []
+        for entity_id, pending in list(self._since_latch.items()):
+            if pending == 0:
+                continue
+            last = self._last_fast.get(entity_id, 0.0)
+            if now - last < self.idle_threshold(entity_id):
+                continue
+            entity = self._published.get(entity_id)
+            if entity is None:
+                self._since_latch.pop(entity_id, None)
+                continue
+            self._entities.write(entity)
+            self._since_latch[entity_id] = 0
+            flushed.append(entity_id)
+        return flushed
 
     def dispose_edge(self, rel_id: str, reason: str) -> bool:
         """
@@ -557,6 +681,9 @@ def run_server(domain_id: Optional[int] = None) -> int:
                 print(f"model: command lane read failed ({failures}): {error!r}",
                       flush=True)
             batch = []
+        for entity_id in publisher.flush_idle():
+            print(f"model: latch flushed for {entity_id} — it stopped moving",
+                  flush=True)
         for command in batch:
             try:
                 print(f"model: {publisher.handle_command(command)}", flush=True)

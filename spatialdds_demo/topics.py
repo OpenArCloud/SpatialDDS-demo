@@ -15,6 +15,7 @@ TOPIC_DDS_ENVELOPE_V1 = "spatialdds/envelope/v1"
 # Entity.layer is carried but informational today.
 TOPIC_MODEL_ENTITY_V1 = "spatialdds/model/entity/v1"
 TOPIC_MODEL_RELATIONSHIP_V1 = "spatialdds/model/relationship/v1"
+TOPIC_MODEL_POSE_V1 = "spatialdds/model/pose/v1"
 TOPIC_MODEL_COMMAND_V1 = "spatialdds/model/command/v1"
 
 
