@@ -756,6 +756,12 @@ model_cache = ModelCache()
 # protocol's msg_type has always been the announced 3.3.2 type name; these
 # lanes are not announced, so the demo-local extension names stand in.
 MODEL_ENTITY_TYPE = "oarc.model_entity"
+# A dispose carries no sample, so there is nothing to forward as an Entity.
+# It goes out under its own type rather than as a half-filled one: a client
+# that receives `{"entity_id": ...}` shaped like an Entity has to guess
+# whether the missing fields mean "gone" or "not sent".
+MODEL_ENTITY_DISPOSED_TYPE = "oarc.model_entity_disposed"
+MODEL_RELATIONSHIP_DISPOSED_TYPE = "oarc.model_relationship_disposed"
 MODEL_RELATIONSHIP_TYPE = "oarc.model_relationship"
 
 
@@ -813,7 +819,13 @@ class _ModelPump:
                                  to_json(sample.data), stamp_ns)
                 applied += 1
             else:
-                model_cache.dispose_entity(sample.instance_handle)
+                # Evicting quietly was enough while nothing was ever removed.
+                # Now that entities retire, a client that is not told stays
+                # holding a duck that no longer exists.
+                removed = model_cache.dispose_entity(sample.instance_handle)
+                if removed:
+                    _stream_callback(MODEL_ENTITY_DISPOSED_TYPE, self._entity_topic,
+                                     {"entity_id": removed}, stamp_ns)
         for sample in self._tt.take_with_state(self._relationship_reader):
             if sample.data is not None:
                 model_cache.admit_relationship(sample.data, sample.instance_handle)
@@ -821,7 +833,11 @@ class _ModelPump:
                                  to_json(sample.data), stamp_ns)
                 applied += 1
             else:
-                model_cache.dispose_relationship(sample.instance_handle)
+                removed = model_cache.dispose_relationship(sample.instance_handle)
+                if removed:
+                    _stream_callback(MODEL_RELATIONSHIP_DISPOSED_TYPE,
+                                     self._relationship_topic,
+                                     {"rel_id": removed}, stamp_ns)
         return applied
 
     def _run(self) -> None:

@@ -80,3 +80,15 @@ class Relationship(idl.IdlStruct, typename="oarc_model.Relationship"):
     stamp: 'spatialdds_idl.oarc_model.Time'
 
 
+@dataclass
+@annotate.appendable
+@annotate.autoid("sequential")
+class ModelCommand(idl.IdlStruct, typename="oarc_model.ModelCommand"):
+    command_id: str
+    verb: str
+    entity_id: str
+    reason: str
+    requester_id: str
+    stamp: 'spatialdds_idl.oarc_model.Time'
+
+

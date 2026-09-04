@@ -205,6 +205,163 @@ class SecondPublisher(unittest.TestCase):
             publisher.close()
 
 
+class Retirement(unittest.TestCase):
+    """
+    Tombstone, then dispose -- and it has to stick.
+
+    The order carries the meaning: a dispose on its own says the entity is
+    gone and nothing about why, so the tombstone has to arrive in front of it
+    while there is still an entity to explain itself. And it has to survive
+    the tool that asked for it, which is the whole reason retirement is a
+    request to the owner rather than something an operator writes directly.
+    """
+
+    def _publisher(self, domain):
+        participant = _participant(domain)
+        publisher = ModelPublisher(participant)
+        entities = seed_entities()
+        for entity in entities:
+            publisher.publish_entity(entity)
+        for relationship in seed_relationships(entities):
+            publisher.publish_relationship(relationship)
+        return participant, publisher
+
+    def test_a_live_subscriber_sees_the_tombstone_then_the_eviction(self):
+        participant, publisher = self._publisher(DOMAIN + 3)
+        entity_reader = tt.make_reader(
+            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        _drain(entity_reader, tt.make_reader(
+            participant, TOPIC_MODEL_RELATIONSHIP_V1, Relationship,
+            MODEL_LATCHED.name), SEEDED_ENTITIES, SEEDED_RELATIONSHIPS)
+
+        target = "ent:duck:east"
+        reason = "taken in for the winter"
+        events = []
+
+        def collect():
+            for sample in tt.take_with_state(entity_reader):
+                if sample.data is None:
+                    events.append(("disposed", None))
+                elif (sample.data.entity_id == target
+                      and sample.data.state.name == "RETIRED"):
+                    events.append(("tombstone", sample.data.state_reason))
+
+        try:
+            # A short settle so the two samples are distinguishable to a
+            # reader polling at human speed; the service uses the same pause.
+            thread = __import__("threading").Thread(
+                target=publisher.retire, args=(target, reason, 0.4))
+            thread.start()
+            deadline = time.time() + 15
+            while time.time() < deadline and len(events) < 2:
+                collect()
+                time.sleep(0.02)
+            thread.join(timeout=10)
+
+            self.assertEqual([kind for kind, _ in events], ["tombstone", "disposed"],
+                             f"expected tombstone then dispose, got {events}")
+            self.assertEqual(events[0][1], reason,
+                             "the tombstone is the only place the reason is carried")
+            print(f"\n  retirement: tombstone ({reason!r}) -> dispose, in that order")
+        finally:
+            publisher.close()
+
+    def test_a_late_joiner_sees_neither_the_entity_nor_its_edges(self):
+        """
+        The claim the design rests on.
+
+        This passes only because the owner did the retiring. A tombstone
+        written by a short-lived tool dies with that tool while the owner's
+        ACTIVE sample stays latched, and a reader joining afterwards is handed
+        a live duck -- measured, and written up in SPEC_COMPLIANCE.
+        """
+        participant, publisher = self._publisher(DOMAIN + 4)
+        target = "ent:duck:east"
+        cascaded = publisher.retire(target, "taken in for the winter", settle=0.2)
+        self.assertEqual(cascaded, ["rel:contains:east"],
+                         "retiring an entity should take its edges with it")
+        time.sleep(0.5)
+
+        try:
+            subscriber = _participant(DOMAIN + 4)
+            entities, relationships = _drain(
+                tt.make_reader(subscriber, TOPIC_MODEL_ENTITY_V1, Entity,
+                               MODEL_LATCHED.name),
+                tt.make_reader(subscriber, TOPIC_MODEL_RELATIONSHIP_V1,
+                               Relationship, MODEL_LATCHED.name),
+                SEEDED_ENTITIES - 1, SEEDED_RELATIONSHIPS - 1, timeout=6.0)
+            self.assertNotIn(target, entities)
+            self.assertNotIn("rel:contains:east", relationships)
+            # And nothing else went with it.
+            self.assertEqual(len(entities), SEEDED_ENTITIES - 1)
+            self.assertEqual(len(relationships), SEEDED_RELATIONSHIPS - 1)
+            print(f"  late-join after retirement: {len(entities)} entities, "
+                  f"{len(relationships)} relationships, no tombstone replayed")
+        finally:
+            publisher.close()
+
+    def test_the_id_is_not_burned(self):
+        """A retired id can be published again. Retirement ends an instance,
+        not a name."""
+        participant, publisher = self._publisher(DOMAIN + 5)
+        target = "ent:duck:east"
+        publisher.retire(target, "winter", settle=0.1)
+        self.assertFalse(publisher.owns(target))
+
+        publisher.restore_seed()
+        time.sleep(0.5)
+        try:
+            subscriber = _participant(DOMAIN + 5)
+            entities, relationships = _drain(
+                tt.make_reader(subscriber, TOPIC_MODEL_ENTITY_V1, Entity,
+                               MODEL_LATCHED.name),
+                tt.make_reader(subscriber, TOPIC_MODEL_RELATIONSHIP_V1,
+                               Relationship, MODEL_LATCHED.name),
+                SEEDED_ENTITIES, SEEDED_RELATIONSHIPS)
+            self.assertIn(target, entities)
+            self.assertEqual(entities[target].state.name, "ACTIVE")
+            self.assertEqual(entities[target].state_reason, "",
+                             "a restored entity should not still be explaining itself")
+            self.assertIn("rel:contains:east", relationships)
+        finally:
+            publisher.close()
+
+    def test_a_command_for_an_entity_we_do_not_own_is_declined(self):
+        """
+        Refusing is the honest answer.
+
+        Publishing a tombstone for someone else's entity would be a claim this
+        writer cannot make stick: the owner's sample is still latched and the
+        next reader to join gets that one instead. The gnome is exactly this
+        case -- a real entity on the same topics, owned by another process.
+        """
+        from spatialdds_idl.oarc_model import ModelCommand
+        participant, publisher = self._publisher(DOMAIN + 6)
+        try:
+            line = publisher.handle_command(ModelCommand(
+                command_id="c1", verb="retire", entity_id="ent:gnome:visitor",
+                reason="not mine to retire", requester_id="tool:test",
+                stamp=seed_entities()[0].stamp))
+            self.assertIn("declined", line)
+            self.assertTrue(publisher.owns("ent:duck:east"),
+                            "a declined command must not disturb what we do own")
+        finally:
+            publisher.close()
+
+    def test_an_unknown_verb_is_ignored_rather_than_guessed_at(self):
+        from spatialdds_idl.oarc_model import ModelCommand
+        participant, publisher = self._publisher(DOMAIN + 7)
+        try:
+            line = publisher.handle_command(ModelCommand(
+                command_id="c2", verb="delete", entity_id="ent:duck:east",
+                reason="", requester_id="tool:test",
+                stamp=seed_entities()[0].stamp))
+            self.assertIn("unknown verb", line)
+            self.assertTrue(publisher.owns("ent:duck:east"))
+        finally:
+            publisher.close()
+
+
 class Mover(unittest.TestCase):
     """
     `scripts/move_duck.py` changes the pose and the stamp and nothing else.

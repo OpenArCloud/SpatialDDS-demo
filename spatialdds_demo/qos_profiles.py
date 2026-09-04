@@ -138,6 +138,14 @@ MODEL_LATCHED = QosProfile(
 )
 PROFILES[MODEL_LATCHED.name] = MODEL_LATCHED
 
+# Commands are events, not state. Reliable so a retirement is not lost in
+# transit, VOLATILE so a service restarting does not replay yesterday's.
+MODEL_COMMAND = QosProfile(
+    "MODEL_COMMAND", reliable=True, deadline_ms=None, latched=False, keep_last=16,
+    note="RELIABLE + VOLATILE + KEEP_LAST(16), unkeyed -- a request, not a claim",
+)
+PROFILES[MODEL_COMMAND.name] = MODEL_COMMAND
+
 
 class UnknownQosProfile(KeyError):
     """Raised for a profile name that is neither registered nor a documented extension."""

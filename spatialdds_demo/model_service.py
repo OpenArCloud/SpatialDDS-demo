@@ -34,13 +34,13 @@ from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.qos_profiles import MODEL_LATCHED
+from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
 from spatialdds_demo.topics import (
-    TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_RELATIONSHIP_V1,
+    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_RELATIONSHIP_V1,
 )
 from spatialdds_idl.builtin import Time
 from spatialdds_idl.oarc_model import (
-    Basis, Entity, LifecycleState, ModelLayer, Relationship,
+    Basis, Entity, LifecycleState, ModelCommand, ModelLayer, Relationship,
 )
 from spatialdds_idl.spatial.common import CoordConvention, FrameRef, KV
 from spatialdds_idl.spatial.core import Aabb3, PoseSE3
@@ -54,6 +54,10 @@ VENUE_FRAME_FQN = "map/ut-littlefield-fountain"
 DUCK_CONTENT_ID = "89f2d953-076d-5c7d-9b74-1193f71685a6"
 
 SOURCE_ID = "svc:model:demo/venue"
+
+# Between a tombstone and the dispose that follows it. For people, not for
+# delivery -- see ModelPublisher.retire.
+TOMBSTONE_SETTLE_S = 1.5
 
 # Borrowed vocabulary. The layer mints no types of its own: Wikidata's
 # canonical entity URIs, in the http:// form Wikidata publishes.
@@ -206,7 +210,17 @@ def seed_relationships(entities: List[Entity],
 
 
 class ModelPublisher:
-    """Latched writers for both model topics."""
+    """
+    Latched writers for both model topics, and the authority over what they
+    hold.
+
+    "Authority" is not grandeur: TRANSIENT_LOCAL history is scoped to the
+    writer that published it, so whatever this process latches is what a late
+    joiner is handed, no matter who else has written to the topic since. A
+    retirement published by anyone else dies with that writer and the entity
+    comes back. See SPEC_COMPLIANCE, "Two writers, one instance" -- the same
+    problem measured for moves, and the reason retirement is a request.
+    """
 
     def __init__(self, participant: DomainParticipant):
         self._entities = tt.make_writer(
@@ -214,6 +228,7 @@ class ModelPublisher:
         self._relationships = tt.make_writer(
             participant, TOPIC_MODEL_RELATIONSHIP_V1, Relationship, MODEL_LATCHED.name)
         self._published: Dict[str, Entity] = {}
+        self._edges: Dict[str, Relationship] = {}
 
     def publish_entity(self, entity: Entity) -> None:
         self._entities.write(entity)
@@ -221,6 +236,85 @@ class ModelPublisher:
 
     def publish_relationship(self, relationship: Relationship) -> None:
         self._relationships.write(relationship)
+        self._edges[relationship.rel_id] = relationship
+
+    def owns(self, entity_id: str) -> bool:
+        return entity_id in self._published
+
+    def retire(self, entity_id: str, reason: str,
+               settle: float = TOMBSTONE_SETTLE_S) -> List[str]:
+        """
+        Tombstone, then dispose -- for the entity and every edge touching it.
+
+        The order carries the meaning. A dispose on its own says the entity is
+        gone and nothing about why; the tombstone is the last thing the entity
+        ever says, and it says what happened to it. Reversed, or collapsed
+        into one step, the reason is unreadable.
+
+        `settle` is a deliberate pause between the two. It is not needed for
+        delivery -- both samples arrive either way -- but it is needed for a
+        person: a tombstone and its dispose issued in the same millisecond
+        reach a human as a thing that simply vanished.
+
+        Returns the rel_ids that were cascaded.
+        """
+        entity = self._published.get(entity_id)
+        if entity is None:
+            raise KeyError(entity_id)
+
+        # Read-modify-write on our own latched copy: state and stamp change,
+        # nothing else does. Pose, type, refs and extent are what the entity
+        # was at the end, and a tombstone that quietly edited them would be
+        # rewriting history rather than closing it.
+        entity.state = LifecycleState.RETIRED
+        entity.state_reason = reason
+        entity.stamp = _now()
+        self._entities.write(entity)
+
+        # Edges first on the way out, so nothing is left pointing at a
+        # tombstone that is about to be disposed.
+        cascaded = [rel_id for rel_id, edge in self._edges.items()
+                    if entity_id in (edge.from_entity_id, edge.to_entity_id)]
+
+        time.sleep(settle)
+
+        for rel_id in cascaded:
+            edge = self._edges.pop(rel_id)
+            # Disposed, not tombstoned. `Relationship` has no LifecycleState,
+            # so an edge cannot say why it went away -- it can only stop
+            # being there. Recorded in SPEC_COMPLIANCE as a design note.
+            self._relationships.dispose(edge)
+
+        self._entities.dispose(entity)
+        del self._published[entity_id]
+        return cascaded
+
+    def restore_seed(self) -> int:
+        """Re-publish the seed, proving a retired id is not burned."""
+        entities = seed_entities()
+        for entity in entities:
+            self.publish_entity(entity)
+        for relationship in seed_relationships(entities):
+            self.publish_relationship(relationship)
+        return len(entities)
+
+    def handle_command(self, command: ModelCommand) -> str:
+        """Act on a request, or say why not. Returns a line for the log."""
+        if command.verb == "restore":
+            count = self.restore_seed()
+            return f"restore from {command.requester_id}: re-seeded {count} entities"
+        if command.verb != "retire":
+            return f"ignored: unknown verb {command.verb!r} from {command.requester_id}"
+        if not self.owns(command.entity_id):
+            # Refusing is the honest answer. This process can only retire what
+            # it latches; pretending otherwise would publish a tombstone that
+            # some other writer's sample immediately contradicts.
+            return (f"declined: {command.entity_id} is not ours "
+                    f"(asked by {command.requester_id})")
+        cascaded = self.retire(command.entity_id, command.reason)
+        edges = f", cascaded {len(cascaded)} edge(s)" if cascaded else ""
+        return (f"retired {command.entity_id} — {command.reason!r}"
+                f"{edges} (asked by {command.requester_id})")
 
     def close(self) -> None:
         """Dispose entity instances so a clean shutdown does not leave a model
@@ -262,6 +356,14 @@ def run_server(domain_id: Optional[int] = None) -> int:
     print(f"model: seeded {len(entities)} entities, {len(relationships)} "
           f"relationships; latched, holding")
 
+    # The command lane. Retirement arrives here rather than being written
+    # around us, because only the writer that latched a sample can make it
+    # stop being the answer to a late join.
+    commands = tt.make_reader(
+        participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
+    print(f"model: command topic     {TOPIC_MODEL_COMMAND_V1} "
+          f"({MODEL_COMMAND.name})")
+
     stop = False
 
     def _stop(_signum, _frame):
@@ -271,7 +373,15 @@ def run_server(domain_id: Optional[int] = None) -> int:
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
     while not stop:
-        time.sleep(0.5)
+        for command in tt.take_samples(commands) or []:
+            try:
+                print(f"model: {publisher.handle_command(command)}", flush=True)
+            except Exception as error:
+                # A bad command must not take the service down with it; the
+                # world it is holding is worth more than the request.
+                print(f"model: command failed ({command.verb} "
+                      f"{command.entity_id}): {error!r}", flush=True)
+        time.sleep(0.1)
 
     print("model: disposing instances and exiting")
     publisher.close()

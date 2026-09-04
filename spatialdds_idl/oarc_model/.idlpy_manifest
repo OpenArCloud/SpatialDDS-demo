@@ -4,6 +4,7 @@ Basis
 Entity
 LifecycleState
 MODULE_ID
+ModelCommand
 ModelLayer
 Relationship
 Time

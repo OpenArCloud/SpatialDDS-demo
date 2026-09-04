@@ -21,6 +21,7 @@ for path in (str(REPO), str(HERE)):
 
 from model_cache import ModelCache  # noqa: E402
 from spatialdds_demo.model_service import seed_entities, seed_relationships  # noqa: E402
+from spatialdds_idl.oarc_model import LifecycleState  # noqa: E402
 
 STAMP = {"sec": 1788400000, "nanosec": 0}
 
@@ -180,6 +181,62 @@ class Mirroring(unittest.TestCase):
         by_id = {e["entity_id"]: e for e in cache.snapshot(STAMP)["entities"]}
         self.assertEqual(by_id[entity.entity_id]["pose"]["t"], [1.0, 2.0, 3.0])
         self.assertEqual(len(cache.snapshot(STAMP)["entities"]), 4)
+
+
+class Retirement(unittest.TestCase):
+    """
+    A tombstone updates the record; the dispose that follows removes it.
+
+    Both halves matter to the endpoint. A client polling `/v1/model` between
+    the two should see the entity still there and saying why it is going --
+    that window is short, but it is the only place the reason exists.
+    """
+
+    def test_a_retired_sample_updates_the_record_rather_than_removing_it(self):
+        cache = _loaded()
+        entities = seed_entities()
+        duck = next(e for e in entities if e.entity_id == "ent:duck:east")
+        duck.state = LifecycleState.RETIRED
+        duck.state_reason = "taken in for the winter"
+        cache.admit_entity(duck, instance_handle=103)
+
+        snapshot = cache.snapshot(STAMP)
+        by_id = {e["entity_id"]: e for e in snapshot["entities"]}
+        self.assertEqual(len(snapshot["entities"]), 4, "still present, still counted")
+        self.assertEqual(by_id["ent:duck:east"]["state"], "RETIRED")
+        self.assertEqual(by_id["ent:duck:east"]["state_reason"],
+                         "taken in for the winter")
+        # Nothing else about it was touched on the way out.
+        self.assertEqual(by_id["ent:duck:east"]["pose"]["t"], [16.5, -10.5, -1.423])
+
+    def test_the_dispose_evicts_and_the_snapshot_forgets_it(self):
+        cache = _loaded()
+        removed = cache.dispose_entity(103)
+        self.assertEqual(removed, "ent:duck:east")
+        snapshot = cache.snapshot(STAMP)
+        self.assertEqual(len(snapshot["entities"]), 3)
+        self.assertNotIn("ent:duck:east",
+                         [e["entity_id"] for e in snapshot["entities"]])
+
+    def test_the_cascade_removes_the_edge_and_leaves_the_others(self):
+        cache = _loaded()
+        # seed_relationships is ordered as the ducks are: catalog-pose, west, east.
+        self.assertEqual(cache.dispose_relationship(202), "rel:contains:east")
+        rel_ids = [r["rel_id"] for r in cache.snapshot(STAMP)["relationships"]]
+        self.assertEqual(rel_ids, ["rel:contains:catalog-pose", "rel:contains:west"])
+
+    def test_a_dispose_reports_what_it_removed_so_clients_can_be_told(self):
+        """
+        The return value is load-bearing now.
+
+        A dispose carries no sample, so the bridge has only the instance
+        handle -- meaningless to a browser. The cache is the one place that
+        can turn it back into an entity_id, and if it returns None the client
+        is never told and keeps drawing something that no longer exists.
+        """
+        cache = _loaded()
+        self.assertEqual(cache.dispose_entity(100), "ent:fountain:littlefield")
+        self.assertIsNone(cache.dispose_entity(100), "a second dispose has nothing to report")
 
 
 if __name__ == "__main__":

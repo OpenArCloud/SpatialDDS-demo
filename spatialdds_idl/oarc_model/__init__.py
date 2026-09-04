@@ -5,12 +5,13 @@
 
 """
 
-from ._oarc_model import Basis, Entity, LifecycleState, MODULE_ID, ModelLayer, Relationship, Time
+from ._oarc_model import Basis, Entity, LifecycleState, MODULE_ID, ModelCommand, ModelLayer, Relationship, Time
 __all__ = [
 	"Basis",
 	"Entity",
 	"LifecycleState",
 	"MODULE_ID",
+	"ModelCommand",
 	"ModelLayer",
 	"Relationship",
 	"Time",

@@ -9,8 +9,8 @@ import {
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  BASIS_VALUES, bridgeModelSnapshot, matchesBasis, modelEntityToItem,
-  observeRest, parseBasisFilter, planModelRender, typeLabel
+  BASIS_VALUES, bridgeModelSnapshot, displayName, matchesBasis,
+  modelEntityToItem, observeRest, parseBasisFilter, planModelRender, typeLabel
 } from './spatialdds_bridge';
 import type { ModelEntity, RestExchange } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
@@ -603,11 +603,41 @@ function connectModelStream() {
       const msg = JSON.parse(event.data as string) as {
         type?: string; msg_type?: string; payload?: ModelEntity;
       };
-      if (msg.type !== 'data' || msg.msg_type !== 'oarc.model_entity') {
+      if (msg.type !== 'data') {
+        return;
+      }
+      // The entity is gone. The bridge sends this under its own type because
+      // a dispose carries no sample; see the bridge's _ModelPump.
+      if (msg.msg_type === 'oarc.model_entity_disposed') {
+        const goneId = (msg.payload as { entity_id?: string } | undefined)?.entity_id;
+        if (goneId) {
+          const removed = removeModelEntity(goneId);
+          readoutItems = Math.max(0, readoutItems - (removed ? 1 : 0));
+          renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
+          appLog(`model:disposed ${goneId} — removed from the scene`);
+        }
+        return;
+      }
+      if (msg.msg_type !== 'oarc.model_entity') {
         return;
       }
       const entity = msg.payload;
       if (!entity?.entity_id) {
+        return;
+      }
+
+      // A tombstone: the last thing the entity says, and the only place the
+      // reason is carried. It is logged before the dispose that follows,
+      // because after the dispose there is nothing left to ask.
+      if (entity.state === 'RETIRED') {
+        appLog(`model:retired ${entity.entity_id} — ` +
+               `${entity.state_reason || 'no reason given'}`);
+        const marker = viewer?.entities.getById(entity.entity_id);
+        if (marker?.label) {
+          // Say it on the map too, for the beat before it disappears.
+          marker.label.text = new Cesium.ConstantProperty(
+            `${displayName(entity)} — retired`);
+        }
         return;
       }
       // The filter applies to updates too, and says so rather than relying
@@ -658,6 +688,31 @@ function moveItemEntity(item: CatalogItem) {
   if (marker) {
     marker.position = new Cesium.ConstantPositionProperty(position);
   }
+}
+
+/**
+ * Take an entity out of the scene, in every form it was drawn in.
+ *
+ * A model entity can be on screen as up to three Cesium entities -- marker,
+ * glTF, extent -- and removing only the one whose id matches leaves a duck
+ * floating with no name, or a name with no duck. Removing the whole set is
+ * the only honest reading of "it is gone".
+ */
+function removeModelEntity(entityId: string): number {
+  if (!viewer) {
+    return 0;
+  }
+  let removed = 0;
+  for (const suffix of ['', '-model', '-extent', '-box']) {
+    const id = `${entityId}${suffix}`;
+    if (viewer.entities.getById(id)) {
+      viewer.entities.removeById(id);
+      entityIds.delete(id);
+      removed += 1;
+    }
+  }
+  modelItems.delete(entityId);
+  return removed;
 }
 
 /**

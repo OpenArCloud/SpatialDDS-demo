@@ -90,6 +90,28 @@ module oarc_model {
     Time   stamp;
   };
 
+  // A request to the authority that owns an entity -- not a claim about the
+  // world, which is why it is a separate type on a separate topic rather than
+  // an Entity with state=RETIRED written by whoever felt like it.
+  //
+  // Retirement cannot be published around the owner. TRANSIENT_LOCAL history
+  // is writer-scoped: a tombstone written by a short-lived operator tool dies
+  // with the tool, and the next reader to join is handed the owner's still
+  // latched ACTIVE sample. So the tool asks and the owner acts, which is also
+  // the only way the dispose sticks. See SPEC_COMPLIANCE, "Two writers, one
+  // instance", where the same problem was measured for moves.
+  //
+  // Unkeyed and VOLATILE on purpose. A command is an event, not state; a
+  // late joiner has no business replaying yesterday's retirements.
+  @extensibility(APPENDABLE) struct ModelCommand {
+    string command_id;
+    string verb;             // "retire" | "restore"
+    string entity_id;        // the subject; ignored by "restore"
+    string reason;           // why, carried into state_reason
+    string requester_id;     // who asked, for the log
+    Time   stamp;
+  };
+
 };
 
 #endif // OARC_MODEL_INCLUDED
