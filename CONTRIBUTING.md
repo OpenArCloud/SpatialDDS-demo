@@ -85,6 +85,35 @@ decoration — several checks in this repo were written, passed immediately,
 and only later turned out to assert nothing. The cheapest moment to find that
 out is while you still have the change in your head.
 
+### A screenshot taken too early verifies the loading window, not the app
+
+The AR demo's markers were being clamped to the ellipsoid, roughly 143 m
+beneath Austin, because this deployment carries no terrain provider for
+`CLAMP_TO_GROUND` to resolve against. The names still rendered in the right
+place — until the 3D tiles finished loading and the clamp resolved, at which
+point they silently dropped underground.
+
+That bug survived several rounds of "verified by screenshot" because every one
+of those screenshots was taken inside the loading window. It was caught by the
+first capture that waited for `tilesLoaded` before shooting.
+
+The lesson generalises past Cesium: a view that resolves asynchronously —
+tiles, fonts, images, lazy-loaded panels, anything clamped or measured against
+late-arriving data — looks correct in the interval before it settles. When
+capturing evidence, wait on the condition rather than the clock, and be
+suspicious of any check that passes faster than the thing it is checking.
+
+Two related traps, both of which cost real time here:
+
+- **Playwright serves the built bundle.** `web/playwright.config.ts` runs
+  `npm run build && npm run preview` on port 4173 with `reuseExistingServer`.
+  A dev server on 5173 is not what the specs are driving; rebuild before
+  re-running a spec, or you will debug code that is not loaded.
+- **A clamped entity lies about where it is.** `scene.cartesianToCanvasCoordinates`
+  projects the entity's *stated* position while the primitive draws at the
+  clamped one, so a probe can confidently report on-screen coordinates for
+  something that is not on screen.
+
 ### Things that look like failures but aren't
 
 - **Stale `.pyc` files across the host/container boundary.** The repo is

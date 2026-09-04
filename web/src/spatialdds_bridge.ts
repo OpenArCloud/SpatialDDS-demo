@@ -606,17 +606,7 @@ export function matchesBasis(entity: ModelEntity, filter: BasisFilter): boolean 
   return typeof entity.basis === 'string' && filter.wanted.has(entity.basis);
 }
 
-/**
- * What to draw, given a model, a catalogue and a view filter.
- *
- * This exists as one function rather than a few lines in the render path
- * because the order of the two steps is load-bearing and easy to get wrong in
- * the obvious way. Suppression is decided from *every* entity, and only then
- * is the filter applied. Reversing that hands the ducks back to the catalogue
- * the moment `?basis=observed` hides the model's ducks, and they reappear at
- * the catalogue pose -- a filter that puts a duck on screen. Hiding a claim
- * must not restore the claim it superseded.
- */
+/** What to draw, given a model, a catalogue and a view filter. */
 export type RenderPlan = {
   /** Catalogue content_ids the model has taken responsibility for. */
   claimed: ReadonlySet<string>;
@@ -630,6 +620,18 @@ export type RenderPlan = {
   unstated: ModelEntity[];
 };
 
+/**
+ * Decide what to draw. **The order of the two steps below is load-bearing.**
+ *
+ * Suppression is decided from *every* entity, and only then is the filter
+ * applied. Reverse them and `?basis=observed` hands the ducks back to the
+ * catalogue the moment the model's ducks are hidden, so one reappears at the
+ * catalogue pose: a filter that puts a duck on screen. Hiding a claim must
+ * not restore the claim it superseded.
+ *
+ * This is one function rather than a few lines in the render path so that
+ * the order is testable; `model-layer.spec.ts` fails if it is reversed.
+ */
 export function planModelRender(
   entities: ModelEntity[],
   catalogItems: CatalogItem[],
