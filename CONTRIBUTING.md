@@ -84,7 +84,7 @@ turns one off so a test proves the thing it claims to:
 
 | Switch | Turns off | So that |
 |---|---|---|
-| `?noassetcache=1` | the catalogue rows the coverage query returned | `catalog:<id>` references must resolve through `content_id_in`. The duck's row and the duck's entity are in the same plaza, so the cached lookup always hits and the by-id path is otherwise never exercised |
+| ~~`?noassetcache=1`~~ | *(retired in P3.0)* | It forced `catalog:<id>` references to resolve through `content_id_in`. Since the model bootstrap runs before any coverage query, there is no cache to hit and every reference resolves by id on every page load — so the switch had nothing left to switch. Retired rather than kept as a control that no longer controls anything |
 | `?catalogpose=1` | model placement | the legacy catalogue-pose path can be compared side by side |
 | `?basis=…` | entities whose basis is not named | a filtered view can be captured without editing what is published |
 

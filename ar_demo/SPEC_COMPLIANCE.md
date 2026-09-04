@@ -377,11 +377,52 @@ recorded; Part 2 either closed or sharpened.
 | No `ServiceKind` fits a world model | open | below, "Model layer discovery" | The publisher is deliberately silent, so the layer has no discovery story yet |
 | `Relationship` is under-specified relative to `Entity` | **new in Part 2** | below, "What an edge cannot say" | No `LifecycleState` and no `basis`: an edge cannot say why it went, or how the claim was arrived at |
 | A retirement cascade is a local courtesy, not a rule | **new in Part 2** | below, "What an edge cannot say" | A dangling edge across a federation boundary is valid; one left by a local tool is mess |
+| A command channel's type must be keyed | **new in Part 3** | below, "An unkeyed command topic kills its readers" | An exiting client delivers an invalid sample; deserializing the key of an unkeyed type raises inside `take()`, before any user code sees it |
 | `test_bridge_http.py` is container-bound | open | `CONTEXT.md`, test state | Writes to `/app/...`, errors on the host, absent from the canonical list. Pre-existing |
 
 The two open `oarc_model` items and the two new ones belong with the
 `spatial.model` graduation discussion; the container-bound test is a
 housekeeping note so it is not rediscovered.
+
+### An unkeyed command topic kills its readers
+
+**A command channel's type must be keyed, or its readers die when its clients
+exit.** Found in Part 3, latent since Part 2 introduced the channel; it needed
+only the timing of an invalid sample to fire.
+
+`ModelCommand` was deliberately unkeyed. The reasoning was sound and the
+consequence was not: a command is an event rather than state, and no instance
+here has a lifetime worth naming. But operator tools are short-lived
+processes. When one exits, its writer unregisters and the middleware delivers
+an **invalid sample** to every reader -- data absent, key blob present -- and
+deserializing the key of a type that has none reads a length prefix out of an
+empty buffer:
+
+```
+struct.error: unpack_from requires a buffer of at least 8 bytes for
+unpacking 4 bytes at offset 4 (actual buffer size is 4)
+    ... in take_samples -> deserialize_key
+```
+
+The model service died there, holding the whole world, because somebody ran
+`move_duck.py`. A reader **cannot filter what it cannot decode**: the
+exception is raised inside `take()` before any of our code sees the sample, so
+no amount of care in the read loop avoids it. The fix has to be at the type.
+`@key string command_id` costs nothing -- VOLATILE keeps no per-instance
+history -- and a request id is a thing a request should have anyway.
+
+**The companion rule, which the same bug also demonstrates.** The read loop
+had its `take()` outside its `try`, so one undecodable sample ended the
+process. A reader loop must treat its lane as untrusted traffic: take inside
+the try, report the first failure and every hundredth, keep serving. The
+bridge's `_StreamPump` and `_ModelPump` had already learned this separately;
+the command lane was the third place it was needed and the first place it was
+load-bearing, because the thing that died was the authority rather than a
+mirror.
+
+Guarded by `tests/test_command_lane.py`, which runs four short-lived writers
+past one long-lived reader -- the shape of every operator-tool invocation --
+and asserts the reader survives. Removing the key turns it red.
 
 ### What an edge cannot say
 
@@ -511,9 +552,11 @@ inventing a URI.
 
 The demo could not previously tell the two paths apart — the duck's catalogue
 row and the duck's entity are in the same plaza, so the cached lookup always
-hit and reference-by-id was never actually exercised. `?noassetcache=1`
-discards the cached rows so the by-id path is the only one left; with it on,
-all three ducks still render.
+hit and reference-by-id was never actually exercised. A `?noassetcache=1`
+switch was added to force it, then retired in Part 3: once the model bootstrap
+ran before any coverage query there was no cache left to hit, and every
+reference resolves by id on every page load. The path is now load-bearing
+rather than demonstrable -- the ducks cannot render without it.
 
 Five, down from twelve. The seven that went away, and what replaced them:
 

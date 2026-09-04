@@ -48,6 +48,48 @@ test.beforeEach(async ({ request }) => {
   await restoreVenue(request, stack as string);
 });
 
+test('a fresh tab shows the venue with no clicks at all', async ({ page }) => {
+  /**
+   * The repair P3.0 exists for.
+   *
+   * The model bootstrap used to live inside the Discover handler, so a person
+   * opening the page saw an empty sky and two buttons, with no way to know
+   * which one stood between them and the venue. The tests pressed the same
+   * button, so nothing ever reported the gap -- the demo was equally
+   * unfriendly to humans and harnesses, which is why it looked fine.
+   *
+   * Nothing below touches a control. The assertion that matters is the last
+   * one: Discover must not have run. Without it this test would still pass if
+   * something quietly clicked for us, which is the failure it exists to catch.
+   */
+  test.setTimeout(180_000);
+  await page.goto('/?debug=1');
+  await page.waitForFunction(() => (window as any).__viewer, null, { timeout: 60_000 });
+  await page.waitForFunction(() => {
+    const v = (window as any).__viewer;
+    return v && v.entities.values.some((e: any) => String(e.id).startsWith('ent:duck'));
+  }, null, { timeout: 60_000 });
+
+  const drawn: string[] = await page.evaluate(() => [...new Set(
+    (window as any).__viewer.entities.values
+      .map((e: any) => String(e.id))
+      .filter((x: string) => x.startsWith('ent:'))
+      .map((x: string) => x.replace(/-(model|extent)$/, '')))] as string[]);
+  const logs: string[] = await page.evaluate(() => (window as any).__appLogs || []);
+
+  expect(drawn.filter((i) => i.startsWith('ent:duck')).length).toBe(3);
+  expect(drawn).toContain('ent:fountain:littlefield');
+  expect(drawn).toContain('ent:gnome:visitor');
+
+  expect(logs.some((l) => l.startsWith('discover:items')),
+         'Discover must not have run').toBe(false);
+  expect(logs.some((l) => l.startsWith('model:loaded')),
+         'the bootstrap should report what it loaded').toBe(true);
+  // And it localized against the demo's own VPS, not a real one.
+  expect(logs.find((l) => l.startsWith('autostart:')))
+    .toContain("is the demo's mock");
+});
+
 // South-east of the basin, high enough to hold the whole model in frame.
 const VIEW = { lon: -97.73920, lat: 30.28345, height: 205, heading: 327, pitch: -36 };
 
@@ -273,37 +315,46 @@ test('a retired entity states its reason, then leaves the map', async ({ page })
   expect(logs.indexOf(retired[0])).toBeLessThan(logs.indexOf(disposed[0]));
 });
 
-test('a catalog reference resolves by id when the coverage results are gone',
+test('every catalog reference is resolved by id, with no coverage query first',
   async ({ page }) => {
     /**
-     * The coincidence, removed.
+     * The coincidence, gone -- and no longer needing a switch to prove it.
      *
-     * The duck's catalogue row and the duck's entity are in the same plaza,
-     * so the cached lookup always hit and the demo never proved that
-     * reference-by-id worked -- only that both happened to be nearby.
-     * `?noassetcache=1` discards the coverage results before resolution, so
-     * the only way the glTF can appear is `content_id_in`.
+     * `?noassetcache=1` existed because the duck's catalogue row and the
+     * duck's entity were in the same plaza: the cached lookup always hit, so
+     * reference-by-id was never exercised and the demo could not tell the two
+     * apart. Since P3.0 the model bootstrap runs *before* any coverage query,
+     * so there is no cache to hit and every reference resolves by id on every
+     * page load. The flag was retired rather than left as a switch with
+     * nothing left to switch.
+     *
+     * This asserts the ordinary path, which is stronger evidence than the
+     * flag ever was: the ducks cannot render at all without `content_id_in`.
      */
     test.setTimeout(240_000);
-    await readyPage(page, '/?debug=1&noassetcache=1');
+    await page.goto('/?debug=1');
+    await page.waitForFunction(() => (window as any).__viewer, null, { timeout: 60_000 });
     await page.waitForFunction(
       () => (window as any).__appLogs?.some((l: string) =>
-        l.startsWith('catalog:by-id 3 reference')), null, { timeout: 40_000 });
+        l.startsWith('catalog:by-id')), null, { timeout: 60_000 });
 
     const logs: string[] = await page.evaluate(() => (window as any).__appLogs || []);
-    expect(logs).toContain('catalog:by-id cache bypassed — references must resolve by id');
-    const line = logs.find((l) => l.startsWith('catalog:by-id 3 reference'))!;
+    const line = logs.find((l) => l.startsWith('catalog:by-id'))!;
     // Three ducks, one row: every distinct id resolved, and the line says so
     // without implying two lookups failed.
     expect(line, 'every id should have resolved')
       .toMatch(/3 reference\(s\) over 1 id\(s\); resolved 1$/);
+    // And it happened before Discover, not because of it.
+    expect(logs.indexOf(line)).toBeLessThan(
+      logs.findIndex((l) => l.startsWith('discover:items')) === -1
+        ? Number.MAX_SAFE_INTEGER
+        : logs.findIndex((l) => l.startsWith('discover:items')));
 
-    // And the duck is on screen, drawn from the asset that lookup returned.
     const ducks = await page.evaluate(() => {
       const v = (window as any).__viewer;
       return v.entities.values
         .filter((e: any) => String(e.id).startsWith('ent:duck') && !!e.model)
         .map((e: any) => String(e.id));
     });
-    expect(ducks.length, 'the ducks should render from a by-id resolution').toBe(3);
+    expect(ducks.length, 'the ducks render from a by-id resolution').toBe(3);
   });

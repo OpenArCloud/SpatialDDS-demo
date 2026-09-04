@@ -157,10 +157,10 @@ receives the whole model and says in the readout how much it is hiding.
 
 A `catalog:<content_id>` reference is resolved against the rows the coverage
 query already returned, and by a direct `content_id_in` query when it is not
-among them. `?noassetcache=1` discards the cached rows so the by-id path is
-the only one left — the demo otherwise cannot tell the two apart, because the
-duck's row and the duck's entity are in the same plaza. It is there to be
-used rather than reserved for one test; the other switches of its kind are in
+among them — which, since the model loads before any coverage query runs, is
+**every** reference on every page load. Lookup-by-id is not a fallback here;
+it is the only way an entity's asset is found. The switches that exist to
+exercise a path deliberately are in
 [CONTRIBUTING](CONTRIBUTING.md#switches-for-exercising-a-path-deliberately).
 
 ### The command channel — how anything gets changed

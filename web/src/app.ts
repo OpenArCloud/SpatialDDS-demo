@@ -9,9 +9,9 @@ import {
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  BASIS_VALUES, bridgeModelSnapshot, catalogRefId, displayName, matchesBasis,
-  modelEntityToItem, observeRest, parseBasisFilter, planModelRender,
-  resolveContentIds, typeLabel
+  BASIS_VALUES, bridgeFrames, bridgeModelSnapshot, catalogRefId, displayName,
+  matchesBasis, modelEntityToItem, observeRest, parseBasisFilter,
+  planModelRender, resolveContentIds, typeLabel
 } from './spatialdds_bridge';
 import type { ModelEntity, RestExchange } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
@@ -78,6 +78,12 @@ let modelSocket: WebSocket | null = null;
 const modelItems = new Map<string, CatalogItem>();
 // The frames and catalogue rows the last discovery resolved against, kept so a
 // live entity update can be placed without re-querying anything.
+// The model as last read, kept so the catalogue can ask which rows it has
+// already claimed without re-fetching. `null` means "not loaded yet", which
+// is different from "loaded and empty" and drives the retry in handleDiscover.
+let lastModel: { entities: ModelEntity[]; relationships: unknown[] } | null = null;
+let modelPlaced = 0;
+let catalogPlaced = 0;
 let lastFrames: Record<string, any> = {};
 let lastAssets: Record<string, { uri?: string; hash?: string }> = {};
 const ddsMessages: string[] = [];
@@ -383,7 +389,45 @@ function captureQueryImage(): string | null {
   }
 }
 
+/**
+ * One localization at a time.
+ *
+ * A second request started while the first is in flight gives two answers to
+ * "where am I", each followed by its own `clearEntities()` and model
+ * bootstrap, so whichever finishes last wipes the other's work. It also
+ * queues behind the bridge's request lock, which is how it first showed up:
+ * a test clicked Localize while the page was already auto-localizing, and
+ * the catalogue query behind it timed out.
+ *
+ * A person can do the same thing by double-clicking. The guard belongs in the
+ * app rather than in the harness.
+ */
+let localizeInFlight = false;
+
+async function withLocalizeLock(work: () => Promise<void>) {
+  if (localizeInFlight) {
+    appLog('localize: already in flight — ignoring');
+    return;
+  }
+  localizeInFlight = true;
+  if (localizeBtn) localizeBtn.disabled = true;
+  if (localizeImageBtn) localizeImageBtn.disabled = true;
+  try {
+    await work();
+  } finally {
+    localizeInFlight = false;
+    if (localizeBtn) localizeBtn.disabled = false;
+    // Restored to what the mode decided, not unconditionally: without a
+    // query-frame bundle this button was disabled for a reason.
+    if (localizeImageBtn) localizeImageBtn.disabled = !bridgeActive || queryFrames === null;
+  }
+}
+
 async function handleLocalize() {
+  await withLocalizeLock(() => localizeOnce());
+}
+
+async function localizeOnce() {
   const prior = await seedPriorGeopose();
   const queryImage = bridgeActive ? captureQueryImage() : null;
   if (queryImage) {
@@ -412,24 +456,26 @@ async function handleLocalizeWithImage() {
     appLog('frame: no query-frame bundle installed (see ar_demo/README.md)');
     return;
   }
-  // The chosen frame, or the next one round if there is no picker.
-  const file = frameSelect?.value
-    || queryFrames.frames[frameCursor++ % queryFrames.frames.length];
+  await withLocalizeLock(async () => {
+    // The chosen frame, or the next one round if there is no picker.
+    const file = frameSelect?.value
+      || queryFrames!.frames[frameCursor++ % queryFrames!.frames.length];
 
-  let queryImage: string;
-  try {
-    queryImage = await loadQueryFrame(file);
-  } catch (error) {
-    appLog(`frame: load failed (${String(error)})`);
-    return;
-  }
-  appLog(
-    `frame: ${file} ${Math.round((queryImage.length * 3) / 4 / 1024)} KB` +
-    (queryFrames.label ? ` (${queryFrames.label})` : '')
-  );
+    let queryImage: string;
+    try {
+      queryImage = await loadQueryFrame(file);
+    } catch (error) {
+      appLog(`frame: load failed (${String(error)})`);
+      return;
+    }
+    appLog(
+      `frame: ${file} ${Math.round((queryImage.length * 3) / 4 / 1024)} KB` +
+      (queryFrames!.label ? ` (${queryFrames!.label})` : '')
+    );
 
-  vpsServiceId = null;
-  await localizeWith(priorFromManifest(queryFrames), queryImage);
+    vpsServiceId = null;
+    await localizeWith(priorFromManifest(queryFrames!), queryImage);
+  });
 }
 
 /** The prior a bundle implies: its map's anchor, level and facing north. */
@@ -456,6 +502,14 @@ async function localizeWith(prior: GeoPose, queryImage: string | null) {
   addMarker('user-location', 'You are here', response.geopose, markerUrl);
 
   appLog(`localize:success ${response.geopose.lat_deg.toFixed(5)},${response.geopose.lon_deg.toFixed(5)}`);
+
+  // Knowing where we are is the only precondition the model had. Waiting for
+  // a second click to ask for it was never a decision, just where the code
+  // happened to live.
+  modelPlaced = 0;
+  catalogPlaced = 0;
+  lastModel = null;
+  void bootstrapModel();
 
   if (viewer) {
     try {
@@ -491,47 +545,71 @@ async function ensureContentService(position: GeoPose): Promise<string | null> {
   return contentServiceId;
 }
 
-async function handleDiscover() {
-  if (!currentPose) {
-    readoutItems = 0;
-    readoutMessage = 'localize first';
-    renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
+/**
+ * Load the world model and start following it.
+ *
+ * This used to live inside `handleDiscover`, which meant the model only
+ * appeared after someone pressed "Discover Content". A person opening the
+ * page saw an empty venue and had no way to know a button stood between them
+ * and it -- and the headless tests pressed the same button, so nothing ever
+ * reported the gap. The two actions are different questions and are now
+ * separate: *what is here* is the model, and it loads as soon as the client
+ * knows where it is; *what content is published for this area* is the
+ * catalogue, and that is still Discover.
+ *
+ * Everything it needs it fetches itself. Frames come from `/v1/frames`, and
+ * `catalog:` references resolve by id -- which is why P2.5's `content_id_in`
+ * is load-bearing here rather than only under a test flag: without it this
+ * function could not resolve an asset without first running a coverage query.
+ */
+async function bootstrapModel(): Promise<void> {
+  if (!bridgeActive || !currentPose) {
+    return;
+  }
+  // `?catalogpose=1` forces the legacy path for side-by-side comparison: no
+  // model, and the catalogue places content from its own pose.
+  if (new URLSearchParams(location.search).has('catalogpose')) {
+    lastModel = { entities: [], relationships: [] };
     return;
   }
 
-  if (bridgeActive) {
-    await ensureContentService(currentPose);
+  const model = await bridgeModelSnapshot();
+  lastModel = model;
+  if (!model.entities.length) {
+    // No model layer publishing is not an error; it is an empty world, and
+    // the catalogue path below behaves exactly as it did before it existed.
+    return;
   }
-  const response = bridgeActive ? await bridgeDiscover(currentPose) : await mockDiscover(currentPose);
 
-  // The world model, when one is publishing.
-  //
-  // No flag switches this on. The layer announces itself by existing: if
-  // `/v1/model` returns entities, they are what gets placed, and the
-  // catalogue contributes only the asset each one points at. If nothing is
-  // publishing the call returns an empty model and everything below behaves
-  // exactly as it did before, which is what keeps the existing demo intact.
-  //
-  // `?catalogpose=1` forces the legacy path for side-by-side comparison.
-  const forceCatalogPose = new URLSearchParams(location.search).has('catalogpose');
-  const model = (bridgeActive && !forceCatalogPose)
-    ? await bridgeModelSnapshot() : { entities: [], relationships: [] };
+  const frames = model.entities.some((e) => e.has_pose) ? await bridgeFrames() : {};
+  const assets: Record<string, { uri?: string; hash?: string }> = {};
 
-  // Suppression is per content_id, not wholesale. A catalogue row that no
-  // entity references still places itself -- only the rows the model has
-  // taken responsibility for are skipped, so the two paths cannot both draw
-  // the same duck and nothing else is silently dropped.
-  // `?basis=observed` renders only what was observed; `?basis=authored` the
-  // inverse. It is a view, not a subscription: the client still receives the
-  // whole model and chooses what to draw. Both decisions -- which catalogue
-  // rows the model supersedes, and which entities this view admits -- are
-  // made in planModelRender, where their order is fixed and tested.
+  // References the model carries. There is no coverage query in front of this
+  // any more, so every one of them is resolved by id -- the path the demo
+  // could not exercise at all before the bootstrap moved ahead of it.
+  const references = model.entities
+    .map((entity) => catalogRefId(entity))
+    .filter((id): id is string => !!id);
+  const wanted = [...new Set(references)];
+  if (wanted.length) {
+    const found = await resolveContentIds(wanted);
+    Object.assign(assets, found);
+    const missing = wanted.filter((id) => !found[id]);
+    // References and ids counted separately, because they are not the same
+    // number and "asked for 3, resolved 1" invites the reading that two
+    // failed. Three ducks share one row: the asset-versus-instance split the
+    // layer exists to express, showing up in a log line.
+    appLog(`catalog:by-id ${references.length} reference(s) over ` +
+           `${wanted.length} id(s); resolved ${Object.keys(found).length}` +
+           (missing.length ? `, unresolved ${missing.join(', ')}` : ''));
+  }
+
+  lastFrames = frames;
+  lastAssets = assets;
+
   const basisFilter = parseBasisFilter(
     new URLSearchParams(location.search).get('basis'));
-  const plan = planModelRender(model.entities, response.items, basisFilter);
-  const { claimed, fromCatalog, visible, hidden } = plan;
-  fromCatalog.forEach((item) => addItemEntity(item));
-
+  const plan = planModelRender(model.entities, [], basisFilter);
   if (basisFilter.unrecognised.length) {
     appLog(`model:basis unrecognised ${basisFilter.unrecognised.join(',')} — ` +
            `showing all; known values ${BASIS_VALUES.join(', ')}`);
@@ -540,47 +618,8 @@ async function handleDiscover() {
     appLog(`model:basis-unstated ${entity.entity_id} — hidden by the filter`);
   }
 
-  const frames = response.frames || {};
-  const assets = response.assets || {};
-
-  // `?noassetcache=1` throws away the rows the coverage query returned, so
-  // every `catalog:` reference has to be resolved by id. It exists because
-  // the demo cannot otherwise tell the two paths apart: the duck's row and
-  // the duck's entity are in the same plaza, so the cached lookup always hits
-  // and the by-id path is never exercised by accident. Same family as
-  // `?catalogpose=1` -- a switch for showing that a thing works for the
-  // reason claimed.
-  if (new URLSearchParams(location.search).has('noassetcache')) {
-    for (const key of Object.keys(assets)) {
-      delete assets[key];
-    }
-    appLog('catalog:by-id cache bypassed — references must resolve by id');
-  }
-
-  // References the coverage query did not answer. Before the catalogue could
-  // be queried by id this was the end of the road, and the demo only worked
-  // because the duck's row happened to be in the same plaza as the duck.
-  const unresolved = model.entities
-    .map((entity) => catalogRefId(entity))
-    .filter((id): id is string => !!id && !assets[id]);
-  if (unresolved.length) {
-    const wanted = [...new Set(unresolved)];
-    const found = await resolveContentIds(wanted);
-    Object.assign(assets, found);
-    const missing = wanted.filter((id) => !found[id]);
-    // References and ids counted separately, because they are not the same
-    // number and saying "asked for 3, resolved 1" invites the reading that
-    // two failed. Three ducks share one row: that is the asset-versus-
-    // instance split the layer exists to express, showing up in a log line.
-    appLog(`catalog:by-id ${unresolved.length} reference(s) over ` +
-           `${wanted.length} id(s); resolved ${Object.keys(found).length}` +
-           (missing.length ? `, unresolved ${missing.join(', ')}` : ''));
-  }
-
-  lastFrames = frames;
-  lastAssets = assets;
-  let placed = 0;
-  for (const entity of visible) {
+  modelPlaced = 0;
+  for (const entity of plan.visible) {
     const item = modelEntityToItem(entity, frames, (id) => assets[id]);
     if (!item) {
       appLog(`model:unresolved ${entity.entity_id} — frame ${entity.frame_ref?.fqn}`);
@@ -588,24 +627,74 @@ async function handleDiscover() {
     }
     modelItems.set(entity.entity_id, item);
     addItemEntity(item);
-    placed += 1;
+    modelPlaced += 1;
   }
 
-  readoutItems = fromCatalog.length + placed;
   // A filtered scene must not read as the whole world. "items: 1" with no
   // further comment is a claim about the venue; this makes it a claim about
   // the view.
-  readoutMessage = (basisFilter.wanted && hidden)
-    ? `basis=${[...basisFilter.wanted].join(',')} — ${hidden} hidden`
+  readoutMessage = (basisFilter.wanted && plan.hidden)
+    ? `basis=${[...basisFilter.wanted].join(',')} — ${plan.hidden} hidden`
     : '';
+  refreshItemCount();
+  appLog(`model:loaded ${modelPlaced} entities, ${model.relationships.length} ` +
+         `relationships` +
+         (plan.hidden ? `; ${plan.hidden} hidden by basis filter` : ''));
+  connectModelStream();
+}
+
+/** The readout counts both sources, because the user sees one scene. */
+function refreshItemCount() {
+  readoutItems = modelPlaced + catalogPlaced;
   renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
-  if (model.entities.length) {
-    appLog(`discover:model ${placed} entities, ${model.relationships.length} ` +
-           `relationships; ${claimed.size} catalog row(s) superseded` +
-           (hidden ? `; ${hidden} hidden by basis filter` : ''));
-    connectModelStream();
+}
+
+/**
+ * The catalogue: what content is published for where we are standing.
+ *
+ * Model placement is not done here any more -- see `bootstrapModel`. What is
+ * still done here is *suppression*: a catalogue row the model has taken
+ * responsibility for must not draw itself a second time, and that decision
+ * needs both lists, so it stays in `planModelRender` where its ordering is
+ * fixed and tested.
+ */
+async function handleDiscover() {
+  if (!currentPose) {
+    catalogPlaced = 0;
+    readoutMessage = 'localize first';
+    refreshItemCount();
+    return;
   }
-  appLog(`discover:items ${readoutItems}`);
+
+  if (bridgeActive) {
+    await ensureContentService(currentPose);
+  }
+  const response = bridgeActive ? await bridgeDiscover(currentPose) : await mockDiscover(currentPose);
+
+  // If the model never loaded -- bootstrap raced the bridge coming up, or the
+  // page was opened before localization -- take the chance now rather than
+  // letting the catalogue draw ducks the model has already claimed.
+  if (lastModel === null) {
+    await bootstrapModel();
+  }
+  const model = lastModel || { entities: [], relationships: [] };
+
+  const basisFilter = parseBasisFilter(
+    new URLSearchParams(location.search).get('basis'));
+  const plan = planModelRender(model.entities, response.items, basisFilter);
+  plan.fromCatalog.forEach((item) => addItemEntity(item));
+  catalogPlaced = plan.fromCatalog.length;
+
+  // Frames and rows the model layer may not have needed. Merged rather than
+  // replaced: the by-id lookups the bootstrap already did are still valid.
+  lastFrames = { ...(response.frames || {}), ...lastFrames };
+  lastAssets = { ...(response.assets || {}), ...lastAssets };
+
+  refreshItemCount();
+  if (plan.claimed.size) {
+    appLog(`discover:superseded ${plan.claimed.size} catalog row(s) the model claims`);
+  }
+  appLog(`discover:items ${catalogPlaced} from the catalogue`);
 }
 
 /**
@@ -648,8 +737,10 @@ function connectModelStream() {
         const goneId = (msg.payload as { entity_id?: string } | undefined)?.entity_id;
         if (goneId) {
           const removed = removeModelEntity(goneId);
-          readoutItems = Math.max(0, readoutItems - (removed ? 1 : 0));
-          renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
+          if (removed) {
+            modelPlaced = Math.max(0, modelPlaced - 1);
+          }
+          refreshItemCount();
           appLog(`model:disposed ${goneId} — removed from the scene`);
         }
         return;
@@ -1459,4 +1550,50 @@ async function initBridgeMode() {
   }
 
   renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
+  await autoLocalizeIfThisIsTheDemosOwnVps();
+}
+
+/**
+ * A demo tab should show the venue, not an empty sky and two buttons.
+ *
+ * But only against our own mock VPS. A real one -- OpenVPS on a GPU box --
+ * would get a localization request per page load if this fired blindly, which
+ * is rude to the service and, worse, hides what localization costs behind a
+ * page refresh. This demo exists partly to make that exchange visible, and a
+ * demo that hides its own cost teaches the wrong lesson.
+ *
+ * So the discriminator is asked of the bus rather than configured: the demo's
+ * mock announces itself under `svc:vps:demo/`, the real deployment as
+ * `svc:vps:oarc/openvps-scan`. Finding a service is a read of the announce
+ * cache and costs nobody anything. Anything unrecognised -- or nothing
+ * announced at all -- leaves the button exactly where it was, which is the
+ * safe direction to fail in.
+ */
+const DEMO_VPS_PREFIX = 'svc:vps:demo/';
+
+async function autoLocalizeIfThisIsTheDemosOwnVps() {
+  if (currentPose) {
+    return;                      // somebody was faster than we were.
+  }
+  if (!bridgeActive) {
+    // No bridge: `mockLocalize` is a local function returning a canned pose,
+    // so nothing is asked of anyone.
+    appLog('autostart: mock mode — localizing without a click');
+    await handleLocalize();
+    return;
+  }
+  try {
+    const prior = await seedPriorGeopose();
+    const serviceId = await ensureVpsService(prior);
+    if (!serviceId?.startsWith(DEMO_VPS_PREFIX)) {
+      appLog(`autostart: held — ${serviceId || 'no VPS announced'} is not the ` +
+             `demo's own; press Localize to send a real request`);
+      return;
+    }
+    appLog(`autostart: ${serviceId} is the demo's mock — localizing without a click`);
+    await handleLocalize();
+  } catch (error) {
+    // Never let the convenience break the page it was meant to improve.
+    appLog(`autostart: skipped (${String(error)})`);
+  }
 }

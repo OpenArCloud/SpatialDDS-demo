@@ -402,8 +402,22 @@ def run_server(domain_id: Optional[int] = None) -> int:
 
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
+    failures = 0
     while not stop:
-        for command in tt.take_samples(commands) or []:
+        try:
+            # The take is inside the try, which it was not. A malformed sample
+            # on the command lane used to raise here and kill the service --
+            # so an operator tool exiting could take down the authority
+            # holding the entire world. Nothing arriving on this topic is
+            # worth more than the model being served.
+            batch = tt.take_samples(commands) or []
+        except Exception as error:
+            failures += 1
+            if failures == 1 or failures % 100 == 0:
+                print(f"model: command lane read failed ({failures}): {error!r}",
+                      flush=True)
+            batch = []
+        for command in batch:
             try:
                 print(f"model: {publisher.handle_command(command)}", flush=True)
             except Exception as error:

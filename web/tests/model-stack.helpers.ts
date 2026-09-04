@@ -76,12 +76,16 @@ export async function readyPage(page: any, url = '/?debug=1'): Promise<void> {
   const clear = async () => page.evaluate(() =>
     document.querySelectorAll('.cesium-widget-errorPanel').forEach((e: any) => e.remove()));
   await clear();
-  await page.evaluate(() => document.getElementById('btnLocalize')?.click());
-  await expect
-    .poll(async () => Number(/alt=([\d.]+)m/.exec(
-      (await page.locator('#readout').getAttribute('data-geopose')) || '')?.[1] ?? NaN),
-    { timeout: 40_000 })
-    .toBeLessThan(1000);
+  // Since P3.0 the page localizes itself against the demo's own VPS, so
+  // clicking Localize is what a person would do only if it had not already
+  // happened. Clicking anyway started a second localization on top of the
+  // first, which is how this harness found the missing in-flight guard.
+  const localized = async () => Number(/alt=([\d.]+)m/.exec(
+    (await page.locator('#readout').getAttribute('data-geopose')) || '')?.[1] ?? NaN);
+  if (!((await localized()) < 1000)) {
+    await page.evaluate(() => document.getElementById('btnLocalize')?.click());
+  }
+  await expect.poll(localized, { timeout: 40_000 }).toBeLessThan(1000);
   await clear();
   await page.evaluate(() => document.getElementById('btnDiscover')?.click());
   await page.waitForFunction(

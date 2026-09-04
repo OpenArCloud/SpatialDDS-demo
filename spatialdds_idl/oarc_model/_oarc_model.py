@@ -85,6 +85,7 @@ class Relationship(idl.IdlStruct, typename="oarc_model.Relationship"):
 @annotate.autoid("sequential")
 class ModelCommand(idl.IdlStruct, typename="oarc_model.ModelCommand"):
     command_id: str
+    annotate.key("command_id")
     verb: str
     entity_id: str
     reason: str

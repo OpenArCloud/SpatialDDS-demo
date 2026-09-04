@@ -294,6 +294,24 @@ export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse
 }
 
 /**
+ * The frame transforms the bus is announcing.
+ *
+ * Pulled out of `bridgeDiscover` because the model bootstrap needs them too
+ * and no longer runs behind a catalogue query: an entity's pose is
+ * meaningless until the frame it names resolves, whoever asked first.
+ *
+ * A failure is not fatal and not silent-by-accident: the caller falls back to
+ * placing nothing rather than placing things at the centre of the earth.
+ */
+export async function bridgeFrames(): Promise<FrameMap> {
+  try {
+    return ((await fetchJson('/v1/frames')) as { frames?: FrameMap }).frames || {};
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Resolve `catalog:<content_id>` references the coverage query did not return.
  *
  * Until the catalogue gained `content_id_in`, this was impossible: a client

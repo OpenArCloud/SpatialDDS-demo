@@ -106,10 +106,20 @@ module oarc_model {
   // the only way the dispose sticks. See SPEC_COMPLIANCE, "Two writers, one
   // instance", where the same problem was measured for moves.
   //
-  // Unkeyed and VOLATILE on purpose. A command is an event, not state; a
-  // late joiner has no business replaying yesterday's retirements.
+  // VOLATILE on purpose: a command is an event, not state, and a late joiner
+  // has no business replaying yesterday's retirements.
+  //
+  // Keyed on command_id, which was not the first design. Unkeyed looked more
+  // honest -- there is no instance here whose lifetime means anything -- and
+  // it crashed the service. When an operator tool exits, its writer
+  // unregisters and the middleware delivers an invalid sample carrying only a
+  // key blob; deserializing the key of an unkeyed type reads a length prefix
+  // out of an empty buffer and raises. The reader cannot filter what it
+  // cannot decode, so the fix is at the type: give each request an identity
+  // the middleware can name. It costs nothing -- VOLATILE keeps no history
+  // per instance -- and a request id is a thing a request should have anyway.
   @extensibility(APPENDABLE) struct ModelCommand {
-    string command_id;
+    @key string command_id;
     string verb;             // "retire" | "move" | "restore"
     string entity_id;        // the subject; ignored by "restore"
     string reason;           // why, carried into state_reason by "retire"

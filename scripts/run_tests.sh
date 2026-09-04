@@ -63,6 +63,8 @@ run "host suite" python3 -m pytest -q \
   bridges/web_bridge/test_wellknown_endpoints.py \
   bridges/web_bridge/test_model_cache.py \
   tests/test_catalog_filter.py \
+  tests/test_command_lane.py \
+  tests/test_autostart_gating.py \
   bridges/mcap_bridge \
   tests/ \
   nuscenes/test_nuscenes_shapes.py \
