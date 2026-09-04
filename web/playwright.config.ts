@@ -2,6 +2,9 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
+  // Always rebuild; see tests/global-setup.ts for why this is not left to
+  // the webServer command below.
+  globalSetup: './tests/global-setup.ts',
   timeout: 90_000,
   expect: {
     timeout: 15_000

@@ -155,6 +155,28 @@ command to run. Two habits are worth keeping from this:
   found the same failure at the previous commit and I read that as
   "pre-existing" when it meant "still running".
 
+### Assert the settled state, not the race to it
+
+Three tests in this repo asserted something adjacent to what they meant, and
+each failed in a way that pointed at the wrong thing:
+
+- **Don't assert the RNG.** The wander test requires two of three ducks to
+  have moved in an eight-second window, not three. The walk is random; a duck
+  can spend a window stepping back and forth over the same metre.
+- **Don't assert the log line.** The live-move test waited for
+  `model:moved`, a proxy for a position. When the fast lane went deliberately
+  silent, the proxy went false while the truth stayed true. It waits on the
+  position now, which is what it was always about.
+- **Don't assert the clock.** The two-tab test compared duck positions while
+  the mover was running and called a 0.19 m difference a disagreement. Two
+  windows sampled milliseconds apart legitimately differ by one in-flight
+  update; the claim is that they *converge*. Stop the motion, let it settle,
+  then compare — and then 1e-9 degrees is a fair tolerance.
+
+The general form: **assert the settled state, not the race to it.** If a
+property only holds once things stop, stop them. If it holds continuously,
+assert the property and not a signal that happens to accompany it.
+
 ### A determinism fix can hide a bug instead of fixing it
 
 The live move test was made deterministic by resetting the venue before each
