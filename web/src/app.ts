@@ -9,7 +9,8 @@ import {
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  bridgeModelSnapshot, catalogRefId, modelEntityToItem, observeRest, typeLabel
+  BASIS_VALUES, bridgeModelSnapshot, matchesBasis, modelEntityToItem,
+  observeRest, parseBasisFilter, planModelRender, typeLabel
 } from './spatialdds_bridge';
 import type { ModelEntity, RestExchange } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
@@ -519,23 +520,31 @@ async function handleDiscover() {
   // entity references still places itself -- only the rows the model has
   // taken responsibility for are skipped, so the two paths cannot both draw
   // the same duck and nothing else is silently dropped.
-  const claimed = new Set<string>();
-  for (const entity of model.entities) {
-    const ref = catalogRefId(entity);
-    if (ref) {
-      claimed.add(ref);
-    }
-  }
-
-  const fromCatalog = response.items.filter((item) => !claimed.has(item.id));
+  // `?basis=observed` renders only what was observed; `?basis=authored` the
+  // inverse. It is a view, not a subscription: the client still receives the
+  // whole model and chooses what to draw. Both decisions -- which catalogue
+  // rows the model supersedes, and which entities this view admits -- are
+  // made in planModelRender, where their order is fixed and tested.
+  const basisFilter = parseBasisFilter(
+    new URLSearchParams(location.search).get('basis'));
+  const plan = planModelRender(model.entities, response.items, basisFilter);
+  const { claimed, fromCatalog, visible, hidden } = plan;
   fromCatalog.forEach((item) => addItemEntity(item));
+
+  if (basisFilter.unrecognised.length) {
+    appLog(`model:basis unrecognised ${basisFilter.unrecognised.join(',')} — ` +
+           `showing all; known values ${BASIS_VALUES.join(', ')}`);
+  }
+  for (const entity of plan.unstated) {
+    appLog(`model:basis-unstated ${entity.entity_id} — hidden by the filter`);
+  }
 
   const frames = response.frames || {};
   const assets = response.assets || {};
   lastFrames = frames;
   lastAssets = assets;
   let placed = 0;
-  for (const entity of model.entities) {
+  for (const entity of visible) {
     const item = modelEntityToItem(entity, frames, (id) => assets[id]);
     if (!item) {
       appLog(`model:unresolved ${entity.entity_id} — frame ${entity.frame_ref?.fqn}`);
@@ -547,11 +556,17 @@ async function handleDiscover() {
   }
 
   readoutItems = fromCatalog.length + placed;
-  readoutMessage = '';
+  // A filtered scene must not read as the whole world. "items: 1" with no
+  // further comment is a claim about the venue; this makes it a claim about
+  // the view.
+  readoutMessage = (basisFilter.wanted && hidden)
+    ? `basis=${[...basisFilter.wanted].join(',')} — ${hidden} hidden`
+    : '';
   renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
   if (model.entities.length) {
     appLog(`discover:model ${placed} entities, ${model.relationships.length} ` +
-           `relationships; ${claimed.size} catalog row(s) superseded`);
+           `relationships; ${claimed.size} catalog row(s) superseded` +
+           (hidden ? `; ${hidden} hidden by basis filter` : ''));
     connectModelStream();
   }
   appLog(`discover:items ${readoutItems}`);
@@ -593,6 +608,17 @@ function connectModelStream() {
       }
       const entity = msg.payload;
       if (!entity?.entity_id) {
+        return;
+      }
+      // The filter applies to updates too, and says so rather than relying
+      // on `known` being absent for a hidden entity. That happens to be true
+      // today -- hidden entities were never drawn, so there is nothing to
+      // move -- but it is an accident of the guard below, and a filter whose
+      // enforcement is accidental leaks the first time the guard changes.
+      // Re-read from the URL rather than caching: it cannot go stale.
+      const filter = parseBasisFilter(
+        new URLSearchParams(location.search).get('basis'));
+      if (!matchesBasis(entity, filter)) {
         return;
       }
       const known = modelItems.get(entity.entity_id);
@@ -725,7 +751,19 @@ function addItemEntity(item: CatalogItem) {
         lon_deg: item.extent.lon_deg,
         alt_m: item.extent.alt_m + item.extent.size[2] / 2 }
     : item.geopose;
-  addMarker(item.id, item.name, markerPose, itemUrl, drawsItself, !item.extent);
+  // Never clamped. The altitude here was resolved from a stated pose through
+  // an announced frame, exactly like the glTF drawn below, and the two must
+  // agree or the name floats away from the thing it names.
+  //
+  // Clamping was worse than merely redundant. This deployment carries no
+  // terrain provider -- world terrain was removed because it drew a false
+  // surface over the photorealistic tiles' water -- so CLAMP_TO_GROUND had
+  // nothing to clamp to but the ellipsoid, roughly 143 m beneath Austin. The
+  // markers looked right only in the window before the tiles finished loading
+  // and the clamp resolved, then silently dropped underground: visible in
+  // every quick screenshot and absent from every patient one, which is how it
+  // survived this long.
+  addMarker(item.id, item.name, markerPose, itemUrl, drawsItself, false);
   if (!viewer) {
     return;
   }

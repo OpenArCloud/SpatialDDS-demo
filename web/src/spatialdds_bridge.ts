@@ -538,6 +538,124 @@ export function hasUnknownType(entity: ModelEntity): boolean {
   return uris.length > 0 && uris.every((uri) => typeLabel(uri) === undefined);
 }
 
+/**
+ * The four ways a claim can be arrived at, from `oarc_model`'s Basis enum.
+ *
+ * Listed in full rather than as the two this deployment happens to publish.
+ * A filter that only knows the values it has seen is not a filter, it is a
+ * hardcoded demo -- and DECLARED and DERIVED are exactly the ones a second
+ * publisher would show up with.
+ */
+export const BASIS_VALUES: readonly string[] =
+  Object.freeze(['OBSERVED', 'DECLARED', 'AUTHORED', 'DERIVED']);
+
+export type BasisFilter = {
+  /** null means no filter: everything renders. */
+  wanted: ReadonlySet<string> | null;
+  /** Values asked for that are not in the enum, kept so the UI can say so. */
+  unrecognised: string[];
+};
+
+export const NO_BASIS_FILTER: BasisFilter =
+  Object.freeze({ wanted: null, unrecognised: [] });
+
+/**
+ * `?basis=observed` or `?basis=observed,declared`. Case-insensitive.
+ *
+ * An unrecognised value does not hide the world. Falling back to showing
+ * everything and saying loudly that the value was not understood is the
+ * lesser wrong: a typo that silently empties the scene reads as "there is
+ * nothing here", which is a claim about the world rather than about the URL.
+ * The caller is expected to surface `unrecognised` rather than swallow it.
+ */
+export function parseBasisFilter(raw: string | null | undefined): BasisFilter {
+  if (raw === null || raw === undefined || raw.trim() === '') {
+    return NO_BASIS_FILTER;
+  }
+  const wanted = new Set<string>();
+  const unrecognised: string[] = [];
+  for (const part of raw.split(',')) {
+    const value = part.trim().toUpperCase();
+    if (value === '') {
+      continue;
+    }
+    if (BASIS_VALUES.includes(value)) {
+      wanted.add(value);
+    } else {
+      unrecognised.push(part.trim());
+    }
+  }
+  if (wanted.size === 0) {
+    return { wanted: null, unrecognised };
+  }
+  return { wanted, unrecognised };
+}
+
+/**
+ * Whether an entity survives the filter.
+ *
+ * An entity that does not state its basis is excluded while a filter is
+ * active, and the caller reports how many. Including it would put something
+ * on screen the filter cannot vouch for; the alternative -- dropping it
+ * silently -- loses it without saying so.
+ */
+export function matchesBasis(entity: ModelEntity, filter: BasisFilter): boolean {
+  if (!filter.wanted) {
+    return true;
+  }
+  return typeof entity.basis === 'string' && filter.wanted.has(entity.basis);
+}
+
+/**
+ * What to draw, given a model, a catalogue and a view filter.
+ *
+ * This exists as one function rather than a few lines in the render path
+ * because the order of the two steps is load-bearing and easy to get wrong in
+ * the obvious way. Suppression is decided from *every* entity, and only then
+ * is the filter applied. Reversing that hands the ducks back to the catalogue
+ * the moment `?basis=observed` hides the model's ducks, and they reappear at
+ * the catalogue pose -- a filter that puts a duck on screen. Hiding a claim
+ * must not restore the claim it superseded.
+ */
+export type RenderPlan = {
+  /** Catalogue content_ids the model has taken responsibility for. */
+  claimed: ReadonlySet<string>;
+  /** Catalogue rows still drawing themselves. */
+  fromCatalog: CatalogItem[];
+  /** Entities the filter admits. */
+  visible: ModelEntity[];
+  /** How many entities the filter removed. */
+  hidden: number;
+  /** Entities excluded for having no stated basis, so the caller can say so. */
+  unstated: ModelEntity[];
+};
+
+export function planModelRender(
+  entities: ModelEntity[],
+  catalogItems: CatalogItem[],
+  filter: BasisFilter
+): RenderPlan {
+  // Step one, from every entity. Not from the survivors -- see above.
+  const claimed = new Set<string>();
+  for (const entity of entities) {
+    const ref = catalogRefId(entity);
+    if (ref) {
+      claimed.add(ref);
+    }
+  }
+  const fromCatalog = catalogItems.filter((item) => !claimed.has(item.id));
+
+  // Step two.
+  const visible = entities.filter((e) => matchesBasis(e, filter));
+  const unstated = filter.wanted
+    ? entities.filter((e) => typeof e.basis !== 'string')
+    : [];
+  return {
+    claimed, fromCatalog, visible,
+    hidden: entities.length - visible.length, unstated
+  };
+}
+
 export function modelEntityToItem(
   entity: ModelEntity,
   frames: FrameMap,

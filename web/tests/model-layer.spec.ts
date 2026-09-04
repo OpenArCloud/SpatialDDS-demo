@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
-  TYPE_LABELS, catalogEntryToItem, catalogRefId, displayName, hasUnknownType,
-  modelEntityToItem, resolveInFrame, typeLabel
+  BASIS_VALUES, TYPE_LABELS, catalogEntryToItem, catalogRefId, displayName,
+  hasUnknownType, matchesBasis, modelEntityToItem, parseBasisFilter,
+  planModelRender, resolveInFrame, typeLabel
 } from '../src/spatialdds_bridge';
 
 /**
@@ -286,5 +287,152 @@ test.describe("a stranger's entity", () => {
     // are different claims; only the second is worth flagging to a user.
     expect(hasUnknownType({ entity_id: 'ent:x', type_uris: [] })).toBe(false);
     expect(hasUnknownType({ entity_id: 'ent:x' })).toBe(false);
+  });
+});
+
+test.describe('the basis filter', () => {
+  /**
+   * `?basis=observed` is a view, not a subscription.
+   *
+   * The client still receives the whole model and chooses what to draw. That
+   * distinction is the point of the feature: a consumer filtering its own
+   * view must not change what the bus carries, or two clients pointed at one
+   * venue would disagree about what is there.
+   */
+
+  const observed = (id: string) => ({ entity_id: id, basis: 'OBSERVED' });
+  const authored = (id: string) => ({ entity_id: id, basis: 'AUTHORED' });
+
+  test('no parameter means no filter', () => {
+    for (const raw of [null, undefined, '', '   ']) {
+      const filter = parseBasisFilter(raw);
+      expect(filter.wanted).toBeNull();
+      expect(matchesBasis(authored('ent:duck:west'), filter)).toBe(true);
+      expect(matchesBasis(observed('ent:fountain:littlefield'), filter)).toBe(true);
+    }
+  });
+
+  test('observed keeps the fountain and hides the ducks and the gnome', () => {
+    const filter = parseBasisFilter('observed');
+    expect(matchesBasis(observed('ent:fountain:littlefield'), filter)).toBe(true);
+    expect(matchesBasis(authored('ent:duck:west'), filter)).toBe(false);
+    expect(matchesBasis(authored('ent:gnome:visitor'), filter)).toBe(false);
+  });
+
+  test('authored is the exact inverse', () => {
+    const all = [observed('ent:fountain:littlefield'), authored('ent:duck:west'),
+                 authored('ent:duck:east'), authored('ent:duck:catalog-pose'),
+                 authored('ent:gnome:visitor')];
+    const o = parseBasisFilter('observed');
+    const a = parseBasisFilter('authored');
+    // Nothing is in both views, and nothing falls out of both.
+    for (const entity of all) {
+      expect(matchesBasis(entity, o)).toBe(!matchesBasis(entity, a));
+    }
+    expect(all.filter((e) => matchesBasis(e, o)).length).toBe(1);
+    expect(all.filter((e) => matchesBasis(e, a)).length).toBe(4);
+  });
+
+  test('case does not matter and several values can be asked for', () => {
+    const filter = parseBasisFilter('Observed, AUTHORED');
+    expect([...filter.wanted!].sort()).toEqual(['AUTHORED', 'OBSERVED']);
+    expect(filter.unrecognised).toEqual([]);
+  });
+
+  test('it knows the whole enum, not just what this demo publishes', () => {
+    // DECLARED and DERIVED are exactly what a second publisher turns up with.
+    expect([...BASIS_VALUES].sort())
+      .toEqual(['AUTHORED', 'DECLARED', 'DERIVED', 'OBSERVED']);
+    for (const value of BASIS_VALUES) {
+      expect(parseBasisFilter(value.toLowerCase()).wanted!.has(value)).toBe(true);
+    }
+  });
+
+  test('a value nobody recognises shows everything and reports itself', () => {
+    // A typo that silently empties the scene reads as "there is nothing
+    // here", which is a claim about the venue rather than about the URL.
+    const filter = parseBasisFilter('obsevred');
+    expect(filter.wanted).toBeNull();
+    expect(filter.unrecognised).toEqual(['obsevred']);
+    expect(matchesBasis(authored('ent:duck:west'), filter)).toBe(true);
+  });
+
+  test('a recognised value survives alongside an unrecognised one', () => {
+    const filter = parseBasisFilter('observed,banana');
+    expect([...filter.wanted!]).toEqual(['OBSERVED']);
+    expect(filter.unrecognised).toEqual(['banana']);
+    expect(matchesBasis(authored('ent:duck:west'), filter)).toBe(false);
+  });
+
+  test('an entity that does not state its basis is hidden, not assumed', () => {
+    const filter = parseBasisFilter('observed');
+    expect(matchesBasis({ entity_id: 'ent:mystery' }, filter)).toBe(false);
+    // ...but only while a filter is active. With no filter it draws as before.
+    expect(matchesBasis({ entity_id: 'ent:mystery' }, parseBasisFilter(null)))
+      .toBe(true);
+  });
+
+  test('filtering hides entities without unclaiming their catalogue rows', () => {
+    /**
+     * The ordering bug this guards, in the shipped function rather than in a
+     * re-statement of it.
+     *
+     * Suppression is decided from every entity, before the filter runs. If it
+     * were decided from the survivors, hiding the model's ducks under
+     * `?basis=observed` would hand the duck back to the catalogue and it would
+     * reappear at the catalogue pose -- a filter putting a duck on screen.
+     */
+    const entities = [
+      { entity_id: 'ent:fountain:littlefield', basis: 'OBSERVED', content_refs: [] },
+      { entity_id: 'ent:duck:west', basis: 'AUTHORED',
+        content_refs: [`catalog:${DUCK_CONTENT_ID}`] }
+    ];
+    const catalogItems = [{ id: DUCK_CONTENT_ID, name: 'Rubber duck' } as any];
+
+    const plan = planModelRender(entities, catalogItems, parseBasisFilter('observed'));
+    expect(plan.claimed.has(DUCK_CONTENT_ID)).toBe(true);
+    // The duck is hidden, and it stays hidden: the catalogue does not get it
+    // back. Nothing is drawn from either source for that content_id.
+    expect(plan.visible.map((e) => e.entity_id)).toEqual(['ent:fountain:littlefield']);
+    expect(plan.fromCatalog).toEqual([]);
+    expect(plan.hidden).toBe(1);
+  });
+
+  test('an unclaimed catalogue row still draws itself under a filter', () => {
+    // Suppression is per content_id, not wholesale. A row no entity claims is
+    // not the model's to hide.
+    const entities = [
+      { entity_id: 'ent:fountain:littlefield', basis: 'OBSERVED', content_refs: [] }
+    ];
+    const catalogItems = [{ id: 'some-other-row', name: 'Signpost' } as any];
+    const plan = planModelRender(entities, catalogItems, parseBasisFilter('authored'));
+    expect(plan.fromCatalog.map((i) => i.id)).toEqual(['some-other-row']);
+    expect(plan.visible).toEqual([]);
+    expect(plan.hidden).toBe(1);
+  });
+
+  test('with no filter the plan draws the whole model and claims as before', () => {
+    const entities = [
+      { entity_id: 'ent:fountain:littlefield', basis: 'OBSERVED', content_refs: [] },
+      { entity_id: 'ent:duck:west', basis: 'AUTHORED',
+        content_refs: [`catalog:${DUCK_CONTENT_ID}`] }
+    ];
+    const plan = planModelRender(
+      entities, [{ id: DUCK_CONTENT_ID } as any], parseBasisFilter(null));
+    expect(plan.visible.length).toBe(2);
+    expect(plan.hidden).toBe(0);
+    expect(plan.fromCatalog).toEqual([]);
+    expect(plan.unstated).toEqual([]);
+  });
+
+  test('an entity with no stated basis is reported, not just dropped', () => {
+    const entities = [{ entity_id: 'ent:mystery', content_refs: [] }];
+    const filtered = planModelRender(entities, [], parseBasisFilter('observed'));
+    expect(filtered.visible).toEqual([]);
+    expect(filtered.unstated.map((e) => e.entity_id)).toEqual(['ent:mystery']);
+    // Unfiltered it draws as before and there is nothing to report.
+    const unfiltered = planModelRender(entities, [], parseBasisFilter(null));
+    expect(unfiltered.visible.length).toBe(1);
+    expect(unfiltered.unstated).toEqual([]);
   });
 });
