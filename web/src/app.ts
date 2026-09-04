@@ -9,7 +9,7 @@ import {
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  bridgeModelSnapshot, catalogRefId, modelEntityToItem, observeRest
+  bridgeModelSnapshot, catalogRefId, modelEntityToItem, observeRest, typeLabel
 } from './spatialdds_bridge';
 import type { ModelEntity, RestExchange } from './spatialdds_bridge';
 import type { CatalogItem, GeoPose } from './types';
@@ -650,7 +650,12 @@ function describeEntity(item: CatalogItem): string | undefined {
   const note = (entity.properties || [])
     .find((kv: any) => kv.key === 'demo.note')?.value;
   for (const uri of entity.type_uris || []) {
-    rows.push(['Type', `<a href="${uri}" target="_blank" rel="noopener">${uri}</a>`]);
+    // A known type shows its label with the URI behind it; an unknown one
+    // shows the URI, which is all anybody can honestly say about it.
+    const label = typeLabel(uri);
+    rows.push(['Type', label
+      ? `${label} <a href="${uri}" target="_blank" rel="noopener" style="opacity:.65">${uri}</a>`
+      : `<a href="${uri}" target="_blank" rel="noopener">${uri}</a>`]);
   }
   rows.push(['Basis', `${entity.basis} — how the claim was arrived at`]);
   rows.push(['Layer', `${entity.layer} — how fast it is expected to change`]);

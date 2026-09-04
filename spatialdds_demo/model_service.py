@@ -130,17 +130,21 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         properties=[KV(key="demo.label", value="Littlefield Fountain"),
                     KV(key="demo.note",
                        value="Memorial fountain at the south entrance to the Main Mall. The map this demo localizes into was built from a phone LiDAR capture of it.")],
-        # Verified, not guessed. Wikidata Q6652941 gives its coordinates as
-        # 30.28389, -97.73969 -- about 6 m from this entity's pose, well
-        # inside a basin 28 m across -- and OSM way 201514442 is tagged
-        # `name=Littlefield Fountain, amenity=fountain, wikidata=Q6652941`,
-        # so the two references corroborate each other rather than resting on
-        # a name match. `amenity=fountain` is also the concept Q483453 in
-        # type_uris names, so the type and the reference agree.
+        # Verified, not guessed. Both checked 2026-09-02:
         #
-        # An identifier that resolves to the wrong thing is worse than none,
-        # which is why these waited for a check rather than shipping on a
-        # plausible-looking search result.
+        # * `wikidata:Q6652941` -- "Littlefield Fountain", a war memorial in
+        #   Austin, Texas, coordinates 30.28389, -97.73969. That is about 6 m
+        #   from this entity's pose, well inside a basin 28 m across.
+        # * `osm:way/201514442` -- tagged `name=Littlefield Fountain`,
+        #   `amenity=fountain`, `wikidata=Q6652941`.
+        #
+        # The two corroborate each other rather than resting on a name match:
+        # OSM points at the Wikidata item, and Wikidata's coordinates land on
+        # this venue. `amenity=fountain` is also the concept Q483453 in
+        # type_uris names, so the type and the references agree.
+        #
+        # An identifier that resolves to the wrong thing is worse than none.
+        # Add others only with verification, and record the date here.
         external_refs=[KV(key="wikidata", value="Q6652941"),
                        KV(key="osm", value="way/201514442")],
         # The fountain has no asset: it is already in the photorealistic tiles.

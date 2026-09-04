@@ -408,6 +408,35 @@ export type ModelSnapshot = {
   relationships: Record<string, any>[];
 };
 
+/**
+ * Type URI to a human label.
+ *
+ * A table, not a function, and exported as one: a consumer that wants to know
+ * whether a type is known asks the map and gets undefined, so an unrecognised
+ * URI is a lookup miss rather than a branch someone has to remember to write.
+ * That matters because the interesting case is the *miss* -- a publisher we
+ * have never met, using a vocabulary we do not carry, must still render.
+ *
+ * The layer mints no types, so every key here is borrowed. Entries are added
+ * when the demo publishes something that uses them; this is a convenience for
+ * display, not an authority on what the URIs mean, and a client that has
+ * never heard of a type is not thereby wrong about the world.
+ */
+export const TYPE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  'http://www.wikidata.org/entity/Q483453': 'Fountain',
+  'http://www.wikidata.org/entity/Q851478': 'Rubber duck'
+});
+
+/**
+ * The label for a type URI, or undefined when it is not one we know.
+ *
+ * Undefined is a legitimate answer and callers are expected to handle it --
+ * see the degraded rendering an unknown type gets.
+ */
+export function typeLabel(uri: string): string | undefined {
+  return TYPE_LABELS[uri];
+}
+
 /** A namespaced property, or undefined. */
 export function modelProperty(entity: ModelEntity, key: string): string | undefined {
   return (entity.properties || []).find((kv) => kv.key === key)?.value;

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
-  catalogEntryToItem, catalogRefId, modelEntityToItem, resolveInFrame
+  TYPE_LABELS, catalogEntryToItem, catalogRefId, modelEntityToItem,
+  resolveInFrame, typeLabel
 } from '../src/spatialdds_bridge';
 
 /**
@@ -169,5 +170,40 @@ test.describe('suppression is per content_id', () => {
     expect(claimedBy([{ entity_id: 'ent:x',
                         content_refs: ['spatialdds://elsewhere/manifest:1'] }]).size)
       .toBe(0);
+  });
+});
+
+test.describe('borrowed vocabulary', () => {
+  /**
+   * The table is data, so "do we know this type?" is a lookup rather than a
+   * branch. The miss is the case that matters: a publisher we have never met,
+   * using a vocabulary we do not carry, still has to render.
+   */
+  test('the types this demo publishes resolve to labels', () => {
+    expect(typeLabel('http://www.wikidata.org/entity/Q483453')).toBe('Fountain');
+    expect(typeLabel('http://www.wikidata.org/entity/Q851478')).toBe('Rubber duck');
+  });
+
+  test('an unknown type is a miss, not an error', () => {
+    expect(typeLabel('https://example.org/vocab/garden-gnome')).toBeUndefined();
+    expect(typeLabel('')).toBeUndefined();
+    expect(typeLabel('not even a uri')).toBeUndefined();
+  });
+
+  test('the table is borrowed vocabulary only', () => {
+    // The layer mints no types of its own. Every key is somebody else's URI,
+    // which is the property that makes the model interoperable rather than a
+    // private ontology.
+    for (const uri of Object.keys(TYPE_LABELS)) {
+      expect(uri).toMatch(/^https?:\/\//);
+      expect(uri).not.toContain('oarc');
+      expect(uri).not.toContain('spatialdds');
+    }
+  });
+
+  test('the table cannot be mutated by a consumer', () => {
+    // Frozen on purpose: a display convenience that a caller could edit would
+    // make "what does this type mean" depend on load order.
+    expect(Object.isFrozen(TYPE_LABELS)).toBe(true);
   });
 });

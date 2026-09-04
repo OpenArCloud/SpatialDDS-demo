@@ -91,6 +91,64 @@ class AssetVersusInstance(unittest.TestCase):
         self.assertEqual(len({tuple(d["pose"]["t"]) for d in ducks}), 3)
 
 
+class ExternalReferences(unittest.TestCase):
+    """
+    The fountain says what it is in somebody else's namespace.
+
+    Both refs were checked on 2026-09-02 and corroborate each other: OSM way
+    201514442 is tagged `wikidata=Q6652941`, and that item's coordinates land
+    on this venue. The test pins the values so a later edit cannot quietly
+    swap in an unverified id -- the failure mode being guarded against is a
+    reference that resolves to the wrong thing, which is worse than none.
+    """
+
+    def test_the_fountain_carries_its_verified_identifiers(self):
+        entities = {e["entity_id"]: e for e in _loaded().snapshot(STAMP)["entities"]}
+        refs = {kv["key"]: kv["value"]
+                for kv in entities["ent:fountain:littlefield"]["external_refs"]}
+        self.assertEqual(refs, {"wikidata": "Q6652941", "osm": "way/201514442"})
+
+    def test_the_ducks_claim_no_public_identity(self):
+        """A rubber duck in a fountain is not a thing the world has an id for."""
+        for entity in _loaded().snapshot(STAMP)["entities"]:
+            if entity["entity_id"].startswith("ent:duck"):
+                self.assertEqual(entity["external_refs"], [])
+
+
+class BorrowedVocabulary(unittest.TestCase):
+    """
+    Everything published names a type the client can label.
+
+    Reading the client's table from Python is unusual, but the alternative is
+    two lists that drift: the seeder starts publishing a type, the client shows
+    a bare URI where a name should be, and nothing fails. The same trick already
+    guards the catalogue kinds in test_wellknown_endpoints.py.
+
+    This is deliberately not "every label has a publisher" -- the table may
+    carry types nothing here publishes yet. The asymmetry is the point.
+    """
+
+    def test_every_published_type_has_a_label(self):
+        import re
+        bridge_ts = (REPO / "web" / "src" / "spatialdds_bridge.ts").read_text()
+        block = re.search(r"TYPE_LABELS[^=]*=\s*Object\.freeze\(\{(.*?)\}\)",
+                          bridge_ts, re.S)
+        self.assertIsNotNone(block, "could not find TYPE_LABELS in spatialdds_bridge.ts")
+        known = set(re.findall(r"'([^']+)':", block.group(1)))
+        for entity in seed_entities():
+            for uri in entity.type_uris:
+                with self.subTest(entity=entity.entity_id, uri=uri):
+                    self.assertIn(uri, known)
+
+    def test_published_types_are_borrowed_not_minted(self):
+        for entity in seed_entities():
+            for uri in entity.type_uris:
+                with self.subTest(uri=uri):
+                    self.assertTrue(uri.startswith("http"))
+                    self.assertNotIn("oarc", uri)
+                    self.assertNotIn("spatialdds", uri)
+
+
 class Mirroring(unittest.TestCase):
     """It holds nothing the bus does not."""
 
