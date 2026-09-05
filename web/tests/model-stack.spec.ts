@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  BRIDGE_URL, container, inContainer, readyPage, restoreVenue, startMover,
-  stopMover, look
+  BRIDGE_URL, container, inContainer, moverRunning, readyPage, restoreVenue,
+  startMover, stopMover, look
 } from './model-stack.helpers';
 
 /**
@@ -26,6 +26,8 @@ test.describe.configure({ mode: 'serial' });
 const OUT = process.env.P23_OUT || join(tmpdir(), 'spatialdds-basis');
 
 let stack: string | null = null;
+// Whether the stack had a mover running before the suite touched it.
+let moverWasRunning = false;
 
 test.beforeAll(async ({ request }) => {
   stack = container();
@@ -49,7 +51,19 @@ test.beforeAll(async ({ request }) => {
     // leaving one going after a demo, would otherwise fail the suite for a
     // reason that has nothing to do with the code under test. The one test
     // that wants motion starts it itself.
+    //
+    // But put it back afterwards. Tests own the environment *during* the run
+    // and borrow it, they do not inherit it: stopping the motion on a stack
+    // somebody is demonstrating and walking away is how a test suite becomes
+    // the reason a demo looks broken.
+    moverWasRunning = moverRunning(stack);
     stopMover(stack);
+  }
+});
+
+test.afterAll(async () => {
+  if (stack && moverWasRunning) {
+    startMover(stack);
   }
 });
 

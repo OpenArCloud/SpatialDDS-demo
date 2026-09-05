@@ -107,6 +107,18 @@ export function startMover(name: string, bounds: 'declared' | 'derived' = 'decla
            + `--bounds ${bounds}`, { stdio: 'ignore' });
 }
 
+/** Whether a mover is running right now. */
+export function moverRunning(name: string): boolean {
+  try {
+    const out = execSync(
+      `docker exec ${name} pgrep -c -f '^python3 -m spatialdds_demo.duck_mover'`,
+      { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    return Number(out) > 0;
+  } catch {
+    return false;                 // pgrep exits non-zero when nothing matches
+  }
+}
+
 export function stopMover(name: string): void {
   try {
     // Anchored, and this matters more than it looks. The container's PID 1 is
