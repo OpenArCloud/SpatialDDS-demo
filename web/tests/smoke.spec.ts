@@ -25,7 +25,7 @@ test('smoke: cesium app loads and responds to mock endpoints', async ({ page, re
   // "Expected width to be greater than 0".
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  await page.goto('/');
+  await page.goto('/?autostart=0');
 
   await expect(page.locator('#cesiumContainer')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Localize (Mock VPS)' })).toBeVisible();

@@ -32,7 +32,7 @@ test('live 1.7 bridge: localize + discover against real DDS', async ({ page, req
   });
   page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
 
-  await page.goto('/');
+  await page.goto('/?autostart=0');
   await expect(page.locator('#cesiumContainer')).toBeVisible();
 
   // The app probes /health on boot and flips to bridge mode when it answers.

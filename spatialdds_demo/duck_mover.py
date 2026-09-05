@@ -72,13 +72,27 @@ DEFAULT_BOUNDS_ENTITY = BOUNDS_ENTITIES["declared"]
 INSET_M = 1.0
 
 # How far a duck travels per move, and how often any duck moves. Six moves a
-# second shared between three ducks is a turn each every half second, at
-# 0.45 m a step -- a slow drift at human scale, which is what ducks do. Small
+# second shared between three ducks is a turn each every half second, at half
+# a metre a step -- about 1 m/s, which is roughly how fast a duck swims. Small
 # and often reads better than large and rare, and it keeps each entity's
 # update interval well inside the idle threshold that decides when the
 # service considers it stopped.
-STEP_M = 0.45
+STEP_M = 0.5
 MOVES_PER_SECOND = 6.0
+
+# How much a duck can turn between steps, in radians.
+#
+# This matters more than the speed did. A direction drawn uniformly every step
+# is a random walk, and a random walk does not go anywhere: expected
+# displacement grows with the square root of the number of steps, so three
+# ducks stepping half a metre six times a second spend a minute vibrating
+# around where they started. It reads as jitter, not as swimming, and the
+# demonstration -- that these things live in a world and move through it --
+# does not survive looking like a rendering artefact.
+#
+# Keeping the heading and perturbing it makes the same step size travel. A
+# duck holds its course, wanders off it gradually, and crosses the pond.
+TURN_RADIANS = 0.45
 
 
 def _now() -> Time:
@@ -139,6 +153,7 @@ class DuckMover:
         self._counter = 0
         self._matched = False
         self._warned_unheard = False
+        self._heading: Dict[str, float] = {}
 
     # --- reading the world -------------------------------------------------
 
@@ -170,11 +185,30 @@ class DuckMover:
     # --- asking for a change ----------------------------------------------
 
     def step_for(self, duck: Entity, bounds: Aabb3) -> PoseSE3:
-        """Where this duck should drift to next, clamped into the model's box."""
-        angle = self._rng.uniform(0, 2 * math.pi)
-        x = duck.pose.t[0] + STEP_M * math.cos(angle)
-        y = duck.pose.t[1] + STEP_M * math.sin(angle)
-        x, y = clamp_into(x, y, bounds)
+        """
+        Where this duck should drift to next, clamped into the model's box.
+
+        It keeps a heading and wanders off it, rather than choosing a fresh
+        direction each time. See TURN_RADIANS: the second is a random walk and
+        goes nowhere; the first is swimming.
+
+        When the clamp pulls it back -- it reached the edge of whatever water
+        it is following -- the heading is turned right around rather than left
+        pressed against the boundary, so it leaves the edge instead of
+        grinding along it.
+        """
+        heading = self._heading.get(duck.entity_id)
+        if heading is None:
+            heading = self._rng.uniform(0, 2 * math.pi)
+        heading += self._rng.uniform(-TURN_RADIANS, TURN_RADIANS)
+
+        wanted_x = duck.pose.t[0] + STEP_M * math.cos(heading)
+        wanted_y = duck.pose.t[1] + STEP_M * math.sin(heading)
+        x, y = clamp_into(wanted_x, wanted_y, bounds)
+        if abs(x - wanted_x) > 1e-9 or abs(y - wanted_y) > 1e-9:
+            heading += math.pi + self._rng.uniform(-TURN_RADIANS, TURN_RADIANS)
+        self._heading[duck.entity_id] = heading % (2 * math.pi)
+
         return PoseSE3(
             t=[x, y, duck.pose.t[2]],
             q=heading_quaternion(x - duck.pose.t[0], y - duck.pose.t[1],

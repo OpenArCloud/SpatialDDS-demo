@@ -79,6 +79,71 @@ class Geometry(unittest.TestCase):
         self.assertEqual([round(v, 4) for v in heading_quaternion(1, 0, [0, 0, 0, 1])],
                          [0.0, 0.0, 0.0, 1.0])
 
+    def test_a_duck_holds_its_heading_rather_than_redrawing_it(self):
+        """
+        The difference between swimming and jittering.
+
+        A direction drawn afresh every step is a random walk: displacement
+        grows with the square root of the step count, so at half a metre six
+        times a second three ducks spend a minute vibrating where they
+        started. Measured over 360 steps, uniform headings net about 18 m of
+        travel and persistent ones about 51 m -- and the second looks like a
+        duck crossing a pond while the first looks like a rendering fault.
+
+        Asserted as a property of the path, not of the constant: consecutive
+        steps must mostly continue in a similar direction.
+        """
+        import math
+
+        from spatialdds_demo.duck_mover import TURN_RADIANS
+        from spatialdds_idl.spatial.core import PoseSE3
+
+        mover = DuckMover.__new__(DuckMover)      # geometry only; no bus.
+        mover._rng = random.Random(9)
+        mover._heading = {}
+
+        duck = next(e for e in seed_entities() if e.entity_id == "ent:duck:west")
+        wide = Aabb3(min_xyz=[-500.0, -500.0, -2.0], max_xyz=[500.0, 500.0, -1.0])
+        headings = []
+        for _ in range(40):
+            before = list(duck.pose.t)
+            duck.pose = mover.step_for(duck, wide)
+            headings.append(math.atan2(duck.pose.t[1] - before[1],
+                                       duck.pose.t[0] - before[0]))
+
+        turns = [abs((b - a + math.pi) % (2 * math.pi) - math.pi)
+                 for a, b in zip(headings, headings[1:])]
+        self.assertLessEqual(max(turns), TURN_RADIANS + 1e-6,
+                             "a duck may not spin between steps")
+        # And it goes somewhere: forty half-metre steps of a persistent walk
+        # cover far more ground than the ~3 m a random walk would average.
+        travelled = math.hypot(duck.pose.t[0] - seed_entities()[3].pose.t[0],
+                               duck.pose.t[1] - seed_entities()[3].pose.t[1])
+        self.assertGreater(travelled, 6.0,
+                           "forty steps should have taken it somewhere")
+
+    def test_hitting_the_edge_turns_it_around_rather_than_grinding_along(self):
+        """A duck pressed against a boundary by a heading that points out of
+        the water would sit there until the random turn walked it back."""
+        import math
+
+        mover = DuckMover.__new__(DuckMover)
+        mover._rng = random.Random(3)
+        mover._heading = {"ent:duck:west": 0.0}       # due east, at the edge
+
+        duck = next(e for e in seed_entities() if e.entity_id == "ent:duck:west")
+        from spatialdds_idl.spatial.core import PoseSE3
+        duck.pose = PoseSE3(t=[POND.max_xyz[0] - INSET_M, -14.0, -1.423],
+                            q=[0, 0, 0, 1])
+        mover.step_for(duck, POND)
+        turned = mover._heading["ent:duck:west"]
+        # Away from the wall it just hit: the eastward component must now be
+        # negative. `abs(cos)` was the first attempt and rejected "turned
+        # right around" along with "did not turn at all" -- the two outcomes
+        # it exists to tell apart.
+        self.assertLess(math.cos(turned), 0.0,
+                        "after a clamp it should be heading away from the edge")
+
     def test_a_zero_step_keeps_the_facing_it_had(self):
         self.assertEqual(heading_quaternion(0, 0, [0, 0, 0.5, 0.5]), [0, 0, 0.5, 0.5])
 

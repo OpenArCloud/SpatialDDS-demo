@@ -1719,6 +1719,15 @@ async function autoLocalizeIfThisIsTheDemosOwnVps() {
   if (currentPose) {
     return;                      // somebody was faster than we were.
   }
+  // `?autostart=0` for anyone who wants the pre-localization state: a test
+  // that drives the exchange itself and would otherwise race a second one,
+  // or a person who wants to watch the request happen rather than find it
+  // already in the overlay. The bridge serialises localize requests, so a
+  // suite where every open page asks for one queues behind itself.
+  if (new URLSearchParams(location.search).get('autostart') === '0') {
+    appLog('autostart: disabled by ?autostart=0 — press Localize');
+    return;
+  }
   if (!bridgeActive) {
     // No bridge: `mockLocalize` is a local function returning a canned pose,
     // so nothing is asked of anyone.

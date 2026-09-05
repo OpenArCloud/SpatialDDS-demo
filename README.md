@@ -191,7 +191,12 @@ single-writer rule.
 SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_DUCK_MOVER=1 ./run_bridge_server_docker.sh
 ```
 
-It **writes nothing on the model topics**. It reads the model like any client,
+It **writes nothing on the model topics**. A duck keeps its heading and
+wanders off it rather than picking a fresh direction each step: a random walk
+goes nowhere in particular, so three ducks stepping half a metre six times a
+second would spend a minute vibrating around where they started. Holding a
+course and turning gradually makes the same step size travel, and reads as
+swimming rather than as a rendering fault. It reads the model like any client,
 decides what it would like to be different, and asks the authority on the
 command lane. Three properties worth knowing, each of them guarded by a test:
 

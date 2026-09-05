@@ -10,7 +10,7 @@ test('REST overlay records the exchanges the app makes', async ({ page, request 
   } catch { health = null; }
   test.skip(health === null, 'bridge not reachable');
 
-  await page.goto('/');
+  await page.goto('/?autostart=0');
   await expect(page.locator('#modeBadge')).toContainText('DDS Bridge');
 
   // Both panels start hidden.

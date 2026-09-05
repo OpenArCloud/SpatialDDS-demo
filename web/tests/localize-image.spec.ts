@@ -78,7 +78,7 @@ test('localize with a real scan frame', async ({ page, request }) => {
   });
   page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
 
-  await page.goto('/');
+  await page.goto('/?autostart=0');
   await expect(page.locator('#modeBadge')).toContainText('DDS Bridge');
 
   const button = page.locator('#btnLocalizeImage');
