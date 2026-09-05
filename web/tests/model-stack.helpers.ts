@@ -109,7 +109,13 @@ export function startMover(name: string, bounds: 'declared' | 'derived' = 'decla
 
 export function stopMover(name: string): void {
   try {
-    execSync(`docker exec ${name} pkill -f spatialdds_demo.duck_mover`,
+    // Anchored, and this matters more than it looks. The container's PID 1 is
+    // the startup shell, whose command line *contains* the string
+    // `spatialdds_demo.duck_mover` because it is the script that conditionally
+    // launches it. An unanchored `pkill -f` therefore sends SIGTERM to init on
+    // every cleanup: it has not killed the stack yet, which is luck rather
+    // than design. `^python3 -m ...` matches the mover and nothing else.
+    execSync(`docker exec ${name} pkill -f '^python3 -m spatialdds_demo.duck_mover'`,
              { stdio: 'ignore' });
   } catch {
     // pkill exits non-zero when there was nothing to kill, which is fine:
