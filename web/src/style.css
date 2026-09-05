@@ -105,6 +105,17 @@ body {
   line-height: 1.4;
 }
 
+#hud { cursor: pointer; }
+#hud.hidden { display: none; }
+
+#hudDismiss {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: #8fa3bd;
+  font-size: 10px;
+}
+
 #restOverlay,
 #ddsOverlay {
   position: absolute;

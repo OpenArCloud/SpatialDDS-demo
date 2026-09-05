@@ -139,6 +139,10 @@ export async function look(page: any, view = VIEW): Promise<void> {
     if (viewer.navigationHelpButton) {
       viewer.navigationHelpButton.viewModel.showInstructions = false;
     }
+    // The keyboard card is furniture in a capture: it sat over the venue in
+    // every acceptance screenshot for three parts because nothing could put
+    // it away. A capture never presses a key, so it has to be told.
+    document.getElementById('hud')?.classList.add('hidden');
   }, view);
   await page.waitForFunction(() => {
     const v = (window as any).__viewer;

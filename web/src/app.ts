@@ -1452,6 +1452,51 @@ function enableFpsControls(activeViewer: Cesium.Viewer) {
   canvas.addEventListener('click', () => canvas.focus());
 
   const keys: Record<string, boolean> = Object.create(null);
+  // The keyboard card. Useful once, then it is furniture sitting over the
+  // venue -- and it was in every acceptance screenshot for three parts
+  // because nothing could put it away.
+  //
+  // Click dismisses it, `?` brings it back, and it hides itself the first
+  // time somebody actually drives: by then they have read it. The choice is
+  // remembered per browser, so a demo machine stays clean across reloads.
+  // localStorage can throw in a private window or with site data blocked, so
+  // every touch of it is guarded and the card simply shows in that case.
+  const hud = document.getElementById('hud');
+  const HUD_KEY = 'spatialdds.hud.dismissed';
+
+  function setHud(visible: boolean, remember = true) {
+    hud?.classList.toggle('hidden', !visible);
+    if (!remember) {
+      return;
+    }
+    try {
+      localStorage.setItem(HUD_KEY, visible ? '0' : '1');
+    } catch {
+      // No storage: the preference lasts for this page view only.
+    }
+  }
+
+  try {
+    if (localStorage.getItem(HUD_KEY) === '1') {
+      setHud(false, false);
+    }
+  } catch {
+    // Show it, which is what it did before there was a choice.
+  }
+  hud?.addEventListener('click', () => setHud(false));
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key === '?') {
+      setHud(hud?.classList.contains('hidden') ?? false);
+      return;
+    }
+    // First time they fly the camera, the instructions have done their job.
+    if ('wasdqeWASDQE'.includes(event.key)
+        || event.key.startsWith('Arrow')) {
+      setHud(false);
+    }
+  });
+
   window.addEventListener('keydown', (event) => {
     keys[event.code] = true;
   });
