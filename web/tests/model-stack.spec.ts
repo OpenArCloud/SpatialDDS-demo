@@ -41,6 +41,16 @@ test.beforeAll(async ({ request }) => {
   } catch {
     stack = null;
   }
+  if (stack) {
+    // Start from a still world however the stack was launched. Every test
+    // here asserts where something is, and `restoreVenue` waits for the ducks
+    // to be back at their seeded poses -- which never happens while a mover
+    // is moving them. Running the stack with SPATIALDDS_DUCK_MOVER=1, or
+    // leaving one going after a demo, would otherwise fail the suite for a
+    // reason that has nothing to do with the code under test. The one test
+    // that wants motion starts it itself.
+    stopMover(stack);
+  }
 });
 
 test.beforeEach(async ({ request }) => {
