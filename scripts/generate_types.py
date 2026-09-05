@@ -391,11 +391,17 @@ def _tree_diff(a: Path, b: Path) -> list[str]:
     if not a.exists():
         return [f"missing: {a}"]
     def sources(root: Path) -> set:
-        # Compare generated source only. __pycache__ appears as soon as anything
-        # imports the package and says nothing about generator drift.
+        # Compare generated source only. __pycache__ appears as soon as
+        # anything imports the package and says nothing about generator drift;
+        # neither does .DS_Store, which macOS writes into any directory a
+        # Finder window has looked at. Opening the folder to read a file
+        # reported the checked-in types as stale, which is a false alarm of
+        # the worst kind: it accuses the one thing in the repo whose whole job
+        # is to be trustworthy.
         return {
             p.relative_to(root) for p in root.rglob("*")
-            if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"
+            if p.is_file() and "__pycache__" not in p.parts
+            and p.suffix != ".pyc" and p.name != ".DS_Store"
         }
 
     out: list[str] = []
