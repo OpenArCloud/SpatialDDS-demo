@@ -37,6 +37,9 @@ from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.qos_profiles import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
 )
+from spatialdds_demo.tempo import (
+    GAP_SMOOTHING, IDLE_FACTOR, IDLE_FLOOR_S, LATCH_EVERY_N, Tempo,
+)
 from spatialdds_demo.topics import (
     TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
     TOPIC_MODEL_RELATIONSHIP_V1,
@@ -52,6 +55,26 @@ from spatialdds_idl.spatial.core import Aabb3, PoseSE3
 # The frame the venue model is expressed in — the same one the client
 # localizes into and the same one the catalogue row names, so an entity pose
 # and a catalogue pose are directly comparable.
+VENUE_FRAME_FQN = "map/ut-littlefield-fountain"
+
+# The one catalogue row all three ducks render from. Asset, not instance.
+DUCK_CONTENT_ID = "89f2d953-076d-5c7d-9b74-1193f71685a6"
+
+SOURCE_ID = "svc:model:demo/venue"
+
+# Between a tombstone and the dispose that follows it. For people, not for
+# delivery -- see ModelPublisher.retire.
+TOMBSTONE_SETTLE_S = 1.5
+
+# The fast tier's cadence rules live in spatialdds_demo/tempo.py, because the
+# robot bridge owns FAST entities too and two publishers answering the same
+# question differently is the duplicate-matcher mistake from Part 2. Re-exported
+# here under their old names: the numbers are still part of this service's
+# documented behaviour, and its tests name them.
+LATCH_EVERY_N_MOVES = LATCH_EVERY_N
+IDLE_FLUSH_S = IDLE_FLOOR_S
+IDLE_FLUSH_FACTOR = IDLE_FACTOR
+
 VENUE_FRAME_FQN = "map/ut-littlefield-fountain"
 
 # The one catalogue row all three ducks render from. Asset, not instance.
@@ -352,11 +375,9 @@ class ModelPublisher:
         # Per FAST entity: moves since the latched record was last refreshed,
         # and when its last fast pose went out. Both exist only for the fast
         # tier; a SLOW entity is latched on every move as it always was.
-        self._since_latch: Dict[str, int] = {}
-        self._last_fast: Dict[str, float] = {}
-        # Smoothed interval between an entity's poses, which is what "idle"
-        # has to be measured against.
-        self._gap: Dict[str, float] = {}
+        # When to rewrite a FAST entity's latched record, and when it has
+        # stopped moving. See spatialdds_demo/tempo.py.
+        self._tempo = Tempo()
 
     def publish_entity(self, entity: Entity) -> None:
         self._entities.write(entity)
@@ -450,32 +471,13 @@ class ModelPublisher:
             pose=PoseSE3(t=list(pose.t), q=list(pose.q)),
             source_id=SOURCE_ID,
             stamp=entity.stamp))
-        now = time.time()
-        previous = self._last_fast.get(entity_id)
-        if previous is not None:
-            gap = now - previous
-            known = self._gap.get(entity_id)
-            self._gap[entity_id] = (gap if known is None
-                                    else GAP_SMOOTHING * known
-                                    + (1 - GAP_SMOOTHING) * gap)
-        self._last_fast[entity_id] = now
-        count = self._since_latch.get(entity_id, 0) + 1
-        if count >= LATCH_EVERY_N_MOVES:
+        if self._tempo.observed(entity_id):
             self._entities.write(entity)
-            self._since_latch[entity_id] = 0
-        else:
-            self._since_latch[entity_id] = count
         return was
 
     def idle_threshold(self, entity_id: str) -> float:
-        """How long without a pose means this entity has stopped.
-
-        Derived from its own cadence, because a gap is only evidence of
-        stopping if it is longer than the gaps that thing normally has."""
-        gap = self._gap.get(entity_id)
-        if gap is None:
-            return IDLE_FLUSH_S
-        return max(IDLE_FLUSH_S, IDLE_FLUSH_FACTOR * gap)
+        """How long without a pose means this entity has stopped."""
+        return self._tempo.threshold(entity_id)
 
     def flush_idle(self, now: Optional[float] = None) -> List[str]:
         """
@@ -490,20 +492,13 @@ class ModelPublisher:
         Cheap by construction: it writes only entities that have both moved
         since their last refresh and gone quiet since.
         """
-        now = time.time() if now is None else now
         flushed = []
-        for entity_id, pending in list(self._since_latch.items()):
-            if pending == 0:
-                continue
-            last = self._last_fast.get(entity_id, 0.0)
-            if now - last < self.idle_threshold(entity_id):
-                continue
+        for entity_id in self._tempo.idle(now):
             entity = self._published.get(entity_id)
             if entity is None:
-                self._since_latch.pop(entity_id, None)
+                self._tempo.forget(entity_id)
                 continue
             self._entities.write(entity)
-            self._since_latch[entity_id] = 0
             flushed.append(entity_id)
         return flushed
 

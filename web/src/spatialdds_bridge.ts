@@ -492,7 +492,11 @@ export const TYPE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   // "element of a fountain where water is poured into" -- and `part of`
   // (P361) Q483453, the fountain above, so the vocabulary states the
   // hierarchy the model publishes rather than the demo inventing it.
-  'http://www.wikidata.org/entity/Q810524': 'Basin'
+  'http://www.wikidata.org/entity/Q810524': 'Basin',
+  // "automatic machine that is capable of movement in any given
+  // environment", `subclass of` (P279) Q11012 (robot). Verified 2026-09-05
+  // against the entity data: several US patents share the label.
+  'http://www.wikidata.org/entity/Q4810574': 'Mobile robot'
 });
 
 /**

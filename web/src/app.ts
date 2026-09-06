@@ -1041,6 +1041,21 @@ function describeEntity(item: CatalogItem): string | undefined {
  * one pond is that a viewer can see *why* they differ, and "the blue one is
  * the pond entity" would not survive a second opinion arriving.
  */
+/**
+ * An entity we have stopped hearing from is still there, and is no longer
+ * a claim about now.
+ *
+ * UNOBSERVED is not absence: the last pose is the last place anyone saw the
+ * thing, not where it is. Removing it would say something stronger and false;
+ * drawing it unchanged would let a stale position pass for a live one. Grey
+ * is the difference, and the reason is in the info panel.
+ */
+const UNOBSERVED_TINT = Cesium.Color.fromCssColorString('rgba(150, 156, 166, 0.55)');
+
+function isUnobserved(item: CatalogItem): boolean {
+  return (item.entity as ModelEntity | undefined)?.state === 'UNOBSERVED';
+}
+
 function extentColour(basis: string | undefined): Cesium.Color {
   switch (basis) {
     case 'OBSERVED':                            // measured; the tiles saw it
@@ -1122,6 +1137,11 @@ function addItemEntity(item: CatalogItem) {
         : undefined,
       model: {
         uri,
+        // Greyed while unobserved, so a stale pose does not read as a live
+        // one. Cesium's silhouette would say "selected"; a colour blend says
+        // "this is the last we heard".
+        color: isUnobserved(item) ? UNOBSERVED_TINT : undefined,
+        colorBlendMode: Cesium.ColorBlendMode.REPLACE,
         scale: 0.6,
         // Keeps it findable from across the mall; without this a duck a metre
         // long is a couple of pixels from the far end of the plaza.

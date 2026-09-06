@@ -52,8 +52,17 @@ export async function restoreVenue(request: any, name: string): Promise<void> {
           d.state === 'ACTIVE'
           && Math.abs(d.pose.t[0] - SEED_POSES[d.entity_id][0]) < 0.01
           && Math.abs(d.pose.t[1] - SEED_POSES[d.entity_id][1]) < 0.01);
-        return (model.entities || []).length === SEEDED_ENTITIES
-          && (model.relationships || []).length === SEEDED_RELATIONSHIPS
+        // What the venue's own publisher seeds must all be present and back
+        // where it put them. Deliberately not an exact total: optional
+        // services add entities (pondwatch a pond, the robot bridge a robot),
+        // and asserting a count made the suite depend on which flags the
+        // stack happened to be launched with. An eighth entity is not a
+        // reason for a duck test to fail.
+        const ids = new Set((model.entities || []).map((e: any) => e.entity_id));
+        const seeded = ['ent:fountain:littlefield', 'ent:pond:littlefield',
+                        'ent:duck:catalog-pose', 'ent:duck:west', 'ent:duck:east'];
+        return seeded.every((id) => ids.has(id))
+          && (model.relationships || []).length >= SEEDED_RELATIONSHIPS
           && placed;
       } catch {
         return false;

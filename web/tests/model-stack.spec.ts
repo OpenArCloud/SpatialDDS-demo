@@ -179,22 +179,36 @@ test('the basis pair partitions the venue, and a stranger is placed either way',
 
     // The quartet. One venue, four kinds of claim about it -- including two
     // about the same water, which is the pair the model refuses to settle.
-    expect(observed.ids).toEqual(['ent:fountain:littlefield']);
+    //
+    // Membership is asserted for the entities the venue itself seeds, and
+    // the partition is asserted over everything. Fixed lists would make this
+    // depend on which optional publishers are running: the robot bridge adds
+    // a second OBSERVED entity, and an eighth thing in the world is not a
+    // reason for a basis test to fail.
+    expect(observed.ids).toContain('ent:fountain:littlefield');
     expect(declared.ids).toEqual(['ent:pond:littlefield']);
-    expect(derived.ids).toEqual(['ent:pond:observed']);
-    expect(authored.ids).toEqual(
-      ['ent:duck:catalog-pose', 'ent:duck:east', 'ent:duck:west', 'ent:gnome:visitor']);
-    // Disjoint and complete: every entity is in exactly one view, and between
-    // them they account for the whole model.
-    expect([...observed.ids, ...declared.ids, ...derived.ids, ...authored.ids].sort())
-      .toEqual(all.ids);
+    expect(derived.ids).toContain('ent:pond:observed');
+    for (const authoredId of ['ent:duck:catalog-pose', 'ent:duck:east',
+                              'ent:duck:west', 'ent:gnome:visitor']) {
+      expect(authored.ids).toContain(authoredId);
+    }
 
-    // A filtered scene says so, rather than presenting a partial world as
-    // the whole one.
-    expect(observed.readout).toContain('basis=OBSERVED — 6 hidden');
-    expect(declared.readout).toContain('basis=DECLARED — 6 hidden');
-    expect(derived.readout).toContain('basis=DERIVED — 6 hidden');
-    expect(authored.readout).toContain('basis=AUTHORED — 3 hidden');
+    // Disjoint and complete: every entity is in exactly one view, and between
+    // them they account for the whole model. This is the claim; the lists
+    // above are just its recognisable landmarks.
+    const union = [...observed.ids, ...declared.ids, ...derived.ids,
+                   ...authored.ids];
+    expect(union.sort()).toEqual(all.ids);
+    expect(new Set(union).size).toBe(union.length);
+
+    // A filtered scene says so, rather than presenting a partial world as the
+    // whole one -- and "N hidden" is (total - shown), which is arithmetic
+    // rather than a number to memorise.
+    for (const [view, name] of [[observed, 'OBSERVED'], [declared, 'DECLARED'],
+                                [derived, 'DERIVED'], [authored, 'AUTHORED']] as const) {
+      expect(view.readout).toContain(
+        `basis=${name} — ${all.ids.length - view.ids.length} hidden`);
+    }
     expect(all.readout).not.toContain('hidden');
 
     // Both ponds are drawn, and the map says which claim is which rather
@@ -375,10 +389,18 @@ test('every catalog reference is resolved by id, with no coverage query first',
 
     const logs: string[] = await page.evaluate(() => (window as any).__appLogs || []);
     const line = logs.find((l) => l.startsWith('catalog:by-id'))!;
-    // Three ducks, one row: every distinct id resolved, and the line says so
-    // without implying two lookups failed.
-    expect(line, 'every id should have resolved')
-      .toMatch(/3 reference\(s\) over 1 id\(s\); resolved 1$/);
+    // Every distinct id resolved, and more references than ids -- which is
+    // the asset-versus-instance split showing up in a log line. The counts
+    // themselves depend on which publishers are running (three ducks share a
+    // row; a robot brings a second), so the invariant is asserted and not the
+    // arithmetic of one configuration.
+    const counts = /(\d+) reference\(s\) over (\d+) id\(s\); resolved (\d+)$/
+      .exec(line);
+    expect(counts, `unexpected by-id line: ${line}`).not.toBeNull();
+    const [, references, ids, resolved] = counts!.map(Number);
+    expect(resolved, 'every distinct id should have resolved').toBe(ids);
+    expect(references).toBeGreaterThanOrEqual(ids);
+    expect(references).toBeGreaterThan(1);
     // And it happened before Discover, not because of it.
     expect(logs.indexOf(line)).toBeLessThan(
       logs.findIndex((l) => l.startsWith('discover:items')) === -1

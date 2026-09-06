@@ -58,5 +58,65 @@
       "hash": "sha256:4f29c95860fee8da2ed2f844f90914e24ec1ca27e420b8d13def9950f5dcf8f6",
       "meta": []
     }
+  },
+  {
+    "content_id": "dcef7c31-1d5f-54aa-9344-899912f9d34a",
+    "kind": "model",
+    "name": "Mobile robot",
+    "coverage": [
+      {
+        "has_crs": true,
+        "crs": "EPSG:4979",
+        "has_bbox": true,
+        "bbox": [
+          -97.7396465,
+          30.283820351994255,
+          -97.7396065,
+          30.283860351994253
+        ],
+        "global": false,
+        "has_coverage_window": false,
+        "coverage_window_start": {
+          "sec": 0,
+          "nanosec": 0
+        },
+        "coverage_window_end": {
+          "sec": 0,
+          "nanosec": 0
+        }
+      }
+    ],
+    "frame_ref": {
+      "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0",
+      "fqn": "map/ut-littlefield-fountain",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+    },
+    "formats": [
+      "model/gltf-binary"
+    ],
+    "updated_sec": 1769057000,
+    "href": "models/tb3.glb",
+    "has_pose": false,
+    "pose": {
+      "t": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "q": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    "has_asset": true,
+    "asset": {
+      "uri": "models/tb3.glb",
+      "media_type": "model/gltf-binary",
+      "hash": "sha256:6faa8eec0627eb9afa80194f87d9d064a98022faa8fbb0664703d0c503c8cdc7",
+      "meta": []
+    }
   }
 ]

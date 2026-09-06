@@ -55,7 +55,14 @@ test('live 1.7 bridge: localize + discover against real DDS', async ({ page, req
     .poll(async () => {
       const text = (await page.locator('#readout').getAttribute('data-geopose')) || '';
       return Number(/alt=([\d.]+)m/.exec(text)?.[1] ?? NaN);
-    }, { timeout: 20_000 })
+      // 45s, not 20s. The bridge serialises localize requests behind one
+      // lock, and by Part 4 several specs need a real one -- this, the
+      // overlay tests, and every model-stack page that autostarts. Run in
+      // parallel they queue, and this spec was the one that timed out because
+      // it happens to go first. The request is not slow; the queue is deep.
+      // `?autostart=0` already spares the pages that do not need a
+      // localization; the ones that do have to wait their turn.
+    }, { timeout: 45_000 })
     .toBeLessThan(1000);
   await expect(page.locator('#readout'))
     .toHaveAttribute('data-geopose', /GeoPose: lat=30\.28\d+ lon=-97\.73\d+/);

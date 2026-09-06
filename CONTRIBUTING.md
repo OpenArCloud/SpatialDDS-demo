@@ -188,6 +188,27 @@ contained no tests at all, so pytest collected it, found nothing, and counted
 it among the passing files. A helper that looks like a suite is worse than one
 with an awkward name; it is now `ros2_mocks.py`.
 
+### An optional publisher starting is not a reason for a duck test to fail
+
+Three assertions in the stack suite hard-coded the size of the world: a total
+entity count, which entities appear in each `?basis=` view, and how many
+catalogue references resolved to how many ids. All three were true of one
+configuration and broke the moment an optional service was running -- pondwatch
+adds a pond, the robot bridge adds a robot, and a duck test failed because
+there were eight things instead of seven.
+
+Assert the property, not the census:
+
+- the entities the venue *seeds* are present and where it put them, rather
+  than a total;
+- the basis views are **disjoint and complete** over whatever is there,
+  rather than four fixed lists;
+- every distinct content id **resolved**, rather than "three references over
+  one id".
+
+The landmarks can still be named -- the fountain is OBSERVED, the pond is
+DECLARED -- but as members of a set, not as the whole of it.
+
 ### Assert the settled state, not the race to it
 
 Three tests in this repo asserted something adjacent to what they meant, and
