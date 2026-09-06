@@ -188,6 +188,23 @@ contained no tests at all, so pytest collected it, found nothing, and counted
 it among the passing files. A helper that looks like a suite is worse than one
 with an awkward name; it is now `ros2_mocks.py`.
 
+### Derive fixtures from the seed, never from counting it
+
+Seeding one entity broke ten tests. Not because the entity was wrong -- because
+the suite had memorised the venue: entity totals written as `5`, and instance
+handles written as `dispose_entity(104)`, which encoded the *seed order* into a
+file three directories away from the seeder. Inserting the monument between the
+pond and the ducks shifted every handle, and the failure read `expected
+ent:duck:east, got ent:duck:west`, which points nowhere near the cause.
+
+Counts come from `len(seed_entities())`. Handles come from a lookup by id.
+Landmarks are named (`ent:pond:littlefield`), never indexed
+(`seed_entities()[1]`).
+
+**Every literal was a test waiting to fail for the wrong reason on the next
+entity** -- and the venue has gained one in three of the last four parts. The
+suite should expect growth.
+
 ### An optional publisher starting is not a reason for a duck test to fail
 
 Three assertions in the stack suite hard-coded the size of the world: a total

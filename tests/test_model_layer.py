@@ -40,8 +40,11 @@ from spatialdds_idl.oarc_model import Entity, Relationship  # noqa: E402
 
 # High enough to stay clear of the demo stack's own domains.
 DOMAIN = 43
-SEEDED_ENTITIES = 5      # fountain, pond, three ducks
-SEEDED_RELATIONSHIPS = 4  # fountain>pond, pond>each duck
+# Derived, not counted by hand. The venue has gained an entity in three of
+# the last four parts, and every literal was a test that would fail for the
+# wrong reason on the next one.
+SEEDED_ENTITIES = len(seed_entities())
+SEEDED_RELATIONSHIPS = len(seed_relationships(seed_entities()))
 
 
 def _participant(domain_id: int):
@@ -138,7 +141,8 @@ class AssetVersusInstance(unittest.TestCase):
 
     def test_the_fountain_carries_no_asset(self):
         """It is already in the tiles; an entity need not have content."""
-        fountain = seed_entities()[0]
+        fountain = next(e for e in seed_entities()
+                        if e.entity_id == "ent:fountain:littlefield")
         self.assertEqual(fountain.content_refs, [])
         self.assertTrue(fountain.has_extent)
 
@@ -175,7 +179,8 @@ class SecondPublisher(unittest.TestCase):
         self.assertEqual(list(gnome.properties), [])
         self.assertEqual(list(gnome.external_refs), [])
         # A different publisher, and it says so.
-        self.assertNotEqual(gnome.source_id, seed_entities()[0].source_id)
+        self.assertNotEqual(gnome.source_id, next(e for e in seed_entities()
+                              if e.entity_id == "ent:fountain:littlefield").source_id)
 
     def test_it_names_the_same_frame_so_it_can_be_placed(self):
         """A stranger who names the frame correctly is placeable. One who does

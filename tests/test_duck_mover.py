@@ -117,8 +117,10 @@ class Geometry(unittest.TestCase):
                              "a duck may not spin between steps")
         # And it goes somewhere: forty half-metre steps of a persistent walk
         # cover far more ground than the ~3 m a random walk would average.
-        travelled = math.hypot(duck.pose.t[0] - seed_entities()[3].pose.t[0],
-                               duck.pose.t[1] - seed_entities()[3].pose.t[1])
+        start = next(e for e in seed_entities()
+                     if e.entity_id == "ent:duck:west")
+        travelled = math.hypot(duck.pose.t[0] - start.pose.t[0],
+                               duck.pose.t[1] - start.pose.t[1])
         self.assertGreater(travelled, 6.0,
                            "forty steps should have taken it somewhere")
 
@@ -252,7 +254,7 @@ class Wandering(unittest.TestCase):
                                         TOPIC_MODEL_ENTITY_V1, Entity,
                                         MODEL_LATCHED.name)
                 got, deadline = {}, time.time() + 6
-                while time.time() < deadline and len(got) < 5:
+                while time.time() < deadline and len(got) < len(seed_entities()):
                     for sample in tt.take_samples(reader) or []:
                         got[sample.entity_id] = tuple(
                             round(v, 6) for v in sample.pose.t)
@@ -260,7 +262,7 @@ class Wandering(unittest.TestCase):
                 return got
 
             first = read_world()
-            self.assertEqual(len(first), 5)
+            self.assertEqual(len(first), len(seed_entities()))
             time.sleep(1.5)
             second = read_world()
 

@@ -137,6 +137,12 @@ TYPE_RUBBER_DUCK = "http://www.wikidata.org/entity/Q851478"  # rubber duck
 # water undisturbed by fountain jets, which this basin is not.
 TYPE_BASIN = "http://www.wikidata.org/entity/Q810524"
 
+# "war memorial" -- memorial for the victims of a war. Verified 2026-09-05
+# against the entity data. Littlefield Fountain is one: Q6652941 describes it
+# as a war memorial in Austin, which is the external ref the fountain already
+# carries.
+TYPE_MONUMENT = "http://www.wikidata.org/entity/Q575759"
+
 # Venue-frame metres. The frame's origin is the OpenVPS map anchor, which sits
 # on the plaza north-west of the basin, so the fountain itself is a short walk
 # from the origin rather than at it.
@@ -158,6 +164,21 @@ BASIN_DOWN, BASIN_UP = 1.0, 4.0
 # a reason a person can see rather than by a rounding error.
 POND_MIN = (9.5, -18.0, -2.0)
 POND_MAX = (20.0, -10.0, -1.0)
+
+# The memorial sculpture, as a thing a robot must not drive into.
+#
+# Measured off the tiles the same way the waterline was: `move_duck.py`
+# records the sculpture sitting at x ~ 8 in the middle of the water, which is
+# why the pond's declared bounds start at 9.5 and not at the waterline.
+#
+# It exists because avoidance in this demo is policy or nothing. There is no
+# lidar and no physics: a robot planning across a perception-free plaza would
+# drive straight through the monument, which reads as broken on screen and is
+# dishonest in the other direction -- a real robot's sensors would refuse. So
+# the venue declares its memorial off-limits, which is what a venue would
+# actually do.
+MONUMENT_MIN = (6.5, -16.0, -1.5)
+MONUMENT_MAX = (9.5, -12.0, 2.5)
 
 # Three ducks on the water. The first reuses the catalogue row's own pose, so
 # switching the client from catalogue placement to model placement does not
@@ -276,6 +297,31 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         stamp=stamp,
     )
 
+    mx = [(MONUMENT_MIN[i] + MONUMENT_MAX[i]) / 2 for i in range(3)]
+    monument = Entity(
+        entity_id="ent:monument:littlefield",
+        # DECLARED, like the pond: the venue asserts this footprint. Nothing
+        # measured it into the model, and that is the point -- a keep-out is
+        # something a venue declares, not something a sensor happened to bound.
+        basis=Basis.DECLARED,
+        type_uris=[TYPE_MONUMENT],
+        layer=ModelLayer.STATIC,
+        frame_ref=frame,
+        has_pose=True,
+        pose=PoseSE3(t=mx, q=[0.0, 0.0, 0.0, 1.0]),
+        has_extent=True,
+        extent=Aabb3(min_xyz=list(MONUMENT_MIN), max_xyz=list(MONUMENT_MAX)),
+        properties=[KV(key="demo.label", value="Memorial"),
+                    KV(key="demo.note",
+                       value="The sculpture group at the head of the basin, declared off-limits by the venue. Its bounds legislate rather than locate: they say where not to go, not where the statue is.")],
+        external_refs=[],
+        content_refs=[],
+        state=LifecycleState.ACTIVE,
+        state_reason="",
+        source_id=SOURCE_ID,
+        stamp=stamp,
+    )
+
     ducks = [
         Entity(
             entity_id=entity_id,
@@ -306,7 +352,7 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         )
         for entity_id, name, translation, rotation in DUCKS
     ]
-    return [fountain, pond] + ducks
+    return [fountain, pond, monument] + ducks
 
 
 def seed_relationships(entities: List[Entity],

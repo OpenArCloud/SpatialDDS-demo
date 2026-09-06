@@ -25,6 +25,34 @@ from spatialdds_idl.oarc_model import LifecycleState  # noqa: E402
 
 STAMP = {"sec": 1788400000, "nanosec": 0}
 
+# Derived rather than counted: the venue keeps gaining entities, and a literal
+# here is a test that fails for the wrong reason the next time it does.
+SEEDED = len(seed_entities())
+EDGES = len(seed_relationships(seed_entities()))
+
+
+def handle(entity_id: str) -> int:
+    """
+    The instance handle `_loaded` gave an entity, by id.
+
+    Handles were written as literals -- 100 for the fountain, 104 for the east
+    duck -- which encoded the seed order into the test file. Seeding the
+    monument between the pond and the ducks shifted every one of them, and the
+    failure said "expected ent:duck:east, got ent:duck:west" three files away
+    from the change that caused it.
+    """
+    for index, entity in enumerate(seed_entities()):
+        if entity.entity_id == entity_id:
+            return 100 + index
+    raise AssertionError(f"no seeded entity {entity_id}")
+
+
+def edge_handle(rel_id: str) -> int:
+    for index, edge in enumerate(seed_relationships(seed_entities())):
+        if edge.rel_id == rel_id:
+            return 200 + index
+    raise AssertionError(f"no seeded relationship {rel_id}")
+
 
 def _loaded() -> ModelCache:
     cache = ModelCache()
@@ -40,8 +68,8 @@ class SnapshotShape(unittest.TestCase):
     def test_top_level_shape(self):
         snapshot = _loaded().snapshot(STAMP)
         self.assertEqual(set(snapshot), {"entities", "relationships", "stamp"})
-        self.assertEqual(len(snapshot["entities"]), 5)
-        self.assertEqual(len(snapshot["relationships"]), 4)
+        self.assertEqual(len(snapshot["entities"]), SEEDED)
+        self.assertEqual(len(snapshot["relationships"]), EDGES)
         self.assertEqual(snapshot["stamp"], STAMP)
 
     def test_entity_fields_match_the_documented_shape(self):
@@ -155,17 +183,17 @@ class Mirroring(unittest.TestCase):
 
     def test_dispose_evicts(self):
         cache = _loaded()
-        removed = cache.dispose_entity(101)
+        removed = cache.dispose_entity(handle("ent:pond:littlefield"))
         self.assertIsNotNone(removed)
         snapshot = cache.snapshot(STAMP)
-        self.assertEqual(len(snapshot["entities"]), 4)
+        self.assertEqual(len(snapshot["entities"]), SEEDED - 1)
         self.assertNotIn(removed, [e["entity_id"] for e in snapshot["entities"]])
         self.assertEqual(cache.stats()["evicted"], 1)
 
     def test_disposing_an_unknown_handle_is_harmless(self):
         cache = _loaded()
         self.assertIsNone(cache.dispose_entity(9999))
-        self.assertEqual(len(cache.snapshot(STAMP)["entities"]), 5)
+        self.assertEqual(len(cache.snapshot(STAMP)["entities"]), SEEDED)
 
     def test_an_empty_cache_still_answers_with_the_documented_shape(self):
         """No publisher running is not an error; it is an empty world."""
@@ -175,12 +203,13 @@ class Mirroring(unittest.TestCase):
 
     def test_latest_wins_per_key(self):
         cache = _loaded()
-        entity = seed_entities()[1]
+        entity = next(e for e in seed_entities()
+                      if e.entity_id == "ent:pond:littlefield")
         entity.pose.t = [1.0, 2.0, 3.0]
-        cache.admit_entity(entity, instance_handle=101)
+        cache.admit_entity(entity, instance_handle=handle(entity.entity_id))
         by_id = {e["entity_id"]: e for e in cache.snapshot(STAMP)["entities"]}
         self.assertEqual(by_id[entity.entity_id]["pose"]["t"], [1.0, 2.0, 3.0])
-        self.assertEqual(len(cache.snapshot(STAMP)["entities"]), 5)
+        self.assertEqual(len(cache.snapshot(STAMP)["entities"]), SEEDED)
 
 
 class Retirement(unittest.TestCase):
@@ -198,11 +227,11 @@ class Retirement(unittest.TestCase):
         duck = next(e for e in entities if e.entity_id == "ent:duck:east")
         duck.state = LifecycleState.RETIRED
         duck.state_reason = "taken in for the winter"
-        cache.admit_entity(duck, instance_handle=104)
+        cache.admit_entity(duck, instance_handle=handle("ent:duck:east"))
 
         snapshot = cache.snapshot(STAMP)
         by_id = {e["entity_id"]: e for e in snapshot["entities"]}
-        self.assertEqual(len(snapshot["entities"]), 5, "still present, still counted")
+        self.assertEqual(len(snapshot["entities"]), SEEDED, "still present, still counted")
         self.assertEqual(by_id["ent:duck:east"]["state"], "RETIRED")
         self.assertEqual(by_id["ent:duck:east"]["state_reason"],
                          "taken in for the winter")
@@ -211,17 +240,17 @@ class Retirement(unittest.TestCase):
 
     def test_the_dispose_evicts_and_the_snapshot_forgets_it(self):
         cache = _loaded()
-        removed = cache.dispose_entity(104)
+        removed = cache.dispose_entity(handle("ent:duck:east"))
         self.assertEqual(removed, "ent:duck:east")
         snapshot = cache.snapshot(STAMP)
-        self.assertEqual(len(snapshot["entities"]), 4)
+        self.assertEqual(len(snapshot["entities"]), SEEDED - 1)
         self.assertNotIn("ent:duck:east",
                          [e["entity_id"] for e in snapshot["entities"]])
 
     def test_the_cascade_removes_the_edge_and_leaves_the_others(self):
         cache = _loaded()
         # seed_relationships is ordered as the ducks are: catalog-pose, west, east.
-        self.assertEqual(cache.dispose_relationship(203), "rel:contains:pond-duck-east")
+        self.assertEqual(cache.dispose_relationship(edge_handle("rel:contains:pond-duck-east")), "rel:contains:pond-duck-east")
         rel_ids = [r["rel_id"] for r in cache.snapshot(STAMP)["relationships"]]
         self.assertEqual(rel_ids, ["rel:contains:fountain-pond-littlefield",
                                    "rel:contains:pond-duck-catalog-pose",
@@ -237,8 +266,9 @@ class Retirement(unittest.TestCase):
         is never told and keeps drawing something that no longer exists.
         """
         cache = _loaded()
-        self.assertEqual(cache.dispose_entity(100), "ent:fountain:littlefield")
-        self.assertIsNone(cache.dispose_entity(100), "a second dispose has nothing to report")
+        fountain = handle("ent:fountain:littlefield")
+        self.assertEqual(cache.dispose_entity(fountain), "ent:fountain:littlefield")
+        self.assertIsNone(cache.dispose_entity(fountain), "a second dispose has nothing to report")
 
 
 if __name__ == "__main__":

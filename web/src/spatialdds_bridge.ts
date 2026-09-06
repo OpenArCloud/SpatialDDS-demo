@@ -496,7 +496,10 @@ export const TYPE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   // "automatic machine that is capable of movement in any given
   // environment", `subclass of` (P279) Q11012 (robot). Verified 2026-09-05
   // against the entity data: several US patents share the label.
-  'http://www.wikidata.org/entity/Q4810574': 'Mobile robot'
+  'http://www.wikidata.org/entity/Q4810574': 'Mobile robot',
+  // "memorial for the victims of a war". Verified 2026-09-05; Q6652941, the
+  // fountain's own external ref, describes it as exactly that.
+  'http://www.wikidata.org/entity/Q575759': 'War memorial'
 });
 
 /**
