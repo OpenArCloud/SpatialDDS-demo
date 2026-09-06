@@ -596,8 +596,26 @@ class ModelPublisher:
             self.publish_relationship(relationship)
         return len(entities)
 
-    def handle_command(self, command: ModelCommand) -> str:
-        """Act on a request, or say why not. Returns a line for the log."""
+    def handle_command(self, command: ModelCommand) -> Optional[str]:
+        """
+        Act on a request, or say why not. Returns a line for the log, or None
+        when the command was not addressed to us.
+
+        **"Not mine" is not "no".** The command lane has more than one owner:
+        this service owns the venue, the robot bridge owns the robot. Both
+        read every command. Declining one addressed to somebody else would put
+        a refusal in the log for a request that is about to be carried out --
+        which reads, to anyone watching, as the system contradicting itself.
+        So a subject we do not own is silence, and a subject we *do* own with
+        something wrong about it is a decline with a reason.
+        """
+        if command.verb not in ("restore",) and command.subject_id:
+            if (command.subject_id.startswith("ent:")
+                    and not self.owns(command.subject_id)):
+                return None
+            if (command.subject_id.startswith("rel:")
+                    and command.subject_id not in self._edges):
+                return None
         if command.verb == "restore":
             count = self.restore_seed()
             return f"restore from {command.requester_id}: re-seeded {count} entities"
@@ -607,9 +625,6 @@ class ModelPublisher:
                 # to a point. Declining is the only reading that cannot be
                 # mistaken for obedience.
                 return f"declined: set_extent for {command.subject_id} carried no extent"
-            if not self.owns(command.subject_id):
-                return (f"declined: {command.subject_id} is not ours "
-                        f"(asked by {command.requester_id})")
             was = self.set_extent(command.subject_id, command.extent)
             now = command.extent
             return (f"set_extent {command.subject_id} "
@@ -630,9 +645,6 @@ class ModelPublisher:
         if command.verb == "move":
             if not command.has_pose:
                 return f"declined: move for {command.subject_id} carried no pose"
-            if not self.owns(command.subject_id):
-                return (f"declined: {command.subject_id} is not ours "
-                        f"(asked by {command.requester_id})")
             was = self.move(command.subject_id, command.pose)
             now = command.pose.t
             return (f"moved {command.subject_id} "
@@ -640,12 +652,6 @@ class ModelPublisher:
                     f"(asked by {command.requester_id})")
         if command.verb != "retire":
             return f"ignored: unknown verb {command.verb!r} from {command.requester_id}"
-        if not self.owns(command.subject_id):
-            # Refusing is the honest answer. This process can only retire what
-            # it latches; pretending otherwise would publish a tombstone that
-            # some other writer's sample immediately contradicts.
-            return (f"declined: {command.subject_id} is not ours "
-                    f"(asked by {command.requester_id})")
         cascaded = self.retire(command.subject_id, command.reason)
         edges = f", cascaded {len(cascaded)} edge(s)" if cascaded else ""
         return (f"retired {command.subject_id} — {command.reason!r}"
@@ -727,7 +733,9 @@ def run_server(domain_id: Optional[int] = None) -> int:
                   flush=True)
         for command in batch:
             try:
-                print(f"model: {publisher.handle_command(command)}", flush=True)
+                note = publisher.handle_command(command)
+                if note:
+                    print(f"model: {note}", flush=True)
             except Exception as error:
                 # A bad command must not take the service down with it; the
                 # world it is holding is worth more than the request.

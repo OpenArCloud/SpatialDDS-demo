@@ -9,8 +9,8 @@ import {
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  BASIS_VALUES, bridgeFrames, bridgeModelSnapshot, catalogRefId, disambiguate,
-  displayName, matchesBasis, modelEntityToItem, observeRest, parseBasisFilter,
+  BASIS_VALUES, bridgeCommand, bridgeFrames, bridgeModelSnapshot, catalogRefId,
+  disambiguate, displayName, localInFrame, matchesBasis, modelEntityToItem, observeRest, parseBasisFilter,
   planModelRender, resolveContentIds, resolveInFrame, typeLabel
 } from './spatialdds_bridge';
 import type { ModelEntity, RestExchange } from './spatialdds_bridge';
@@ -27,6 +27,7 @@ const toggleTilesBtn = document.getElementById('btnToggleTiles') as HTMLButtonEl
 const toggleDdsOverlayBtn = document.getElementById('btnToggleDdsOverlay') as HTMLButtonElement | null;
 const toggleRestOverlayBtn = document.getElementById('btnToggleRestOverlay') as HTMLButtonElement | null;
 const clearBtn = document.getElementById('btnClear') as HTMLButtonElement | null;
+const sendRobotBtn = document.getElementById('btnSendRobot') as HTMLButtonElement | null;
 const modeBadgeEl = document.getElementById('modeBadge') as HTMLSpanElement | null;
 const ddsOverlayEl = document.getElementById('ddsOverlay') as HTMLDivElement | null;
 const ddsOverlayBodyEl = document.getElementById('ddsOverlayBody') as HTMLPreElement | null;
@@ -83,6 +84,7 @@ const modelItems = new Map<string, CatalogItem>();
 // is different from "loaded and empty" and drives the retry in handleDiscover.
 let lastModel: { entities: ModelEntity[]; relationships: unknown[] } | null = null;
 const tempoAnnounced = new Set<string>();
+let sendingRobot = false;
 let modelPlaced = 0;
 let catalogPlaced = 0;
 let lastFrames: Record<string, any> = {};
@@ -877,6 +879,41 @@ function moveItemEntity(item: CatalogItem) {
 }
 
 /**
+ * Send the robot to a point on the ground.
+ *
+ * The tap happens in the world; the command is expressed in the model's
+ * terms. Converting here rather than sending a lat/lon keeps the frame
+ * question with the sender, which is what a frame reference is for -- and
+ * `localInFrame` is the exact inverse of the transform that placed
+ * everything on screen, so a tap lands where it was aimed.
+ */
+async function sendRobotTo(ecef: Cesium.Cartesian3): Promise<void> {
+  const robot = modelItems.get(ROBOT_ENTITY_ID);
+  const fqn = (robot?.entity as ModelEntity | undefined)?.frame_ref?.fqn;
+  if (!fqn || !lastFrames[fqn]) {
+    appLog(`robot:send — no frame for ${ROBOT_ENTITY_ID}; is it published?`);
+    return;
+  }
+  const local = localInFrame(lastFrames[fqn],
+                             { x: ecef.x, y: ecef.y, z: ecef.z });
+  if (!local) {
+    appLog('robot:send — could not resolve that point into the venue frame');
+    return;
+  }
+  const [x, y, z] = local;
+  try {
+    await bridgeCommand('goto', ROBOT_ENTITY_ID,
+                        { t: [x, y, z], q: [0, 0, 0, 1] });
+    // What was asked, not what happened: the robot bridge decides whether it
+    // can take the goal, and the answer arrives as the robot moving.
+    appLog(`robot:goto asked (${x.toFixed(2)}, ${y.toFixed(2)}) — ` +
+           `watch the model for whether it was accepted`);
+  } catch (error) {
+    appLog(`robot:goto failed (${String(error)})`);
+  }
+}
+
+/**
  * Move something already on screen, from a pose and nothing else.
  *
  * The snapshot placed it and said what it is; this says only where it is now.
@@ -1471,6 +1508,21 @@ function enableFpsControls(activeViewer: Cesium.Viewer) {
   canvas.style.outline = 'none';
   canvas.addEventListener('click', () => canvas.focus());
 
+  // Tap-to-send. Only while the mode is on, and only for a click that landed
+  // on something: a click into empty sky has no position to send.
+  const sendHandler = new Cesium.ScreenSpaceEventHandler(canvas);
+  sendHandler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+    if (!sendingRobot || !viewer) {
+      return;
+    }
+    const picked = viewer.scene.pickPosition(movement.position);
+    if (!Cesium.defined(picked)) {
+      appLog('robot:send — nothing under the cursor to aim at');
+      return;
+    }
+    void sendRobotTo(picked);
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
   const keys: Record<string, boolean> = Object.create(null);
   // The keyboard card. Useful once, then it is furniture sitting over the
   // venue -- and it was in every acceptance screenshot for three parts
@@ -1636,6 +1688,10 @@ export function initApp() {
   // up otherwise means eyeballing a screenshot and guessing, which is how a
   // model sitting in a tree canopy passed for correct twice.
   if (new URLSearchParams(location.search).has('debug')) {
+    // Exposed for the goto test, which aims at a point in the venue frame
+    // rather than at a screen pixel: the claim under test is about the
+    // command the tab publishes, not about where the camera happens to look.
+    (window as any).__sendRobotTo = sendRobotTo;
     (window as unknown as Record<string, unknown>).__viewer = viewer;
   }
 
@@ -1672,6 +1728,22 @@ export function initApp() {
 
   discoverBtn?.addEventListener('click', () => {
     void handleDiscover();
+  });
+
+  // Sending a robot somewhere is a deliberate act, so it lives behind a mode
+  // rather than on a bare click. A stray tap on the map should not dispatch a
+  // vehicle, and the info panel already owns plain clicks -- an explicit
+  // toggle is both safer and easier to drive for somebody demonstrating this
+  // to a room.
+  sendRobotBtn?.addEventListener('click', () => {
+    sendingRobot = !sendingRobot;
+    sendRobotBtn.textContent = `Send Robot: ${sendingRobot ? 'On' : 'Off'}`;
+    if (viewer) {
+      viewer.canvas.style.cursor = sendingRobot ? 'crosshair' : '';
+    }
+    appLog(sendingRobot
+      ? 'robot:send on — click the ground to send a goto'
+      : 'robot:send off');
   });
 
   clearBtn?.addEventListener('click', () => {
@@ -1779,6 +1851,11 @@ async function initBridgeMode() {
  * safe direction to fail in.
  */
 const DEMO_VPS_PREFIX = 'svc:vps:demo/';
+
+// The one entity tap-to-send addresses. Named here rather than discovered by
+// type: "which robot did you mean" is a question this demo does not have to
+// answer yet, and pretending otherwise would be inventing a fleet.
+const ROBOT_ENTITY_ID = 'ent:robot:tb3';
 
 async function autoLocalizeIfThisIsTheDemosOwnVps() {
   if (currentPose) {

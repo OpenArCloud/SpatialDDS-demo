@@ -139,7 +139,12 @@ module oarc_model {
   @extensibility(APPENDABLE) struct ModelCommand {
     @key string command_id;
     string verb;             // "retire" | "move" | "set_extent"
-                             // | "dispose_edge" | "restore"
+                             // | "dispose_edge" | "restore" | "goto"
+    //
+    // The lane has more than one owner now: the model service owns the venue,
+    // the robot bridge owns the robot, and both read every command. A service
+    // that does not own a command's subject leaves it alone rather than
+    // refusing it -- on a shared lane, "not mine" is not "no".
 
     // The thing being acted on, entity or relationship. One field rather than
     // an entity_id beside a rel_id, because the verb already determines which

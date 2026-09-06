@@ -98,6 +98,10 @@ class SpatialDDSBridge:
         self._blobs = None
         self._vps: Optional[VpsClient] = None
         self._catalog: Optional[CatalogClient] = None
+        # Kept, not created per request: the command lane is VOLATILE, so a
+        # fresh writer would drop its own first sample while discovery caught
+        # up -- and that sample is somebody's tap on the map.
+        self._commands = None
         self._announces = AnnounceCache()
         self._client_frame_ref = SpatialDDSValidator.create_frame_ref("client/handset")
         self._stream_ref = SpatialDDSValidator.create_frame_ref("rig/front_cam")
@@ -296,6 +300,52 @@ class SpatialDDSBridge:
             return to_json(typed)
         finally:
             _unlock(self._request_lock)
+
+    def publish_model_command(self, verb: str, subject_id: str,
+                              pose: Optional[Dict[str, Any]] = None,
+                              reason: str = "") -> Dict[str, Any]:
+        """Write one ModelCommand. The writer is kept, because the lane is
+        VOLATILE and a writer created per request would drop its own sample
+        while discovery caught up."""
+        from spatialdds_demo.qos_profiles import MODEL_COMMAND
+        from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1
+        from spatialdds_idl.oarc_model import ModelCommand
+
+        self.ensure_transport()
+        if self._commands is None:
+            from spatialdds_demo import typed_transport as tt
+            self._commands = tt.make_writer(
+                self._announce_participant, TOPIC_MODEL_COMMAND_V1,
+                ModelCommand, MODEL_COMMAND.name)
+            # Discovery, not a retry: a VOLATILE writer with nobody attached
+            # drops the sample on the floor, and the first command a tab sends
+            # would vanish with no trace anywhere.
+            deadline = time.time() + 5.0
+            while (time.time() < deadline
+                   and not self._commands.get_publication_matched_status().current_count):
+                time.sleep(0.05)
+
+        now = time.time()
+        command = {
+            "command_id": str(uuid.uuid4()),
+            "verb": verb,
+            "subject_id": subject_id,
+            "reason": reason,
+            "requester_id": "web:browser",
+            "has_pose": pose is not None,
+            "pose": pose or {"t": [0.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]},
+            "has_extent": False,
+            "extent": {"min_xyz": [0.0, 0.0, 0.0], "max_xyz": [0.0, 0.0, 0.0]},
+            "stamp": {"sec": int(now), "nanosec": int((now % 1) * 1e9)},
+        }
+        self._commands.write(from_json(ModelCommand, command))
+        _emit_dds_event({
+            "ts": now, "dir": "tx", "domain": self._domain_id,
+            "msg_type": "oarc.model_command",
+            "logical_topic": TOPIC_MODEL_COMMAND_V1,
+            "request_id": command["command_id"], "payload": command,
+        })
+        return {"published": command}
 
     def catalog_query(
         self,
@@ -1007,6 +1057,40 @@ def catalog_query(payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
         return bridge.catalog_query(geopose, kind_in=kind_in, limit=limit,
                                     content_id_in=content_id_in)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.post("/v1/model/command")
+def model_command(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Publish a ModelCommand on behalf of a browser.
+
+    The client cannot join the bus, so the bridge asks for it -- and asks in
+    exactly the form an operator tool would, on the same lane, with the same
+    verbs. There is no browser-only path into the model: whatever a tab can
+    do here, a script at a terminal can do identically, which is the property
+    that keeps the demo honest about what the model's interface actually is.
+
+    This returns what was published, not what happened. Whether anything acts
+    on it is between the command lane and whoever owns the subject; the caller
+    learns the outcome by watching the model, the same as everybody else.
+    """
+    verb = (payload or {}).get("verb")
+    subject_id = (payload or {}).get("subject_id")
+    if not verb or not subject_id:
+        raise HTTPException(status_code=400,
+                            detail="verb and subject_id are required")
+    pose = (payload or {}).get("pose")
+    if pose is not None and not (
+            isinstance(pose, dict) and isinstance(pose.get("t"), list)
+            and len(pose["t"]) == 3):
+        raise HTTPException(status_code=400,
+                            detail="pose must be {t: [x, y, z], q: [x, y, z, w]}")
+    try:
+        return bridge.publish_model_command(
+            verb=verb, subject_id=subject_id, pose=pose,
+            reason=(payload or {}).get("reason", ""))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

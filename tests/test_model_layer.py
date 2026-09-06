@@ -350,14 +350,14 @@ class SetExtent(unittest.TestCase):
         finally:
             publisher.close()
 
-    def test_set_extent_for_something_we_do_not_own_is_declined(self):
+    def test_set_extent_for_somebody_else_s_entity_is_left_alone(self):
         from spatialdds_idl.spatial.core import Aabb3
         participant, publisher = self._publisher(DOMAIN + 15)
         try:
-            line = publisher.handle_command(_command(
+            self.assertIsNone(publisher.handle_command(_command(
                 "set_extent", "ent:gnome:visitor",
-                extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[1.0, 1.0, 1.0])))
-            self.assertIn("declined", line)
+                extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[1.0, 1.0, 1.0]))),
+                "somebody else's entity is not ours to refuse")
         finally:
             publisher.close()
 
@@ -412,11 +412,12 @@ class EdgeDisposal(unittest.TestCase):
         finally:
             publisher.close()
 
-    def test_disposing_an_edge_that_is_not_ours_is_declined(self):
+    def test_an_edge_we_do_not_hold_is_left_alone(self):
+        """Same rule as for entities: somebody else may own it."""
         participant, publisher = self._publisher(DOMAIN + 12)
         try:
-            line = publisher.handle_command(_command("dispose_edge", "rel:nope:nope"))
-            self.assertIn("declined", line)
+            self.assertIsNone(
+                publisher.handle_command(_command("dispose_edge", "rel:nope:nope")))
         finally:
             publisher.close()
 
@@ -542,22 +543,26 @@ class Retirement(unittest.TestCase):
         finally:
             publisher.close()
 
-    def test_a_command_for_an_entity_we_do_not_own_is_declined(self):
+    def test_a_command_for_somebody_else_s_entity_is_left_alone(self):
         """
-        Refusing is the honest answer.
+        On a shared lane, "not mine" is not "no".
 
-        Publishing a tombstone for someone else's entity would be a claim this
-        writer cannot make stick: the owner's sample is still latched and the
-        next reader to join gets that one instead. The gnome is exactly this
-        case -- a real entity on the same topics, owned by another process.
+        This service owns the venue; the robot bridge owns the robot; the
+        gnome belongs to a third publisher. All of them read every command.
+        Refusing one addressed to somebody else would put a decline in the log
+        for a request that is about to be carried out, which reads as the
+        system contradicting itself.
+
+        Silence, not refusal -- and nothing of ours disturbed.
         """
         participant, publisher = self._publisher(DOMAIN + 6)
         try:
-            line = publisher.handle_command(_command(
-                "retire", "ent:gnome:visitor", reason="not mine to retire"))
-            self.assertIn("declined", line)
+            self.assertIsNone(publisher.handle_command(_command(
+                "retire", "ent:gnome:visitor", reason="not mine to retire")))
+            self.assertIsNone(publisher.handle_command(_command(
+                "goto", "ent:robot:tb3")))
             self.assertTrue(publisher.owns("ent:duck:east"),
-                            "a declined command must not disturb what we do own")
+                            "an ignored command must not disturb what we own")
         finally:
             publisher.close()
 

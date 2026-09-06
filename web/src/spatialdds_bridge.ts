@@ -418,6 +418,57 @@ function ecefToGeodetic(x: number, y: number, z: number) {
  * separately they could disagree about where the same duck is, which is
  * exactly the class of bug this layer exists to remove.
  */
+/**
+ * Ask the model for something, through the bridge.
+ *
+ * The same lane and the same verbs an operator tool uses at a terminal --
+ * there is deliberately no browser-only path into the model. What comes back
+ * is what was published, not what happened: whether anything acts on it is
+ * between the lane and whoever owns the subject, and the caller finds out by
+ * watching the model like everybody else.
+ */
+export async function bridgeCommand(
+  verb: string,
+  subjectId: string,
+  pose?: { t: number[]; q: number[] },
+  reason = ''
+): Promise<{ published?: Record<string, unknown> }> {
+  return await fetchJson('/v1/model/command', {
+    method: 'POST',
+    body: JSON.stringify({ verb, subject_id: subjectId, pose, reason })
+  }) as { published?: Record<string, unknown> };
+}
+
+/**
+ * The inverse of `resolveInFrame`: an earth-fixed point, in a frame's metres.
+ *
+ * Needed because a tap happens in the world and a command is expressed in the
+ * model's terms. Sending a lat/lon would push the frame question onto whoever
+ * receives it, and the whole point of a frame reference is that the sender
+ * has already answered it.
+ *
+ * Deliberately the exact inverse of the forward path and not a second
+ * derivation: rotate by the conjugate, subtract the origin. If the two ever
+ * disagree, a tap lands somewhere other than where it was aimed.
+ */
+export function localInFrame(
+  frame: FrameTransform | undefined,
+  ecef: { x: number; y: number; z: number } | null
+): [number, number, number] | null {
+  if (!frame || !ecef) {
+    return null;
+  }
+  const ft = frame.pose?.t;
+  const fq = frame.pose?.q;
+  if (!Array.isArray(ft) || !Array.isArray(fq)) {
+    return null;
+  }
+  const conjugate = [-fq[0], -fq[1], -fq[2], fq[3]];
+  const [x, y, z] = rotate(conjugate,
+                           [ecef.x - ft[0], ecef.y - ft[1], ecef.z - ft[2]]);
+  return [x, y, z];
+}
+
 export function resolveInFrame(
   frame: FrameTransform | undefined,
   local: { t?: number[]; q?: number[] } | null

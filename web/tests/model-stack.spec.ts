@@ -186,7 +186,11 @@ test('the basis pair partitions the venue, and a stranger is placed either way',
     // a second OBSERVED entity, and an eighth thing in the world is not a
     // reason for a basis test to fail.
     expect(observed.ids).toContain('ent:fountain:littlefield');
-    expect(declared.ids).toEqual(['ent:pond:littlefield']);
+    // The last fixed list, and it outlived the others by one part: the
+    // monument is DECLARED too, so this became two the moment a second
+    // keep-out was seeded.
+    expect(declared.ids).toContain('ent:pond:littlefield');
+    expect(declared.ids).toContain('ent:monument:littlefield');
     expect(derived.ids).toContain('ent:pond:observed');
     for (const authoredId of ['ent:duck:catalog-pose', 'ent:duck:east',
                               'ent:duck:west', 'ent:gnome:visitor']) {

@@ -38,19 +38,23 @@ import math
 import signal
 import sys
 import time
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.model_service import venue_frame
-from spatialdds_demo.qos_profiles import MODEL_FAST, MODEL_LATCHED
+from spatialdds_demo.qos_profiles import (
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
+)
 from spatialdds_demo.tempo import Tempo
-from spatialdds_demo.topics import TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1
+from spatialdds_demo.topics import (
+    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
+)
 from spatialdds_idl.builtin import Time
 from spatialdds_idl.oarc_model import (
-    Basis, Entity, LifecycleState, ModelLayer, ModelPose,
+    Basis, Entity, LifecycleState, ModelCommand, ModelLayer, ModelPose,
 )
 from spatialdds_idl.spatial.common import KV
 from spatialdds_idl.spatial.core import Aabb3, PoseSE3
@@ -104,7 +108,10 @@ class RobotBridge:
             participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
         self._poses = tt.make_writer(
             participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
+        self._commands = tt.make_reader(
+            participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
         self._tempo = Tempo()
+        self._goal: Optional[Tuple[float, float]] = None
         self._entity: Optional[Entity] = None
         self._silent = False
         self._last_seen = 0.0
@@ -153,6 +160,64 @@ class RobotBridge:
         # find out the robot is alive again would be told late.
         if self._tempo.observed(ENTITY_ID, now) or first or was_silent:
             self._entities.write(self._entity)
+
+    # --- what it is asked to do -------------------------------------------
+
+    def handle_command(self, command: ModelCommand) -> Optional[str]:
+        """
+        `goto`, and nothing else. Returns a line for the log, or None when the
+        command was not addressed to us.
+
+        Silence for somebody else's subject, for the same reason the model
+        service is silent about the robot: the lane has several owners and a
+        refusal from the wrong one reads as the system disagreeing with
+        itself. A malformed command *about the robot* is a different matter
+        and gets a reason.
+
+        What it reports is what was accepted, not what was sent. A goal the
+        robot cannot take -- because nothing is publishing its pose, so there
+        is nothing to navigate from -- is declined here rather than queued
+        silently for a robot that may never come back.
+        """
+        if command.subject_id != ENTITY_ID:
+            return None
+        if command.verb != "goto":
+            return None
+        if not command.has_pose:
+            # A zeroed pose is a well-formed request to drive to the frame
+            # origin. Declining is the only reading that cannot be mistaken
+            # for obedience -- the same ethic as set_extent's guard.
+            return f"declined: goto for {ENTITY_ID} carried no pose"
+        if self._entity is None or self._silent:
+            return (f"declined: goto for {ENTITY_ID} — no pose from "
+                    f"{SOURCE_ID}, so there is nothing to navigate from")
+
+        x, y = command.pose.t[0], command.pose.t[1]
+        self._goal = (x, y)
+        return (f"accepted goto ({x:.2f}, {y:.2f}) "
+                f"(asked by {command.requester_id})")
+
+    def poll_commands(self) -> List[str]:
+        """Drain the command lane. The caller decides what to do with the
+        notes; the goal is already set."""
+        notes = []
+        try:
+            batch = tt.take_samples(self._commands) or []
+        except Exception as error:
+            # Untrusted traffic, the same as every other reader here.
+            return [f"command lane read failed: {error!r}"]
+        for command in batch:
+            note = self.handle_command(command)
+            if note:
+                notes.append(note)
+        return notes
+
+    @property
+    def goal(self) -> Optional[Tuple[float, float]]:
+        return self._goal
+
+    def clear_goal(self) -> None:
+        self._goal = None
 
     def tick(self, now: Optional[float] = None) -> Optional[str]:
         """
@@ -254,6 +319,12 @@ def run(domain_id: Optional[int] = None, source: str = "sim",
     interval = 1.0 / hz
     reported = 0
     while not stop:
+        for note in bridge.poll_commands():
+            print(f"robot: {note}", flush=True)
+        if bridge.goal is not None and sim.goal != bridge.goal:
+            sim.goal = bridge.goal
+        if sim.goal is None and bridge.goal is not None:
+            bridge.clear_goal()
         x, y, yaw = sim.step(interval)
         bridge.observed(x, y, yaw)
         note = bridge.tick()

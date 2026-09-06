@@ -85,10 +85,16 @@ class Ownership(unittest.TestCase):
                          "the bridge must never dispose the robot: silence "
                          "means we stopped hearing, not that it is gone")
 
-    def test_it_does_not_reach_for_the_command_lane(self):
-        """The northbound half reports; it does not ask for anything."""
+    def test_it_reads_the_command_lane_but_never_writes_it(self):
+        """
+        It listens for `goto` and asks for nothing. The northbound half
+        reports; the southbound half obeys. Neither publishes a command,
+        which is what keeps the operator tools the only things asking.
+        """
         source = (REPO / "spatialdds_demo" / "robot_bridge.py").read_text()
-        self.assertNotIn("TOPIC_MODEL_COMMAND_V1", source)
+        self.assertIn("TOPIC_MODEL_COMMAND_V1", source)
+        self.assertIn("make_reader(\n            participant, TOPIC_MODEL_COMMAND_V1",
+                      source)
 
 
 class WhatItPublishes(unittest.TestCase):
@@ -279,3 +285,89 @@ class Kinematics(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Goto(unittest.TestCase):
+    """
+    What it accepts, what it declines, and what it leaves alone.
+
+    The distinction that matters is the third one. Several services read this
+    lane, so a command about the ducks is not this bridge's to refuse -- and a
+    malformed command about the robot is not somebody else's to ignore.
+    """
+
+    def setUp(self):
+        self.participant = _participant(DOMAIN + 2)
+        self.bridge = RobotBridge(self.participant)
+
+    def _command(self, verb, subject, x=None, y=None):
+        from spatialdds_idl.builtin import Time
+        from spatialdds_idl.oarc_model import ModelCommand
+        from spatialdds_idl.spatial.core import Aabb3, PoseSE3
+        return ModelCommand(
+            command_id="c", verb=verb, subject_id=subject, reason="",
+            requester_id="tool:test",
+            has_pose=x is not None,
+            pose=PoseSE3(t=[x or 0.0, y or 0.0, 0.0], q=[0, 0, 0, 1]),
+            has_extent=False,
+            extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0]),
+            stamp=Time(sec=0, nanosec=0))
+
+    def test_a_goal_is_accepted_once_the_robot_is_reporting(self):
+        self.bridge.observed(22.0, -8.0, 0.0)
+        note = self.bridge.handle_command(
+            self._command("goto", ENTITY_ID, 14.0, -20.0))
+        self.assertIn("accepted goto", note)
+        self.assertEqual(self.bridge.goal, (14.0, -20.0))
+
+    def test_a_goal_with_no_pose_is_declined(self):
+        """A zeroed pose is a well-formed request to drive to the frame
+        origin, which is somewhere in the plaza. Declining is the only
+        reading that cannot be mistaken for obedience."""
+        self.bridge.observed(22.0, -8.0, 0.0)
+        note = self.bridge.handle_command(self._command("goto", ENTITY_ID))
+        self.assertIn("declined", note)
+        self.assertIn("no pose", note)
+        self.assertIsNone(self.bridge.goal)
+
+    def test_a_goal_is_declined_while_the_robot_is_unheard(self):
+        """
+        Not queued. A goal held for a robot that may never report again is a
+        promise the bridge cannot keep, and the requester would have no way
+        to learn that nothing was going to happen.
+        """
+        note = self.bridge.handle_command(
+            self._command("goto", ENTITY_ID, 14.0, -20.0))
+        self.assertIn("declined", note)
+        self.assertIn("nothing to navigate from", note)
+        self.assertIsNone(self.bridge.goal)
+
+    def test_a_goal_is_declined_after_the_feed_goes_quiet(self):
+        self.bridge.observed(22.0, -8.0, 0.0, now=100.0)
+        self.bridge.tick(now=200.0)
+        self.assertEqual(self.bridge.state, "UNOBSERVED")
+        note = self.bridge.handle_command(
+            self._command("goto", ENTITY_ID, 14.0, -20.0))
+        self.assertIn("declined", note)
+
+    def test_somebody_else_s_subject_is_left_alone(self):
+        """Silence, not refusal: the ducks have an owner and it is not this."""
+        self.bridge.observed(22.0, -8.0, 0.0)
+        self.assertIsNone(self.bridge.handle_command(
+            self._command("goto", "ent:duck:west", 1.0, 2.0)))
+        self.assertIsNone(self.bridge.handle_command(
+            self._command("move", "ent:duck:west", 1.0, 2.0)))
+        self.assertIsNone(self.bridge.goal)
+
+    def test_a_verb_it_does_not_implement_is_left_alone(self):
+        self.bridge.observed(22.0, -8.0, 0.0)
+        self.assertIsNone(self.bridge.handle_command(
+            self._command("retire", ENTITY_ID, 1.0, 2.0)))
+
+    def test_it_reports_what_it_accepted_not_what_was_sent(self):
+        """The coordinates in the log are the ones it took, so a reader can
+        tell a rounded or clamped goal from the one they asked for."""
+        self.bridge.observed(22.0, -8.0, 0.0)
+        note = self.bridge.handle_command(
+            self._command("goto", ENTITY_ID, 14.25, -20.5))
+        self.assertIn("(14.25, -20.50)", note)
