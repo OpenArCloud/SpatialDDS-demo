@@ -371,3 +371,91 @@ class Goto(unittest.TestCase):
         note = self.bridge.handle_command(
             self._command("goto", ENTITY_ID, 14.25, -20.5))
         self.assertIn("(14.25, -20.50)", note)
+
+
+class OneWriterPerKey(unittest.TestCase):
+    """
+    Two bridges would put one robot in two places.
+
+    The demo stack can start a bridge with its own kinematic sim and the robot
+    tier starts one driven by nav2. Both own `ent:robot:tb3`, and both running
+    is the two-writers state Part 2 spent itself closing -- except the symptom
+    would be a robot that teleports between two sims, not an error anyone can
+    read. So a bridge looks before it writes.
+    """
+
+    def test_it_sees_a_bridge_that_is_already_publishing(self):
+        from spatialdds_demo.robot_bridge import already_published
+        participant = _participant(DOMAIN + 3)
+        incumbent = RobotBridge(participant)
+        incumbent.observed(22.0, -8.0, 0.0)
+        time.sleep(0.6)
+        self.assertEqual(already_published(_participant(DOMAIN + 3)), SOURCE_ID)
+
+    def test_an_empty_bus_is_free_to_take(self):
+        from spatialdds_demo.robot_bridge import already_published
+        self.assertIsNone(already_published(_participant(DOMAIN + 4), settle=1.0))
+
+
+class NavigatorDeclines(unittest.TestCase):
+    """`goto` has a second way to be undeliverable: nothing to drive with."""
+
+    class _Unavailable:
+        def available(self):
+            return "nav2 is not accepting goals (no navigate_to_pose server)"
+
+        def send(self, x, y):
+            raise AssertionError("must not be called when unavailable")
+
+    class _Ready:
+        def __init__(self):
+            self.sent = None
+
+        def available(self):
+            return None
+
+        def send(self, x, y):
+            self.sent = (x, y)
+            return f"nav2 accepted a goal at ({x:.2f}, {y:.2f})"
+
+    def _command(self, x, y):
+        from spatialdds_idl.builtin import Time
+        from spatialdds_idl.oarc_model import ModelCommand
+        from spatialdds_idl.spatial.core import Aabb3, PoseSE3
+        return ModelCommand(
+            command_id="c", verb="goto", subject_id=ENTITY_ID, reason="",
+            requester_id="tool:test", has_pose=True,
+            pose=PoseSE3(t=[x, y, 0.0], q=[0, 0, 0, 1]),
+            has_extent=False,
+            extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0]),
+            stamp=Time(sec=0, nanosec=0))
+
+    def test_a_goal_is_declined_when_nothing_will_drive(self):
+        """
+        Accepting it would be worse than refusing. The robot is reporting its
+        pose perfectly, so "no pose" is not the reason -- and a requester
+        watching a stationary robot would have no way to learn why.
+        """
+        bridge = RobotBridge(_participant(DOMAIN + 5),
+                             navigator=self._Unavailable())
+        bridge.observed(22.0, -8.0, 0.0)
+        note = bridge.handle_command(self._command(14.0, -20.0))
+        self.assertIn("declined", note)
+        self.assertIn("not accepting goals", note)
+        self.assertIsNone(bridge.goal)
+
+    def test_it_reports_what_the_navigator_accepted(self):
+        navigator = self._Ready()
+        bridge = RobotBridge(_participant(DOMAIN + 6), navigator=navigator)
+        bridge.observed(22.0, -8.0, 0.0)
+        note = bridge.handle_command(self._command(14.25, -20.5))
+        self.assertEqual(navigator.sent, (14.25, -20.5))
+        self.assertIn("nav2 accepted", note)
+        self.assertIn("(14.25, -20.50)", note)
+
+    def test_the_pose_check_still_comes_first(self):
+        """A robot nobody can hear cannot be sent anywhere, whatever nav2
+        thinks."""
+        bridge = RobotBridge(_participant(DOMAIN + 7), navigator=self._Ready())
+        note = bridge.handle_command(self._command(14.0, -20.0))
+        self.assertIn("nothing to navigate from", note)

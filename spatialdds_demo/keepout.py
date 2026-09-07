@@ -76,6 +76,11 @@ MARGIN_M = 4.0
 FREE = 0
 OCCUPIED = 100
 
+# A shoulder: cells outside a declared bound but close enough that a robot
+# should prefer not to be there. Rendered by the *consumer*, never by the
+# venue -- see `build_mask`.
+SHOULDER_MIN = 1
+
 
 @dataclass(frozen=True)
 class KeepoutMask:
@@ -132,18 +137,40 @@ def contributing(entities: Iterable, exclude_ids: Sequence[str] = ()) -> List:
 
 def build_mask(entities: Iterable, exclude_ids: Sequence[str] = (),
                resolution: float = RESOLUTION_M,
-               margin: float = MARGIN_M) -> Optional[KeepoutMask]:
+               margin: float = MARGIN_M,
+               shoulder_m: float = 0.0) -> Optional[KeepoutMask]:
     """
     Rasterise the contributing extents into an OccupancyGrid mask.
 
     Returns None when nothing contributes: an empty mask and no mask are
     different statements, and publishing a blank one would tell a planner
     "everywhere is clear" on the authority of a model that said nothing.
+
+    **`shoulder_m` is the consumer's, not the venue's.** A binary mask makes a
+    region illegal, not undesirable, and a shortest-path planner shaves an
+    illegal boundary by design -- measured at 0.10 m from the water, which is
+    a legal path no robot can drive. Inflation does not help: nav2 applies
+    filters *after* the layer stack, so filter-marked cells never enter the
+    inflation computation, and the keep-out is a cliff -- cost 0 at 0.11 m,
+    cost 254 at 0.10 m. Doubling the inflation radius moved the failure point
+    by one centimetre, which was the pipeline saying the knob was not
+    connected.
+
+    A shoulder gives the planner a reason to bow away: the declared extent
+    stays lethal, and a band outside it ramps down, so being near the water
+    costs something without being forbidden.
+
+    The width belongs to whoever is driving. The venue's extents are
+    robot-agnostic -- a Roomba and a forklift render different shoulders from
+    the same pond -- so the law names the region and the consumer renders its
+    own clearance around it. That is why the bridge's inspection endpoint
+    passes no shoulder: it shows the law, not one robot's reading of it.
     """
     keep = contributing(entities, exclude_ids)
     if not keep:
         return None
 
+    shoulder = max(0.0, shoulder_m)
     min_x = min(e.extent.min_xyz[0] for e in keep) - margin
     min_y = min(e.extent.min_xyz[1] for e in keep) - margin
     max_x = max(e.extent.max_xyz[0] for e in keep) + margin
@@ -156,6 +183,34 @@ def build_mask(entities: Iterable, exclude_ids: Sequence[str] = (),
     for entity in keep:
         lo_x, lo_y = entity.extent.min_xyz[0], entity.extent.min_xyz[1]
         hi_x, hi_y = entity.extent.max_xyz[0], entity.extent.max_xyz[1]
+
+        # The shoulder first, so the lethal core overwrites it where they meet
+        # and a cell inside two extents never ends up merely discouraged.
+        if shoulder > 0:
+            scol0 = max(0, int((lo_x - shoulder - min_x) / resolution))
+            scol1 = min(width - 1, int((hi_x + shoulder - min_x) / resolution))
+            srow0 = max(0, int((lo_y - shoulder - min_y) / resolution))
+            srow1 = min(height - 1, int((hi_y + shoulder - min_y) / resolution))
+            for row in range(srow0, srow1 + 1):
+                cy = min_y + (row + 0.5) * resolution
+                dy = max(lo_y - cy, 0.0, cy - hi_y)
+                base = row * width
+                for col in range(scol0, scol1 + 1):
+                    cx = min_x + (col + 0.5) * resolution
+                    dx = max(lo_x - cx, 0.0, cx - hi_x)
+                    gap = math.hypot(dx, dy)
+                    if gap <= 0.0 or gap > shoulder:
+                        continue
+                    # Linear ramp: just outside the bound is nearly as bad as
+                    # inside it; at the shoulder's edge it costs almost
+                    # nothing. Linear because a planner only needs a gradient
+                    # to lean on, and a curve here would be a claim about
+                    # dynamics this module has no business making.
+                    value = int(round(OCCUPIED * (1.0 - gap / shoulder)))
+                    value = max(SHOULDER_MIN, min(OCCUPIED - 1, value))
+                    if value > data[base + col]:
+                        data[base + col] = value
+
         col0 = max(0, int((lo_x - min_x) / resolution))
         col1 = min(width - 1, int((hi_x - min_x) / resolution))
         row0 = max(0, int((lo_y - min_y) / resolution))
@@ -175,6 +230,9 @@ def describe(mask: Optional[KeepoutMask]) -> str:
     if mask is None:
         return "no mask: nothing in the model constrains a robot"
     area = mask.occupied_cells * mask.resolution ** 2
+    shoulder = sum(1 for v in mask.data if 0 < v < OCCUPIED)
+    band = (f", {shoulder * mask.resolution ** 2:.0f} m2 of shoulder"
+            if shoulder else "")
     return (f"{mask.width}x{mask.height} cells at {mask.resolution:.2f} m, "
             f"origin ({mask.origin_x:.1f}, {mask.origin_y:.1f}), "
-            f"{area:.0f} m2 keep-out from {', '.join(mask.contributors)}")
+            f"{area:.0f} m2 keep-out{band} from {', '.join(mask.contributors)}")

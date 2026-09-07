@@ -35,7 +35,9 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -1059,6 +1061,81 @@ def catalog_query(payload: Dict[str, Any]) -> Dict[str, Any]:
                                     content_id_in=content_id_in)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.get("/v1/keepout")
+def keepout(request: Request, response: Response) -> Dict[str, Any]:
+    """
+    Where the model says a robot may not go.
+
+    **Law, not perception.** This is built from DECLARED extents alone -- what
+    the venue legislates, never what a sensor happened to bound -- and it is
+    the same `spatialdds_demo.keepout` a participant on the bus would call.
+    Only the last hop differs: a ROS process runs a different major version of
+    CycloneDDS than this repo does, so it cannot join the bus in-process, and
+    this is the door §6.1 exists for. The contract survives the substitution;
+    the transport is carriage.
+
+    It is a **policy-tempo feed**, not a control loop. The mask changes when
+    the venue legislates, which is rare, and never because a robot moved.
+    `cmd_vel` and odom stay inside ROS where they belong.
+
+    `etag` is a hash of the grid: a caller that already has it can skip the
+    body, and one that cannot reach us at all should keep the last mask it
+    got. A robot navigating briefly on last-known law is behaving correctly --
+    the same last-seen semantics `UNOBSERVED` carries.
+    """
+    import base64
+    import hashlib
+
+    from spatialdds_demo.keepout import build_mask
+    from spatialdds_demo.robot_bridge import ENTITY_ID as ROBOT_ENTITY_ID
+    from spatialdds_idl.oarc_model import Entity
+
+    snapshot = model_cache.snapshot(SpatialDDSValidator.now_time())
+    entities = []
+    for row in snapshot["entities"]:
+        try:
+            entities.append(from_json(Entity, row))
+        except Exception:
+            # One undecodable entity must not deny a robot the whole of the
+            # law. Skipping it is safe in the direction that matters: a
+            # smaller keep-out is a smaller claim, and the omission is
+            # visible in `contributors`.
+            continue
+    mask = build_mask(entities, exclude_ids=(ROBOT_ENTITY_ID,))
+    if mask is None:
+        # No mask is not an empty mask: an empty grid would tell a planner
+        # everywhere is clear on the authority of a model that said nothing.
+        response.headers["Cache-Control"] = "no-store"
+        return {"mask": None,
+                "reason": "nothing in the model constrains a robot"}
+
+    # Both answers share a shape, with `mask` present in each. An earlier
+    # version put the grid at the top level and only the empty answer carried
+    # a `mask` key, so a caller checking `body["mask"] is None` read every
+    # successful response as "nothing forbidden" -- a sentinel that only one
+    # branch sets is not a sentinel.
+    body = {
+        "mask": {
+            "resolution": mask.resolution,
+            "width": mask.width,
+            "height": mask.height,
+            "origin": {"x": mask.origin_x, "y": mask.origin_y},
+            "frame": "map",
+            "data_b64": base64.b64encode(mask.data).decode("ascii"),
+        },
+        "contributors": list(mask.contributors),
+    }
+    etag = hashlib.sha256(
+        f"{mask.width}x{mask.height}@{mask.origin_x},{mask.origin_y}".encode()
+        + mask.data).hexdigest()[:32]
+    body["etag"] = etag
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        response.status_code = 304
+        return {}
+    return body
 
 
 @app.post("/v1/model/command")
