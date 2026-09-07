@@ -271,6 +271,95 @@ that question is not asked by any test that begins by putting things back.
 The guard added afterwards says it in its name:
 `test_a_move_outlives_the_tool_that_asked_for_it`.
 
+### One world, so one worker: files race even when their tests do not
+
+`model-stack.spec.ts` collects its tests into a single serial file because
+they share a venue, and its header says so. What that cannot do is keep a
+*second file* out of the same world: Playwright runs files in parallel by
+default, and the venue does not know which spec is talking to it.
+
+It fired when a capture asked the robot for a journey to the far side of the
+basin while `robot-goto.spec.ts` was taking a tap on the ground and sending
+the same robot somewhere else. The capture reported
+
+    journey: 442 samples from (22.0, -8.0) to (23.8, -19.7); 0 in the water
+
+-- four hundred samples, no arrival, and a failure that pointed at the
+journey rather than at the second writer. Two writers of one goal, which is
+the same defect the robot bridge refuses at startup for `ent:robot:tb3`, at a
+level the bridge cannot see.
+
+The three specs that drive the running stack are now a Playwright project of
+their own with `workers: 1`, which is that setting's documented purpose. The
+rest of the suite still runs as wide as the machine allows. The whole run
+went from 4.9 to 9.0 minutes, which is what a shared world costs when the
+harness stops pretending there are several of them.
+
+The general form: **serial-within-a-file is not isolation.** If two spec
+files can reach the same running thing, they are one test suite, and the
+harness has to say so.
+
+### A test can pass because the world was already in the end state
+
+The Part 4 journey capture drives the robot to a point and asserts it got
+there without crossing the declared water. Its first green run reported:
+
+    journey: 1 samples from (6.3, -20.1) to (6.3, -20.1); 0 in the water
+
+A previous run had left the robot on the goal, so the arrival check fired on
+the first sample, the "journey" was one reading of a stationary robot, and
+the screenshot beside it showed a robot that had not moved. Green, and
+illustrating nothing.
+
+This is the determinism lesson from the section above wearing its plainest
+costume. Restoring the venue makes a test reproducible; it does not make the
+test *ask anything*. Here the fix was to make the journey a distance rather
+than a state -- drive to the start, prove it arrived, assert the start is
+more than ten metres from the goal, and assert the track is more than one
+sample long:
+
+    expect(track.length, 'a journey is more than one sample').toBeGreaterThan(20);
+
+The general form: **when a test asserts that something happened, assert the
+band it happened across, not the state it ended in.** An end state is
+reachable by doing the work and by having already been there, and a passing
+test cannot tell you which one it saw.
+
+### Rendered look is untested surface; captures are its only gate
+
+This suite asserts semantics and is deliberately blind to appearance. It
+checks how many entities exist, where they are, what basis they claim, what
+their labels say, and what the bus carried. It does not check what any of it
+looks like, and that is the right division: an assertion about a colour is
+usually an assertion about a decision already tested somewhere better.
+
+The blind spot is real anyway, and three defects walked straight through it,
+all of them in Part 4:
+
+- **Every duck rendered white.** Setting `colorBlendMode: REPLACE` with no
+  colour makes Cesium replace the model's colour with the default, which is
+  white. Entity counts, positions, labels and bases were all still correct.
+- **A reshaped pond kept its old box.** The ducks crowded into the new bounds
+  and the drawn volume stayed the size of the old ones, because the update
+  path carried positions and not dimensions. Every semantic test passed.
+- **The watching tab never greyed the robot.** UNOBSERVED tinting is chosen
+  where an entity is *drawn*, and an update only moved what was already on
+  screen -- so a tab that watched a robot go silent kept drawing it live,
+  while a tab opened a second later drew it grey. The two disagreed about the
+  same latched sample, and the state assertions passed on both.
+
+None of the three could have been caught by a test this suite would sensibly
+write. All three were caught by taking a screenshot, and the first was caught
+by a screenshot taken for an unrelated reason entirely.
+
+So: **rendered look is untested surface, and captures are its only gate.**
+That is the reason captures are part of acceptance here rather than
+decoration on top of it -- they are not illustrations of work already
+verified, they are the verification for a layer nothing else covers. When a
+capture is taken, look at it. When appearance carries the claim -- a grey
+robot, a shrinking box -- assert it in the capture spec, where it is the
+subject rather than an incidental property.
+
 ### Things that look like failures but aren't
 
 - **Stale `.pyc` files across the host/container boundary.** The repo is

@@ -856,13 +856,47 @@ function connectModelStream() {
   modelSocket.onclose = () => { modelSocket = null; };
 }
 
-/** Move an already-rendered entity rather than rebuilding it. */
+/**
+ * Move an already-rendered entity rather than rebuilding it.
+ *
+ * "Move" was too narrow a reading of an update for one field: an entity can
+ * also change *shape*, and a declared extent is the field the venue most
+ * often changes its mind about. Only the positions were being carried over,
+ * so after a `set_extent` the ducks crowded into bounds that the box on
+ * screen still drew at their old size -- the model correct, the picture a
+ * frame behind, and nothing failing. It survived because the suite asserts
+ * where things are and never what shape they are drawn in; it was found in a
+ * capture, which is the only gate rendered output has.
+ */
 function moveItemEntity(item: CatalogItem) {
   if (!viewer) {
     return;
   }
   const position = Cesium.Cartesian3.fromDegrees(
     item.geopose.lon_deg, item.geopose.lat_deg, item.geopose.alt_m);
+  const box = viewer.entities.getById(`${item.id}-extent`);
+  if (item.extent && box) {
+    const [sx, sy, sz] = item.extent.size;
+    box.position = new Cesium.ConstantPositionProperty(
+      Cesium.Cartesian3.fromDegrees(
+        item.extent.lon_deg, item.extent.lat_deg, item.extent.alt_m));
+    box.orientation = new Cesium.ConstantProperty(new Cesium.Quaternion(
+      item.extent.orientation[0], item.extent.orientation[1],
+      item.extent.orientation[2], item.extent.orientation[3]));
+    if (box.box) {
+      box.box.dimensions = new Cesium.ConstantProperty(
+        new Cesium.Cartesian3(sx, sy, sz));
+    }
+  } else if (!!item.extent !== !!box) {
+    // Gained or lost its extent, which is a different entity on screen than
+    // the one that is there. Rebuild rather than patch: the marker sits on
+    // top of the volume when there is one and on the pose when there is not,
+    // and that decision is made where the entity is drawn.
+    removeModelEntity(item.id);
+    modelItems.set(item.id, item);
+    addItemEntity(item);
+    return;
+  }
   const model = viewer.entities.getById(`${item.id}-model`);
   if (model) {
     model.position = new Cesium.ConstantPositionProperty(position);
@@ -870,6 +904,34 @@ function moveItemEntity(item: CatalogItem) {
       model.orientation = new Cesium.ConstantProperty(new Cesium.Quaternion(
         item.orientation[0], item.orientation[1],
         item.orientation[2], item.orientation[3]));
+    }
+    // The grey, on the tab that is already watching.
+    //
+    // This was the whole of P4.1's claim and it only ever worked on a tab
+    // that arrived afterwards: the tint is chosen where an entity is drawn,
+    // and an update only moved what was already on screen. So a client
+    // watching a robot go silent kept drawing it live, while a client
+    // opening a tab a second later drew it grey -- the two disagreeing about
+    // the same latched sample. Found by taking the capture, not by the
+    // suite, which asserts state and never colour.
+    if (model.model) {
+      const stale = isUnobserved(item);
+      model.model.color = stale
+        ? new Cesium.ConstantProperty(UNOBSERVED_TINT) : undefined;
+      model.model.colorBlendMode = stale
+        ? new Cesium.ConstantProperty(Cesium.ColorBlendMode.REPLACE) : undefined;
+    }
+  }
+  // And the reason with it: the panel is the only place the entity says why
+  // it is grey, and a stale description would still be answering about the
+  // state before last.
+  const description = describeEntity(item);
+  if (description) {
+    for (const id of [item.id, `${item.id}-model`, `${item.id}-extent`]) {
+      const drawn = viewer.entities.getById(id);
+      if (drawn) {
+        drawn.description = new Cesium.ConstantProperty(description);
+      }
     }
   }
   const marker = viewer.entities.getById(item.id);
@@ -1177,8 +1239,14 @@ function addItemEntity(item: CatalogItem) {
         // Greyed while unobserved, so a stale pose does not read as a live
         // one. Cesium's silhouette would say "selected"; a colour blend says
         // "this is the last we heard".
+        //
+        // Both fields are conditional, and the second one matters: REPLACE
+        // with no colour means white, so setting the blend mode
+        // unconditionally turned every duck in the venue white and nothing
+        // noticed until a capture was taken for another reason entirely.
         color: isUnobserved(item) ? UNOBSERVED_TINT : undefined,
-        colorBlendMode: Cesium.ColorBlendMode.REPLACE,
+        colorBlendMode: isUnobserved(item)
+          ? Cesium.ColorBlendMode.REPLACE : undefined,
         scale: 0.6,
         // Keeps it findable from across the mall; without this a duck a metre
         // long is a couple of pixels from the far end of the plaza.
