@@ -30,7 +30,7 @@ from spatialdds_demo.json_mapping import to_json  # noqa: E402
 from spatialdds_idl.builtin import Time  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
     DUCK_CONTENT_ID, IDLE_FLUSH_S, LATCH_EVERY_N_MOVES, ModelPublisher,
-    seed_entities, seed_relationships,
+    POND_MIN, seed_entities, seed_relationships,
 )
 from spatialdds_demo.qos_profiles import MODEL_LATCHED  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
@@ -245,19 +245,27 @@ class Hierarchy(unittest.TestCase):
         self.assertTrue(pond.has_extent)
         self.assertEqual(pond.type_uris, ["http://www.wikidata.org/entity/Q810524"])
 
-        # Inside the waterline measured off the tiles (x 5..20, y -10..-18),
-        # and clear of the sculpture at x ~ 8. A declared boundary that is a
-        # little small keeps whatever trusts it wet.
-        self.assertGreaterEqual(pond.extent.min_xyz[0], 9.0)
-        self.assertLessEqual(pond.extent.max_xyz[0], 20.0)
-        self.assertGreaterEqual(pond.extent.min_xyz[1], -18.0)
-        self.assertLessEqual(pond.extent.max_xyz[1], -10.0)
+        # Around the waterline sampled off the tiles, not inside it. The
+        # pond is what a robot is kept out of, so the box has to *cover* the
+        # water -- outside it must mean dry ground. The direction of this
+        # assertion is the whole claim, and it used to point the other way.
+        self.assertLessEqual(pond.extent.min_xyz[0], -1.25)
+        self.assertGreaterEqual(pond.extent.max_xyz[0], 25.0)
+        self.assertLessEqual(pond.extent.min_xyz[1], -19.75)
+        self.assertGreaterEqual(pond.extent.max_xyz[1], -5.0)
 
-    def test_every_duck_sits_inside_the_declared_pond(self):
-        """The seed has to be consistent with itself, or the mover starts
-        out of bounds in P3.2."""
+    def test_every_duck_sits_inside_the_declared_shallows(self):
+        """
+        The seed has to be consistent with itself, or the mover starts out of
+        bounds and corrects on its first tick, which reads as the demo fixing
+        a mistake it should not have made.
+
+        Against the shallows, not the pond: the shallows are the box the
+        mover clamps into. Checking the pond would pass for any duck anywhere
+        on the water, including the paving inside the pond's corners.
+        """
         entities = {e.entity_id: e for e in seed_entities()}
-        pond = entities["ent:pond:littlefield"]
+        pond = entities["ent:shallows:littlefield"]
         for entity_id, entity in entities.items():
             if not entity_id.startswith("ent:duck"):
                 continue
@@ -271,7 +279,10 @@ class Hierarchy(unittest.TestCase):
     def test_the_hierarchy_is_two_levels_and_names_both_ends(self):
         entities = seed_entities()
         edges = {r.rel_id: r for r in seed_relationships(entities)}
-        self.assertEqual(len(edges), 4)
+        self.assertEqual(len(edges), len(entities) - 1,
+                         "every seeded entity but the fountain has one parent")
+        self.assertEqual(edges["rel:contains:pond-shallows-littlefield"].from_entity_id,
+                         "ent:pond:littlefield")
         self.assertEqual(edges["rel:contains:fountain-pond-littlefield"].from_entity_id,
                          "ent:fountain:littlefield")
         self.assertEqual(edges["rel:contains:fountain-pond-littlefield"].to_entity_id,
@@ -345,7 +356,7 @@ class SetExtent(unittest.TestCase):
             self.assertIn("declined", line)
             self.assertIn("no extent", line)
             pond = publisher._published["ent:pond:littlefield"]
-            self.assertEqual(pond.extent.min_xyz, [9.5, -18.0, -2.0],
+            self.assertEqual(pond.extent.min_xyz, list(POND_MIN),
                              "a declined command must not have touched anything")
         finally:
             publisher.close()

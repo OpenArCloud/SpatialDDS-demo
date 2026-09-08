@@ -252,9 +252,13 @@ class Retirement(unittest.TestCase):
         # seed_relationships is ordered as the ducks are: catalog-pose, west, east.
         self.assertEqual(cache.dispose_relationship(edge_handle("rel:contains:pond-duck-east")), "rel:contains:pond-duck-east")
         rel_ids = [r["rel_id"] for r in cache.snapshot(STAMP)["relationships"]]
-        self.assertEqual(rel_ids, ["rel:contains:fountain-pond-littlefield",
-                                   "rel:contains:pond-duck-catalog-pose",
-                                   "rel:contains:pond-duck-west"])
+        # Derived from the seed rather than written out, for the same reason
+        # the instance handles are: a literal list here fails three files
+        # away from whatever adds an edge next, and naming the one that went
+        # is the actual claim.
+        expected = sorted(r.rel_id for r in seed_relationships(seed_entities())
+                          if r.rel_id != "rel:contains:pond-duck-east")
+        self.assertEqual(sorted(rel_ids), expected)
 
     def test_a_dispose_reports_what_it_removed_so_clients_can_be_told(self):
         """

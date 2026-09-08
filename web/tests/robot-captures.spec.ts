@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import {
   BRIDGE_URL, container, inContainer, readyPage, restoreVenue, look,
-  startMover, stopMover
+  moverRunning, startMover, stopMover
 } from './model-stack.helpers';
 
 /**
@@ -21,6 +21,16 @@ import {
 
 const OUT = process.env.P44_OUT || join(tmpdir(), 'spatialdds-robot');
 const TIER = 'robot_tier';
+// ROBOT_START_XY in spatialdds_demo/plaza.py. Copied rather than imported
+// because this is TypeScript reading a Python constant; the test below
+// asserts the separation from the goal, so a drift shows up as a failure
+// rather than as a journey that no longer goes anywhere.
+const START: [number, number] = [20.0, -22.0];
+// The far side of the water. A straight line from START to here crosses
+// the declared pond end to end, so the only legal route is round one end
+// of it -- which is the journey worth filming, and the thing that changes
+// when the venue changes its mind about where the water is.
+const GOAL: [number, number] = [6.0, -3.0];
 let stack: string | null = null;
 
 /**
@@ -79,19 +89,41 @@ async function robotOnBus(request: any): Promise<[number, number] | null> {
 async function sendGoto(request: any, x: number, y: number) {
   return request.post(`${BRIDGE_URL}/v1/model/command`, {
     data: { verb: 'goto', subject_id: 'ent:robot:tb3',
-            pose: { t: [x, y, -1.9], q: [0, 0, 0, 1] } }
+            // The navigator plans in 2D and ignores this, but it should
+            // still be the ground rather than a number nothing stands on:
+            // GROUND_Z in spatialdds_demo/plaza.py.
+            pose: { t: [x, y, -1.15], q: [0, 0, 0, 1] } }
   });
 }
 
+// POND_MIN/POND_MAX in spatialdds_demo/model_service.py: the box the venue
+// declares around the water, which the robot is kept out of.
 const inPond = (p: [number, number]) =>
-  p[0] >= 9.5 && p[0] <= 20.0 && p[1] >= -18.0 && p[1] <= -10.0;
+  p[0] >= -1.5 && p[0] <= 25.5 && p[1] >= -20.0 && p[1] <= -4.75;
 
 test.describe.configure({ mode: 'serial' });
+
+let moverWasRunning = false;
 
 test.beforeAll(async () => {
   stack = container();
   if (!stack || !tierRunning()) {
     stack = null;
+    return;
+  }
+  // Start from a still world however the stack was launched -- the mover
+  // runs by default now, and `restoreVenue` waits for ducks to be back at
+  // their seeded poses, which never happens while something is moving them.
+  // Borrowed, not inherited: put it back afterwards, because stopping the
+  // motion on a stack somebody is demonstrating is how a suite becomes the
+  // reason a demo looks broken.
+  moverWasRunning = moverRunning(stack);
+  stopMover(stack);
+});
+
+test.afterAll(async () => {
+  if (stack && moverWasRunning) {
+    startMover(stack);
   }
 });
 
@@ -99,6 +131,8 @@ test.beforeEach(async ({ request }) => {
   test.skip(stack === null, 'robot tier not running — see robot_tier/README');
   await restoreVenue(request, stack as string);
   inContainer(stack as string, 'python3 scripts/reshape_pond.py --restore');
+  inContainer(stack as string, 'python3 scripts/reshape_pond.py '
+              + '--entity ent:shallows:littlefield --restore');
 });
 
 test('a journey around the water, with the law in the costmap', async ({ page, request }) => {
@@ -114,18 +148,18 @@ test('a journey around the water, with the law in the costmap', async ({ page, r
   // test passes trivially whenever a previous run left the robot on the goal:
   // the arrival check fires on the first sample, the journey is one sample
   // long, and a screenshot of a stationary robot illustrates nothing.
-  await sendGoto(request, 22.0, -8.0);
+  await sendGoto(request, START[0], START[1]);
   await expect.poll(async () => {
     const p = await robotOnBus(request);
-    return p ? Math.hypot(p[0] - 22.0, p[1] + 8.0) : 99;
+    return p ? Math.hypot(p[0] - START[0], p[1] - START[1]) : 99;
   }, { timeout: 180_000, intervals: [500] }).toBeLessThan(1.5);
 
   const before = (await robotOnBus(request))!;
-  expect(Math.hypot(before[0] - 6.0, before[1] + 20.0),
+  expect(Math.hypot(before[0] - GOAL[0], before[1] - GOAL[1]),
          'the journey must start somewhere other than its destination')
     .toBeGreaterThan(10);
   await page.screenshot({ path: join(OUT, 'robot-1-before.png') });
-  await sendGoto(request, 6.0, -20.0);
+  await sendGoto(request, GOAL[0], GOAL[1]);
 
   // Sampled off the bus while it drives: the picture shows a robot somewhere,
   // the samples show where it has been.
@@ -135,7 +169,7 @@ test('a journey around the water, with the law in the costmap', async ({ page, r
     const p = await robotOnBus(request);
     if (p) {
       track.push(p);
-      if (Math.hypot(p[0] - 6.0, p[1] + 20.0) < 1.0) break;
+      if (Math.hypot(p[0] - GOAL[0], p[1] - GOAL[1]) < 1.0) break;
     }
     await page.waitForTimeout(400);
   }
@@ -148,8 +182,8 @@ test('a journey around the water, with the law in the costmap', async ({ page, r
     + `${track[track.length - 1][1].toFixed(1)}); ${wet.length} in the water`);
   expect(track.length, 'a journey is more than one sample').toBeGreaterThan(20);
   expect(wet.length, 'the robot must not cross the declared water').toBe(0);
-  expect(Math.hypot(track[track.length - 1][0] - 6.0,
-                    track[track.length - 1][1] + 20.0)).toBeLessThan(1.5);
+  expect(Math.hypot(track[track.length - 1][0] - GOAL[0],
+                    track[track.length - 1][1] - GOAL[1])).toBeLessThan(1.5);
 });
 
 test('a duck is a decoration, not an obstacle', async ({ request }) => {
@@ -174,19 +208,24 @@ test('a duck is a decoration, not an obstacle', async ({ request }) => {
     + `the keep-out is ${keepout.contributors.join(', ')}`);
 });
 
-test('one command, and two consumers follow it', async ({ page, request }) => {
+test('the venue changes its mind about the water, mid-journey',
+     async ({ page, request }) => {
   /**
-   * The two-consumers frame: `reshape_pond.py` sends one `set_extent` and
-   * stops. Nothing in it knows a duck exists and nothing in it knows nav2
-   * exists. The ducks crowd because the mover reads the pond's bounds on
-   * every update; the path bends because the keep-out node rebuilds the mask
-   * from the same box. One law, two readers, neither told about the other.
+   * `reshape_pond.py` sends one `set_extent` and stops. Nothing in it knows
+   * nav2 exists; the path bends because the keep-out node rebuilds its mask
+   * from the venue's declaration, and nav2 replans against that.
    *
-   * The timing is rehearsed rather than hoped for: the robot reaches the
-   * water's east side about six seconds in, the mask repaints in about
-   * three, and the mover clamps within about two. Firing while it is still
-   * approaching leaves a route to bend; firing once it is round the south
-   * rim would change the law behind it, where nothing can show.
+   * The ducks do *not* move, and that is asserted here rather than left to
+   * be noticed. They read the shallows -- the venue's separate claim about
+   * where its ducks go -- so a change to the water is not addressed to them.
+   * One model, two claims, two consumers, and each one answers the claim it
+   * was reading. (The ducks have their own version of this: shrink the
+   * shallows and they crowd while the robot's route is untouched. It is in
+   * model-stack.spec.ts.)
+   *
+   * The timing is rehearsed rather than hoped for: the mask repaints in
+   * about three seconds, so the change has to land while there is still
+   * route left to bend.
    */
   test.setTimeout(600_000);
   await readyPage(page);
@@ -198,10 +237,10 @@ test('one command, and two consumers follow it', async ({ page, request }) => {
 
   startMover(stack as string);
   try {
-    await sendGoto(request, 22.0, -8.0);
+    await sendGoto(request, START[0], START[1]);
     await expect.poll(async () => {
       const p = await robotOnBus(request);
-      return p ? Math.hypot(p[0] - 22.0, p[1] + 8.0) : 99;
+      return p ? Math.hypot(p[0] - START[0], p[1] - START[1]) : 99;
     }, { timeout: 180_000, intervals: [500] }).toBeLessThan(1.5);
 
     const declared = lethalCells();
@@ -217,7 +256,7 @@ test('one command, and two consumers follow it', async ({ page, request }) => {
     expect(boxBefore, 'the declared water should be drawn as a volume')
       .not.toBeNull();
 
-    await sendGoto(request, 6.0, -20.0);
+    await sendGoto(request, GOAL[0], GOAL[1]);
     const track: [number, number][] = [];
     let fired = -1;
     const deadline = Date.now() + 240_000;
@@ -225,25 +264,25 @@ test('one command, and two consumers follow it', async ({ page, request }) => {
       const p = await robotOnBus(request);
       if (p) {
         track.push(p);
-        // On the east side, heading south, still short of the corner. The
-        // first version of this read `x > 22.0`, which one rehearsal
-        // satisfied and the next did not: the controller's opening arc puts
-        // the robot anywhere between x 21.1 and 22.6 on the same route, so
-        // the trigger has to be the part of the journey that is the same
-        // every time -- it descends past y = -11 on the east side or it does
-        // not go at all.
-        if (fired < 0 && p[0] > 18.0 && p[1] < -11.0) {
+        // Halfway up the east walkway, heading north, with the whole
+        // northern leg of the detour still ahead of it. Rehearsed, because
+        // this trigger has been wrong twice before -- each time it was tuned
+        // to a route that later moved, and each time the failure was a
+        // capture that fired nothing and asserted nothing. It keys on the
+        // part of the route that is the same every run: the robot goes up
+        // x = 26 from the south plaza to the north terrace, or it does not
+        // go at all.
+        if (fired < 0 && p[0] > 25.0 && p[1] > -15.0) {
           await page.screenshot({ path: join(OUT, 'robot-3-declared.png') });
           inContainer(stack as string,
                       'python3 scripts/reshape_pond.py --shrink 0.4');
           fired = track.length;
         }
         if (fired > 0 && track.length === fired + 18) {
-          // Both consumers have answered by now: ducks crowded, mask
-          // repainted, route replanned. One frame, three things in it.
+          // The mask has repainted and the route has been replanned by now.
           await page.screenshot({ path: join(OUT, 'robot-4-reshaped.png') });
         }
-        if (fired > 0 && Math.hypot(p[0] - 6.0, p[1] + 20.0) < 1.0) break;
+        if (fired > 0 && Math.hypot(p[0] - GOAL[0], p[1] - GOAL[1]) < 1.0) break;
       }
       await page.waitForTimeout(400);
     }
@@ -257,21 +296,27 @@ test('one command, and two consumers follow it', async ({ page, request }) => {
     expect(reshaped, 'the smaller pond must forbid fewer cells')
       .toBeLessThan(declared / 2);
 
-    // 2. The ducks are inside what the pond now says it is.
+    // 2. The ducks are where the shallows say, and the shallows did not
+    //    change. A command addressed to the water is not addressed to them.
     const model = await (await request.get(`${BRIDGE_URL}/v1/model`)).json();
     const pond = (model.entities || [])
       .find((e: any) => e.entity_id === 'ent:pond:littlefield');
     const [nx, ny] = pond.extent.min_xyz;
     const [xx, xy] = pond.extent.max_xyz;
+    const shallows = (model.entities || [])
+      .find((e: any) => e.entity_id === 'ent:shallows:littlefield');
+    expect(shallows.extent.min_xyz.slice(0, 2),
+           'the shallows are a different claim and must be untouched')
+      .toEqual([9.5, -18.0]);
     const ducks = (model.entities || [])
       .filter((e: any) => e.entity_id.startsWith('ent:duck:'));
     for (const duck of ducks) {
       const [x, y] = duck.pose.t;
-      expect(x, `${duck.entity_id} is outside the water it belongs to`)
-        .toBeGreaterThan(nx - 0.2);
-      expect(x).toBeLessThan(xx + 0.2);
-      expect(y).toBeGreaterThan(ny - 0.2);
-      expect(y).toBeLessThan(xy + 0.2);
+      expect(x, `${duck.entity_id} left the shallows`)
+        .toBeGreaterThan(shallows.extent.min_xyz[0] - 0.2);
+      expect(x).toBeLessThan(shallows.extent.max_xyz[0] + 0.2);
+      expect(y).toBeGreaterThan(shallows.extent.min_xyz[1] - 0.2);
+      expect(y).toBeLessThan(shallows.extent.max_xyz[1] + 0.2);
     }
 
     // 3. The box on screen is the box in the model. This is an assertion
@@ -292,9 +337,10 @@ test('one command, and two consumers follow it', async ({ page, request }) => {
     const wasWater = after.filter(inPond);
     const isWater = after.filter(([x, y]) =>
       x >= nx && x <= xx && y >= ny && y <= xy);
-    console.log(`  reshape: ${declared} -> ${reshaped} lethal cells; `
-      + `${ducks.length} ducks inside x ${nx.toFixed(1)}..${xx.toFixed(1)}, `
-      + `y ${ny.toFixed(1)}..${xy.toFixed(1)}`);
+    console.log(`  reshape: ${declared} -> ${reshaped} lethal cells; the water `
+      + `is now x ${nx.toFixed(1)}..${xx.toFixed(1)}, `
+      + `y ${ny.toFixed(1)}..${xy.toFixed(1)}; `
+      + `${ducks.length} ducks still in the shallows`);
     console.log(`  path: ${wasWater.length} of ${after.length} samples after `
       + `the change are inside the old bounds, ${isWater.length} inside the new`);
     expect(wasWater.length,

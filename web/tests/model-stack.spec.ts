@@ -186,11 +186,8 @@ test('the basis pair partitions the venue, and a stranger is placed either way',
     // a second OBSERVED entity, and an eighth thing in the world is not a
     // reason for a basis test to fail.
     expect(observed.ids).toContain('ent:fountain:littlefield');
-    // The last fixed list, and it outlived the others by one part: the
-    // monument is DECLARED too, so this became two the moment a second
-    // keep-out was seeded.
     expect(declared.ids).toContain('ent:pond:littlefield');
-    expect(declared.ids).toContain('ent:monument:littlefield');
+    expect(declared.ids).toContain('ent:shallows:littlefield');
     expect(derived.ids).toContain('ent:pond:observed');
     for (const authoredId of ['ent:duck:catalog-pose', 'ent:duck:east',
                               'ent:duck:west', 'ent:gnome:visitor']) {
@@ -519,9 +516,12 @@ test('shrinking the pond crowds the ducks on every open tab', async ({ browser }
 
   const bounds = async () => {
     const model = await (await first.request.get(`${BRIDGE_URL}/v1/model`)).json();
-    const pond = (model.entities || []).find(
-      (e: any) => e.entity_id === 'ent:pond:littlefield');
-    return { min: pond.extent.min_xyz, max: pond.extent.max_xyz };
+    // The shallows, not the pond: since the pond was declared honestly it
+    // covers the whole pool, and the box the ducks are clamped into is the
+    // smaller claim the venue makes about where they go.
+    const box = (model.entities || []).find(
+      (e: any) => e.entity_id === 'ent:shallows:littlefield');
+    return { min: box.extent.min_xyz, max: box.extent.max_xyz };
   };
   const ducksOn = (page: any) => page.evaluate(() => {
     const v = (window as any).__viewer;
@@ -560,7 +560,7 @@ test('shrinking the pond crowds the ducks on every open tab', async ({ browser }
     // argument. 10.5 x 8.0 m becomes 4.2 x 3.2 m -- still comfortably above
     // the 2 m the mover's inset needs, so the ducks crowd inside the water
     // rather than sitting on its rim.
-    inContainer(name, 'python3 scripts/reshape_pond.py --shrink 0.4');
+    inContainer(name, 'python3 scripts/reshape_pond.py --entity ent:shallows:littlefield --shrink 0.4');
     const small = await bounds();
     expect(small.max[0] - small.min[0]).toBeLessThan(wide.max[0] - wide.min[0]);
 
@@ -605,7 +605,8 @@ test('shrinking the pond crowds the ducks on every open tab', async ({ browser }
                 + '— one model, two windows');
   } finally {
     stopMover(name);
-    inContainer(name, 'python3 scripts/reshape_pond.py --restore');
+    inContainer(name, 'python3 scripts/reshape_pond.py '
+                + '--entity ent:shallows:littlefield --restore');
     await first.close();
     await second.close();
   }

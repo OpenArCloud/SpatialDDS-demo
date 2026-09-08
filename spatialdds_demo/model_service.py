@@ -137,12 +137,6 @@ TYPE_RUBBER_DUCK = "http://www.wikidata.org/entity/Q851478"  # rubber duck
 # water undisturbed by fountain jets, which this basin is not.
 TYPE_BASIN = "http://www.wikidata.org/entity/Q810524"
 
-# "war memorial" -- memorial for the victims of a war. Verified 2026-09-05
-# against the entity data. Littlefield Fountain is one: Q6652941 describes it
-# as a war memorial in Austin, which is the external ref the fountain already
-# carries.
-TYPE_MONUMENT = "http://www.wikidata.org/entity/Q575759"
-
 # Venue-frame metres. The frame's origin is the OpenVPS map anchor, which sits
 # on the plaza north-west of the basin, so the fountain itself is a short walk
 # from the origin rather than at it.
@@ -153,32 +147,42 @@ BASIN_HALF_EW, BASIN_HALF_NS = 14.1, 16.25
 BASIN_DOWN, BASIN_UP = 1.0, 4.0
 
 # The pond: the water itself, as a thing rather than as a property of the
-# fountain. Bounds are the waterline measured off the photorealistic tiles,
-# then pulled in past the memorial sculpture at x ~ 8.
+# fountain. Bounds are the waterline, sampled off the photorealistic tiles:
+# first on a 1 m grid, then edge by edge at 0.25 m, because a metre of
+# quantisation is a metre of robot. The water reaches y = -19.75 at its
+# southern point, x = 25.0 east, x = -1.25 west and y = -5.0 north; the box
+# rounds each of those outward.
 #
-# Deliberately conservative rather than accurate. The venue *declares* these
-# bounds; it has not surveyed them, and a declared boundary that is a little
-# smaller than the water is safe in the way that matters -- anything trusting
-# it stays wet. Being visibly coarse is also useful: when a second service
-# publishes its own observed opinion of the same water, the two disagree for
-# a reason a person can see rather than by a rounding error.
-POND_MIN = (9.5, -18.0, -2.0)
-POND_MAX = (20.0, -10.0, -1.0)
+# It used to be 84 m2 in the eastern lobe, which is where the ducks are, and
+# it looked wrong the moment anyone stood in the venue and compared the box
+# on screen to the pool under it. It was also the wrong claim for the robot:
+# a keep-out has to *cover* the water, because outside it must mean dry
+# ground, and a box smaller than the pool sends a machine that obeys it
+# straight into the water.
+#
+# This over-claims instead, which is the safe direction and visibly coarse:
+# the pool is a U with an island in it, so the box includes dry paving at the
+# northern bays. A venue declaring a rectangle around a curved thing has no
+# other option -- `Entity.extent` is an `Aabb3` -- and over-claiming is the
+# error a reader can be safe about.
+POND_MIN = (-1.5, -20.0, -2.0)
+POND_MAX = (25.5, -4.75, -1.0)
 
-# The memorial sculpture, as a thing a robot must not drive into.
+# The shallows: the part of the pond the venue keeps its ducks on.
 #
-# Measured off the tiles the same way the waterline was: `move_duck.py`
-# records the sculpture sitting at x ~ 8 in the middle of the water, which is
-# why the pond's declared bounds start at 9.5 and not at the waterline.
+# A second declared box, because the duck service and the robot need the
+# margin to point opposite ways and no single rectangle does both. A duck is
+# clamped *into* its box, so that box has to be inside the water or the duck
+# lands on paving; a robot is kept *out of* its box, so that one has to cover
+# the water or the robot drives in. These are two different claims about the
+# venue and the venue makes both.
 #
-# It exists because avoidance in this demo is policy or nothing. There is no
-# lidar and no physics: a robot planning across a perception-free plaza would
-# drive straight through the monument, which reads as broken on screen and is
-# dishonest in the other direction -- a real robot's sensors would refuse. So
-# the venue declares its memorial off-limits, which is what a venue would
-# actually do.
-MONUMENT_MIN = (6.5, -16.0, -1.5)
-MONUMENT_MAX = (9.5, -12.0, 2.5)
+# The numbers are the pond's old bounds, which were always the eastern lobe
+# and always all water. Simulated over the sampled waterline, a duck walk
+# clamped into this box spends 0% of its time on dry ground; the same walk
+# clamped into the pond above spends 32%.
+SHALLOWS_MIN = (9.5, -18.0, -2.0)
+SHALLOWS_MAX = (20.0, -10.0, -1.0)
 
 # Three ducks on the water. The first reuses the catalogue row's own pose, so
 # switching the client from catalogue placement to model placement does not
@@ -288,7 +292,7 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         extent=Aabb3(min_xyz=list(POND_MIN), max_xyz=list(POND_MAX)),
         properties=[KV(key="demo.label", value="Pond"),
                     KV(key="demo.note",
-                       value="The water, as its own entity. Bounds are declared by the venue and deliberately a little inside the waterline.")],
+                       value="The water, as its own entity. The venue declares a rectangle around a pool that is not one, so the box covers dry paving at the northern bays — over-claiming, which is the safe direction for something a machine is told to stay out of.")],
         external_refs=[],
         content_refs=[],
         state=LifecycleState.ACTIVE,
@@ -297,23 +301,24 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         stamp=stamp,
     )
 
-    mx = [(MONUMENT_MIN[i] + MONUMENT_MAX[i]) / 2 for i in range(3)]
-    monument = Entity(
-        entity_id="ent:monument:littlefield",
-        # DECLARED, like the pond: the venue asserts this footprint. Nothing
-        # measured it into the model, and that is the point -- a keep-out is
-        # something a venue declares, not something a sensor happened to bound.
+    sx = [(SHALLOWS_MIN[i] + SHALLOWS_MAX[i]) / 2 for i in range(3)]
+    shallows = Entity(
+        entity_id="ent:shallows:littlefield",
+        # DECLARED, like the pond, and a different claim about the same
+        # venue: this one says where the ducks are kept, not where the water
+        # ends. Two consumers, two boxes, and neither has to know about the
+        # other -- which is the whole reason a model is worth having.
         basis=Basis.DECLARED,
-        type_uris=[TYPE_MONUMENT],
+        type_uris=[TYPE_BASIN],
         layer=ModelLayer.STATIC,
         frame_ref=frame,
         has_pose=True,
-        pose=PoseSE3(t=mx, q=[0.0, 0.0, 0.0, 1.0]),
+        pose=PoseSE3(t=sx, q=[0.0, 0.0, 0.0, 1.0]),
         has_extent=True,
-        extent=Aabb3(min_xyz=list(MONUMENT_MIN), max_xyz=list(MONUMENT_MAX)),
-        properties=[KV(key="demo.label", value="Memorial"),
+        extent=Aabb3(min_xyz=list(SHALLOWS_MIN), max_xyz=list(SHALLOWS_MAX)),
+        properties=[KV(key="demo.label", value="Shallows"),
                     KV(key="demo.note",
-                       value="The sculpture group at the head of the basin, declared off-limits by the venue. Its bounds legislate rather than locate: they say where not to go, not where the statue is.")],
+                       value="The part of the pond the venue keeps its ducks on. Inside the water on every side, because a duck is clamped into these bounds rather than kept out of them.")],
         external_refs=[],
         content_refs=[],
         state=LifecycleState.ACTIVE,
@@ -352,13 +357,14 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
         )
         for entity_id, name, translation, rotation in DUCKS
     ]
-    return [fountain, pond, monument] + ducks
+    return [fountain, pond, shallows] + ducks
 
 
 def seed_relationships(entities: List[Entity],
                        stamp: Optional[Time] = None) -> List[Relationship]:
     """
-    The hierarchy: fountain contains pond, pond contains each duck.
+    The hierarchy: fountain contains pond, pond contains the shallows,
+    pond contains each duck.
 
     Part 1 had the fountain containing the ducks directly, which was true and
     shallow -- the ducks are on the water, and the water is part of the
@@ -392,8 +398,14 @@ def seed_relationships(entities: List[Entity],
             stamp=stamp,
         )
 
+    shallows = by_id["ent:shallows:littlefield"]
+
+    # The ducks stay children of the pond rather than of the shallows. They
+    # are on the water; the shallows are the region the venue keeps them in,
+    # which is a policy about them and not a place that contains them.
     ducks = [e for e in entities if e.entity_id.startswith("ent:duck")]
-    return [edge(fountain, pond)] + [edge(pond, duck) for duck in ducks]
+    return ([edge(fountain, pond), edge(pond, shallows)]
+            + [edge(pond, duck) for duck in ducks])
 
 
 class ModelPublisher:

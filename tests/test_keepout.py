@@ -118,33 +118,36 @@ class TheMask(unittest.TestCase):
     def test_the_venue_declares_two_keep_outs_and_locates_a_third_thing(self):
         mask = build_mask(seed_entities(), exclude_ids=(ROBOT_ID,))
         self.assertIsNotNone(mask)
+        # Both declared boxes forbid, including the shallows, which exists
+        # for the ducks. That is right rather than incidental: a keep-out is
+        # everything the venue declares, and the shallows are water.
         self.assertEqual(list(mask.contributors),
-                         ["ent:monument:littlefield", "ent:pond:littlefield"])
+                         ["ent:pond:littlefield", "ent:shallows:littlefield"])
+        # The fountain has the largest extent in the venue and forbids
+        # nothing: it is OBSERVED, and OBSERVED locates rather than
+        # legislates. That distinction is the whole policy.
         self.assertNotIn("ent:fountain:littlefield", mask.contributors)
         print(f"\n  {describe(mask)}")
 
     def test_the_robot_starts_outside_every_keep_out(self):
         """
-        It could not, under the old policy: (22.0, -8.0) is inside the
+        It could not, under the old policy: the start is inside the
         fountain's bounding box, so the robot began life in a forbidden cell.
+
+        The bounds check is the load-bearing half. `cell()` answers FREE for
+        anything outside the mask, which is true and useless here -- move the
+        start off the mask and this test goes green while asserting nothing
+        about keep-outs at all.
         """
         from spatialdds_demo.robot_bridge import START_XY
         mask = build_mask(seed_entities(), exclude_ids=(ROBOT_ID,))
-        self.assertEqual(mask.cell(*START_XY), FREE,
+        x, y = START_XY
+        self.assertTrue(
+            mask.origin_x <= x < mask.origin_x + mask.width * mask.resolution
+            and mask.origin_y <= y < mask.origin_y + mask.height * mask.resolution,
+            f"the start {START_XY} is outside the mask, so 'free' means nothing")
+        self.assertEqual(mask.cell(x, y), FREE,
                          f"the robot starts at {START_XY}, which must be legal")
-
-    def test_the_monument_is_declared_because_avoidance_is_policy_here(self):
-        """
-        There is no lidar in this demo. A robot planning across a
-        perception-free plaza would drive through the sculpture, which reads
-        as broken and is dishonest the other way: a real robot's sensors would
-        refuse. So the venue declares it.
-        """
-        monument = next(e for e in seed_entities()
-                        if e.entity_id == "ent:monument:littlefield")
-        self.assertEqual(monument.basis.name, "DECLARED")
-        mask = build_mask(seed_entities())
-        self.assertEqual(mask.cell(8.0, -14.0), OCCUPIED)
 
     def test_points_inside_a_declared_bound_are_occupied(self):
         mask = build_mask(seed_entities())
