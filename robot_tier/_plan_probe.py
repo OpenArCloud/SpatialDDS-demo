@@ -8,11 +8,11 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 
 sys.path.insert(0, "/ws")
-from spatialdds_demo.plaza import GROUND_Z
+from spatialdds_demo.plaza import GROUND_Z, ROBOT_START_XY
 
 # The pond the venue declares: x 9.5..20, y -18..-10. Start east of it, aim
 # west of it, so the straight line between them crosses the water.
-START = (22.0, -8.0)
+START = ROBOT_START_XY
 GOAL = (6.0, -20.0)
 
 

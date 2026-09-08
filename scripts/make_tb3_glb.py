@@ -9,13 +9,20 @@ redistributable. It is a recognisable silhouette rather than a likeness --
 a stacked cylindrical body, two wheels, a caster and a spinning lidar can --
 because at the size it appears in the demo nothing more survives.
 
-The shape faces +X, which is the frame convention the seeder documents:
-identity orientation points a model's authored forward along the venue
-frame's east, and the robot bridge writes a yaw about Z on top of that.
+The shape is built the way a robot is described -- +X forward, +Y left,
++Z up -- and converted to glTF's axes on the way out. That conversion is the
+whole of `to_gltf_axes` below and it is not optional: glTF is Y-up, Cesium
+rotates every asset it loads from Y-up to Z-up, and a model authored Z-up
+therefore arrives lying on its side. This one did, for the whole of Part 4 --
+19 cm of TurtleBot face-down on the plaza, small enough to read as a speck
+rather than as a bug.
 
-glTF 2.0 binary, same structure as the duck: a JSON chunk describing the
-scene, one binary chunk of interleaved-by-attribute vertex data, one
-primitive per material.
+After the conversion, identity orientation faces the venue frame's east,
+which is what the seeder's yaws assume -- yaw 0 is east, +45 degrees is
+north-east -- and the robot bridge writes its heading on top of that.
+
+glTF 2.0 binary: a JSON chunk describing the scene, one binary chunk of
+interleaved-by-attribute vertex data, one primitive per material.
 """
 
 import argparse
@@ -84,6 +91,42 @@ def place(p, n, scale, offset):
     return out.astype(np.float32), nn.astype(np.float32)
 
 
+# Drawn larger than life, on purpose, and recorded here so the number is a
+# decision rather than an accident.
+#
+# The geometry below is built at true TurtleBot3-Burger size: 0.14 m across
+# the plates, 0.198 m to the top of the lidar. That is honest and it is
+# invisible. The client draws models with `minimumPixelSize: 64` so small
+# things stay findable, capped by `maximumScale: 4` so nothing balloons -- and
+# the cap binds first for anything this small: 0.198 m x 0.6 x 4 is 0.48 m,
+# about six pixels from across the mall, where the demo's ducks are twenty-five.
+#
+# So the robot loses a race the ducks win by being 2 m long, which is itself
+# twenty-five times life size. Everything in this venue is drawn for
+# legibility; the robot was the only asset built to scale, and looked like a
+# speck for it. 7.2 put it level with a duck, which read as a toy beside
+# one; 14.4 makes it 2.85 m, the tallest thing on the water and legible as
+# the thing the demo is about.
+DEMO_SCALE = 14.4
+
+
+def to_gltf_axes(p, n):
+    """
+    Robot axes (+X forward, +Y left, +Z up) to glTF axes (+Y up).
+
+    Cesium applies Y-up-to-Z-up to every glTF it loads, which maps gltf
+    (x, y, z) to world (x, -z, y). Feeding it (x, z, -y) therefore lands
+    forward on the frame's east, up on up and left on north -- a right-handed
+    mapping with no reflection, so the normals come along unchanged and
+    nothing turns inside out.
+    """
+    def swap(v):
+        return np.stack([v[:, 0], v[:, 2], -v[:, 1]], axis=1).astype(np.float32)
+    # Positions scale; normals do not -- they are directions, and scaling
+    # them uniformly then renormalising is a no-op that only costs time.
+    return (swap(p) * DEMO_SCALE).astype(np.float32), swap(n)
+
+
 def build():
     """
     Parts grouped by material. Roughly TurtleBot3-Burger proportions: about
@@ -124,8 +167,11 @@ def build():
     p, n = place(cy_p, cy_n, (0.008, 0.008, 0.032), (0.030, 0, 0.166))
     add("trim", p, n, cy_i)
 
-    return {name: (np.concatenate(pos), np.concatenate(nor), np.concatenate(ind))
-            for name, (pos, nor, ind) in groups.items()}
+    out = {}
+    for name, (pos, nor, ind) in groups.items():
+        p, n = to_gltf_axes(np.concatenate(pos), np.concatenate(nor))
+        out[name] = (p, n, np.concatenate(ind))
+    return out
 
 
 MATERIALS = {
