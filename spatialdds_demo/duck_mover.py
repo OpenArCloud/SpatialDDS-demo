@@ -26,6 +26,23 @@ the pond changes. Shrink the pond and the ducks crowd into the smaller water
 with no duck-to-water logic anywhere but the clamp below, which knows only
 "stay inside the box the model currently says". That is the whole trick and
 there is deliberately nothing else to it.
+
+**What it reads, and from where.** Two topics, both SpatialDDS:
+
+* `spatialdds/model/entity/v1` -- latched -- for the box it keeps ducks in.
+  A declaration, published by the venue's model service.
+* `spatialdds/model/pose/v1` -- best-effort, keep-last-one -- for where the
+  robot currently is. An observation, published by `robot_bridge` running
+  inside the ROS tier, which is the process that reads `/odom` off the ROS
+  graph and owns `ent:robot:tb3` on this bus.
+
+That second one is the only place in this demo where a consumer reacts to
+another *service's* live measurement rather than to a venue's declaration,
+and it is worth being exact about the path: ROS `/odom` -> robot bridge ->
+`oarc.model_pose` on the wire -> here. No ROS message type is imported by
+this file and no duck is published to ROS. The two buses meet at exactly one
+process, which is the one that owns the key.
+
 """
 
 import argparse
@@ -34,6 +51,7 @@ import random
 import signal
 import sys
 import time
+import zlib
 from typing import Dict, List, Optional, Tuple
 
 from cyclonedds.domain import DomainParticipant
@@ -41,10 +59,12 @@ from cyclonedds.domain import DomainParticipant
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.model_service import TYPE_RUBBER_DUCK
-from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
-from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1
+from spatialdds_demo.qos_profiles import (
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED)
+from spatialdds_demo.topics import (
+    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1)
 from spatialdds_idl.builtin import Time
-from spatialdds_idl.oarc_model import Entity, ModelCommand
+from spatialdds_idl.oarc_model import Entity, ModelCommand, ModelPose
 from spatialdds_idl.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "svc:mover:demo/ducks"
@@ -58,13 +78,23 @@ REQUESTER_ID = "svc:mover:demo/ducks"
 # service's observed ones. They disagree, and the model does not settle it --
 # it carries both, each saying who published it and how it was arrived at.
 # **Which one to believe is a policy this consumer holds**, which is why it is
-# a command-line flag and not a constant. Run the mover against the other and
+# a command-line flag and not a constant. Run the mover against another and
 # the ducks roam differently; nothing else changes.
+#
+# The default is the shallows, and the reason is worth stating because it is
+# the same point from the other side. Both pond boxes are claims about the
+# *water*, and the water is a U with an island in it, so a rectangle round it
+# contains a good deal of dry paving -- a duck walk clamped into the declared
+# pond spends about a third of its time on stone. The shallows are the box
+# the venue drew for exactly this job. Following the pond is not wrong, it is
+# answering a question nobody asked here; `--bounds declared` will show you
+# what it looks like.
 BOUNDS_ENTITIES = {
-    "declared": "ent:pond:littlefield",     # the venue says so
-    "derived": "ent:pond:observed",         # a service measured it
+    "shallows": "ent:shallows:littlefield",  # where the venue keeps its ducks
+    "declared": "ent:pond:littlefield",      # the venue's water
+    "derived": "ent:pond:observed",          # a service measured that water
 }
-DEFAULT_BOUNDS_ENTITY = BOUNDS_ENTITIES["declared"]
+DEFAULT_BOUNDS_ENTITY = BOUNDS_ENTITIES["shallows"]
 
 # Kept off the declared edge. The pond's bounds are where the water stops, and
 # a duck is not a point -- placing one exactly on the boundary puts half of it
@@ -79,6 +109,66 @@ INSET_M = 1.0
 # service considers it stopped.
 STEP_M = 0.5
 MOVES_PER_SECOND = 6.0
+
+# The one thing in this service that reacts to something alive.
+#
+# Everything else here follows a *declaration*: a box the venue published,
+# read off the latched entity topic. This reads a **live observation** made
+# by a different process -- the robot bridge, in the ROS tier, turning
+# `/odom` into poses on `spatialdds/model/pose/v1`. Nothing is shared but the
+# bus: no ROS types reach this process and no duck reaches ROS. A duck backs
+# off because a robot said where it was, on the same wire the pond's bounds
+# came in on.
+#
+# Nothing here knows what a robot is, either. It is the entity id the demo
+# happens to care about, and the radius is in metres because that is what
+# poses are in. A second robot published under another id would be ignored,
+# which is honest: this service was told about one.
+AVOID_ENTITY_ID = "ent:robot:tb3"
+
+# Ten metres, which is a lot for a duck and is set by the geometry rather
+# than by taste. The robot is kept out of the shallows and out of the water
+# around them, so it *cannot* come near: its route round the south rim runs
+# about 4.2 m from the closest a duck is allowed to be, and even cutting
+# across the top of the shallows after a reshape it stays about 2.1 m off.
+# A radius smaller than the distance the robot can actually achieve is a
+# behaviour that never fires -- the first version was 4 m and never once did.
+#
+# How near the robot has to be to matter at all, and the only geometry in
+# the rule: inside this, a duck simply swims away from it; outside, the
+# robot may as well not exist.
+#
+# Fifteen metres, because the thing it has to cover is not "how close the
+# robot gets" but "how far a duck can get". The water the ducks may use is
+# 8.5 x 6 m, so a duck fleeing to the corner furthest from a robot on the
+# south rim ends up about 13.5 m from it. Anything smaller and the push
+# stops partway: the duck coasts out of range, wanders back in, gets pushed
+# again, and settles a couple of metres short of the corner, milling about.
+# That is what a graded falloff produced, and it looked like indecision.
+#
+# Two earlier attempts are worth recording because both were reasonable and
+# both were wrong. A 4 m radius never fired at all -- the robot is kept out
+# of the water and cannot come nearer than about 4.2 m. A 12 m radius with a
+# squared falloff did fire, and put the ducks at an equilibrium where the
+# push balanced their wander, which is a hover rather than a retreat.
+AVOID_RADIUS_M = 15.0
+
+# How far from the corner a duck is allowed to settle, so that three of them
+# make a group rather than a stack.
+CORNER_SPREAD_M = 1.6
+
+# How much of the wander a fleeing duck gives up. Not all of it: with none
+# left, three ducks steering for the same corner converge on one point and
+# sit there in a stack, which reads as a rendering bug rather than as a
+# flock.
+AVOID_URGENCY = 0.75
+
+# A pose stops meaning "where it is" once it is old. The fast lane is
+# BEST_EFFORT, so samples are dropped rather than queued, and a robot that
+# stopped publishing leaves its last one sitting here forever. Ducks should
+# not go on avoiding a ghost.
+AVOID_STALE_S = 3.0
+
 
 # How much a duck can turn between steps, in radians.
 #
@@ -98,6 +188,47 @@ TURN_RADIANS = 0.45
 def _now() -> Time:
     now = time.time()
     return Time(sec=int(now), nanosec=int((now % 1) * 1e9))
+
+
+def farthest_corner(bounds: Aabb3, away_from: Tuple[float, float],
+                    entity_id: str = "", inset: float = INSET_M
+                    ) -> Tuple[float, float]:
+    """
+    The corner of the usable water that is furthest from a point, nudged by
+    a stable per-entity offset.
+
+    Usable, so inset the same way `clamp_into` insets: aiming at a corner a
+    duck is not allowed to reach would leave it pressed against the boundary
+    nearest that corner, which is where the naive version already put it.
+
+    The offset is what stops three ducks steering for one point from ending
+    up in a stack -- measured spread was two centimetres, which on screen is
+    one duck with a shadow. Derived from the id rather than drawn, so a duck
+    always makes for its own bit of the corner and the arrangement is the
+    same every time the robot comes back.
+    """
+    lo_x, hi_x = bounds.min_xyz[0] + inset, bounds.max_xyz[0] - inset
+    lo_y, hi_y = bounds.min_xyz[1] + inset, bounds.max_xyz[1] - inset
+    if lo_x > hi_x:
+        lo_x = hi_x = (bounds.min_xyz[0] + bounds.max_xyz[0]) / 2
+    if lo_y > hi_y:
+        lo_y = hi_y = (bounds.min_xyz[1] + bounds.max_xyz[1]) / 2
+    corners = [(x, y) for x in (lo_x, hi_x) for y in (lo_y, hi_y)]
+    corner = max(corners, key=lambda c: math.hypot(c[0] - away_from[0],
+                                                   c[1] - away_from[1]))
+    if not entity_id:
+        return corner
+    # Inward from the corner, never outward: an offset that pushes past the
+    # boundary gets clamped back to it, and two ducks whose offsets both
+    # clamp land on the same point -- which is the stack this exists to
+    # avoid, reintroduced by the fix for it.
+    seed = zlib.crc32(entity_id.encode())
+    inward_x = -1.0 if corner[0] == hi_x else 1.0
+    inward_y = -1.0 if corner[1] == hi_y else 1.0
+    nudge_x = inward_x * (seed & 0xFF) / 255.0 * CORNER_SPREAD_M
+    nudge_y = inward_y * ((seed >> 8) & 0xFF) / 255.0 * CORNER_SPREAD_M
+    return (min(max(corner[0] + nudge_x, lo_x), hi_x),
+            min(max(corner[1] + nudge_y, lo_y), hi_y))
 
 
 def clamp_into(x: float, y: float, bounds: Aabb3, inset: float = INSET_M
@@ -140,11 +271,22 @@ def heading_quaternion(dx: float, dy: float, fallback: List[float]) -> List[floa
 class DuckMover:
     """Reads the model, asks for moves. Publishes nothing on model topics."""
 
+    # A class-level default, because the geometry tests build this with
+    # `__new__` to get at `step_for` without a bus, and an attribute that
+    # only exists after `__init__` turns "the mover does not need a bus for
+    # this" into an AttributeError in a test about headings.
+    _avoid: Optional[Tuple[float, float, float]] = None
+
     def __init__(self, participant: DomainParticipant,
                  bounds_entity: str = DEFAULT_BOUNDS_ENTITY,
                  rng: Optional[random.Random] = None):
         self._reader = tt.make_reader(
             participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        # The fast lane, where things that move say so. Same bus, different
+        # QoS: BEST_EFFORT and KEEP_LAST(1), because a stale pose is worse
+        # than a missing one.
+        self._poses = tt.make_reader(
+            participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
         self._commands = tt.make_writer(
             participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
         self._bounds_entity = bounds_entity
@@ -154,6 +296,7 @@ class DuckMover:
         self._matched = False
         self._warned_unheard = False
         self._heading: Dict[str, float] = {}
+        self._avoid: Optional[Tuple[float, float, float]] = None
 
     # --- reading the world -------------------------------------------------
 
@@ -166,7 +309,48 @@ class DuckMover:
                 continue          # a dispose; the id is not carried here.
             self._entities[sample.data.entity_id] = sample.data
             applied += 1
+        for pose in tt.take_samples(self._poses) or []:
+            # Anything we already know about gets its live pose applied. This
+            # matters more than it looks: the latched entity topic only
+            # republishes every few moves, so reading positions from it alone
+            # meant every step was computed from where a duck had been up to
+            # a couple of seconds ago. The duck still drifted -- each request
+            # is an absolute pose and the last one wins -- but at about a
+            # fifth of the intended speed, and a *directed* push barely
+            # accumulated at all. Ducks avoiding a robot crawled sideways
+            # instead of crossing to the far corner, which is exactly what
+            # a demonstration of "the model is the interface" must not do.
+            known = self._entities.get(pose.entity_id)
+            if known is not None and known.has_pose:
+                known.pose = pose.pose
+            if pose.entity_id == AVOID_ENTITY_ID:
+                now = time.time()
+                if self._avoid is None:
+                    # Once, and it says where the pose came from rather than
+                    # that one arrived: the interesting part is that this is
+                    # another service's observation, off the same bus.
+                    print(f"mover: keeping clear of {AVOID_ENTITY_ID} — poses "
+                          f"from {pose.source_id} on {TOPIC_MODEL_POSE_V1}",
+                          flush=True)
+                self._avoid = (pose.pose.t[0], pose.pose.t[1], now)
         return applied
+
+    def avoiding(self, now: Optional[float] = None
+                 ) -> Optional[Tuple[float, float]]:
+        """
+        Where the thing to keep away from is, if anyone has said recently.
+
+        The staleness check is the whole of the honesty here: this is a
+        BEST_EFFORT lane, so silence and "still there" look identical, and a
+        robot whose bridge died would otherwise keep three ducks pinned
+        against the far side of the shallows for the rest of the afternoon.
+        """
+        if self._avoid is None:
+            return None
+        x, y, heard = self._avoid
+        if (now or time.time()) - heard > AVOID_STALE_S:
+            return None
+        return x, y
 
     def bounds(self) -> Optional[Aabb3]:
         entity = self._entities.get(self._bounds_entity)
@@ -200,12 +384,53 @@ class DuckMover:
         heading = self._heading.get(duck.entity_id)
         if heading is None:
             heading = self._rng.uniform(0, 2 * math.pi)
-        heading += self._rng.uniform(-TURN_RADIANS, TURN_RADIANS)
+        wander = self._rng.uniform(-TURN_RADIANS, TURN_RADIANS)
+        heading += wander
+
+        # Something alive is nearby, so lean away from it. Blended into the
+        # heading rather than replacing it: a duck that swung to exactly
+        # away-from-the-robot every step would move like a compass needle,
+        # not like a duck deciding it would rather be elsewhere.
+        avoid_weight = 0.0
+        near = self.avoiding()
+        if near is not None:
+            distance = math.hypot(duck.pose.t[0] - near[0],
+                                  duck.pose.t[1] - near[1])
+            if distance < AVOID_RADIUS_M:
+                # Not "away from it" -- *as far from it as this water gets*.
+                #
+                # Swimming directly away is the obvious rule and it does not
+                # work, for a reason worth writing down. A duck pushed north
+                # reaches the northern edge and stops: the away-vector is
+                # then perpendicular to the wall, the clamp eats all of it,
+                # and nothing suggests going east or west. The ducks ended up
+                # on the near side of the far wall, which is a local answer
+                # to a global question. Steering for the furthest corner of
+                # the water is the question they were actually being asked.
+                target = farthest_corner(bounds, near, duck.entity_id)
+                want = math.atan2(target[1] - duck.pose.t[1],
+                                  target[0] - duck.pose.t[0])
+                delta = (want - heading + math.pi) % (2 * math.pi) - math.pi
+                heading += AVOID_URGENCY * delta
+                avoid_weight = AVOID_URGENCY
+                # Most of the wander goes, but not all of it: three ducks
+                # with none left converge on one point and sit there in a
+                # stack. A little keeps them a flock in a corner.
+                heading -= wander * AVOID_URGENCY
 
         wanted_x = duck.pose.t[0] + STEP_M * math.cos(heading)
         wanted_y = duck.pose.t[1] + STEP_M * math.sin(heading)
         x, y = clamp_into(wanted_x, wanted_y, bounds)
-        if abs(x - wanted_x) > 1e-9 or abs(y - wanted_y) > 1e-9:
+        clamped = abs(x - wanted_x) > 1e-9 or abs(y - wanted_y) > 1e-9
+        # Turning around at the edge is right for a duck that has simply
+        # swum into the boundary, and wrong for one that is being pushed
+        # into it: reversing sends it straight back at the thing it is
+        # avoiding, which it then turns away from again. The result was a
+        # duck hovering a couple of metres short of the far corner rather
+        # than going to it, because `clamp_into` bounds each axis on its
+        # own -- so a heading that points into a wall still slides *along*
+        # it, into the corner, if it is left alone.
+        if clamped and avoid_weight < 0.5:
             heading += math.pi + self._rng.uniform(-TURN_RADIANS, TURN_RADIANS)
         self._heading[duck.entity_id] = heading % (2 * math.pi)
 
@@ -335,9 +560,10 @@ def main() -> int:
         description="Wander the ducks inside whatever bounds the model declares")
     parser.add_argument("--domain", type=int, default=None)
     parser.add_argument("--bounds", choices=sorted(BOUNDS_ENTITIES),
-                        default="declared",
-                        help="whose account of the water to trust "
-                             "(declared: the venue; derived: pondwatch)")
+                        default="shallows",
+                        help="which box to keep the ducks in (shallows: the "
+                             "venue's duck water; declared: the venue's whole "
+                             "pond; derived: pondwatch's measurement of it)")
     parser.add_argument("--bounds-entity", default=None,
                         help="or name an entity directly")
     args = parser.parse_args()

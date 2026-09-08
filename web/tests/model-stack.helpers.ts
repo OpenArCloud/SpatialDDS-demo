@@ -111,7 +111,9 @@ export async function readyPage(page: any, url = '/?debug=1'): Promise<void> {
  * turn the whole file into a coin toss. Anything that needs motion starts it
  * and is responsible for stopping it, including when it fails.
  */
-export function startMover(name: string, bounds: 'declared' | 'derived' = 'declared'): void {
+export function startMover(
+    name: string,
+    bounds: 'shallows' | 'declared' | 'derived' = 'shallows'): void {
   execSync(`docker exec -d -w /app ${name} python3 -m spatialdds_demo.duck_mover `
            + `--bounds ${bounds}`, { stdio: 'ignore' });
 }

@@ -12,6 +12,7 @@ structurally:
   behaviour, so the test reads the source rather than watching the bus.
 """
 
+import math
 import random
 import re
 import sys
@@ -26,17 +27,19 @@ if str(REPO) not in sys.path:
 
 from spatialdds_demo import typed_transport as tt  # noqa: E402
 from spatialdds_demo.duck_mover import (  # noqa: E402
-    INSET_M, DuckMover, clamp_into, heading_quaternion,
+    AVOID_STALE_S, CORNER_SPREAD_M, INSET_M, DuckMover, clamp_into,
+    farthest_corner, heading_quaternion,
 )
 from spatialdds_demo.model_service import (  # noqa: E402
-    ModelPublisher, seed_entities, seed_relationships,
+    SHALLOWS_MAX, SHALLOWS_MIN, ModelPublisher, seed_entities,
+    seed_relationships,
 )
 from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
     TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1,
 )
 from spatialdds_idl.oarc_model import Entity, ModelCommand  # noqa: E402
-from spatialdds_idl.spatial.core import Aabb3  # noqa: E402
+from spatialdds_idl.spatial.core import Aabb3, PoseSE3  # noqa: E402
 
 DOMAIN = 56
 POND = Aabb3(min_xyz=[9.5, -18.0, -2.0], max_xyz=[20.0, -10.0, -1.0])
@@ -148,6 +151,201 @@ class Geometry(unittest.TestCase):
 
     def test_a_zero_step_keeps_the_facing_it_had(self):
         self.assertEqual(heading_quaternion(0, 0, [0, 0, 0.5, 0.5]), [0, 0, 0.5, 0.5])
+
+
+class AvoidingSomethingAlive(unittest.TestCase):
+    """
+    The one behaviour here driven by another service's measurement.
+
+    Everything else the mover does follows a declaration read off the latched
+    entity topic. This follows a pose on the fast lane, published by the robot
+    bridge from `/odom` inside the ROS tier. Geometry only in these tests --
+    no bus -- because what is under test is what the mover does with a pose,
+    not how it got one.
+    """
+
+    def _mover(self, seed=3):
+        mover = DuckMover.__new__(DuckMover)
+        mover._rng = random.Random(seed)
+        mover._heading = {}
+        mover._avoid = None
+        return mover
+
+    def _duck(self, x, y):
+        duck = next(e for e in seed_entities() if e.entity_id == "ent:duck:west")
+        duck.pose = PoseSE3(t=[x, y, -1.42], q=[0.0, 0.0, 0.0, 1.0])
+        return duck
+
+    WIDE = Aabb3(min_xyz=[-500.0, -500.0, -2.0], max_xyz=[500.0, 500.0, -1.0])
+    SHALLOWS = Aabb3(min_xyz=list(SHALLOWS_MIN), max_xyz=list(SHALLOWS_MAX))
+
+    def test_a_duck_beside_the_robot_ends_up_further_from_it(self):
+        mover = self._mover()
+        mover._avoid = (14.0, -19.0, time.time())
+        duck = self._duck(14.0, -17.0)          # two metres north of it
+        before = math.hypot(duck.pose.t[0] - 14.0, duck.pose.t[1] + 19.0)
+        for _ in range(8):
+            duck.pose = mover.step_for(duck, self.WIDE)
+        after = math.hypot(duck.pose.t[0] - 14.0, duck.pose.t[1] + 19.0)
+        self.assertGreater(after, before + 1.0,
+                           f"it should have backed off; {before:.2f} -> {after:.2f}")
+
+    def test_it_keeps_its_distance_across_the_whole_pass(self):
+        """
+        The property, not the constant: over many walks, a duck at the
+        southern edge ends up further from the robot at its nearest than the
+        same walk without one.
+
+        A single seed proves nothing here -- the duck is wandering, and one
+        run can miss the robot by luck. Forty runs cannot.
+        """
+        import statistics
+
+        def closest(avoid):
+            distances = []
+            for seed in range(40):
+                mover = self._mover(seed)
+                duck = self._duck(14.0, -17.0)
+                best = 99.0
+                for i in range(120):
+                    # The robot crossing the south rim west-bound, at the
+                    # speed and offset its own route actually has.
+                    rx = 24.0 - 0.65 * (i / 6.0)
+                    if avoid:
+                        mover._avoid = (rx, -21.2, time.time())
+                    best = min(best, math.hypot(duck.pose.t[0] - rx,
+                                                duck.pose.t[1] + 21.2))
+                    duck.pose = mover.step_for(duck, self.SHALLOWS)
+                distances.append(best)
+            return statistics.median(distances)
+
+        without, with_ = closest(False), closest(True)
+        self.assertGreater(with_, without + 0.5,
+                           f"median closest approach {without:.2f} -> {with_:.2f} m")
+
+    def test_they_go_to_the_corner_furthest_from_it(self):
+        """
+        The behaviour stated the way anyone watching would state it: put the
+        robot at one corner of the water and the ducks end up in the opposite
+        one.
+
+        This is the assertion the earlier tunings could not have passed. A
+        graded push settles the ducks wherever it happens to balance their
+        wander -- a couple of metres short, milling -- which satisfies "they
+        keep their distance" and fails "they go to the far corner". The
+        second is what a person actually sees, so it is what is pinned here.
+        """
+        import statistics
+
+        # The ducks may use the box inset by INSET_M: x 10.5..19, y -17..-11.
+        for robot, corner in [((10.0, -21.0), (19.0, -11.0)),
+                              ((19.0, -21.0), (10.5, -11.0)),
+                              ((10.0, -9.0), (19.0, -17.0)),
+                              ((19.0, -9.0), (10.5, -17.0))]:
+            xs, ys = [], []
+            for seed in range(8):
+                mover = self._mover(seed)
+                ducks = [e for e in seed_entities()
+                         if e.entity_id.startswith("ent:duck")]
+                for step in range(140):
+                    mover._avoid = (robot[0], robot[1], time.time())
+                    for duck in ducks:
+                        duck.pose = mover.step_for(duck, self.SHALLOWS)
+                    if step > 100:
+                        xs += [d.pose.t[0] for d in ducks]
+                        ys += [d.pose.t[1] for d in ducks]
+            with self.subTest(robot=robot):
+                # Not the corner exactly: each duck is deliberately offset
+                # inward by up to CORNER_SPREAD_M so three of them make a
+                # group rather than a stack. The claim is the corner they
+                # chose, not the centimetre they stopped at.
+                reach = CORNER_SPREAD_M + 0.8
+                self.assertAlmostEqual(statistics.mean(xs), corner[0], delta=reach)
+                self.assertAlmostEqual(statistics.mean(ys), corner[1], delta=reach)
+
+    def test_the_ducks_hold_the_far_side_while_it_passes(self):
+        """
+        The claim a person can check by looking, as opposed to the one only
+        a statistic can see.
+
+        Three ducks, one pass, and the question is whether they end up on the
+        far side of the water rather than a little further away on average.
+        The first two tunings of this behaviour were real and invisible: a
+        metre of drift inside an 8 m box that ducks cross every few seconds
+        is not something anyone watching can distinguish from the wander.
+        """
+        import statistics
+
+        def mean_y(avoid):
+            ys = []
+            for seed in range(12):
+                mover = self._mover(seed)
+                ducks = [e for e in seed_entities()
+                         if e.entity_id.startswith("ent:duck")]
+                for i in range(150):
+                    rx = 24.0 - 0.6 * (i / 6.0)
+                    if avoid:
+                        mover._avoid = (rx, -21.2, time.time())
+                    for duck in ducks:
+                        duck.pose = mover.step_for(duck, self.SHALLOWS)
+                    if 40 < i < 130:
+                        ys += [d.pose.t[1] for d in ducks]
+            return statistics.mean(ys)
+
+        idle, passing = mean_y(False), mean_y(True)
+        # The inset limit is -11, and each duck settles up to
+        # CORNER_SPREAD_M inside the corner it makes for, so the flock's
+        # mean sits a little short of the edge rather than on it. This
+        # asserts they are up there, not merely north of where they would
+        # otherwise have been.
+        self.assertGreater(passing, -11.0 - CORNER_SPREAD_M - 0.5,
+                           f"ducks should hold the far edge; mean y {passing:.2f}")
+        self.assertGreater(passing, idle + 1.5,
+                           f"mean duck y {idle:.2f} -> {passing:.2f}")
+
+    def test_a_duck_well_clear_of_it_is_not_affected(self):
+        """
+        The radius has to bind, or the demo is three ducks permanently
+        cowering in a corner rather than a near miss anyone can read.
+        """
+        far = self._mover()
+        far._avoid = (14.0, -80.0, time.time())     # far outside the radius
+        none = self._mover()                        # same seed, nothing to avoid
+        a, b = self._duck(14.0, -14.0), self._duck(14.0, -14.0)
+        for _ in range(8):
+            a.pose = far.step_for(a, self.WIDE)
+            b.pose = none.step_for(b, self.WIDE)
+        self.assertAlmostEqual(a.pose.t[0], b.pose.t[0], places=9)
+        self.assertAlmostEqual(a.pose.t[1], b.pose.t[1], places=9)
+
+    def test_a_pose_nobody_has_repeated_stops_counting(self):
+        """
+        The fast lane is BEST_EFFORT, so silence and "still there" look the
+        same on the wire. Without this the ducks would go on avoiding the
+        last place a robot was seen for as long as the process lived --
+        which is the same mistake as drawing a stale pose as a live one, and
+        the robot bridge already refuses to make it.
+        """
+        mover = self._mover()
+        now = time.time()
+        mover._avoid = (14.0, -19.0, now)
+        self.assertIsNotNone(mover.avoiding(now=now))
+        self.assertIsNone(mover.avoiding(now=now + AVOID_STALE_S + 0.1),
+                          "an old pose is not a place the robot is")
+
+    def test_it_is_the_bus_it_reads_and_not_ros(self):
+        """
+        The path is ROS /odom -> robot_bridge -> oarc.model_pose -> here, and
+        the last hop is the only one this file knows about. A `import rclpy`
+        creeping in would make the ducks depend on a ROS graph they have no
+        business seeing, and the demo's claim that the model is the interface
+        would be false in the place a reader would check first.
+        """
+        source = (Path(__file__).resolve().parent.parent
+                  / "spatialdds_demo" / "duck_mover.py").read_text()
+        for banned in ("import rclpy", "from rclpy", "nav_msgs", "geometry_msgs"):
+            self.assertNotIn(banned, source)
+        self.assertIn("TOPIC_MODEL_POSE_V1", source)
 
 
 class WritesNothing(unittest.TestCase):
@@ -274,20 +472,24 @@ class Wandering(unittest.TestCase):
         finally:
             publisher.close()
 
-    def test_a_shrunk_pond_crowds_them_without_any_duck_to_water_code(self):
+    def test_a_shrunk_box_crowds_them_without_any_duck_to_water_code(self):
         """
         The P3.4 moment, asserted here rather than only screenshotted there.
 
         Nothing in the mover knows what a pond is. It reads a box off the
         model and clamps into it, so making the box smaller is the entire
         mechanism.
+
+        The box is the shallows: since the pond was declared honestly it
+        covers the whole pool, and the mover follows the smaller claim the
+        venue makes about where its ducks go.
         """
         participant, publisher, commands = self._stack(DOMAIN + 1)
         mover = DuckMover(_participant(DOMAIN + 1), rng=random.Random(11))
         time.sleep(0.6)
         small = Aabb3(min_xyz=[10.0, -16.0, -2.0], max_xyz=[14.0, -12.0, -1.0])
         try:
-            publisher.set_extent("ent:pond:littlefield", small)
+            publisher.set_extent("ent:shallows:littlefield", small)
             time.sleep(0.6)
 
             asked = []

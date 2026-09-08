@@ -50,7 +50,7 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
   # starting it is better than being refused.
   -e SPATIALDDS_ROBOT_SIM="${SPATIALDDS_ROBOT_SIM:-0}" \
   -e SPATIALDDS_POND_WATCH="${SPATIALDDS_POND_WATCH:-0}" \
-  -e SPATIALDDS_DUCK_MOVER="${SPATIALDDS_DUCK_MOVER:-0}" \
+  -e SPATIALDDS_DUCK_MOVER="${SPATIALDDS_DUCK_MOVER:-1}" \
   -e SPATIALDDS_VPS_SERVICE_ID="${SPATIALDDS_VPS_SERVICE_ID:-svc:vps:demo/austin-downtown}" \
   -e SPATIALDDS_VPS_SERVICE_NAME="${SPATIALDDS_VPS_SERVICE_NAME:-MockVPS-Austin}" \
   -e SPATIALDDS_DEMO_MANIFEST_URI="spatialdds://vps.example.com/zone:austin-downtown/manifest:vps" \

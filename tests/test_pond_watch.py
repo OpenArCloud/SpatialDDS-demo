@@ -126,7 +126,12 @@ class NothingJoinsThem(unittest.TestCase):
 
 class ConsumerPolicy(unittest.TestCase):
     def test_the_mover_can_be_pointed_at_either_account(self):
-        self.assertEqual(sorted(BOUNDS_ENTITIES), ["declared", "derived"])
+        # Three boxes now, and the two that matter here are still the pair
+        # that disagree about the same water: the venue's declaration and
+        # pondwatch's measurement of it. The third is the venue's separate
+        # claim about where its ducks go, which nothing measures.
+        self.assertEqual(sorted(BOUNDS_ENTITIES),
+                         ["declared", "derived", "shallows"])
         self.assertEqual(BOUNDS_ENTITIES["declared"], "ent:pond:littlefield")
         self.assertEqual(BOUNDS_ENTITIES["derived"], ENTITY_ID)
 
@@ -213,6 +218,18 @@ class WhomYouTrustChangesTheWorld(unittest.TestCase):
         time.sleep(0.4)
 
     def _run_mover(self, domain, bounds_entity, publisher, commands):
+        """
+        Run the mover for a while and report how far *west* the duck was
+        allowed to be, not where it happened to finish.
+
+        The claim under test is about a limit -- which account of the water
+        lets a duck stand further out -- and the final pose is a wandering
+        duck's last step, which says nothing about the limit. It was read as
+        the answer here for two parts and only stopped agreeing when the
+        walk changed for an unrelated reason: the duck drifted back east
+        after being pulled in, and a true statement about the boundary
+        became a false statement about a random position.
+        """
         from spatialdds_demo import typed_transport as tt
         from spatialdds_demo.duck_mover import DuckMover
 
@@ -220,16 +237,20 @@ class WhomYouTrustChangesTheWorld(unittest.TestCase):
                           rng=random.Random(5))
         time.sleep(0.6)
         applied = 0
+        westmost = None
         for _ in range(30):
             mover.tick()
             for command in tt.take_samples(commands) or []:
                 publisher.handle_command(command)
                 if command.subject_id == "ent:duck:west":
                     applied += 1
+                    here = publisher._published["ent:duck:west"].pose.t[:2]
+                    if westmost is None or here[0] < westmost[0]:
+                        westmost = list(here)
             time.sleep(0.02)
         self.assertGreater(applied, 0,
                            f"the mover following {bounds_entity} never moved the duck")
-        return publisher._published["ent:duck:west"].pose.t[:2]
+        return westmost
 
     def test_trusting_the_venue_pulls_a_duck_in_that_the_observer_would_leave(self):
         from spatialdds_demo.duck_mover import BOUNDS_ENTITIES, INSET_M
