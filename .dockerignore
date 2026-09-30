@@ -15,20 +15,41 @@
 **/*.pyo
 
 # Version control + tooling
+#
+# `.git/` matches the root only -- a nested clone under any subdirectory is
+# not covered by it, and walks straight into the context. `**/.git/` is what
+# actually excludes them, and a vendored clone is never wanted in an image.
 .git/
+**/.git/
 .github/
 .idea/
 .vscode/
 .claude/
 directions/
 
+# Local working directories. Not part of the demo, never wanted in an image.
+analysis/
+
 # Local data dirs (gitignored too, but worth blocking explicitly)
+#
+# Gitignored is not dockerignored. These are separate files with separate
+# rules, and a build context is whatever this file does not exclude --
+# untracked or not. That gap is how `spatialdds-deploy:latest` ended up with
+# a single 13.6 GB `COPY . /app/` layer: the working tree held that much at
+# build time, and nothing here said otherwise.
 nuscenes/data/
 nuscenes/scenario9_dev/
 deepsense/data/
 multi_operator_fusion/data/
 benchmarks/results/
 benchmarks/figures/
+dataset/
+
+# Query frames and aligner clouds: photographs of a real place, and that
+# place's coordinates. The AR demo installs them locally and never commits
+# them -- baking them into a distributed image would undo exactly that.
+web/public/query-frames/
+web/public/aligner/
 
 # Web build artifacts (huge node_modules)
 web/node_modules/
