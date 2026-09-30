@@ -45,6 +45,7 @@ from cyclonedds.domain import DomainParticipant
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.model_service import venue_frame
+from spatialdds_demo.keepout import FREE, build_mask
 from spatialdds_demo.plaza import GROUND_Z, ROBOT_START_XY
 from spatialdds_demo.qos_profiles import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
@@ -291,6 +292,13 @@ class RobotBridge:
         return "UNOBSERVED" if self._silent else "ACTIVE"
 
 
+def _extent_of(entity) -> tuple:
+    """An entity's extent as something comparable; () when it has none."""
+    if not entity.has_extent:
+        return ()
+    return tuple(entity.extent.min_xyz) + tuple(entity.extent.max_xyz)
+
+
 class PlazaSim:
     """
     A stand-in for a navigating robot, until the ROS tier lands.
@@ -306,14 +314,24 @@ class PlazaSim:
                  yaw: float = math.pi, speed: float = 0.6):
         self.x, self.y, self.yaw, self.speed = x, y, yaw, speed
         self.goal: Optional[Tuple[float, float]] = None
+        # The venue's declared keep-out, when the caller has one to give.
+        # `None` means "nothing has said where the water is", which is not the
+        # same as "there is no water" -- so with no mask this refuses nothing
+        # and says so in the log rather than inventing a boundary.
+        self.keepout = None
+
+    def blocked(self, x: float, y: float) -> bool:
+        """Would standing here break the venue's declaration?"""
+        return self.keepout is not None and self.keepout.cell(x, y) != FREE
 
     def step(self, dt: float) -> Tuple[float, float, float]:
         if self.goal is None:
-            # Idle: a slow patrol along the plaza's edge, so there is
-            # something to watch before anyone sends it anywhere.
-            self.yaw += 0.25 * dt
-            self.x += self.speed * dt * math.cos(self.yaw)
-            self.y += self.speed * dt * math.sin(self.yaw)
+            # Idle is *still*. This used to add 0.25 rad/s of yaw while
+            # driving at 0.6 m/s and call itself "a slow patrol along the
+            # plaza's edge" -- which is a 2.4 m circle, wherever the robot
+            # happened to stop, straight through whatever was there. It went
+            # unnoticed because the demo is normally run with the nav2 tier,
+            # where this class is not used at all.
             return self.x, self.y, self.yaw
 
         gx, gy = self.goal
@@ -322,10 +340,22 @@ class PlazaSim:
         if distance < 0.15:
             self.goal = None
             return self.x, self.y, self.yaw
-        self.yaw = math.atan2(dy, dx)
+
+        yaw = math.atan2(dy, dx)
         step = min(self.speed * dt, distance)
-        self.x += step * math.cos(self.yaw)
-        self.y += step * math.sin(self.yaw)
+        x = self.x + step * math.cos(yaw)
+        y = self.y + step * math.sin(yaw)
+
+        # It refuses to enter; it does not plan around. That distinction is
+        # the honest difference between this and the tier: nav2 reads the same
+        # declaration and finds a way round it, which is the demonstration.
+        # This only declines to break it, which is enough to stop the dev
+        # fallback contradicting the venue it is standing in.
+        if self.blocked(x, y):
+            self.goal = None
+            return self.x, self.y, self.yaw
+
+        self.yaw, self.x, self.y = yaw, x, y
         return self.x, self.y, self.yaw
 
 
@@ -378,14 +408,40 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
 
     Kept because iteration should not pay the nav2 start-up tax, and because
     everything north of the navigator -- cadence, latching, UNOBSERVED,
-    declines -- is identical in both modes. It drives in straight lines and
-    honours no keep-out, which is exactly why it is not the demo.
+    declines -- is identical in both modes. It drives in straight lines
+    rather than planning, which is why the tier is still the demonstration --
+    but it reads the venue's declaration off the same bus and declines to
+    cross it, so the fallback no longer contradicts the world it stands in.
     """
     sim = PlazaSim()
     bridge = RobotBridge(participant, navigator=KinematicNavigator(sim))
 
+    # The venue's law, read off the latched topic the way any consumer reads
+    # it -- so a reshape reaches this robot too, with nothing here that knows
+    # what a pond is.
+    entities_reader = tt.make_reader(
+        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+    known: dict = {}
+
+    def refresh_keepout():
+        changed = False
+        for sample in tt.take_samples(entities_reader) or []:
+            if sample.entity_id == ENTITY_ID:
+                continue                      # never keep yourself out
+            before = known.get(sample.entity_id)
+            known[sample.entity_id] = sample
+            if before is None or _extent_of(before) != _extent_of(sample):
+                changed = True
+        if not changed:
+            return None
+        sim.keepout = build_mask(list(known.values()), exclude_ids=(ENTITY_ID,))
+        if sim.keepout is None:
+            return "no declared keep-out on the bus — refusing nothing"
+        return (f"keep-out from {', '.join(sim.keepout.contributors)} "
+                f"({sim.keepout.occupied_cells} cells)")
+
     print(f"robot: domain {domain_id}, source {SOURCE_ID} — kinematic mode")
-    print(f"robot: owns {ENTITY_ID}; straight lines, no keep-out, dev only")
+    print(f"robot: owns {ENTITY_ID}; straight lines, declines declared cells")
 
     stop = False
 
@@ -399,6 +455,9 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
     interval = 1.0 / hz
     reported = 0
     while not stop:
+        note = refresh_keepout()
+        if note:
+            print(f"robot: {note}", flush=True)
         for note in bridge.poll_commands():
             print(f"robot: {note}", flush=True)
         x, y, yaw = sim.step(interval)
