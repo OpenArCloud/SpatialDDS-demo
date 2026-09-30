@@ -681,7 +681,20 @@ class ModelPublisher:
         self._published.clear()
 
 
-def run_server(domain_id: Optional[int] = None) -> int:
+# Verbs whose notes are routine enough to drown everything else.
+#
+# `move` is the only one, and it is the only one that matters: the duck mover
+# asks about six times a second, forever, and the service printed every one.
+# One container left running from 6 to 24 September wrote a 670 MB log --
+# 7,262,409 `model: moved` lines out of 7,263,842. The 1,433 lines that were
+# not duck bookkeeping were the ones anybody would have wanted to read.
+#
+# The mover already throttles its own output to one line per twenty moves; the
+# service did not, which is why the noisy half was the half without a limit.
+QUIET_VERBS = ("move",)
+
+
+def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
     domain_id = require_dds_env() if domain_id is None else domain_id
     participant = DomainParticipant(domain_id)
     publisher = ModelPublisher(participant)
@@ -765,8 +778,12 @@ def main() -> int:
         description="SpatialDDS demo world model publisher (demo-local oarc_model)")
     parser.add_argument("--domain", type=int, default=None,
                         help="DDS domain id (default: SPATIALDDS_DDS_DOMAIN)")
+    parser.add_argument("--quiet", action="store_true",
+                        help="stop logging routine per-move notes; commands "
+                             "that change the world, and every failure, still "
+                             "print. The container stack passes this.")
     args = parser.parse_args()
-    return run_server(args.domain)
+    return run_server(args.domain, quiet=args.quiet)
 
 
 if __name__ == "__main__":
