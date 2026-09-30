@@ -18,9 +18,36 @@ cd web && npm install && npm run dev   # → http://localhost:5173/
 
 Turn on **REST Messages** and **DDS Messages**, then click **Localize**.
 
-That pairing is the point: the REST panel shows the two HTTP calls the browser
-makes, the DDS panel the five bus messages they cause. A browser using the
-spec's HTTP binding, with DDS behind it the whole way.
+That pairing is the point. A browser using the spec's HTTP binding, with DDS
+behind it the whole way — and the two panels side by side show that one click
+on the left is a conversation on the right.
+
+Measured on a live stack, one **Localize** produces three REST calls:
+
+```
+GET  /.well-known/spatialdds/search?geohash=9v6kr&kind=VPS   ->  200
+POST /v1/localize                                            ->  200
+GET  /v1/model                                               ->  200
+```
+
+and five bus messages:
+
+```
+spatialdds/discovery/query/v1                 coverage_query
+spatialdds/discovery/replies/bridge-<id>/v1   coverage_response   (the VPS)
+spatialdds/discovery/replies/bridge-<id>/v1   coverage_response   (the catalogue)
+spatialdds/vps/query/v1                       vps_query
+spatialdds/vps/result/v1                      vps_response        VPS_SUCCESS
+```
+
+Two things worth pointing at in that list. The search carries `&kind=VPS`, so
+the *client* says what it wants and discovery says who provides it — the
+browser never holds an endpoint. And two services answer the coverage query;
+only one of them is a localizer, which is why the filter is there rather than
+the browser taking whatever came back first.
+
+`GET /health` also appears in the REST panel, from page load rather than from
+the click.
 
 **What is real here and what is not.** The whole request path is real — a
 full-size JPEG chunked onto `spatialdds/blob/chunk/v1`, reassembled and

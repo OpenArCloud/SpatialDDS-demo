@@ -24,9 +24,9 @@ the bus — no configured endpoint, no per-service client code.
 cd web && npm install && npm run dev   # → http://localhost:5173/
 ```
 
-Turn on **REST Messages** and **DDS Messages**, then click **Localize**: the
-REST panel shows the two HTTP calls the browser makes, the DDS panel the five
-bus messages they cause.
+Turn on **REST Messages** and **DDS Messages**, then click **Localize**. The
+REST panel shows the three calls the browser makes — discovery search, localize,
+model snapshot — and the DDS panel the five bus messages they cause.
 
 The bundled localizer returns the prior plus jitter. For poses computed from
 pixels, put a real [OpenVPS](https://github.com/OpenArCloud/openvps) on the bus
