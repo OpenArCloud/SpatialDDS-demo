@@ -90,3 +90,10 @@ web/public/aligner/
 # at two times of day. Local input, not repo content -- the same reasoning as
 # the query frames and the aligner clouds above.
 dataset/
+
+# idlc's C output. This repo generates Python (scripts/generate_types.py) and
+# has no C in it; `idlc -l c` run by hand in the root drops a .c/.h pair per
+# IDL file, and a pair of those sat in the root tracked for months. Root only,
+# so a genuine C source added deliberately elsewhere is unaffected.
+/*.c
+/*.h

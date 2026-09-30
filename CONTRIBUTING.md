@@ -62,7 +62,7 @@ The table below is what those tiers run, if you want one of them alone.
 | MCAP record → replay | `python3 bridges/mcap_bridge/test_live.py` | Docker + `pip install mcap` |
 | AR-demo protocol | `cd ar_demo && ./run_all_tests.sh` | host |
 | Cesium web UI | `cd web && npm test` | host + Playwright browsers |
-| Web bridge HTTP | `bash run_bridge_http_tests_docker.sh` | Docker |
+| Web bridge HTTP | `bash scripts/run_bridge_http_tests_docker.sh` | Docker |
 | IDL compile + protocol | `docker run --rm cyclonedds-python` | Docker |
 | ROS 2 bridge, all tiers | `bash bridges/ros2_bridge/run_docker_tests.sh` | Docker, emulates amd64 on Apple Silicon |
 | MQTT bridge Tier-2 | `cd bridges/mqtt_bridge && docker compose -f docker-compose.test.yaml up --abort-on-container-exit --exit-code-from tests` | Docker + Mosquitto |
@@ -397,7 +397,7 @@ subject rather than an incidental property.
   loses some. A test asserting zero loss on one of those is asserting the
   wrong thing; assert it on a reliable lane.
 - The two web specs skip each other by design; see `web/README.md`.
-- `run_bridge_http_tests_docker.sh` can report `COVERAGE_RESPONSE timeout`. Its
+- `scripts/run_bridge_http_tests_docker.sh` can report `COVERAGE_RESPONSE timeout`. Its
   discovery query is sent once with no retry. Re-run it, or use the pytest
   variant.
 - `idlc -l py` writes nothing for `ar_demo/spatialdds.idl` and ignores `-o`, and

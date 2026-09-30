@@ -76,7 +76,7 @@ class TestScriptsReferenceRealFiles(unittest.TestCase):
     HARNESSES = [
         "bridges/ros2_bridge/Dockerfile.test",
         "bridges/ros2_bridge/run_docker_tests.sh",
-        "run_bridge_http_tests_docker.sh",
+        "scripts/run_bridge_http_tests_docker.sh",
         "bridges/mqtt_bridge/docker-compose.test.yaml",
     ]
 

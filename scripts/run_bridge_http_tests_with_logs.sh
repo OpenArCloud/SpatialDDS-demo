@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -u
 
+# Run from anywhere: the mount, the build context and the log all resolve from
+# this script's own location. It used to use ${PWD}, which meant running it
+# from a subdirectory mounted that subdirectory as /app and failed deep inside
+# a container rather than here.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO}"
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required but not installed or not on PATH."
   exit 1
@@ -13,7 +20,7 @@ fi
 
 if ! docker image inspect cyclonedds-python:latest >/dev/null 2>&1; then
   echo "Docker image cyclonedds-python:latest not found. Building from Dockerfile..."
-  docker build -t cyclonedds-python .
+  docker build -t cyclonedds-python "${REPO}"
 fi
 
 bts="$(date +%Y%m%d_%H%M%S)"
@@ -26,7 +33,7 @@ docker run --rm --network host \
   -e SPATIALDDS_TRANSPORT=dds \
   -e SPATIALDDS_DDS_DOMAIN=1 \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
-  -v "${PWD}:/app" \
+  -v "${REPO}:/app" \
   cyclonedds-python bash -lc "python3 -m pip install -r requirements.txt -r bridges/web_bridge/requirements.txt >/dev/null && python3 -m pytest -q bridges/web_bridge/tests/test_bridge_http.py -s" \
   >"${log_file}" 2>&1
 

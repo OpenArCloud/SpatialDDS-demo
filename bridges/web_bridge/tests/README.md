@@ -8,8 +8,8 @@ provides and a host normally doesn't:
 
 ```bash
 # from the repo root
-bash run_bridge_http_tests_docker.sh        # plain runner
-bash run_bridge_http_tests_with_logs.sh     # pytest variant, captures logs
+bash scripts/run_bridge_http_tests_docker.sh        # plain runner
+bash scripts/run_bridge_http_tests_with_logs.sh     # pytest variant, captures logs
 ```
 
 The harness starts `ar_demo/spatialdds_demo_server.py`,
