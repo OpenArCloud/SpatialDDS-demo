@@ -85,3 +85,8 @@ web/public/query-frames/
 
 # Aligner point clouds: large, and derived from a real place.
 web/public/aligner/
+
+# Source scans: 2.7 GB of point clouds and meshes of a real place, captured
+# at two times of day. Local input, not repo content -- the same reasoning as
+# the query frames and the aligner clouds above.
+dataset/

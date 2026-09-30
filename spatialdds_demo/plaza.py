@@ -34,7 +34,7 @@ GROUND_Z = -0.84
 # declares. That is a test, not a hope -- `test_the_robot_starts_outside_
 # every_keep_out` builds the mask from the seed and asks it.
 #
-# It has moved twice, and both moves are the same lesson from different
+# It has moved three times. The first two are the same lesson from different
 # sides. It was (22, -8), which is not in the *declared* pond but is in real
 # water -- the declaration was smaller than the pool, so nothing in the model
 # could say the robot had spawned afloat. Then it was (16, -7), a dry strip
@@ -43,4 +43,10 @@ GROUND_Z = -0.84
 # bays, so the venue now forbids ground that is genuinely dry. That is the
 # cost of a rectangle, it is paid in the safe direction, and it is visible
 # here rather than hidden.
-ROBOT_START_XY = (20.0, -22.0)
+#
+# The third move is presentational, and worth knowing before changing this
+# again: from here, in front of the pond, nav2 rounds the *west* end on the
+# way to the grass behind it; from (20, -22) it rounded the east. The planner
+# takes the nearer end, so this constant silently chooses which way the
+# demo's headline route sweeps on camera.
+ROBOT_START_XY = (17.0, -21.5)

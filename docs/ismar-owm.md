@@ -9,20 +9,24 @@ Background and design notes: [`docs/world-model.md`](world-model.md).
 
 ---
 
-## The two-line version
+## Running it
+
+Two terminals. The first is the venue; the second is the robot that plans
+against it.
 
 ```bash
-SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_ROBOT_SIM=1 ./run_bridge_server_docker.sh
+# 1 — the venue: model service, gnome, ducks, derived pond
+SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_POND_WATCH=1 ./run_bridge_server_docker.sh
+
+# 2 — the robot: nav2, the keep-out node, the plaza sim
+scripts/run_robot_tier.sh
+
+# 3 — the browser
 cd web && npm install && npm run dev        # → http://localhost:5173/
 ```
 
-That gives the whole venue: the model service, a second independent publisher
-(the gnome), moving ducks, and a kinematic robot you can drive. No ROS needed.
-
-Add `SPATIALDDS_POND_WATCH=1` for the **derived** pond — a second service
-publishing its own measured opinion of the same water, next to the venue's
-declared one. It is off by default and it is the clearest single illustration
-of what `basis` is for, so turn it on if you are showing this to anyone.
+The tier takes about 20 s to bring nav2's lifecycle nodes to active. It shares
+the bridge container's network namespace, so the bridge has to be up first.
 
 ### What to point at
 
@@ -31,13 +35,29 @@ nothing is authored by the client.
 
 - **Four colours, four bases.** OBSERVED locates, DECLARED legislates, DERIVED
   opines, AUTHORED decorates. Two boxes over the same water disagree on purpose.
-- **Send Robot: On**, then click the ground. The tap publishes a `goto` on the
-  same command lane an operator script would use; the robot routes **around**
-  the declared water rather than through it.
+- **Send Robot: On**, then click the grass on the far side of the pond. The tap
+  publishes a `goto` on the same command lane an operator script would use, and
+  nav2 **routes around the water** — it has built a costmap from the venue's
+  declared extents. Measured on a live stack: 67 samples from (17.0, −21.5) to
+  the far grass, **zero inside the declared water**, with the path swinging out
+  to x = −2.7 where a straight line would have stayed between 6 and 17.
 - **Drive it along the near edge** and the ducks cross to the far corner. They
   are reacting to the robot's live poses off the fast lane — the only place in
   the demo where one service reacts to another's measurement rather than to a
   venue declaration.
+
+Which way it goes round is just geometry: the planner takes the nearer end, so
+a start east of the pond sweeps east and one in front of it sweeps west.
+
+### Without ROS
+
+`SPATIALDDS_ROBOT_SIM=1` on the bridge gives a kinematic stand-in and needs no
+second terminal. **It does not plan.** It drives straight lines and declines
+any step that would put its footprint inside a declared keep-out — so it stops
+at the water's edge rather than going round it.
+
+That is enough for looking at the model, and it is not the demonstration. The
+routing is the demonstration, and the routing is nav2.
 
 ### Change the world from a terminal
 
@@ -77,12 +97,9 @@ That tier lives in [`robot_tier/`](../robot_tier/) — a Humble image with nav2
 and CycloneDDS built from source, a keep-out node that turns declared entities
 into a costmap filter mask, and a plaza simulator.
 
-> **Not yet scripted.** There is no launcher for this tier and no README under
-> `robot_tier/`. It has been run end to end — the captures in the Part 4 work
-> are from it — but bringing it up is currently hand-assembled. A
-> `scripts/run_robot_tier.sh` plus a short `robot_tier/README.md` is the
-> outstanding piece of work before this half is demo-ready for someone who is
-> not already holding the command in their head.
+`scripts/run_robot_tier.sh` starts it against a running bridge. It refuses if
+the bridge is running its own kinematic robot, because both own
+`ent:robot:tb3` and one of them would have to lose.
 
 When it is running, `robot_bridge --source ros` owns `ent:robot:tb3` on the bus
 and refuses to start if something else already does — so the kinematic robot and

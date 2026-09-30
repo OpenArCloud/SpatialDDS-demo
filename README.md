@@ -40,7 +40,8 @@ pose, type, basis and relationships. A robot plans against the venue's own
 declarations; ducks follow the water; every claim says how it was arrived at.
 
 ```bash
-SPATIALDDS_MODEL_LAYER=1 ./run_bridge_server_docker.sh
+SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_POND_WATCH=1 ./run_bridge_server_docker.sh
+scripts/run_robot_tier.sh              # second terminal: nav2 plans the routes
 cd web && npm run dev                  # → http://localhost:5173/
 ```
 
