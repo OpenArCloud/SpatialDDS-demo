@@ -292,6 +292,16 @@ class RobotBridge:
         return "UNOBSERVED" if self._silent else "ACTIVE"
 
 
+# How much room the robot keeps around itself, in metres.
+#
+# Tied to what is *drawn*, not to a real TurtleBot. The asset is scaled up for
+# legibility -- 0.14 m across the plates becomes about 2 m on screen -- and a
+# demo whose robot visibly overlaps water it is refusing to enter has lost the
+# argument regardless of what the arithmetic says. One metre of drawn radius
+# plus a little.
+CLEARANCE_M = 1.2
+
+
 def _extent_of(entity) -> tuple:
     """An entity's extent as something comparable; () when it has none."""
     if not entity.has_extent:
@@ -321,8 +331,28 @@ class PlazaSim:
         self.keepout = None
 
     def blocked(self, x: float, y: float) -> bool:
-        """Would standing here break the venue's declaration?"""
-        return self.keepout is not None and self.keepout.cell(x, y) != FREE
+        """
+        Would standing here break the venue's declaration?
+
+        The robot is a disc, not a point, so this asks about its footprint.
+        Checking the centre alone let it stop 0.07 m outside the pond's edge
+        with a full metre of itself inside the declared water -- legal by the
+        letter, and plainly wrong on screen, which is where anyone judges it.
+
+        That is the tier's shoulder lesson arriving here: the law names the
+        region, the consumer renders its own clearance. nav2 does it with an
+        inflation layer; this does it with eight points on a circle.
+        """
+        if self.keepout is None:
+            return False
+        if self.keepout.cell(x, y) != FREE:
+            return True
+        for i in range(8):
+            angle = i * math.pi / 4
+            if self.keepout.cell(x + CLEARANCE_M * math.cos(angle),
+                                 y + CLEARANCE_M * math.sin(angle)) != FREE:
+                return True
+        return False
 
     def step(self, dt: float) -> Tuple[float, float, float]:
         if self.goal is None:
