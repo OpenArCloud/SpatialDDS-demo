@@ -17,6 +17,10 @@
 #
 #     scripts/cold_start.sh                                  # Austin, the stack's default
 #     BRIDGE=http://host:8088 GEOHASH=9q8yy scripts/cold_start.sh
+#     KIND=CONTENT scripts/cold_start.sh                     # the catalogue instead
+#
+# tests/test_cold_start.py runs this against a live bridge and asserts which
+# service it picks; it skips when :8088 is quiet, and needs websocket-client.
 #
 set -euo pipefail
 
@@ -48,18 +52,32 @@ for doc in body["results"]:
 STEP2
 
 say "3. Pick a manifest and the topics it advertises"
-python3 - > /tmp/cold_start_pick.txt <<'STEP3'
+# By kind, not by list order. This step used to take the first result that
+# advertised any topic, which worked only because the VPS was the sole
+# announcing service. When the catalogue began announcing itself the results
+# gained a second entry, `results` is ordered by service_id, and
+# `svc:content:demo/catalog` sorts ahead of `svc:vps:demo/…` -- so the script
+# started handing a CONTENT service to /v1/localize and step 4 died on a 502.
+#
+# A client knows what it wants to *do*; discovery tells it who. So this asks
+# for the kind, which is a field of the manifest -- still nothing baked in
+# about who serves this cell. KIND=CONTENT to walk the catalogue path instead.
+SDDS_KIND="${KIND:-VPS}" python3 - > /tmp/cold_start_pick.txt <<'STEP3'
 import json, os, sys
+want = os.environ["SDDS_KIND"]
+seen = []
 for doc in json.load(open("/tmp/cold_start_search.json"))["results"]:
-    topics = doc["service"].get("topics") or []
-    if not topics:
+    svc = doc["service"]
+    topics = svc.get("topics") or []
+    seen.append(f'{svc["service_id"]} ({svc.get("kind")}, {len(topics)} topic(s))')
+    if not topics or svc.get("kind") != want:
         continue
     # A glob over the service's own topics, built from the manifest rather
     # than from anything this script knows about SpatialDDS.
     prefix = os.path.commonprefix([t["name"] for t in topics]).rsplit("/", 1)[0]
-    print(doc["service"]["service_id"], prefix + "/*")
+    print(svc["service_id"], prefix + "/*")
     sys.exit(0)
-sys.exit("no service in this cell advertises a topic")
+sys.exit(f'no {want} in this cell advertises a topic; saw: ' + "; ".join(seen))
 STEP3
 read -r SERVICE_ID PATTERN < /tmp/cold_start_pick.txt
 echo "service:    $SERVICE_ID"
