@@ -153,3 +153,66 @@ What each outcome means:
 
 Only after this passes: delete the old stack, and the orphaned volume it leaves
 behind.
+
+---
+
+## The current deployment
+
+Recorded because `<instance-id>` in a runbook is the reason this took an
+afternoon to reconstruct rather than five minutes.
+
+```
+openvps-fountain-2   i-04d28d454b7d35e75   172.31.1.28    sg-0ef313f99840dc12d
+                     vol-079ce4dcfe06e1c9b (maps)         us-east-1a
+                     UpstreamRefDeployed 31b3df8          deployed 2026-10-01
+
+spatialdds-demo      http://spatia-Servi-aXJc8ECI0qPS-1339332116.us-east-1.elb.amazonaws.com
+                     /ar/ is the demo, /static/index.html the fusion dashboard
+
+map                  dataset e6c9dced-7c03-494a-8ac0-581da857c13c
+                     map     b1afa008-6c71-4877-b831-70b113d601dc
+                     geohash 9v6kr
+```
+
+Kept as a rollback until after ISMAR, stopped:
+
+```
+openvps-fountain     i-0e6bf67b60e2de5ed   172.31.13.67   sg-022208ef1e0b195e5
+                     UpstreamRefDeployed 1a608af
+```
+
+To fall back: start that instance, load the map, put `172.31.13.67` and
+`sg-022208ef1e0b195e5` back into `deploy/aws/config.yaml`, `deploy.sh`.
+
+**Do not run both at once.** Two instances serving the same map announce the
+*same* `service_id` — it carries the map, not the host — so discovery cannot say
+which one answered, and a request naming that id is served by whoever replies
+first. Fine if they run identical code; silently wrong for any comparison.
+
+## Waking the current deployment
+
+Not a rebuild. Three steps, and `config.yaml` is not one of them:
+
+```bash
+aws ec2 start-instances --instance-ids i-04d28d454b7d35e75
+aws ec2 wait instance-status-ok --instance-ids i-04d28d454b7d35e75
+
+python3 scripts/openvps_prepare_map.py --instance i-04d28d454b7d35e75 \
+    --dataset e6c9dced-7c03-494a-8ac0-581da857c13c \
+    --map b1afa008-6c71-4877-b831-70b113d601dc --load --verify
+
+aws ecs update-service --cluster spatialdds-demo-cluster \
+    --service spatialdds-demo-service --force-new-deployment
+```
+
+Then `BASE=<alb> python3 deploy/aws/smoke_test.py`, which localizes a real frame
+against the real VPS and fails if the pose does not come back.
+
+**It will not idle-stop while a map is loaded.** The idle detector counts GPU
+processes and a resident localizer holds one, so it logs
+`busy (gpu:1proc); resetting idle clock` indefinitely. At $0.752/hr, stop it by
+hand:
+
+```bash
+aws ec2 stop-instances --instance-ids i-04d28d454b7d35e75
+```
