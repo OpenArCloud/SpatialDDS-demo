@@ -120,10 +120,21 @@ autostart: held — svc:vps:oarc/… is not the demo's own; press Localize to se
 
 **Use "Localize with Image", not "Localize".** Plain *Localize* sends the
 rendered Cesium view, which no VPS can match against a map — it exercises the
-blob lane with real bytes and nothing more. *Localize with Image* sends an
-actual photograph from the scan the map was built from. That button is disabled
-until a query-frame bundle is installed; see
-[`ar_demo/README.md`](../ar_demo/README.md#localize-with-image).
+blob lane with real bytes and gets a correct `VPS_FAILED` back. *Localize with
+Image* sends an actual photograph from the scan the map was built from, and is
+the only button that produces a pose from pixels.
+
+It needs the query-frame bundle, and it is disabled without one. The bundle is
+gitignored, so:
+
+- **the deployed demo has it** if whoever ran `deploy.sh` had it installed —
+  the image carries `web/public/query-frames/` deliberately, see `.dockerignore`;
+- **a local page** needs it in `web/public/query-frames/`; see
+  [`ar_demo/README.md`](../ar_demo/README.md#localize-with-image).
+
+Measured against the real localizer, all six bundled frames: `VPS_SUCCESS`,
+4.5-5.2 s each, poses spanning ~5 m of latitude and ~22 m of longitude. Numbers
+in [`deploy/aws/maps/fountain/baseline-1a608af.md`](../deploy/aws/maps/fountain/baseline-1a608af.md).
 
 ### Shutting down
 

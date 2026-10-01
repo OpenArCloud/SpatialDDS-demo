@@ -45,11 +45,21 @@ benchmarks/results/
 benchmarks/figures/
 dataset/
 
-# Query frames and aligner clouds: photographs of a real place, and that
-# place's coordinates. The AR demo installs them locally and never commits
-# them -- baking them into a distributed image would undo exactly that.
-web/public/query-frames/
+# Aligner point clouds: large, and a dense scan of a real place. Nothing in
+# the deployed demo reads them -- MapAligner runs on the GPU host.
 web/public/aligner/
+
+# Query frames are deliberately NOT excluded. They are 1.9 MB of photographs
+# from the scan, and they are the only thing that makes "Localize with Image"
+# work: a real VPS matches against its map, so the bridge's placeholder gets a
+# correct VPS_FAILED and no pose. Excluding them left the deployed demo able to
+# show the request path and never a pose from pixels.
+#
+# They stay gitignored, so this only bakes them in when the person deploying has
+# installed the bundle; a checkout without it deploys fine and the button is
+# disabled, which is the documented behaviour. The place's coordinates are
+# public either way -- they are in the announce the ALB already serves and in
+# deploy/aws/maps/fountain/transform.json.
 
 # Web build artifacts (huge node_modules)
 web/node_modules/
