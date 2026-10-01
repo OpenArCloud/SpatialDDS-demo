@@ -164,6 +164,11 @@ Done once, on `us-east-1`. The AR demo's **Localize with Image** button sends a
 real photograph from the scan a map was built from; with a real localizer on
 the bus the pose comes back from the pixels rather than from the stand-in.
 
+> Doing it again from nothing, or waking what is already deployed?
+> [`docs/openvps-from-scratch.md`](../../docs/openvps-from-scratch.md) has both,
+> with the live instance ids rather than placeholders. This section is the
+> explanation behind it.
+
 **1. Deploy the localizer.** Into *this task's VPC*, so no VPC peering is
 needed, and a public subnet, since that stack has no NAT gateway:
 
@@ -241,9 +246,11 @@ and method in [`maps/fountain/baseline-1a608af.md`](maps/fountain/baseline-1a608
 
 * **You still have to redeploy this task on every GPU restart** — but not
   because the address moved. A VPC holds an instance's primary private IPv4
-  for the life of the instance, stop/start included: `i-0e6bf67b60e2de5ed` has
-  answered on `172.31.13.67` since the stack was created on 2026-08-30, across
-  every stop/start since, and `config.yaml` has not needed an edit.
+  for the life of the instance, stop/start included. Observed over four
+  stop/starts of the stack that preceded the current one: the same address every
+  time, from stack creation to the day it was deleted, with no edit to
+  `config.yaml`. A *replacement* instance is a different matter and does get a
+  new address — see [`docs/openvps-from-scratch.md`](../../docs/openvps-from-scratch.md).
 
   The reason is the participant, not the address. A CycloneDDS participant does
   not pick up a peer that was absent when it started, so a task that outlived

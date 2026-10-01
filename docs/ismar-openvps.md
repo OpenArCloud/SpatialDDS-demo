@@ -73,6 +73,10 @@ First-time setup — deploying the localizer, building or loading a map, pointin
 this repo's task at it — is in
 [`deploy/aws/README.md`](../deploy/aws/README.md#running-against-a-real-openvps).
 
+To **rebuild it from scratch**, with the real identifiers, the order the two
+stacks have to go in, and the current deployment's wake sequence:
+[`docs/openvps-from-scratch.md`](openvps-from-scratch.md).
+
 ### Waking it from stopped
 
 Once deployed, the GPU host lives stopped between demos (it idles itself off

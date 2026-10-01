@@ -174,20 +174,23 @@ map                  dataset e6c9dced-7c03-494a-8ac0-581da857c13c
                      geohash 9v6kr
 ```
 
-Kept as a rollback until after ISMAR, stopped:
+The stack this replaced, `openvps-fountain` at `1a608af`, was deleted on
+2026-10-01 once the rebuild had been verified against it. Its maps volume
+survives as an orphan — `vol-0950652a0110696dc`, 50 GB, unattached — because the
+template retains it. Nothing needs it: the same map is in S3, round-trip
+verified, and restoring from there is one command.
 
-```
-openvps-fountain     i-0e6bf67b60e2de5ed   172.31.13.67   sg-022208ef1e0b195e5
-                     UpstreamRefDeployed 1a608af
-```
+**Rolling back now means rebuilding**, which is section 1 with
+`ParameterKey=UpstreamRef,ParameterValue=1a608af79b54ef9552c235013b231e75ac06f280`
+to override the variant pin, then section 2 to restore the map. About 40
+minutes. That is the cost of having deleted the old stack, and it is the reason
+`UpstreamRef` exists as a parameter.
 
-To fall back: start that instance, load the map, put `172.31.13.67` and
-`sg-022208ef1e0b195e5` back into `deploy/aws/config.yaml`, `deploy.sh`.
-
-**Do not run both at once.** Two instances serving the same map announce the
-*same* `service_id` — it carries the map, not the host — so discovery cannot say
-which one answered, and a request naming that id is served by whoever replies
-first. Fine if they run identical code; silently wrong for any comparison.
+**If you ever run two at once, don't trust a pose.** Two instances serving the
+same map announce the *same* `service_id` — it carries the map, not the host —
+so discovery cannot say which one answered, and a request naming that id is
+served by whoever replies first. Fine when they run identical code; silently
+wrong for any comparison between versions. Stop one before measuring.
 
 ## Waking the current deployment
 
