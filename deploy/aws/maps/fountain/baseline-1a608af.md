@@ -56,3 +56,43 @@ change in a pose.
 `rmse_m` came back exactly 0.0000 on every frame while `confidence` was 1.000.
 Both look like placeholder values from the binding rather than measurements, and
 neither should be read as a quality signal. Not investigated.
+
+---
+
+## Result — the rebuild at 31b3df8
+
+Fresh stack `openvps-fountain-2`, built from scratch on a new instance
+(`i-04d28d454b7d35e75`, 172.31.1.28), map restored from the S3 archive, old
+instance stopped so only the new code could answer.
+
+Map verified identical after the restore:
+
+```
+images 269   rotation-from-prior 0.00 deg   scale 1.0000
+per-image offset mean 0.083 m        transform.json byte-identical
+```
+
+Poses, against the baseline above, tolerance 1e-7 deg / 10 mm:
+
+```
+frame            status           dlat        dlon   dalt_mm     s   verdict
+frame_0005.jpg   VPS_SUCCESS   4.92e-09    1.68e-09     0.03   4.8   MATCH
+frame_0383.jpg   VPS_SUCCESS   4.03e-09   -4.21e-09    -0.39   4.8   MATCH
+frame_0595.jpg   VPS_SUCCESS  -2.51e-09    4.02e-09     0.38   5.2   MATCH
+frame_0794.jpg   VPS_SUCCESS  -4.42e-09    4.58e-10    -0.43   4.6   MATCH
+frame_1007.jpg   VPS_SUCCESS  -2.22e-09    2.32e-09    -0.46   4.8   MATCH
+frame_1233.jpg   VPS_SUCCESS   3.47e-09    5.10e-09    -0.25   4.5   MATCH
+```
+
+**All six within tolerance**, and the differences are the same magnitude as
+pass-to-pass noise on a *single* build — so `31b3df8` changes nothing observable
+on this capture. The COLMAP camera-model fix in that commit covers models this
+capture does not use; it is a fix for other captures, not a change to this one.
+Timings unchanged too: 4.5-5.2 s against 4.5-5.3 s.
+
+**Two instances serving the same map announce the same `service_id`.** Both
+boxes announced `svc:vps:oarc/aws-test;v=b1afa008-…` — the id carries the map,
+not the host — so discovery cannot say which one answered, and with different
+code on each that would have silently invalidated this comparison. The old
+instance was stopped before measuring. Worth knowing before running two
+localizers side by side and trusting a pose.

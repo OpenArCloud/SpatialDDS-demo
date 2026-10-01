@@ -314,7 +314,7 @@ deploy/aws/
 ├── Dockerfile.deploy            # single image used by all containers in the task
 ├── cyclonedds.xml               # loopback-only DDS config (baked into the image)
 ├── docker-compose.local.yaml    # 4-container local equivalent (validate before deploying)
-├── smoke_test.py                # asserts /health + ≥2 operators + fused tracks
+├── smoke_test.py                # /health, then whichever demos are deployed
 ├── config.yaml.example          # template config (copy → config.yaml + edit)
 ├── deploy.sh                    # one-button deploy
 ├── destroy.sh                   # one-button teardown
