@@ -226,9 +226,16 @@ curl "$BASE/.well-known/spatialdds/search?geohash=<cell>"
 
 Measured: discovery inside ~20 s of the announce, and 3.6-5.7 s per localize
 for a 180-270 KB JPEG — decode, NetVLAD retrieval, SuperGlue matching and PnP
-on a T4. Distinct frames give distinct poses and a repeated frame reproduces
-its pose exactly, which is the check that the pixels are being used at all: a
-stand-in returning the prior plus jitter passes every other test.
+on a T4. Distinct frames give distinct poses, which is the check that the
+pixels are being used at all: a stand-in returning the prior plus jitter passes
+every other test.
+
+A repeated frame reproduces its pose to **sub-millimetre, not bit-for-bit** —
+measured over six frames twice each, ~1e-9 degrees and up to 0.9 mm, because
+RANSAC inside PnP is not deterministic across runs. Compare with a tolerance
+(1e-7 degrees / 10 mm is two orders above that noise and still far below any
+real change); an exact-equality check will fail on a working localizer. Numbers
+and method in [`maps/fountain/baseline-1a608af.md`](maps/fountain/baseline-1a608af.md).
 
 ### Three things that will bite
 

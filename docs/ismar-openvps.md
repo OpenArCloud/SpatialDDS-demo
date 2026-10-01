@@ -60,9 +60,14 @@ Stop with `./stop_bridge_server_docker.sh`.
 ## B · Against a real OpenVPS on AWS
 
 Now the pose comes from the pixels: NetVLAD retrieval, SuperGlue matching and
-PnP on a T4. Distinct frames give distinct poses, and a repeated frame
-reproduces its pose exactly — which is the check that pixels are being used at
-all, since a stand-in returning prior-plus-jitter passes every other test.
+PnP on a T4. Distinct frames give distinct poses — which is the check that
+pixels are being used at all, since a stand-in returning prior-plus-jitter
+passes every other test. Measured over the six bundled query frames, the poses
+span about 5 m of latitude and 22 m of longitude: the walk they were taken on.
+
+A repeated frame comes back to sub-millimetre rather than bit-for-bit (~1e-9
+degrees, up to 0.9 mm) — RANSAC inside PnP is not deterministic, so compare
+with a tolerance.
 
 First-time setup — deploying the localizer, building or loading a map, pointing
 this repo's task at it — is in
