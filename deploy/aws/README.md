@@ -232,10 +232,23 @@ stand-in returning the prior plus jitter passes every other test.
 
 ### Three things that will bite
 
-* **The private IP changes on stop/start.** `dds_peers` names an address, so
-  restarting the instance means editing `config.yaml` and redeploying this
-  task. An Elastic IP would remove the step; the stack has `AttachElasticIp`
-  for it.
+* **You still have to redeploy this task on every GPU restart** — but not
+  because the address moved. A VPC holds an instance's primary private IPv4
+  for the life of the instance, stop/start included: `i-0e6bf67b60e2de5ed` has
+  answered on `172.31.13.67` since the stack was created on 2026-08-30, across
+  every stop/start since, and `config.yaml` has not needed an edit.
+
+  The reason is the participant, not the address. A CycloneDDS participant does
+  not pick up a peer that was absent when it started, so a task that outlived
+  the last GPU shutdown never finds the localizer -- which looks exactly like a
+  stale address and is not. `aws ecs update-service --force-new-deployment` is
+  the fix, and `config.yaml` can be left alone.
+
+  An earlier version of this note said the IP changes and prescribed editing
+  `config.yaml`. It was wrong, and wrong in the expensive direction: it sends
+  you editing deploy config during a wake-up, where the actual fault is a
+  participant that needs restarting. `AttachElasticIp` exists on the stack but
+  is not needed for this.
 * **The instance does not idle-stop with a map loaded.** Its idle detector
   counts GPU processes and a resident localizer holds one, so it logs
   `busy (gpu:1proc); resetting idle clock` every five minutes indefinitely.
