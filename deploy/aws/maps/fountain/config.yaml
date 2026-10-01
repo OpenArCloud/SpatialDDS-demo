@@ -1,0 +1,28 @@
+# The pipeline config MapBuilder produced for this map, kept for provenance.
+#
+# `metric_alignment_mode: coord_scale_only` is the value HlocConfigurationStage
+# hardcodes. The API accepts `rescale_model`, echoes it back, and ignores it --
+# which is why scripts/openvps_prepare_map.py --align exists at all, and why
+# this file records scale-only on a map that is in fact fully aligned.
+#
+# The absolute /uploads/... paths are the container's view and are rewritten on
+# restore; they are here as the record of what was run, not as input.
+hloc_reconstruction:
+  feature_conf: superpoint_aachen
+  hloc_path: /app/Hierarchical-Localization
+  image_path: /uploads/e6c9dced-7c03-494a-8ac0-581da857c13c/hlocMaps/b1afa008-6c71-4877-b831-70b113d601dc/prior_model/images
+  matcher_conf: superglue
+  metric_alignment_min_pair_distance_m: 0.05
+  metric_alignment_min_shared_images: 4
+  metric_alignment_mode: coord_scale_only
+  optimize_poses: true
+  pairs_strategy: from_retrieval
+  prior_model_path: /uploads/e6c9dced-7c03-494a-8ac0-581da857c13c/hlocMaps/b1afa008-6c71-4877-b831-70b113d601dc/prior_model
+  reconstruction_path: /uploads/e6c9dced-7c03-494a-8ac0-581da857c13c/hlocMaps/b1afa008-6c71-4877-b831-70b113d601dc/hloc_reconstruction
+  retrieval_conf: netvlad
+program_steps:
+  hloc_build_model: true
+  hloc_extract_features: true
+  hloc_find_image_pairs: true
+  hloc_matches_from_pairs: true
+  hloc_metric_alignment: true
