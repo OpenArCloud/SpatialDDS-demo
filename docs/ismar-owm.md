@@ -88,20 +88,30 @@ rectangle does both jobs.
 
 ## The ROS 2 robot tier
 
-The kinematic robot above is a stand-in: it moves in a straight line to where
-you tap. The real version runs **nav2** in a ROS 2 container, planning against a
-costmap built from the venue's declared extents — so the keep-out is enforced by
-a real planner rather than by the thing being planned.
+**nav2** in a ROS 2 container, planning against a costmap built from the venue's
+declared extents — so the keep-out is enforced by a real planner rather than by
+the thing being planned. A Humble image with nav2 and CycloneDDS built from
+source, a keep-out node that turns declared entities into a costmap filter mask,
+and a kinematic base with no physics and no sensors under it.
 
-That tier lives in [`robot_tier/`](../robot_tier/) — a Humble image with nav2
-and CycloneDDS built from source, a keep-out node that turns declared entities
-into a costmap filter mask, and a plaza simulator.
+How the declaration becomes a costmap, what the probes are for, and the three
+details in the keep-out node that were each found the hard way:
+[`robot_tier/README.md`](../robot_tier/README.md).
 
-`scripts/run_robot_tier.sh` starts it against a running bridge. It refuses if
-the bridge is running its own kinematic robot, because both own
-`ent:robot:tb3` and one of them would have to lose.
-
-When it is running, `robot_bridge --source ros` owns `ent:robot:tb3` on the bus
-and refuses to start if something else already does — so the kinematic robot and
-the ROS one cannot both claim the key. Start the tier and leave
+One robot per key. `robot_bridge --source ros` owns `ent:robot:tb3` and refuses
+to start if something else already does, so the kinematic fallback and the ROS
+one cannot both claim it. `run_robot_tier.sh` checks for the fallback up front
+rather than letting the race decide. Start the tier and leave
 `SPATIALDDS_ROBOT_SIM` off.
+
+### Measured on this stack
+
+```
+bridge up                     6 s      9 entities, all four bases
+nav2 lifecycle active        14 s
+keep-out mask         350x233 cells at 0.10 m, origin (-5.5, -24.0)
+                      415 m2 keep-out + 74 m2 shoulder
+                      from ent:pond:littlefield, ent:shallows:littlefield
+tap-to-goto           asked (24, -20), arrived (23.06, -20.92)
+route behind the pond 67 samples, 0 inside the declared water
+```
