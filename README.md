@@ -74,7 +74,7 @@ per-demo wiring.
 There are **two** HTTP servers — a gateway and a conformance harness — and they
 are not interchangeable: [which one do I want?](docs/servers-and-uis.md)
 
-## Adapters elsewhere
+## Adapters
 
 | Adapter | Repo | What it does |
 |---|---|---|
