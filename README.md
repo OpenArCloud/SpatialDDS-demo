@@ -74,6 +74,12 @@ per-demo wiring.
 There are **two** HTTP servers — a gateway and a conformance harness — and they
 are not interchangeable: [which one do I want?](docs/servers-and-uis.md)
 
+## Adapters elsewhere
+
+| Adapter | Repo | What it does |
+|---|---|---|
+| Intel SceneScape sidecar | [spatialdds-scenescape](https://github.com/OpenArCloud/spatialdds-scenescape) | Publishes a stock SceneScape deployment's scene analytics as typed SpatialDDS samples: tracks, detections, polygon zones, crossing lines, events, and a georeference. Lives in its own repo because it tracks the 1.8 draft, while this repo pins the stamped 1.7. |
+
 ## Conformance, in one line
 
 **The demos publish spec IDL types on spec-named topics with spec QoS
