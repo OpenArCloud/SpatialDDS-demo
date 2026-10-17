@@ -44,32 +44,32 @@ from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
-# The pre-1.8 frame, because this lane is pre-1.8. model_service's
-# venue_frame() returns 1.8's eight-member FrameRef and this file builds
-# 1.7 Entities; the mismatch serialized silently, dropping the four scale
-# members. Same frame, same UUID, this era's shape. See pre18.py.
-from spatialdds_demo.pre18 import venue_frame
+# The 1.8 frame now, which is the whole of this lane's type-level change: the
+# census found one construction site and zero reads of any member, so the four
+# members 1.8 added cannot alter what this file does -- they alter what it
+# declares, which is that the robot's pose is in a frame that says on the wire
+# it is metric.
+from spatialdds_demo.model_service import venue_frame
 from spatialdds_demo.keepout import FREE, build_mask
 from spatialdds_demo.plaza import GROUND_Z, ROBOT_START_XY
 from spatialdds_demo.qos_profiles import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
 )
 from spatialdds_demo.tempo import Tempo
-# Still the pre-1.8 topics and the demo-local `oarc_model` types: this is a
-# later batch. The Open World Model demo migrated to `spatial.owm/0.1` on
-# scene-scoped topic names, so nothing publishes these three any more and
-# this lane sees an empty bus until it migrates too. The names are explicit
-# rather than inherited so that is visible here instead of being discovered
-# as silence. See docs/owm-1.8-census.md.
+# Migrated to `spatial.owm/0.1` on the scene-scoped topic names, same scene as
+# the venue it stands in -- the robot is in the Littlefield plaza, not a second
+# venue. This lane was pinned at the pre-1.8 names while the OWM pilot ran so
+# the cost of staging was visible in source rather than discovered as silence;
+# docs/robot-1.8-census.md is the field-level check that took the pin out.
 from spatialdds_demo.topics import (
-    TOPIC_MODEL_COMMAND_V1_PRE18, TOPIC_MODEL_ENTITY_V1_PRE18, TOPIC_MODEL_POSE_V1_PRE18,
+    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
 )
-from spatialdds_idl.builtin import Time
-from spatialdds_idl.oarc_model import (
+from spatialdds_idl18.builtin import Time
+from spatialdds_idl18.spatial.owm import (
     Basis, Entity, LifecycleState, ModelCommand, ModelLayer, ModelPose,
 )
-from spatialdds_idl.spatial.common import KV
-from spatialdds_idl.spatial.core import Aabb3, PoseSE3
+from spatialdds_idl18.spatial.common import KV
+from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
 
 ENTITY_ID = "ent:robot:tb3"
 SOURCE_ID = "svc:robot:demo/tb3"
@@ -134,11 +134,11 @@ class RobotBridge:
 
     def __init__(self, participant: DomainParticipant, navigator=None):
         self._entities = tt.make_writer(
-            participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
+            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
         self._poses = tt.make_writer(
-            participant, TOPIC_MODEL_POSE_V1_PRE18, ModelPose, MODEL_FAST.name)
+            participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
         self._commands = tt.make_reader(
-            participant, TOPIC_MODEL_COMMAND_V1_PRE18, ModelCommand, MODEL_COMMAND.name)
+            participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
         self._tempo = Tempo()
         self._goal: Optional[Tuple[float, float]] = None
         self._entity: Optional[Entity] = None
@@ -414,7 +414,7 @@ def already_published(participant: DomainParticipant,
     So a bridge looks before it writes, and refuses rather than joins.
     """
     reader = tt.make_reader(
-        participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
+        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
     deadline = time.time() + settle
     while time.time() < deadline:
         for sample in tt.take_samples(reader) or []:
@@ -460,7 +460,7 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
     # it -- so a reshape reaches this robot too, with nothing here that knows
     # what a pond is.
     entities_reader = tt.make_reader(
-        participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
+        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
     known: dict = {}
 
     def refresh_keepout():

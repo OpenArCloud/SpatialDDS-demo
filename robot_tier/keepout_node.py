@@ -56,14 +56,13 @@ sys.path.insert(0, "/ws")
 from spatialdds_demo import typed_transport as tt  # noqa: E402
 from spatialdds_demo.keepout import build_mask, describe  # noqa: E402
 from spatialdds_demo.qos_profiles import MODEL_LATCHED  # noqa: E402
-# Still the pre-1.8 topics and the demo-local `oarc_model` types: this is a
-# later batch. The Open World Model demo migrated to `spatial.owm/0.1` on
-# scene-scoped topic names, so nothing publishes these three any more and
-# this lane sees an empty bus until it migrates too. The names are explicit
-# rather than inherited so that is visible here instead of being discovered
-# as silence. See docs/owm-1.8-census.md.
-from spatialdds_demo.topics import TOPIC_MODEL_ENTITY_V1_PRE18  # noqa: E402
-from spatialdds_idl.oarc_model import Entity  # noqa: E402
+# Migrated to `spatial.owm/0.1` on the scene-scoped topic names, same scene as
+# the venue it stands in -- the robot is in the Littlefield plaza, not a second
+# venue. This lane was pinned at the pre-1.8 names while the OWM pilot ran so
+# the cost of staging was visible in source rather than discovered as silence;
+# docs/robot-1.8-census.md is the field-level check that took the pin out.
+from spatialdds_demo.topics import TOPIC_MODEL_ENTITY_V1  # noqa: E402
+from spatialdds_idl18.spatial.owm import Entity  # noqa: E402
 
 # The robot's own entity, excluded from its own keep-out. Named here rather
 # than imported from robot_bridge so this file's imports stay readable.
@@ -117,7 +116,7 @@ class KeepoutNode(Node):
         from cyclonedds.domain import DomainParticipant
         self._participant = DomainParticipant(domain_id)
         self._reader = tt.make_reader(
-            self._participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
+            self._participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
         self._entities = {}
         self._published_signature = None
 
