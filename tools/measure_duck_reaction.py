@@ -34,6 +34,27 @@ than while it is outside, when the logic is not engaged at all.
 The null is reported beside it because somebody will compute it again, and a
 null nobody explained reads like a contradiction.
 
+**Why sharing `farthest_corner` with the mover does not make this
+self-observing.** The objection is the right one to raise -- an instrument that
+borrows the implementation it is testing usually proves only that the
+implementation agrees with itself. It does not apply here, because of what the
+claim rests on. The claim is not "ducks are near the far corner", which a
+shared function could indeed manufacture; it is the *contrast* between the
+inside-the-radius arm and the outside-the-radius arm. That contrast is
+produced by the bus: by whether the mover actually received a robot pose and
+engaged its avoidance. If it had received none, both arms would report the same
+distance-to-corner -- which is exactly what a random walk gives -- no matter
+whose definition of the corner was used. `farthest_corner` names the
+destination; it cannot create the difference between the two arms, and the
+difference is the finding.
+
+What *would* be self-observing is an instrument that computed where the ducks
+should be by calling `step_for`, then checked they were there. This one reads
+positions out of the recording and never runs the mover's stepping logic at
+all. The shared symbol is a shared definition of "away", which is the honest
+choice: a second, private definition could disagree with the code under test
+and the measurement would then be of the disagreement.
+
 Exits non-zero if either arm has too few observations to mean anything, rather
 than reporting a statistic over three samples.
 """
