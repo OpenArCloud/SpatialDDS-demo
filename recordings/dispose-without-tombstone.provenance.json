@@ -1,0 +1,38 @@
+{
+  "recording": "dispose-without-tombstone.mcap",
+  "sha256": "bd190ee81e3f5bfe950c91588525fe977c2df0c7b86db62caa20cccc6c96707a",
+  "bytes": 104609,
+  "captured_utc": "2026-10-17T05:32:25Z",
+  "capture_seconds": 16.03,
+  "scene": "ut-austin-littlefield",
+  "dds_domain": 52,
+  "types": "spatial.owm/0.1 (provisional)",
+  "spec_commit": "9c3e1f2",
+  "idl_source": "idl/v1.8 (vendored from SpatialDDS-spec 9c3e1f2)",
+  "message_encoding": "cdr (XCDR2, serialized by CycloneDDS)",
+  "schema_encoding": "omgidl",
+  "schemas": {
+    "spatial::owm::Entity": "eb830504895084659666c66e63b981e5a2f46c4057e58eeb4b154fb480812815",
+    "spatial::owm::ModelPose": "eb830504895084659666c66e63b981e5a2f46c4057e58eeb4b154fb480812815",
+    "spatial::owm::ModelCommand": "eb830504895084659666c66e63b981e5a2f46c4057e58eeb4b154fb480812815"
+  },
+  "samples": {
+    "spatialdds/ut-austin-littlefield/world/entity/v1": 7,
+    "spatialdds/ut-austin-littlefield/world/model_pose/v1": 0,
+    "spatialdds/ut-austin-littlefield/world/model_command/v1": 0
+  },
+  "disposes": [
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/entity/v1",
+      "key": "ent:gnome:visitor"
+    }
+  ],
+  "dispose_records": 1,
+  "dispose_record_label": "spatialdds-web:dispose",
+  "dispose_records_consumed_by": "nothing, for an --mcap seed: spatialdds-web's journal path reads this label, its recording loader infers removal from the RETIRED terminal sample instead (server/gateway.py:338)",
+  "unnameable_disposes": 0,
+  "no_writer_instance_ends": 0,
+  "volatile_instance_ends": 0,
+  "driven_by": "tools/capture_dispose_divergence.sh (the finding's exhibit)",
+  "recorded_by": "tools/record_owm_session.py"
+}

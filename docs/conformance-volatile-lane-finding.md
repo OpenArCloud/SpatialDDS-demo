@@ -14,7 +14,7 @@ endpoint whose traffic is mostly VOLATILE.
 `every resource validates against its published schema` can report PASS
 having validated **nothing** on a resource, and the pass is indistinguishable
 from one that checked every sample. On the migrated OWM demo it reported
-`6 instance(s)` against a recording carrying **202**.
+`7 instance(s)` against a recording carrying **581**.
 
 ## Why, exactly
 
@@ -57,13 +57,13 @@ The migrated OWM demo's recording, served by the unmodified gateway:
 
 | resource | durability | latched collection | samples on the stream |
 | --- | --- | --- | --- |
-| `/ut-austin-littlefield/world/entity/v1` | TRANSIENT_LOCAL | 6 | 25 |
-| `/ut-austin-littlefield/world/model_pose/v1` | VOLATILE | **0** | **88** |
-| `/ut-austin-littlefield/world/model_command/v1` | VOLATILE | **0** | **89** |
+| `/ut-austin-littlefield/world/entity/v1` | TRANSIENT_LOCAL | 7 | 77 |
+| `/ut-austin-littlefield/world/model_pose/v1` | VOLATILE | **0** | **243** |
+| `/ut-austin-littlefield/world/model_command/v1` | VOLATILE | **0** | **261** |
 
 The suite reported `13 passed, 0 failed, 1 skipped` and, for this check,
-`6 instance(s)`. **177 of 202 payloads — 88% of the traffic, and two of the
-three types — were never validated against anything.** Both types are in the
+`7 instance(s)`. **504 of 581 payloads — 87% of the traffic, and two of
+the three types — were never validated against anything.** Both types are in the
 binding's own durability table by omission (they default to not-latched), so
 nothing here is a misconfiguration on the endpoint's side.
 
@@ -96,7 +96,7 @@ written to be read as a proposal rather than kept:
 - Asserts exactly one `end_of_replay` per subscription.
 - Exits non-zero on zero payloads: *an empty pass is not a pass.*
 
-Result on the same endpoint: `202 payload(s) across 3 type(s), 0 failures`,
+Result on the same endpoint: `581 payload(s) across 3 type(s), 0 failures`,
 reconciling exactly with the recorder's own provenance — which is how the
 count was confirmed to be every sample in the file rather than merely a large
 number.

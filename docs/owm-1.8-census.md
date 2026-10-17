@@ -322,5 +322,5 @@ Two numbers for anyone reading this as a precedent:
 
 The acceptance evidence is `recordings/owm-littlefield.evidence.md`: a live
 capture served by the unmodified web-binding gateway, 13 of 14 conformance
-checks passed with 0 failed, and all 202 served payloads validated against the
+checks passed with 0 failed, and all 581 served payloads validated against the
 endpoint's own published schemas.

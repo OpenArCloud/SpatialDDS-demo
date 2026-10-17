@@ -20,10 +20,19 @@ One command goes through the lane on purpose. A recording whose command topic
 carried nothing would have a channel with no messages in it, and "the lane
 exists" would be a claim about the schema rather than about the demo.
 
-No retirement is asked for here. The lifecycle is covered by
-`tests/test_model_layer.py` against a live bus, and a session that retired an
-entity would serve a venue with a duck missing -- the point of this recording
-is that the whole migrated model survives the round trip.
+No retirement is asked for here, and this harness is no longer what the
+committed recording comes from: `tools/capture_owm_session.sh` is, running the
+real entry points inside the demo image. This file stays because it needs no
+container and is the quickest way to put traffic on a bus.
+
+**If you add a removal to this harness, mind the window.** The recorder must
+finish before any publisher does. `ModelPublisher.close` disposes every entity
+deliberately, and a capture that outlives it collects six genuine disposes of
+a venue nobody dismantled -- disposes carrying no RETIRED tombstone, which the
+gateway's recording loader then drops, so the served recording would show a
+venue its own metadata says was removed. The ordering contract is written out
+at the top of `capture_owm_session.sh`; this harness happens to satisfy it by
+recording in a subprocess that returns first.
 """
 from __future__ import annotations
 

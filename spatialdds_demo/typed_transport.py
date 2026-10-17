@@ -131,15 +131,55 @@ class TypedSample:
     delivers that as an InvalidSample carrying no key fields, only the handle.
     Callers therefore track ``instance_handle -> key`` from the alive samples
     they have already seen, which is what :class:`AnnounceCache` does.
+
+    **``alive`` and ``instance_state`` answer different questions, and a
+    recorder needs the second one.** For a cache, "disposed" and "every writer
+    went away" are the same fact --- the instance stopped being the answer ---
+    and ``alive``/``disposed`` deliberately collapse them, which is what every
+    cache in this repository wants. ``instance_state`` is here because a
+    durable record needs the state verbatim rather than a collapse of it.
+
+    **But do not mistake ``was_disposed`` for "somebody meant this".**
+    Measured on 2026-10-17: DDS defaults ``autodispose_unregistered_instances``
+    to TRUE, so destroying a writer disposes its instances, and a short-lived
+    operator tool exiting is indistinguishable here from a deliberate
+    removal --- both arrive as ``NotAliveDisposed``. ``ModelPublisher.close``
+    disposes every entity on purpose for the same reason, and that one is
+    deliberate. So the predicate answers "was this a dispose rather than a
+    liveliness loss", which is a real question, and it does not and cannot
+    answer "was this a removal of something".
+
+    For a recording, intent comes from **ordering and lane**, not from this
+    flag: capture only while the publishers still hold their data, and record
+    removals only on a lane whose data is latched, because an instance ending
+    on a VOLATILE lane had no late-joiner state to stop being the answer for.
+    ``tools/record_owm_session.py`` carries both rules and the reasoning.
+
+    So ``instance_state`` carries the DDS state verbatim and
+    ``was_disposed`` is the narrow question. Neither changes what ``alive``
+    means, because its callers are caches and they are right as they stand.
     """
 
     data: Optional[Any]
     alive: bool
     instance_handle: Optional[int]
+    #: The DDS instance state verbatim, or None where it could not be read.
+    instance_state: Optional[Any] = None
 
     @property
     def disposed(self) -> bool:
+        """Not alive, for whatever reason. See ``was_disposed`` for the
+        narrower question a durable record has to ask."""
         return not self.alive
+
+    @property
+    def was_disposed(self) -> bool:
+        """A writer disposed this instance, as opposed to going away.
+
+        False when the state could not be read, so a caller that needs
+        certainty gets the conservative answer rather than a guess.
+        """
+        return self.instance_state == InstanceState.NotAliveDisposed
 
 
 def take_samples(reader: DataReader, *, n: int = 100) -> List[Any]:
@@ -168,6 +208,7 @@ def take_with_state(reader: DataReader, *, n: int = 100) -> List[TypedSample]:
             data=sample if valid else None,
             alive=alive,
             instance_handle=handle,
+            instance_state=state,
         ))
     return out
 

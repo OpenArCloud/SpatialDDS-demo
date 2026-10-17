@@ -94,7 +94,7 @@ and gets `retire`, or it does not and needs a verb that admits the difference.
 
 **Evidence this is real and not theoretical.**
 
-- The migration ran. 202 samples of the migrated demo serve through the
+- The migration ran. 581 samples of the migrated demo serve through the
   unmodified web-binding gateway and pass 13 of 14 conformance checks
   (`recordings/owm-littlefield.evidence.md`).
 - The loss is measured, not asserted. Five tests were deleted with the type,

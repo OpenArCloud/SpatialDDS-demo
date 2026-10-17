@@ -117,24 +117,46 @@ class LiveLog(unittest.TestCase):
         self.assertFalse(second, "the second call changed nothing, and says so")
         self.assertIsInstance(first, bool)
 
-    def test_every_long_lived_owm_entry_point_calls_it(self):
-        """The three processes that stay alive, by name rather than by habit.
+    #: Long-lived by construction: it installs a signal handler and loops
+    #: until signalled. Derived rather than listed, because the first version
+    #: of this test hand-wrote three module names and missed
+    #: `scripts/gnome_publisher.py`, which holds exactly as long. The capture
+    #: script then waited seven seconds for a readiness line that was sitting
+    #: in a buffer -- the defect this file exists to prevent, found in a
+    #: process the file had not thought to look at.
+    HELD_BY_A_SIGNAL = "signal.signal"
 
-        A fix applied to one of three is the same defect with a smaller
-        footprint, and the next long-lived entry point is the one that gets
-        forgotten. `robot_bridge.py` is deliberately absent: it is still
-        pre-1.8 and belongs to a later batch, which is where its own fix goes.
+    #: Still pre-1.8 and belonging to a later batch, which is where its own
+    #: fix goes. Named here so the exemption is a decision and not an
+    #: oversight; when the robot lane migrates, deleting this line is the
+    #: whole of the change needed on this test.
+    PINNED = {"spatialdds_demo/robot_bridge.py"}
+
+    def _long_lived(self):
+        for d in ("spatialdds_demo", "scripts", "robot_tier"):
+            for f in sorted((REPO / d).glob("*.py")):
+                rel = f"{d}/{f.name}"
+                src = f.read_text()
+                if self.HELD_BY_A_SIGNAL in src and rel not in self.PINNED:
+                    yield rel, src
+
+    def test_every_long_lived_owm_entry_point_calls_it(self):
+        """Every process that stays alive, found rather than remembered.
+
+        A fix applied to three of four is the same defect with a smaller
+        footprint, and the one that gets forgotten is the one nobody listed.
         """
-        for mod, func in (("model_service", "def run_server("),
-                          ("pond_watch", "def run("),
-                          ("duck_mover", "def run(")):
-            src = (REPO / "spatialdds_demo" / f"{mod}.py").read_text()
-            start = src.index(func)
-            # the first 12 lines of the entry point, where setup belongs
-            head = "\n".join(src[start:].splitlines()[:12])
-            self.assertIn("live_log()", head,
-                          f"{mod}.py's long-lived entry point does not make "
+        found = list(self._long_lived())
+        self.assertGreaterEqual(len(found), 4,
+                                "the discovery is broken, not the code: a repo "
+                                "with fewer than four held-open entry points "
+                                "means this stopped looking in the right place")
+        for rel, src in found:
+            self.assertIn("live_log()", src,
+                          f"{rel} holds open until signalled and never makes "
                           f"its stdout readable while it runs")
+        print(f"  live_log: {len(found)} long-lived entry point(s), "
+              f"all readable while running")
 
 
 if __name__ == "__main__":

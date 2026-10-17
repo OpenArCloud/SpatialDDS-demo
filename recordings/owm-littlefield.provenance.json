@@ -1,11 +1,11 @@
 {
   "recording": "owm-littlefield.mcap",
-  "sha256": "edb365e39e1cfcbd58e8dbd58c0572e59095ffd6b263f4ac22502a32bab13e12",
-  "bytes": 115761,
-  "captured_utc": "2026-10-17T03:23:34Z",
-  "capture_seconds": 18.03,
+  "sha256": "84c3651b397c7638f5e8e0bae4a0d027e6b55c93b1613c54eb29027053bb5698",
+  "bytes": 137184,
+  "captured_utc": "2026-10-17T05:29:54Z",
+  "capture_seconds": 44.02,
   "scene": "ut-austin-littlefield",
-  "dds_domain": 47,
+  "dds_domain": 51,
   "types": "spatial.owm/0.1 (provisional)",
   "spec_commit": "9c3e1f2",
   "idl_source": "idl/v1.8 (vendored from SpatialDDS-spec 9c3e1f2)",
@@ -17,9 +17,26 @@
     "spatial::owm::ModelCommand": "eb830504895084659666c66e63b981e5a2f46c4057e58eeb4b154fb480812815"
   },
   "samples": {
-    "spatialdds/ut-austin-littlefield/world/entity/v1": 25,
-    "spatialdds/ut-austin-littlefield/world/model_pose/v1": 88,
-    "spatialdds/ut-austin-littlefield/world/model_command/v1": 89
+    "spatialdds/ut-austin-littlefield/world/entity/v1": 77,
+    "spatialdds/ut-austin-littlefield/world/model_pose/v1": 243,
+    "spatialdds/ut-austin-littlefield/world/model_command/v1": 261
   },
+  "disposes": [
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/entity/v1",
+      "key": "ent:duck:east"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/entity/v1",
+      "key": "ent:duck:catalog-pose"
+    }
+  ],
+  "dispose_records": 2,
+  "dispose_record_label": "spatialdds-web:dispose",
+  "dispose_records_consumed_by": "nothing, for an --mcap seed: spatialdds-web's journal path reads this label, its recording loader infers removal from the RETIRED terminal sample instead (server/gateway.py:338)",
+  "unnameable_disposes": 0,
+  "no_writer_instance_ends": 0,
+  "volatile_instance_ends": 2,
+  "driven_by": "tools/capture_owm_session.sh (scripted operator session)",
   "recorded_by": "tools/record_owm_session.py"
 }

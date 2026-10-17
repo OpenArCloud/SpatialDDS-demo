@@ -19,6 +19,22 @@ and the one that found the dead base64 rule in the web binding's own mapping
 table. A recorder that borrowed the gateway's encoder would have proved
 nothing but self-consistency.
 
+**Disposes are recorded, and they are provenance rather than mechanism.** A
+removal crosses the bus as an InvalidSample carrying only an instance handle,
+so this keeps a handle-to-key map from the alive samples it has already seen
+and writes each removal as an MCAP metadata record under the web binding's own
+label, `spatialdds-web:dispose`, with that path's field names.
+
+That label is read by `spatialdds-web`'s journal path, which replays removals
+from these records. It is **not** read by the gateway's recording loader: that
+derives removal by inference from a `RETIRED` terminal sample and from nothing
+else (`server/gateway.py:338`). So for a recording served with `--mcap`, no
+component consumes these records at all --- they are an honest statement that
+the dispose happened, in the one shape another SpatialDDS tool already knows
+how to read, and nothing here should be read as the gateway having consumed a
+dispose. The two-doors divergence that follows from this is filed in
+`docs/removal-two-doors-finding.md`.
+
 **The IDL is this repository's vendored pin**, `idl/v1.8/`, taken from
 SpatialDDS-spec at 9c3e1f2 -- the same commit the validating gateway's own
 artifacts are generated from. The flatten convention (preamble, one
@@ -81,6 +97,18 @@ LANES = [
      "spatial::owm::ModelCommand"),
 ]
 
+#: Removals are recorded only on lanes whose data is latched, and the reason is
+#: not tidiness. An instance ending on a VOLATILE lane had no late-joiner state
+#: to stop being the answer for, so "it was removed" says nothing about the
+#: world --- and DDS disposes a writer's instances when the writer is destroyed
+#: (`autodispose_unregistered_instances` defaults to TRUE), so every
+#: short-lived operator tool that sends one command ends its instance as
+#: NotAliveDisposed on the way out. A first pass recorded one of those: a
+#: command-lane dispose with a UUID for a key, which the gateway's loader would
+#: not honour and which no reader could act on. Honest, and noise.
+LATCHED_TOPICS = frozenset(
+    topic for topic, _cls, qos, _name in LANES if qos is MODEL_LATCHED)
+
 
 def flatten(files: list[str]) -> bytes:
     """The named IDL files as one translation unit, directives stripped."""
@@ -93,7 +121,15 @@ def flatten(files: list[str]) -> bytes:
     return "\n".join(out).encode()
 
 
-def record(out: Path, seconds: float, domain_id: int) -> dict:
+#: The web binding's own label for a removal, and its field names. Matching
+#: them is the whole point: a record written under a private label would be
+#: provenance nothing could read, and this one replays through
+#: `spatialdds-web`'s journal path unchanged.
+DISPOSE_RECORD = "spatialdds-web:dispose"
+
+
+def record(out: Path, seconds: float, domain_id: int,
+           driver: str = "tools/record_owm_session.py") -> dict:
     """Capture every lane for `seconds`, and return the provenance."""
     from cyclonedds.domain import DomainParticipant
 
@@ -119,10 +155,62 @@ def record(out: Path, seconds: float, domain_id: int) -> dict:
             for topic, _, _, name in LANES
         }
 
+        # instance handle -> key, per topic. A dispose arrives with no key
+        # fields, only the handle, so the only way to name what went is to
+        # have seen it alive first. A removal whose instance was never
+        # observed alive is therefore unnameable and counted separately
+        # rather than guessed at.
+        keys: dict[tuple[str, int], str] = {}
+        disposes: list[dict] = []
+        unnamed_disposes = 0
+        no_writer_ends = 0
+        volatile_ends = 0
+        seq = 0
+
         deadline = started + seconds
         while time.time() < deadline:
             for topic, reader, _name in readers:
-                for sample in tt.take_samples(reader) or []:
+                for s in tt.take_with_state(reader) or []:
+                    seq += 1
+                    if s.data is None:
+                        # `was_disposed`, not `disposed`: a writer process
+                        # that vanishes ends its instances too, and that is a
+                        # fact about the process rather than a removal anyone
+                        # performed.
+                        #
+                        # It does not filter the demo's own shutdown, and must
+                        # not be read as doing so. `ModelPublisher.close`
+                        # disposes every entity on purpose, so a window that
+                        # outlives the service captures six genuine disposes
+                        # of a venue nobody dismantled -- and, carrying no
+                        # RETIRED tombstone, six removals the gateway's loader
+                        # then drops, leaving the served recording to show a
+                        # venue its own metadata says was removed. The fix for
+                        # that is ordering, not filtering: the capture closes
+                        # first. See the window note in run_owm_session.py.
+                        if not s.was_disposed:
+                            no_writer_ends += 1
+                            continue
+                        if topic not in LATCHED_TOPICS:
+                            volatile_ends += 1
+                            continue
+                        key = keys.get((topic, s.instance_handle))
+                        if key is None:
+                            unnamed_disposes += 1
+                            continue
+                        disposes.append({"seq": str(seq), "topic": topic,
+                                         "key": key,
+                                         "reason": "observed on the bus as a "
+                                                   "dispose; the reason, if "
+                                                   "any, is on the RETIRED "
+                                                   "sample before it"})
+                        continue
+                    sample = s.data
+                    if s.instance_handle is not None:
+                        k = getattr(sample, "entity_id", None) or \
+                            getattr(sample, "command_id", None)
+                        if k:
+                            keys[(topic, s.instance_handle)] = k
                     now = time.time_ns()
                     writer.add_message(
                         channel_id=channel_ids[topic],
@@ -138,6 +226,8 @@ def record(out: Path, seconds: float, domain_id: int) -> dict:
                     )
                     counts[topic] += 1
             time.sleep(0.02)
+        for d in disposes:
+            writer.add_metadata(name=DISPOSE_RECORD, data=d)
         writer.finish()
 
     elapsed = time.time() - started
@@ -159,6 +249,22 @@ def record(out: Path, seconds: float, domain_id: int) -> dict:
         "schemas": {name: hashlib.sha256(flatten(files)).hexdigest()
                     for name, files in CLOSURES.items()},
         "samples": counts,
+        "disposes": [{"topic": d["topic"], "key": d["key"]} for d in disposes],
+        "dispose_records": len(disposes),
+        "dispose_record_label": DISPOSE_RECORD,
+        "dispose_records_consumed_by": (
+            "nothing, for an --mcap seed: spatialdds-web's journal path reads "
+            "this label, its recording loader infers removal from the RETIRED "
+            "terminal sample instead (server/gateway.py:338)"),
+        "unnameable_disposes": unnamed_disposes,
+        # Instances that ended because a writer left rather than disposed.
+        # Counted and not recorded: a publisher exiting is not a removal.
+        "no_writer_instance_ends": no_writer_ends,
+        # Instances that ended on a VOLATILE lane: counted, never recorded.
+        # See LATCHED_TOPICS -- there was no latched state to stop being the
+        # answer, and a writer's exit disposes its instances by default.
+        "volatile_instance_ends": volatile_ends,
+        "driven_by": driver,
         "recorded_by": "tools/record_owm_session.py",
     }
 
@@ -171,21 +277,37 @@ def main() -> int:
                         default=REPO / "recordings" / "owm-littlefield.mcap")
     parser.add_argument("--seconds", type=float, default=20.0)
     parser.add_argument("--domain", type=int, default=0)
+    parser.add_argument("--driver", default="tools/record_owm_session.py",
+                        help="who or what drove the session, recorded in the "
+                             "provenance verbatim. A scripted session "
+                             "honestly labeled beats a person's session "
+                             "assumed.")
     args = parser.parse_args()
 
     print(f"record: scene {SCENE}, domain {args.domain}, "
           f"{args.seconds:.0f}s")
     for topic, _, _, name in LANES:
         print(f"record: {topic}  <- {name}")
-    prov = record(args.out, args.seconds, args.domain)
+    prov = record(args.out, args.seconds, args.domain, args.driver)
     side = args.out.with_suffix(".provenance.json")
     side.write_text(json.dumps(prov, indent=2) + "\n")
 
     total = sum(prov["samples"].values())
     for topic, n in prov["samples"].items():
         print(f"record: {n:5d} samples on {topic}")
-    print(f"record: {total} samples, {prov['bytes']} bytes, "
-          f"sha256 {prov['sha256'][:16]}")
+    for d in prov["disposes"]:
+        print(f"record: dispose  {d['key']} on {d['topic']}")
+    if prov["volatile_instance_ends"]:
+        print(f"record: {prov['volatile_instance_ends']} instance(s) ended on "
+              f"a VOLATILE lane; counted, not recorded as removals")
+    if prov["no_writer_instance_ends"]:
+        print(f"record: {prov['no_writer_instance_ends']} instance(s) ended "
+              f"because a writer left, not by dispose; counted, not recorded")
+    if prov["unnameable_disposes"]:
+        print(f"record: {prov['unnameable_disposes']} dispose(s) arrived for "
+              f"instances never seen alive, so unnameable; not recorded")
+    print(f"record: {total} samples, {prov['dispose_records']} dispose "
+          f"record(s), {prov['bytes']} bytes, sha256 {prov['sha256'][:16]}")
     print(f"record: provenance {side.relative_to(REPO)}")
     if total == 0:
         print("record: nothing arrived -- is the demo running on this "

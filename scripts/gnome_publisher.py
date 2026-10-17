@@ -40,6 +40,7 @@ from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.model_service import VENUE_FRAME_FQN, venue_frame
 from spatialdds_demo.qos_profiles import MODEL_LATCHED
+from spatialdds_demo.model_service import live_log
 from spatialdds_demo.topics import TOPIC_MODEL_ENTITY_V1
 from spatialdds_idl18.builtin import Time
 from spatialdds_idl18.spatial.owm import (
@@ -95,6 +96,7 @@ def gnome(stamp: Optional[Time] = None) -> Entity:
 
 
 def run(domain_id: Optional[int] = None) -> int:
+    live_log()
     domain_id = require_dds_env() if domain_id is None else domain_id
     participant = DomainParticipant(domain_id)
     writer = tt.make_writer(

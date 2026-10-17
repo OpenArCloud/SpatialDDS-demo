@@ -38,7 +38,8 @@ is a better demonstration anyway because nothing in it is this repository's
 code:
 
 ```bash
-python3 tools/run_owm_session.py --seconds 18             # capture a session
+docker run --rm -v "$PWD:/app" -w /app cyclonedds-python \\
+    bash tools/capture_owm_session.sh                     # capture a session
 python3 ../spatialdds-web/tools/run_gateway.py \
     --mcap recordings/owm-littlefield.mcap --port 8831    # serve it
 python3 examples/list_owm_entities.py                     # read it
