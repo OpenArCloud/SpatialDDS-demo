@@ -1,11 +1,12 @@
-# For the spec queue: two things in `spatial.owm/0.1` the migration surfaced
+# For the spec queue: three things the migration surfaced
 
 The Open World Model demo is the first consumer of 1.8's provisional
 `spatial.owm` module outside the SceneScape sidecar, and migrating onto it put
 every member of every type through a real publisher, a real bus, a typed
-recording and an independent web-binding reader. Two observations came out of
-that which belong in front of the spec rather than in this repository's
-backlog. Neither is a defect in 1.8, and neither blocked the migration.
+recording and an independent web-binding reader. Three observations came out
+of that which belong in front of somebody other than this repository's
+backlog -- two about the types, one about the bindings `idlc` generates from
+them. None is a defect in 1.8 and none blocked the migration.
 
 Two more filings came out of the same batch and are separate because their
 subjects are:
@@ -103,3 +104,59 @@ normative and conformance can check it, or the field is opaque and consumers
 MUST NOT branch on its shape. Right now it is a convention doing a type's job,
 which is the thing that reads as working until two implementations disagree
 about it.
+
+---
+
+## 3. Generated bindings annotate members with a name they never bind
+
+**Not a spec issue — a CycloneDDS codegen one**, recorded here because this is
+where the batch's findings live and because the next person to regenerate the
+shared package is the one who can fix it.
+
+**What it is.** `idlc -l py` emits nested members as dotted string
+annotations, and this repository's generator patches discriminator-bearing
+ones to be fully qualified:
+
+```python
+from spatialdds_idl18 import spatial          # the only root-package import
+...
+cov_pos: 'spatialdds_idl18.spatial.common.Mat3x3'
+```
+
+The module binds `spatial`, never `spatialdds_idl18`, so the dotted name in
+the annotation is unbound. Measured on both generated trees:
+
+```
+spatialdds_idl    NameError: name 'spatialdds_idl' is not defined
+spatialdds_idl    cyclonedds serializer built OK
+spatialdds_idl18  NameError: name 'spatialdds_idl18' is not defined
+spatialdds_idl18  cyclonedds serializer built OK
+```
+
+**Why nothing has broken.** CycloneDDS does not call
+`typing.get_type_hints`; it resolves these with its own machinery, so every
+serializer builds and every demo in this repository works, as they have since
+the 1.7 cutover.
+
+**Why it is still worth fixing.** `typing.get_type_hints()` is the standard
+way to introspect a dataclass, and it is what dataclass-based tooling reaches
+for -- schema generators, validators, API frameworks. Anything that calls it
+on a generated SpatialDDS type raises `NameError` rather than returning
+hints, which makes these bindings quietly unusable by that whole category of
+consumer. A SpatialDDS type system whose Python bindings cannot be
+introspected by standard means is a smaller type system than it looks.
+
+**The fix, and why not in this batch.** One line in the generator's patcher:
+emit `import spatialdds_idl18` (or rewrite the annotation to the already-bound
+`spatial.common.Mat3x3`) in any file it touches. Applying it means
+regenerating, and regenerating the shared 1.7 package reaches the 46 files
+across four unmigrated demos that `docs/owm-1.8-census.md` measured and this
+batch was directed to leave alone. So it is filed, and
+`tests/test_static_checks.py` names it at the exclusion that hides it rather
+than skipping the tree silently.
+
+**How it was found.** By that gate. Adding a second generated tree put
+`spatialdds_idl18/` in front of a check whose skip list knew only about
+`spatialdds_idl/` — the exclusion was per-path, so a new path got the scrutiny
+the old one had been exempted from, and the exemption turned out to be
+covering something real.

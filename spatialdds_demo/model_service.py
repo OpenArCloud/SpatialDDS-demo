@@ -631,7 +631,35 @@ class ModelPublisher:
 QUIET_VERBS = ("move",)
 
 
+def live_log() -> bool:
+    """Make stdout line-buffered, and say whether it had to be.
+
+    A long-lived service's stdout *is* its operational log, and Python block-
+    buffers stdout whenever it is not a TTY. Redirected to a file, piped to a
+    log collector, or captured by `docker run`, this process emitted **zero
+    bytes for its entire life** -- the banner naming the domain, the type
+    source, the scene and every topic arrived only when it was killed, and so
+    did every line of the command lane. Measured at 0 bytes after 8 seconds,
+    1354 after SIGTERM.
+
+    A banner that appears when the service stops is worse than no banner: it
+    is the operator's only statement of what this process is, and it was
+    invisible in exactly the deployment shape the demo ships in while looking
+    fine in a terminal, where stdout is a TTY and line-buffered already.
+
+    Returns True when it changed something, so a test can tell the fix is
+    doing work rather than riding on an interactive terminal.
+    """
+    was_line_buffered = getattr(sys.stdout, "line_buffering", False)
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, OSError):       # a replaced or exotic stdout
+        return False
+    return not was_line_buffered
+
+
 def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
+    live_log()
     domain_id = require_dds_env() if domain_id is None else domain_id
     participant = DomainParticipant(domain_id)
     publisher = ModelPublisher(participant)

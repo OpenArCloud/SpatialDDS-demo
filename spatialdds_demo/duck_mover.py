@@ -58,7 +58,7 @@ from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.model_service import TYPE_RUBBER_DUCK
+from spatialdds_demo.model_service import TYPE_RUBBER_DUCK, live_log
 from spatialdds_demo.qos_profiles import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED)
 from spatialdds_demo.topics import (
@@ -504,6 +504,7 @@ class DuckMover:
 
 def run(domain_id: Optional[int] = None,
         bounds_entity: str = DEFAULT_BOUNDS_ENTITY) -> int:
+    live_log()
     domain_id = require_dds_env() if domain_id is None else domain_id
     participant = DomainParticipant(domain_id)
     mover = DuckMover(participant, bounds_entity)

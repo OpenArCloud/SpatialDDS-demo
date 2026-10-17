@@ -45,6 +45,7 @@ from cyclonedds.domain import DomainParticipant
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.model_service import (
+    live_log,
     POND_MAX, POND_MIN, TYPE_BASIN, venue_frame,
 )
 from spatialdds_demo.qos_profiles import MODEL_LATCHED
@@ -119,6 +120,7 @@ def observation(rng: random.Random, stamp: Optional[Time] = None) -> Entity:
 
 
 def run(domain_id: Optional[int] = None, seed: Optional[int] = None) -> int:
+    live_log()
     domain_id = require_dds_env() if domain_id is None else domain_id
     participant = DomainParticipant(domain_id)
     writer = tt.make_writer(

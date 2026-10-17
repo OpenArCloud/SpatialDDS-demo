@@ -28,7 +28,23 @@ REPO = Path(__file__).resolve().parent.parent
 
 # Generated output is not ours to lint, and idlc's star-imports trip the
 # checker for reasons that say nothing about this repo's correctness.
-SKIP_PREFIXES = ("spatialdds_idl/", "idl/", "web/public/")
+#
+# `spatialdds_idl18/` joins the list on the same terms as `spatialdds_idl/`,
+# and it is worth saying what it hides rather than letting the prefix do it
+# silently. Both generated trees annotate nested members with a dotted string
+# -- `cov_pos: 'spatialdds_idl18.spatial.common.Mat3x3'` -- while importing
+# only `spatial` from the root package, so the dotted name is genuinely
+# unbound. pyflakes is right: `typing.get_type_hints()` on a generated
+# dataclass raises NameError in both trees, today, and has since the 1.7
+# cutover. CycloneDDS does not use `get_type_hints` and resolves these with
+# its own machinery, so every serializer builds and every demo works.
+#
+# Not fixed here, deliberately: the fix is one line in the generator's
+# discriminator patcher, and applying it would regenerate the shared 1.7
+# package that 46 files across four unmigrated demos import -- the blast
+# radius docs/owm-1.8-census.md measured and this batch was told to avoid.
+# Filed in docs/owm-1.8-spec-queue.md for whoever regenerates next.
+SKIP_PREFIXES = ("spatialdds_idl/", "spatialdds_idl18/", "idl/", "web/public/")
 
 
 def _tracked_python() -> list:

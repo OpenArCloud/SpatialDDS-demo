@@ -176,6 +176,68 @@ this repository. The last line is the migration's gain made visible: the venue
 frame now says on the wire that it is metric -- `1 m/unit, SCALE_DECLARED` --
 where before every consumer had to assume it.
 
+## 5. The demo still runs as it did, through its own entry points
+
+Everything above goes through a harness that constructs participants directly,
+which is how this repository's tests have always driven the stack. That proves
+the stack and not the demo: the shipped entry points call `require_dds_env`
+and insist on `CYCLONEDDS_URI=file:///etc/cyclonedds.xml`, the container
+contract, and none of them had been run since the migration.
+
+So they were, in the demo image, under that contract, on a clean DDS domain:
+
+```sh
+docker run --rm -v "$PWD:/app" -w /app cyclonedds-python bash -c '
+  export SPATIALDDS_TRANSPORT=dds CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+  export SPATIALDDS_DDS_DOMAIN=51 PYTHONPATH=/app
+  python3 -m spatialdds_demo.model_service &
+  python3 scripts/move_duck.py ent:duck:west 9.0 -12.0
+  python3 scripts/reshape_pond.py --shrink
+  python3 scripts/retire_entity.py ent:duck:east "winter"
+  python3 scripts/retire_entity.py --restore
+  python3 scripts/gnome_publisher.py
+  python3 -m spatialdds_demo.pond_watch
+  python3 -m spatialdds_demo.duck_mover'
+```
+
+Verbatim, trimmed to one line each:
+
+```
+ent:duck:west: (10.50, -13.00, -1.42) -> (9.00, -12.00, -1.42)
+reshape: x -1.5..25.5, y -20.0..-4.8  ->  x 5.2..18.8, y -16.2..-8.6
+retire: order tombstone -> disposed
+retire: a retired id is not burned — the same id can be published again
+gnome: ent:gnome:visitor — AUTHORED/SLOW, pose (20.00, -21.00, -0.98) in map/ut-littlefield-fountain
+pondwatch: it disagrees with the venue by about 0.9 m, on purpose
+mover: stopping after 116 moves. The ducks stay where they are
+```
+
+And the dropped verb refuses by name rather than by silence:
+
+```
+$ python3 scripts/retire_entity.py --edge rel:contains:pond-duck-east "x"
+usage: retire_entity.py [-h] [--restore] [--domain DOMAIN] [entity_id] [reason]
+retire_entity.py: error: unrecognized arguments: --edge
+```
+
+**This run found a defect, which is the reason for doing it.** The service
+wrote **zero bytes for its entire life** when stdout was not a terminal: the
+banner naming the domain, the type source, the scene and every topic, and
+every line of the command lane after it, arrived only when the process was
+killed. Measured at 0 bytes after 8 seconds and 1354 after SIGTERM. In a
+terminal it looked perfect, because an interactive stdout is line-buffered
+already -- so the failure was invisible in the shape a developer checks and
+total in the shape the demo ships in, where `docker run` captures the logs.
+
+Fixed by `live_log()`, called by all three long-lived OWM entry points, and
+guarded by `tests/test_live_log.py`: 1315 bytes readable 7 seconds in with the
+service still running, against 0 before. The test's own first version passed
+for the wrong reason -- it looped on `readline()`, which blocks, so it sat
+through the subprocess's whole sleep and collected the line at exit -- and its
+injection case is what caught that. It now uses `select` with a real deadline:
+the banner arrives in 0.135s with the fix and nothing arrives in 6.0s without
+it, the writer alive in both.
+
 ## What this does not prove
 
 - **The relationship hierarchy.** It is not in the recording because
