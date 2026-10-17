@@ -125,8 +125,11 @@ just the totals.
 
 The suite validates *latched* instances, which here is the six entities. The
 pose and command lanes are VOLATILE, so they have no instance paths and the
-suite never reaches them -- which would leave two thirds of the recording's
-traffic unvalidated.
+suite never reaches them -- which would leave 177 of the 202 payloads, and two
+of the three types, unvalidated by the run that passed above. That is a defect
+in the suite and it is filed as one:
+[`docs/conformance-volatile-lane-finding.md`](../docs/conformance-volatile-lane-finding.md).
+The tool below is its prototype.
 
 ```sh
 python3 tools/validate_served_owm.py --endpoint http://127.0.0.1:8831 \

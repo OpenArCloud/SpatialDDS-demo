@@ -7,6 +7,22 @@ validated the migration, and an instrument edited during its own run proves
 less. Landing it is a one-paste operation for whoever owns that repository's
 next batch; nothing below depends on this file's location.
 
+**A candidates list in two places is worse than one in the wrong place**, so
+until this is pasted there, that file should carry the pointer. The line to
+add, under its own heading so it is not mistaken for a drafted candidate:
+
+```markdown
+## 6. A relationship type for `spatial.owm` — drafted elsewhere
+
+Raised by the OWM demo's 1.8 migration census and drafted in full at
+`SpatialDDS-demo/docs/relationship-candidate-1.9.md`; paste it here when that
+repository is not the subject under test.
+```
+
+Whichever happens first — the paste or the pointer — this file stops being the
+canonical copy at that moment, and should be reduced to a link rather than
+left to drift against it.
+
 ---
 
 ## 6. A relationship type for `spatial.owm`

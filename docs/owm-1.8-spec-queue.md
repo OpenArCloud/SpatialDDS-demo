@@ -7,8 +7,15 @@ recording and an independent web-binding reader. Two observations came out of
 that which belong in front of the spec rather than in this repository's
 backlog. Neither is a defect in 1.8, and neither blocked the migration.
 
-The `Relationship` GAP is filed separately, as a 1.9 candidate, in
-[`relationship-candidate-1.9.md`](relationship-candidate-1.9.md).
+Two more filings came out of the same batch and are separate because their
+subjects are:
+
+- the `Relationship` GAP, as a 1.9 candidate —
+  [`relationship-candidate-1.9.md`](relationship-candidate-1.9.md);
+- a defect in the **conformance suite** rather than in the binding or the
+  types — [`conformance-volatile-lane-finding.md`](conformance-volatile-lane-finding.md),
+  which is how this migration discovered that 88% of its own traffic went
+  unvalidated by the suite that passed it.
 
 ---
 
