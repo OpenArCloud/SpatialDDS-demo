@@ -1,11 +1,17 @@
 # Open World Model
 
 The venue as a live model rather than a list of files. Entities with identity,
-pose, type, **basis** and relationships; a robot that plans against the venue's
+pose, type, **basis** and lifecycle; a robot that plans against the venue's
 own declarations; ducks that follow the water because the water told them where
 it is.
 
-Background and design notes: [`docs/world-model.md`](world-model.md).
+Published as `spatial.owm/0.1`, the provisional Open World Model module in
+SpatialDDS 1.8, which this demo's own prototype became. Relationships are not
+in it: the module excludes them explicitly and reserves them as open design,
+so the venue's containment hierarchy is the one thing the migration gave up.
+
+Background and design notes: [`docs/world-model.md`](world-model.md); the
+field-level migration census, [`docs/owm-1.8-census.md`](owm-1.8-census.md).
 
 ---
 

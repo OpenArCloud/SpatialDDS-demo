@@ -31,7 +31,7 @@ from spatialdds_demo.robot_bridge import (  # noqa: E402
 )
 from spatialdds_demo.tempo import IDLE_FLOOR_S, LATCH_EVERY_N  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
-    TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
+    TOPIC_MODEL_ENTITY_V1_PRE18, TOPIC_MODEL_POSE_V1_PRE18,
 )
 from spatialdds_idl.oarc_model import Entity, ModelPose  # noqa: E402
 
@@ -58,7 +58,7 @@ class Ownership(unittest.TestCase):
         source = (REPO / "spatialdds_demo" / "robot_bridge.py").read_text()
         writers = re.findall(r"make_writer\(\s*\w+,\s*(\w+)", source)
         self.assertEqual(sorted(writers),
-                         ["TOPIC_MODEL_ENTITY_V1", "TOPIC_MODEL_POSE_V1"],
+                         ["TOPIC_MODEL_ENTITY_V1_PRE18", "TOPIC_MODEL_POSE_V1_PRE18"],
                          f"the bridge should write its entity and its poses "
                          f"and nothing else; found {writers}")
 
@@ -92,8 +92,8 @@ class Ownership(unittest.TestCase):
         which is what keeps the operator tools the only things asking.
         """
         source = (REPO / "spatialdds_demo" / "robot_bridge.py").read_text()
-        self.assertIn("TOPIC_MODEL_COMMAND_V1", source)
-        self.assertIn("make_reader(\n            participant, TOPIC_MODEL_COMMAND_V1",
+        self.assertIn("TOPIC_MODEL_COMMAND_V1_PRE18", source)
+        self.assertIn("make_reader(\n            participant, TOPIC_MODEL_COMMAND_V1_PRE18",
                       source)
 
 
@@ -102,9 +102,9 @@ class WhatItPublishes(unittest.TestCase):
         self.participant = _participant(DOMAIN)
         self.bridge = RobotBridge(self.participant)
         self.entities = tt.make_reader(
-            self.participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+            self.participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
         self.poses = tt.make_reader(
-            self.participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
+            self.participant, TOPIC_MODEL_POSE_V1_PRE18, ModelPose, MODEL_FAST.name)
         time.sleep(0.5)
         tt.take_samples(self.entities)
         tt.take_samples(self.poses)
@@ -178,7 +178,7 @@ class GoingQuiet(unittest.TestCase):
         self.participant = _participant(DOMAIN + 1)
         self.bridge = RobotBridge(self.participant)
         self.entities = tt.make_reader(
-            self.participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+            self.participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
         time.sleep(0.5)
         tt.take_samples(self.entities)
 
@@ -252,7 +252,7 @@ class GoingQuiet(unittest.TestCase):
         self.bridge.tick(now=now + 30.0)
         time.sleep(0.6)
 
-        joiner = tt.make_reader(_participant(DOMAIN + 1), TOPIC_MODEL_ENTITY_V1,
+        joiner = tt.make_reader(_participant(DOMAIN + 1), TOPIC_MODEL_ENTITY_V1_PRE18,
                                 Entity, MODEL_LATCHED.name)
         got, deadline = None, time.time() + 6
         while got is None and time.time() < deadline:

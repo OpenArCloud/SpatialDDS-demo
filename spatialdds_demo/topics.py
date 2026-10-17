@@ -10,13 +10,34 @@ TOPIC_BOOTSTRAP_QUERY_V1 = "spatialdds/bootstrap/query/v1"
 TOPIC_BOOTSTRAP_RESPONSE_V1 = "spatialdds/bootstrap/response/v1"
 TOPIC_DDS_ENVELOPE_V1 = "spatialdds/envelope/v1"
 
-# --- world model (demo-local `oarc_model`, non-normative) --------------
+# --- world model (`spatial.owm/0.1`, provisional, SpatialDDS 1.8) --------
 # One topic per record kind. Per-layer splitting waits for a FAST tier:
 # Entity.layer is carried but informational today.
-TOPIC_MODEL_ENTITY_V1 = "spatialdds/model/entity/v1"
-TOPIC_MODEL_RELATIONSHIP_V1 = "spatialdds/model/relationship/v1"
-TOPIC_MODEL_POSE_V1 = "spatialdds/model/pose/v1"
-TOPIC_MODEL_COMMAND_V1 = "spatialdds/model/command/v1"
+#
+# The names follow §3.3.1's five-segment grammar,
+# `spatialdds/<domain>/<stream>/<type>/<version>`, with the scene as the
+# domain so two venues on one DDS domain do not share an entity namespace.
+# The scene name is the demo's and it keeps it.
+SCENE = "ut-austin-littlefield"
+
+TOPIC_MODEL_ENTITY_V1 = f"spatialdds/{SCENE}/world/entity/v1"
+TOPIC_MODEL_POSE_V1 = f"spatialdds/{SCENE}/world/model_pose/v1"
+TOPIC_MODEL_COMMAND_V1 = f"spatialdds/{SCENE}/world/model_command/v1"
+
+# The pre-1.8 names, kept because the consumers that have not migrated still
+# read them: the web bridge and the robot tier are later batches, and they are
+# still built against the demo-local `oarc_model` types. Nothing publishes
+# these any more, which is the honest state of a staged migration rather than
+# a compatibility layer -- see docs/owm-1.8-census.md.
+TOPIC_MODEL_ENTITY_V1_PRE18 = "spatialdds/model/entity/v1"
+TOPIC_MODEL_POSE_V1_PRE18 = "spatialdds/model/pose/v1"
+TOPIC_MODEL_COMMAND_V1_PRE18 = "spatialdds/model/command/v1"
+
+# `Relationship` has no 1.8 home: the module excludes relationships
+# explicitly and reserves them as open design. The topic is retired with the
+# type rather than kept pointing at a demo-local struct, and the census's GAP
+# row is what carries the loss forward.
+TOPIC_MODEL_RELATIONSHIP_V1_RETIRED = "spatialdds/model/relationship/v1"
 
 
 def TOPIC_ANCHORS_DELTA(zone: str) -> str:

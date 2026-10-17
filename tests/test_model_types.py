@@ -5,7 +5,7 @@ Demo-local and non-normative: this is not SpatialDDS 1.7 and has no registry
 row. See idl/demo/oarc_model.idl for the guard rails.
 
 What these cover is the seam the rest of the layer is built on: an Entity or
-Relationship has to survive both hops without losing anything — CDR onto the
+An Entity has to survive both hops without losing anything — CDR onto the
 bus and back, and typed-to-JSON for the bridge's `/ws` and snapshot clients.
 
 The guard fields get their own tests because they are where this shape can go
@@ -25,16 +25,20 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from spatialdds_demo.json_mapping import from_json, to_json  # noqa: E402
-from spatialdds_idl.builtin import Time  # noqa: E402
-from spatialdds_idl.oarc_model import (  # noqa: E402
-    Basis, Entity, LifecycleState, ModelLayer, Relationship,
+from spatialdds_demo.model_service import venue_frame  # noqa: E402
+from spatialdds_idl18.builtin import Time  # noqa: E402
+from spatialdds_idl18.spatial.owm import (  # noqa: E402
+    Basis, Entity, LifecycleState, ModelLayer,
 )
-from spatialdds_idl.spatial.common import CoordConvention, FrameRef, KV  # noqa: E402
-from spatialdds_idl.spatial.core import Aabb3, PoseSE3  # noqa: E402
+from spatialdds_idl18.spatial.common import KV  # noqa: E402
+from spatialdds_idl18.spatial.core import Aabb3, PoseSE3  # noqa: E402
 
 STAMP = Time(sec=1788300000, nanosec=250000000)
-VENUE = FrameRef(uuid="b1afa008", fqn="map/ut-littlefield-fountain",
-                 has_coord_convention=True, coord_convention=CoordConvention.ENU)
+# The service's own frame rather than a hand-written copy of it. 1.8's
+# FrameRef gained four members, and a fixture that constructs its own would
+# have had to be edited to match -- which is the edit this test is for. It
+# now exercises the one construction site the demo has.
+VENUE = venue_frame()
 ZERO_POSE = PoseSE3(t=[0.0, 0.0, 0.0], q=[0.0, 0.0, 0.0, 1.0])
 ZERO_EXTENT = Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0])
 
@@ -79,18 +83,13 @@ FOUNTAIN = Entity(
     stamp=STAMP,
 )
 
-CONTAINS = Relationship(
-    rel_id="rel:fountain-contains-duck-1",
-    kind="contains",
-    from_entity_id="ent:fountain",
-    to_entity_id="ent:duck:1",
-    properties=[],
-    source_id="svc:model:demo/venue",
-    stamp=STAMP,
-)
-
-CASES = {"Entity(duck)": DUCK, "Entity(fountain)": FOUNTAIN,
-         "Relationship(contains)": CONTAINS}
+# A `Relationship(contains)` case used to ride alongside these two through
+# every round trip. `spatial.owm/0.1` carries no relationship type, so the
+# case is gone rather than retyped: there is nothing to serialise. What that
+# costs in coverage is counted in docs/owm-1.8-census.md, which is where the
+# GAP row lives -- five tests in this suite and the model-layer suite went
+# with the type, and no assertion here was weakened to keep a number up.
+CASES = {"Entity(duck)": DUCK, "Entity(fountain)": FOUNTAIN}
 
 
 class JsonRoundTrip(unittest.TestCase):

@@ -17,7 +17,8 @@ Run it against the other bounds and the ducks roam differently, which is the
 whole demonstration.
 
 **No edge joins the two.** They are visibly about the same water and nothing
-in the model says so. `Relationship` carries `source_id`, so an edge could say
+in the model says so. The pre-1.8 demo had a `Relationship` carrying
+`source_id`, so an edge could at least say
 who claimed it; what it cannot carry is a `basis`, so it could not say whether
 identity was asserted, computed, or assumed. For an identity claim that is the
 load-bearing half, and an edge that cannot express it launders an assumption
@@ -48,12 +49,12 @@ from spatialdds_demo.model_service import (
 )
 from spatialdds_demo.qos_profiles import MODEL_LATCHED
 from spatialdds_demo.topics import TOPIC_MODEL_ENTITY_V1
-from spatialdds_idl.builtin import Time
-from spatialdds_idl.oarc_model import (
+from spatialdds_idl18.builtin import Time
+from spatialdds_idl18.spatial.owm import (
     Basis, Entity, LifecycleState, ModelLayer,
 )
-from spatialdds_idl.spatial.common import KV
-from spatialdds_idl.spatial.core import Aabb3, PoseSE3
+from spatialdds_idl18.spatial.common import KV
+from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
 
 ENTITY_ID = "ent:pond:observed"
 SOURCE_ID = "svc:fusion:demo/pondwatch"
@@ -107,7 +108,7 @@ def observation(rng: random.Random, stamp: Optional[Time] = None) -> Entity:
         extent=extent,
         properties=[KV(key="demo.label", value="Pond"),
                     KV(key="demo.note",
-                       value="The same water as ent:pond:littlefield, measured rather than declared. Nothing in the model says the two are the same thing: an edge could say who claimed it, but not whether identity was asserted, computed or assumed, and Relationship has no basis to carry that.")],
+                       value="The same water as ent:pond:littlefield, measured rather than declared. Nothing in the model says the two are the same thing, and under spatial.owm/0.1 there is no relationship type to say it with: the module excludes relationships and reserves them as open design. This property is the whole of the claim.")],
         external_refs=[],
         content_refs=[],
         state=LifecycleState.ACTIVE,

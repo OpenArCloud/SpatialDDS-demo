@@ -53,9 +53,9 @@ from spatialdds_demo.qos_profiles import (
 from spatialdds_demo.topics import (
     TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
 )
-from spatialdds_idl.builtin import Time
-from spatialdds_idl.oarc_model import Entity, ModelCommand, ModelPose
-from spatialdds_idl.spatial.core import Aabb3, PoseSE3
+from spatialdds_idl18.builtin import Time
+from spatialdds_idl18.spatial.owm import Entity, ModelCommand, ModelPose
+from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "tool:move_duck"
 
@@ -190,7 +190,7 @@ def move(entity_id: str, x: float, y: float, z: Optional[float] = None,
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Move one world-model entity (demo-local oarc_model)")
+        description="Move one world-model entity (spatial.owm/0.1)")
     parser.add_argument("entity_id", nargs="?", help="e.g. ent:duck:west")
     parser.add_argument("x", type=float, nargs="?", help="metres, entity's own frame")
     parser.add_argument("y", type=float, nargs="?")

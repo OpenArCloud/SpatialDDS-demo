@@ -35,8 +35,8 @@ from spatialdds_demo.qos_profiles import MODEL_FAST, MODEL_LATCHED  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
     TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
 )
-from spatialdds_idl.oarc_model import Entity, ModelPose  # noqa: E402
-from spatialdds_idl.spatial.core import PoseSE3  # noqa: E402
+from spatialdds_idl18.spatial.owm import Entity, ModelPose  # noqa: E402
+from spatialdds_idl18.spatial.core import PoseSE3  # noqa: E402
 
 DOMAIN = 58
 DUCK = "ent:duck:east"

@@ -1,5 +1,12 @@
 # SpatialDDS Web Bridge
 
+> **The model lane is dark.** The Open World Model demo migrated to
+> SpatialDDS 1.8's `spatial.owm/0.1` on scene-scoped topic names. This bridge
+> is a later batch: it still reads the pre-1.8 topics with the demo-local
+> `oarc_model` types, so nothing publishes what it subscribes to and
+> `GET /v1/model` returns an empty model. Everything else here is unaffected.
+> See `docs/owm-1.8-census.md`.
+
 A FastAPI server that exposes the SpatialDDS bus to browsers and other HTTP/WebSocket
 clients. Two generations of endpoints live in the same process:
 

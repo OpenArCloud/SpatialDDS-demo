@@ -39,7 +39,7 @@ there is deliberately nothing else to it.
 That second one is the only place in this demo where a consumer reacts to
 another *service's* live measurement rather than to a venue's declaration,
 and it is worth being exact about the path: ROS `/odom` -> robot bridge ->
-`oarc.model_pose` on the wire -> here. No ROS message type is imported by
+`spatial.owm.ModelPose` on the wire -> here. No ROS message type is imported by
 this file and no duck is published to ROS. The two buses meet at exactly one
 process, which is the one that owns the key.
 
@@ -63,16 +63,17 @@ from spatialdds_demo.qos_profiles import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED)
 from spatialdds_demo.topics import (
     TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1)
-from spatialdds_idl.builtin import Time
-from spatialdds_idl.oarc_model import Entity, ModelCommand, ModelPose
-from spatialdds_idl.spatial.core import Aabb3, PoseSE3
+from spatialdds_idl18.builtin import Time
+from spatialdds_idl18.spatial.owm import Entity, ModelCommand, ModelPose
+from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "svc:mover:demo/ducks"
 
 # The pond entity whose bounds are followed. Named rather than discovered by
 # type, because "which water are these ducks on" is a question the model
 # cannot answer yet: there is no `on` relationship, and Part 3 leaves
-# computed containment alone until Relationship can carry a basis.
+# computed containment alone: spatial.owm/0.1 has no relationship type to
+# carry a basis, which is the census's GAP row seen from the consumer side.
 #
 # Two entities describe this water: the venue's declared bounds and a fusion
 # service's observed ones. They disagree, and the model does not settle it --

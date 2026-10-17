@@ -310,14 +310,14 @@ class SpatialDDSBridge:
         VOLATILE and a writer created per request would drop its own sample
         while discovery caught up."""
         from spatialdds_demo.qos_profiles import MODEL_COMMAND
-        from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1
+        from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1_PRE18
         from spatialdds_idl.oarc_model import ModelCommand
 
         self.ensure_transport()
         if self._commands is None:
             from spatialdds_demo import typed_transport as tt
             self._commands = tt.make_writer(
-                self._announce_participant, TOPIC_MODEL_COMMAND_V1,
+                self._announce_participant, TOPIC_MODEL_COMMAND_V1_PRE18,
                 ModelCommand, MODEL_COMMAND.name)
             # Discovery, not a retry: a VOLATILE writer with nobody attached
             # drops the sample on the floor, and the first command a tab sends
@@ -344,7 +344,7 @@ class SpatialDDSBridge:
         _emit_dds_event({
             "ts": now, "dir": "tx", "domain": self._domain_id,
             "msg_type": "oarc.model_command",
-            "logical_topic": TOPIC_MODEL_COMMAND_V1,
+            "logical_topic": TOPIC_MODEL_COMMAND_V1_PRE18,
             "request_id": command["command_id"], "payload": command,
         })
         return {"published": command}
@@ -852,8 +852,8 @@ class _ModelPump:
         from spatialdds_demo import typed_transport as tt
         from spatialdds_demo.qos_profiles import MODEL_FAST, MODEL_LATCHED
         from spatialdds_demo.topics import (
-            TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
-            TOPIC_MODEL_RELATIONSHIP_V1,
+            TOPIC_MODEL_ENTITY_V1_PRE18, TOPIC_MODEL_POSE_V1_PRE18,
+            TOPIC_MODEL_RELATIONSHIP_V1_RETIRED,
         )
         from spatialdds_idl.oarc_model import Entity, ModelPose, Relationship
 
@@ -864,15 +864,15 @@ class _ModelPump:
         participant = DomainParticipant(domain_id)
         self._participant = participant
         self._entity_reader = tt.make_reader(
-            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+            participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
         self._relationship_reader = tt.make_reader(
-            participant, TOPIC_MODEL_RELATIONSHIP_V1, Relationship,
+            participant, TOPIC_MODEL_RELATIONSHIP_V1_RETIRED, Relationship,
             MODEL_LATCHED.name)
         self._pose_reader = tt.make_reader(
-            participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
-        self._entity_topic = TOPIC_MODEL_ENTITY_V1
-        self._relationship_topic = TOPIC_MODEL_RELATIONSHIP_V1
-        self._pose_topic = TOPIC_MODEL_POSE_V1
+            participant, TOPIC_MODEL_POSE_V1_PRE18, ModelPose, MODEL_FAST.name)
+        self._entity_topic = TOPIC_MODEL_ENTITY_V1_PRE18
+        self._relationship_topic = TOPIC_MODEL_RELATIONSHIP_V1_RETIRED
+        self._pose_topic = TOPIC_MODEL_POSE_V1_PRE18
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)

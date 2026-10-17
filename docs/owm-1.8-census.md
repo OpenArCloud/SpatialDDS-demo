@@ -298,3 +298,29 @@ migration that quietly amputates:
 - **The bridge, live-web serving, and SceneScape.** Untouched.
 - **The other demos.** AR, nuScenes, DeepSense and multi-operator fusion are
   all still 1.7 and are later batches.
+
+## The outcome, so this file is not read without it
+
+The migration ran on the strength of this census, and the census was right
+about the shape of it: 30 members moved unchanged, `Relationship` was the only
+casualty, and nothing blocked.
+
+What the census got wrong, and it matters: it recorded `frame_ref` as plainly
+HOME, because the *member* is. The **type** gained four members in 1.8, and
+that is what decided the packaging -- a second generated bindings package
+rather than a cutover of the shared one. The row now reads IMPROVED with the
+consequence spelled out. A census that compares members and not the types
+those members are made of will keep finding this class of surprise, and the
+method section above has been left as it was so the gap in it is legible.
+
+Two numbers for anyone reading this as a precedent:
+
+- **One** `FrameRef` construction site in the whole OWM demo, which is why a
+  four-member type change cost one function and one test fixture.
+- **46** files across the four unmigrated demos import the shared 1.7
+  bindings, which is what a single-package cutover would have cost instead.
+
+The acceptance evidence is `recordings/owm-littlefield.evidence.md`: a live
+capture served by the unmodified web-binding gateway, 13 of 14 conformance
+checks passed with 0 failed, and all 202 served payloads validated against the
+endpoint's own published schemas.

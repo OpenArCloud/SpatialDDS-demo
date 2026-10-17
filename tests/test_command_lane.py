@@ -26,7 +26,7 @@ if str(REPO) not in sys.path:
 
 from spatialdds_demo import typed_transport as tt  # noqa: E402
 from spatialdds_demo.qos_profiles import MODEL_COMMAND  # noqa: E402
-from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1  # noqa: E402
+from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1_PRE18  # noqa: E402
 from spatialdds_idl.builtin import Time  # noqa: E402
 from spatialdds_idl.oarc_model import ModelCommand  # noqa: E402
 from spatialdds_idl.spatial.core import Aabb3, PoseSE3  # noqa: E402
@@ -77,13 +77,13 @@ class CommandLane(unittest.TestCase):
         """
         participant = _participant(DOMAIN)
         reader = tt.make_reader(
-            participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
+            participant, TOPIC_MODEL_COMMAND_V1_PRE18, ModelCommand, MODEL_COMMAND.name)
 
         seen = []
         for i in range(4):
             writer_participant = _participant(DOMAIN)
             writer = tt.make_writer(
-                writer_participant, TOPIC_MODEL_COMMAND_V1, ModelCommand,
+                writer_participant, TOPIC_MODEL_COMMAND_V1_PRE18, ModelCommand,
                 MODEL_COMMAND.name)
             deadline = time.time() + 3
             while (time.time() < deadline

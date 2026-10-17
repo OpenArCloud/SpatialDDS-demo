@@ -1,13 +1,22 @@
-# Open World Model (prototype, demo-local)
+# Open World Model (`spatial.owm/0.1`, SpatialDDS 1.8)
 
 Moved out of the landing README so that page can stay short. This is the
 detail behind the **Open World Model** row in the demo table.
 
-An **Open World Model** layer, prototyped here before anything is proposed for
-the spec. `oarc_model` is demo-local and non-normative: no registry row, no
-`/1.7` identifiers, no spec type touched. See
-[`ar_demo/SPEC_COMPLIANCE.md`](../ar_demo/SPEC_COMPLIANCE.md) for its status and
-the gaps it has surfaced.
+**This layer has migrated.** It was prototyped here as `oarc_model`, a
+demo-local and non-normative layer, so the shape could be argued against a
+running demo before anything was proposed. SpatialDDS 1.8 carries the result
+as `spatial.owm/0.1` -- provisional and independently versioned -- and this
+demo now publishes those types, generated from the spec at commit `9c3e1f2`.
+What moved, member by member, is
+[`owm-1.8-census.md`](owm-1.8-census.md); what the migration cost is the
+`Relationship` type, which 1.8 does not carry.
+
+Read the census before this page if you are here to judge the proposal: this
+page describes a working demo, and the census is the only place that says what
+the demo can no longer express. See also
+[`ar_demo/SPEC_COMPLIANCE.md`](../ar_demo/SPEC_COMPLIANCE.md) for the gaps the
+prototype surfaced on the way here.
 
 The catalogue says what content *exists* — one `duck.glb`, one checksum, one
 URI. The model says what is *there*: entities with identity, pose, type and
@@ -16,17 +25,38 @@ asset, three ducks. A catalogue row carrying its own pose can place a duck
 exactly once, which is the limitation this removes.
 
 ```bash
-SPATIALDDS_MODEL_LAYER=1 ./run_bridge_server_docker.sh   # off by default
-curl localhost:8088/v1/model                             # the whole model
 python3 scripts/move_duck.py ent:duck:west 9.0 -12.0     # and watch it move
 python3 scripts/retire_entity.py ent:duck:east "winter"   # tombstone, then gone
 ```
 
-Two topics — `spatialdds/model/entity/v1` and
-`spatialdds/model/relationship/v1` — both TRANSIENT_LOCAL, KEEP_LAST(1) per
-key. That is what makes late join work: a client opening a tab is handed the
-whole model by the middleware, unrequested, with no replay code anywhere.
-Measured across processes at 0.14 s.
+**The browser view is dark until the bridge migrates.**
+`SPATIALDDS_MODEL_LAYER=1` plus `curl localhost:8088/v1/model` used to serve
+the whole model to clients with no DDS participant. The web bridge is a later
+batch: it still reads the pre-1.8 topics with the demo-local types, so it sees
+an empty bus. Until then the model is read over the web binding instead, which
+is a better demonstration anyway because nothing in it is this repository's
+code:
+
+```bash
+python3 tools/run_owm_session.py --seconds 18             # capture a session
+python3 ../spatialdds-web/tools/run_gateway.py \
+    --mcap recordings/owm-littlefield.mcap --port 8831    # serve it
+python3 examples/list_owm_entities.py                     # read it
+```
+
+The evidence from exactly that sequence, run against the unmodified gateway
+and the spec's own conformance suite, is in
+[`recordings/owm-littlefield.evidence.md`](../recordings/owm-littlefield.evidence.md).
+
+One latched topic, `spatialdds/ut-austin-littlefield/world/entity/v1`:
+TRANSIENT_LOCAL, KEEP_LAST(1) per key. That is what makes late join work: a
+client opening a tab is handed the whole model by the middleware, unrequested,
+with no replay code anywhere. Measured across processes at 0.14 s.
+
+The names are 1.8's scene-scoped convention, §3.3.1's
+`spatialdds/<domain>/<stream>/<type>/<version>`, with the scene as the domain.
+There was a second latched topic, `spatialdds/model/relationship/v1`, carrying
+the venue's containment hierarchy. It is retired with its type.
 
 `GET /v1/model` serves the same view to clients that have no DDS participant.
 **The bridge's cache is a mirror, not a store — it holds nothing the bus does
@@ -133,8 +163,8 @@ worth calling fast, so the layer has a second topic:
 
 | Topic | QoS | Carries |
 |---|---|---|
-| `spatialdds/model/entity/v1` | RELIABLE + TRANSIENT_LOCAL, KEEP_LAST(1) | the whole entity — the rest state |
-| `spatialdds/model/pose/v1` | BEST_EFFORT + VOLATILE, KEEP_LAST(1) | a bare pose — where it was last seen going |
+| `spatialdds/ut-austin-littlefield/world/entity/v1` | RELIABLE + TRANSIENT_LOCAL, KEEP_LAST(1) | the whole entity — the rest state |
+| `spatialdds/ut-austin-littlefield/world/model_pose/v1` | BEST_EFFORT + VOLATILE, KEEP_LAST(1) | a bare pose — where it was last seen going |
 
 An entity's own `layer` decides which treatment it gets, which is what that
 field is for. A `FAST` entity's every move goes out on the pose lane and its
@@ -201,13 +231,19 @@ R10 settles it: surface both, attribute both, join neither.** Recorded in
 
 Nothing writes to the model topics except the publisher that owns them.
 `move_duck.py` and `retire_entity.py` publish a `ModelCommand` on
-`spatialdds/model/command/v1` and the model service applies it.
+`spatialdds/ut-austin-littlefield/world/model_command/v1` and the model
+service applies it.
 
 | | |
 |---|---|
-| Topic | `spatialdds/model/command/v1` |
-| QoS | `MODEL_COMMAND` — RELIABLE, **VOLATILE**, KEEP_LAST(16), unkeyed |
-| Verbs | `move` (guarded pose), `retire` (reason), `restore` |
+| Topic | `spatialdds/ut-austin-littlefield/world/model_command/v1` |
+| QoS | `MODEL_COMMAND` — RELIABLE, **VOLATILE**, KEEP_LAST(16), keyed on `command_id` |
+| Verbs | `move` (guarded pose), `retire` (reason), `set_extent` (guarded extent), `restore` |
+
+1.8 defines a fifth verb, `goto`, which the robot demo reads. The demo had a
+sixth, `dispose_edge`, and it is gone with the relationship type -- a command
+naming an edge now falls through to the unknown-verb refusal, which says so in
+a sentence.
 
 VOLATILE and unkeyed because a command is an event, not state: a client
 joining tomorrow has no business replaying today's retirements. That has one

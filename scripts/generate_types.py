@@ -2,7 +2,8 @@
 """
 Generate Python bindings for the bundled SpatialDDS IDL.
 
-Runs ``idlc -l py`` over ``idl/v1.7/`` (the verbatim spec bundle) and
+Runs ``idlc -l py`` over a vendored spec bundle (``idl/v1.7/`` by default,
+``--spec-idl idl/v1.8`` for the 1.8 one) and
 ``idl/demo/`` (demo-owned structs for flows the spec has no type for), applies
 the fixes idlc's Python backend needs, and writes an importable package.
 
@@ -15,7 +16,26 @@ Spec provenance
     git -C ../SpatialDDS-spec archive v1.7 idl/v1.7 | tar -x -C .
     python3 scripts/generate_types.py --check
 
-The pin is the **tag**, not a commit hash: ``v1.7`` is a stamped release and
+``idl/v1.8/`` is vendored verbatim from **SpatialDDS-spec commit
+``9c3e1f2``** (the 1.8 revision that added ``TopicMeta.durability``). Resync
+with::
+
+    git -C ../SpatialDDS-spec archive 9c3e1f2 idl/v1.8 | tar -x -C .
+
+The 1.8 pin is a **commit, not a tag**, which breaks this repository's own
+convention and does so deliberately: the spec carries no ``v1.8`` tag, and
+``9c3e1f2`` is the commit the validating toolchain was generated at --
+``spatialdds-web``'s vendored artifacts pin the same one. A demo whose types
+came from a different commit than the gateway that validates them would be
+comparing two type systems and calling it conformance.
+
+Generated into ``spatialdds_idl18/`` with ``--no-demo``, because only the Open
+World Model demo has migrated::
+
+    python3 scripts/generate_types.py --spec-idl idl/v1.8 \
+        --out spatialdds_idl18 --no-demo
+
+The 1.7 pin is the **tag**, not a commit hash: ``v1.7`` is a stamped release and
 will not move, so it says what this demo conforms to in a way a hash does
 not.
 
@@ -68,6 +88,17 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+# The bundle and the demo IDL are module-level because every helper below reads
+# them, and `--spec-idl` rebinds them before anything runs. Two bundles are
+# generated in this repository while the 1.8 migration is staged: `idl/v1.7`
+# into `spatialdds_idl/` for the demos still on 1.7, and `idl/v1.8` into
+# `spatialdds_idl18/` for the Open World Model demo, which has migrated.
+#
+# They are not shims: nothing translates between them and no module imports
+# both. The reason they cannot be one package is `spatial.common.FrameRef`,
+# which gained four members in 1.8 -- see docs/owm-1.8-census.md, which
+# measured what a single-package cutover would cost the four demos that have
+# not migrated yet.
 SPEC_IDL = REPO / "idl" / "v1.7"
 DEMO_IDL = REPO / "idl" / "demo"
 DEFAULT_OUT = REPO / "spatialdds_idl"
@@ -330,12 +361,34 @@ def generate(out_dir: Path, package: str) -> list[str]:
 
 
 def main() -> int:
+    global SPEC_IDL, DEMO_IDL
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--spec-idl", type=Path, default=SPEC_IDL,
+                        help="the vendored spec bundle to compile "
+                             "(default idl/v1.7)")
+    parser.add_argument("--no-demo", action="store_true",
+                        help="leave idl/demo/ out of the output. The 1.8 "
+                             "package is spec-only: the demo-local model "
+                             "layer it replaced stays in the tree as the "
+                             "census's reference artifact and is still "
+                             "compiled into the 1.7 package, which the "
+                             "unmigrated web bridge imports.")
     parser.add_argument("--check", action="store_true",
                         help="fail if the checked-in output differs from a fresh run")
     args = parser.parse_args()
+    # Both paths are accepted relative to the repository root, so the
+    # command lines in the docstring work from anywhere inside it.
+    args.out = args.out if args.out.is_absolute() else (REPO / args.out)
     package = args.out.name
+    SPEC_IDL = args.spec_idl if args.spec_idl.is_absolute() \
+        else (REPO / args.spec_idl)
+    if not SPEC_IDL.is_dir():
+        raise SystemExit(f"no spec bundle at {SPEC_IDL}")
+    if args.no_demo:
+        DEMO_IDL = SPEC_IDL / "__no_demo__"   # a path that does not exist
+    print(f"bundle   {SPEC_IDL.relative_to(REPO)}"
+          f"{'' if not args.no_demo else '  (spec only)'}")
 
     if not args.check:
         fixed = generate(args.out, package)

@@ -36,8 +36,12 @@ pixels, put a real [OpenVPS](https://github.com/OpenArCloud/openvps) on the bus
 ### 2 · Open World Model
 
 The venue as a live model rather than a list of files: entities with identity,
-pose, type, basis and relationships. A robot plans against the venue's own
+pose, type, basis and lifecycle. A robot plans against the venue's own
 declarations; ducks follow the water; every claim says how it was arrived at.
+Migrated to SpatialDDS 1.8's `spatial.owm/0.1`, which carries no relationship
+type -- the containment hierarchy this demo used to publish is the one thing
+the migration cost, and [`docs/owm-1.8-census.md`](docs/owm-1.8-census.md)
+says so member by member.
 
 ```bash
 SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_POND_WATCH=1 ./run_bridge_server_docker.sh
@@ -53,7 +57,7 @@ including the ROS 2 robot tier, which is what makes the keep-out real.
 | Demo | Path | What it shows |
 |---|---|---|
 | **SpatialDDS + OpenVPS** | [`ar_demo/`](ar_demo/README.md) | Bootstrap → discovery → coverage query → localization → catalog → anchor, on a Cesium globe. Runs against real [OpenVPS](https://github.com/OpenArCloud/openvps). |
-| **Open World Model** | [`docs/world-model.md`](docs/world-model.md) | Entities, relationships, basis and lifecycle on latched topics; a ROS 2 robot planning against declared keep-outs. Prototype, demo-local. |
+| **Open World Model** | [`docs/world-model.md`](docs/world-model.md) | Entities, basis and lifecycle on latched topics; a ROS 2 robot planning against declared keep-outs. `spatial.owm/0.1`, SpatialDDS 1.8. |
 | Multi-operator fusion | [`multi_operator_fusion/`](multi_operator_fusion/README.md) | Three AV fleet operators and a 6G base station share `Detection3D`; a platform fuser publishes unified `FusedTrack`s. |
 | nuScenes → Rerun | [`nuscenes/`](nuscenes/README.md) | nuScenes v1.0-mini as typed samples: ego pose, 6 cameras, LiDAR, 5 radars, 3D annotations. |
 | DeepSense 6G → Rerun | [`deepsense/`](deepsense/README.md) | DeepSense Scenario 9 V2I: 60 GHz beam, FMCW radar, camera, GPS, 2D lidar. |

@@ -27,16 +27,16 @@ if str(REPO) not in sys.path:
 
 from spatialdds_demo import typed_transport as tt  # noqa: E402
 from spatialdds_demo.json_mapping import to_json  # noqa: E402
-from spatialdds_idl.builtin import Time  # noqa: E402
+from spatialdds_idl18.builtin import Time  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
     DUCK_CONTENT_ID, IDLE_FLUSH_S, LATCH_EVERY_N_MOVES, ModelPublisher,
-    POND_MIN, seed_entities, seed_relationships,
+    POND_MIN, seed_entities,
 )
 from spatialdds_demo.qos_profiles import MODEL_LATCHED  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
-    TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_RELATIONSHIP_V1,
+    TOPIC_MODEL_ENTITY_V1,
 )
-from spatialdds_idl.oarc_model import Entity, Relationship  # noqa: E402
+from spatialdds_idl18.spatial.owm import Entity  # noqa: E402
 
 # High enough to stay clear of the demo stack's own domains.
 DOMAIN = 43
@@ -44,7 +44,6 @@ DOMAIN = 43
 # the last four parts, and every literal was a test that would fail for the
 # wrong reason on the next one.
 SEEDED_ENTITIES = len(seed_entities())
-SEEDED_RELATIONSHIPS = len(seed_relationships(seed_entities()))
 
 
 def _participant(domain_id: int):
@@ -58,8 +57,8 @@ def _participant(domain_id: int):
 
 def _command(verb, entity_id="", reason="", pose=None, extent=None):
     """A ModelCommand, with the guarded pose left empty unless one is given."""
-    from spatialdds_idl.oarc_model import ModelCommand
-    from spatialdds_idl.spatial.core import Aabb3, PoseSE3
+    from spatialdds_idl18.spatial.owm import ModelCommand
+    from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
     now = time.time()
     return ModelCommand(
         command_id=f"cmd-{verb}", verb=verb, subject_id=entity_id, reason=reason,
@@ -70,26 +69,24 @@ def _command(verb, entity_id="", reason="", pose=None, extent=None):
         stamp=Time(sec=int(now), nanosec=int((now % 1) * 1e9)))
 
 
-def _drain(entity_reader, relationship_reader, want_e, want_r, timeout=10.0):
+def _drain(entity_reader, want_e, timeout=10.0):
     """Collect until the model is complete or time runs out."""
-    entities, relationships = {}, {}
+    entities = {}
     deadline = time.time() + timeout
     while time.time() < deadline:
         for sample in tt.take_samples(entity_reader) or []:
             entities[sample.entity_id] = sample
-        for sample in tt.take_samples(relationship_reader) or []:
-            relationships[sample.rel_id] = sample
-        if len(entities) >= want_e and len(relationships) >= want_r:
+        if len(entities) >= want_e:
             break
         time.sleep(0.02)
-    return entities, relationships
+    return entities
 
 
 class LateJoin(unittest.TestCase):
     """
     The property the whole layer rests on.
 
-    Both topics are TRANSIENT_LOCAL with KEEP_LAST(1) per key, so a subscriber
+    The entity topic is TRANSIENT_LOCAL with KEEP_LAST(1) per key, so a subscriber
     that starts after the publisher gets the current model from the
     middleware. Nothing here asks for it: no query is sent, no snapshot is
     fetched, and there is no replay code in the demo to be fooled by.
@@ -101,8 +98,6 @@ class LateJoin(unittest.TestCase):
         entities = seed_entities()
         for entity in entities:
             publisher.publish_entity(entity)
-        for relationship in seed_relationships(entities):
-            publisher.publish_relationship(relationship)
 
         # Everything above has already happened before this subscriber exists.
         time.sleep(0.5)
@@ -110,17 +105,13 @@ class LateJoin(unittest.TestCase):
         subscriber = _participant(DOMAIN)
         entity_reader = tt.make_reader(
             subscriber, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
-        relationship_reader = tt.make_reader(
-            subscriber, TOPIC_MODEL_RELATIONSHIP_V1, Relationship, MODEL_LATCHED.name)
-        got_entities, got_relationships = _drain(
-            entity_reader, relationship_reader, SEEDED_ENTITIES, SEEDED_RELATIONSHIPS)
+        got_entities = _drain(entity_reader, SEEDED_ENTITIES)
         elapsed = time.time() - started
 
         try:
             self.assertEqual(len(got_entities), SEEDED_ENTITIES)
-            self.assertEqual(len(got_relationships), SEEDED_RELATIONSHIPS)
-            print(f"\n  late-join: full model ({SEEDED_ENTITIES} entities, "
-                  f"{SEEDED_RELATIONSHIPS} relationships) in {elapsed:.3f}s, unrequested")
+            print(f"\n  late-join: full model ({SEEDED_ENTITIES} entities) "
+                  f"in {elapsed:.3f}s, unrequested")
             # The brief's target. Generous against a loaded machine; the
             # number that matters is the one printed above.
             self.assertLess(elapsed, 5.0)
@@ -276,34 +267,17 @@ class Hierarchy(unittest.TestCase):
                     self.assertLessEqual(entity.pose.t[axis],
                                          pond.extent.max_xyz[axis])
 
-    def test_the_hierarchy_is_two_levels_and_names_both_ends(self):
-        entities = seed_entities()
-        edges = {r.rel_id: r for r in seed_relationships(entities)}
-        self.assertEqual(len(edges), len(entities) - 1,
-                         "every seeded entity but the fountain has one parent")
-        self.assertEqual(edges["rel:contains:pond-shallows-littlefield"].from_entity_id,
-                         "ent:pond:littlefield")
-        self.assertEqual(edges["rel:contains:fountain-pond-littlefield"].from_entity_id,
-                         "ent:fountain:littlefield")
-        self.assertEqual(edges["rel:contains:fountain-pond-littlefield"].to_entity_id,
-                         "ent:pond:littlefield")
-        for duck in ("catalog-pose", "west", "east"):
-            edge = edges[f"rel:contains:pond-duck-{duck}"]
-            self.assertEqual(edge.from_entity_id, "ent:pond:littlefield")
-            self.assertEqual(edge.to_entity_id, f"ent:duck:{duck}")
-        # Nothing contains a duck directly any more.
-        self.assertFalse(
-            [r for r in edges.values()
-             if r.from_entity_id == "ent:fountain:littlefield"
-             and r.to_entity_id.startswith("ent:duck")])
-
-    def test_the_edge_ids_say_which_end_is_which(self):
-        """`rel:contains:fountain-littlefield` was the first attempt: the
-        child's last segment is the venue name, so the id read as though the
-        fountain contained itself."""
-        for rel_id in (r.rel_id for r in seed_relationships(seed_entities())):
-            with self.subTest(rel_id=rel_id):
-                self.assertRegex(rel_id, r"^rel:contains:[a-z]+-[a-z]+-[a-z-]+$")
+    # Two tests stood here: one asserting the hierarchy was two levels deep
+    # and named both ends of every edge, one asserting an edge id said which
+    # end was which. Both read `seed_relationships`, and both go with the
+    # type -- `spatial.owm/0.1` excludes relationships and reserves them as
+    # open design, so there is no weaker version of these assertions to keep.
+    #
+    # The containment they checked is now claimed only by geometry: the two
+    # tests above this comment still prove every duck sits inside the
+    # declared shallows and the pond's bounds are inside the water. What is
+    # gone is the model's own statement that the pond is *part of* the
+    # fountain, which no amount of geometry recovers.
 
 
 class SetExtent(unittest.TestCase):
@@ -322,7 +296,7 @@ class SetExtent(unittest.TestCase):
         return participant, publisher
 
     def test_bounds_change_and_nothing_else_does(self):
-        from spatialdds_idl.spatial.core import Aabb3
+        from spatialdds_idl18.spatial.core import Aabb3
         participant, publisher = self._publisher(DOMAIN + 13)
         smaller = Aabb3(min_xyz=[11.0, -16.0, -2.0], max_xyz=[15.0, -12.0, -1.0])
         try:
@@ -362,73 +336,13 @@ class SetExtent(unittest.TestCase):
             publisher.close()
 
     def test_set_extent_for_somebody_else_s_entity_is_left_alone(self):
-        from spatialdds_idl.spatial.core import Aabb3
+        from spatialdds_idl18.spatial.core import Aabb3
         participant, publisher = self._publisher(DOMAIN + 15)
         try:
             self.assertIsNone(publisher.handle_command(_command(
                 "set_extent", "ent:gnome:visitor",
                 extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[1.0, 1.0, 1.0]))),
                 "somebody else's entity is not ours to refuse")
-        finally:
-            publisher.close()
-
-
-class EdgeDisposal(unittest.TestCase):
-    """
-    `dispose_edge`, and why it is not called `retire`.
-
-    An edge has no `LifecycleState`. It cannot retire, and it cannot say why
-    it went -- only stop being there. Naming the verb `retire` would have
-    contradicted the design note published in Part 2.
-    """
-
-    def _publisher(self, domain):
-        participant = _participant(domain)
-        publisher = ModelPublisher(participant)
-        entities = seed_entities()
-        for entity in entities:
-            publisher.publish_entity(entity)
-        for relationship in seed_relationships(entities):
-            publisher.publish_relationship(relationship)
-        return participant, publisher
-
-    def test_an_edge_can_be_disposed_without_touching_either_end(self):
-        participant, publisher = self._publisher(DOMAIN + 10)
-        target = "rel:contains:pond-duck-west"
-        try:
-            line = publisher.handle_command(_command("dispose_edge", target,
-                                                     reason="superseded by hierarchy"))
-            self.assertIn("disposed edge", line)
-            self.assertIn("superseded by hierarchy", line)
-            # Both ends are still there. Only the claim between them went.
-            self.assertTrue(publisher.owns("ent:duck:west"))
-            self.assertTrue(publisher.owns("ent:pond:littlefield"))
-        finally:
-            publisher.close()
-
-    def test_the_reason_exists_only_in_the_log(self):
-        """
-        The gap, demonstrated rather than papered over.
-
-        A retired entity carries its reason in `state_reason` for one sample.
-        An edge has nowhere to put one, so the operator's reason reaches a
-        human through the service log and nothing else -- and the line says
-        so, rather than implying the edge announced itself.
-        """
-        participant, publisher = self._publisher(DOMAIN + 11)
-        try:
-            line = publisher.handle_command(_command(
-                "dispose_edge", "rel:contains:pond-duck-east", reason="winter"))
-            self.assertIn("carries no reason", line)
-        finally:
-            publisher.close()
-
-    def test_an_edge_we_do_not_hold_is_left_alone(self):
-        """Same rule as for entities: somebody else may own it."""
-        participant, publisher = self._publisher(DOMAIN + 12)
-        try:
-            self.assertIsNone(
-                publisher.handle_command(_command("dispose_edge", "rel:nope:nope")))
         finally:
             publisher.close()
 
@@ -450,17 +364,13 @@ class Retirement(unittest.TestCase):
         entities = seed_entities()
         for entity in entities:
             publisher.publish_entity(entity)
-        for relationship in seed_relationships(entities):
-            publisher.publish_relationship(relationship)
         return participant, publisher
 
     def test_a_live_subscriber_sees_the_tombstone_then_the_eviction(self):
         participant, publisher = self._publisher(DOMAIN + 3)
         entity_reader = tt.make_reader(
             participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
-        _drain(entity_reader, tt.make_reader(
-            participant, TOPIC_MODEL_RELATIONSHIP_V1, Relationship,
-            MODEL_LATCHED.name), SEEDED_ENTITIES, SEEDED_RELATIONSHIPS)
+        _drain(entity_reader, SEEDED_ENTITIES)
 
         target = "ent:duck:east"
         reason = "taken in for the winter"
@@ -494,7 +404,7 @@ class Retirement(unittest.TestCase):
         finally:
             publisher.close()
 
-    def test_a_late_joiner_sees_neither_the_entity_nor_its_edges(self):
+    def test_a_late_joiner_sees_neither_the_entity_nor_a_tombstone(self):
         """
         The claim the design rests on.
 
@@ -502,29 +412,32 @@ class Retirement(unittest.TestCase):
         written by a short-lived tool dies with that tool while the owner's
         ACTIVE sample stays latched, and a reader joining afterwards is handed
         a live duck -- measured, and written up in SPEC_COMPLIANCE.
+
+        It used to assert the edge cascade too: retiring the duck disposed
+        `rel:contains:pond-duck-east` in front of the tombstone. There is no
+        relationship type under `spatial.owm/0.1`, so the cascade is empty by
+        construction, and the assertion below says that rather than being
+        dropped -- an empty list nobody checks is how a removed cascade turns
+        into a silently broken one.
         """
         participant, publisher = self._publisher(DOMAIN + 4)
         target = "ent:duck:east"
         cascaded = publisher.retire(target, "taken in for the winter", settle=0.2)
-        self.assertEqual(cascaded, ["rel:contains:pond-duck-east"],
-                         "retiring an entity should take its edges with it")
+        self.assertEqual(cascaded, [],
+                         "there are no edges to cascade under spatial.owm/0.1")
         time.sleep(0.5)
 
         try:
             subscriber = _participant(DOMAIN + 4)
-            entities, relationships = _drain(
+            entities = _drain(
                 tt.make_reader(subscriber, TOPIC_MODEL_ENTITY_V1, Entity,
                                MODEL_LATCHED.name),
-                tt.make_reader(subscriber, TOPIC_MODEL_RELATIONSHIP_V1,
-                               Relationship, MODEL_LATCHED.name),
-                SEEDED_ENTITIES - 1, SEEDED_RELATIONSHIPS - 1, timeout=6.0)
+                SEEDED_ENTITIES - 1, timeout=6.0)
             self.assertNotIn(target, entities)
-            self.assertNotIn("rel:contains:pond-duck-east", relationships)
             # And nothing else went with it.
             self.assertEqual(len(entities), SEEDED_ENTITIES - 1)
-            self.assertEqual(len(relationships), SEEDED_RELATIONSHIPS - 1)
             print(f"  late-join after retirement: {len(entities)} entities, "
-                  f"{len(relationships)} relationships, no tombstone replayed")
+                  f"no tombstone replayed")
         finally:
             publisher.close()
 
@@ -540,17 +453,14 @@ class Retirement(unittest.TestCase):
         time.sleep(0.5)
         try:
             subscriber = _participant(DOMAIN + 5)
-            entities, relationships = _drain(
+            entities = _drain(
                 tt.make_reader(subscriber, TOPIC_MODEL_ENTITY_V1, Entity,
                                MODEL_LATCHED.name),
-                tt.make_reader(subscriber, TOPIC_MODEL_RELATIONSHIP_V1,
-                               Relationship, MODEL_LATCHED.name),
-                SEEDED_ENTITIES, SEEDED_RELATIONSHIPS)
+                SEEDED_ENTITIES)
             self.assertIn(target, entities)
             self.assertEqual(entities[target].state.name, "ACTIVE")
             self.assertEqual(entities[target].state_reason, "",
                              "a restored entity should not still be explaining itself")
-            self.assertIn("rel:contains:pond-duck-east", relationships)
         finally:
             publisher.close()
 
@@ -605,7 +515,7 @@ class Mover(unittest.TestCase):
 
     @staticmethod
     def _command(entity_id, x, y, q):
-        from spatialdds_idl.spatial.core import PoseSE3
+        from spatialdds_idl18.spatial.core import PoseSE3
         return _command("move", entity_id,
                         pose=PoseSE3(t=[x, y, -1.423], q=list(q)))
 

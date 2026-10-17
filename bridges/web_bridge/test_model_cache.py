@@ -20,7 +20,13 @@ for path in (str(REPO), str(HERE)):
         sys.path.insert(0, path)
 
 from model_cache import ModelCache  # noqa: E402
-from spatialdds_demo.model_service import seed_entities, seed_relationships  # noqa: E402
+# The bridge is a later batch and still reads the pre-1.8 topics, so its
+# fixtures still come from the retired relationship seed -- which now
+# lives in its own module, typed against the demo-local bindings. The
+# entities still come from the model service, which has migrated: this
+# import pair is what a staged migration looks like from the outside.
+from spatialdds_demo.model_service import seed_entities  # noqa: E402
+from spatialdds_demo.pre18_relationships import seed_relationships  # noqa: E402
 from spatialdds_idl.oarc_model import LifecycleState  # noqa: E402
 
 STAMP = {"sec": 1788400000, "nanosec": 0}

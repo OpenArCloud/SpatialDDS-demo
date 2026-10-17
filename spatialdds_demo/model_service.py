@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """
-World model publisher — demo-local `oarc_model`, non-normative.
+World model publisher — `spatial.owm/0.1`, provisional, SpatialDDS 1.8.
 
-Seeds a small model of the venue and stays alive holding it. Both topics are
+Migrated off the demo-local `oarc_model` layer this demo was built on. The
+types are generated from the spec at commit 9c3e1f2 into `spatialdds_idl18`,
+the topics follow §3.3.1's scene-scoped grammar, and the relationship lane is
+gone because the module carries no relationship type. What that cost, member
+by member, is docs/owm-1.8-census.md.
+
+Seeds a small model of the venue and stays alive holding it. The entity topic is
 TRANSIENT_LOCAL with KEEP_LAST(1) per key, so the publisher *is* the store: a
 client that connects later is handed the current model by the middleware, with
 no query, no snapshot request and no replay logic anywhere. Staying alive is
@@ -41,16 +47,16 @@ from spatialdds_demo.tempo import (
     GAP_SMOOTHING, IDLE_FACTOR, IDLE_FLOOR_S, LATCH_EVERY_N, Tempo,
 )
 from spatialdds_demo.topics import (
+    SCENE,
     TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
-    TOPIC_MODEL_RELATIONSHIP_V1,
 )
-from spatialdds_idl.builtin import Time
-from spatialdds_idl.oarc_model import (
+from spatialdds_idl18.builtin import Time
+from spatialdds_idl18.spatial.owm import (
     Basis, Entity, LifecycleState, ModelCommand, ModelLayer, ModelPose,
-    Relationship,
 )
-from spatialdds_idl.spatial.common import CoordConvention, FrameRef, KV
-from spatialdds_idl.spatial.core import Aabb3, PoseSE3
+from spatialdds_idl18.spatial.common import (
+    CoordConvention, FrameRef, KV, ScaleStatus)
+from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
 
 # The frame the venue model is expressed in — the same one the client
 # localizes into and the same one the catalogue row names, so an entity pose
@@ -215,12 +221,26 @@ def _now() -> Time:
 
 def venue_frame() -> FrameRef:
     """UUIDv5 of the fqn, the same derivation the catalogue and its
-    announced transform use, so all three name one frame rather than three."""
+    announced transform use, so all three name one frame rather than three.
+
+    1.8 added the scale declaration, and this frame declares it rather than
+    leaning on the default. ``has_scale = false`` already means metric -- the
+    spec says every pre-1.8 publisher is correct by construction -- so the
+    four fields below change nothing a consumer computes. They change what it
+    has to assume: the venue frame is metres because the map was built in
+    metres, and now it says so on the wire instead of in a comment.
+    """
     return FrameRef(
         uuid=str(uuid.uuid5(uuid.NAMESPACE_URL, VENUE_FRAME_FQN)),
         fqn=VENUE_FRAME_FQN,
         has_coord_convention=True,
         coord_convention=CoordConvention.ENU,
+        has_scale=True,
+        # DECLARED, not DERIVED: nobody recovered this from a similarity
+        # transform, the capture was metric to begin with.
+        scale_status=ScaleStatus.SCALE_DECLARED,
+        meters_per_unit=1.0,
+        display_unit="m",
     )
 
 
@@ -360,54 +380,6 @@ def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
     return [fountain, pond, shallows] + ducks
 
 
-def seed_relationships(entities: List[Entity],
-                       stamp: Optional[Time] = None) -> List[Relationship]:
-    """
-    The hierarchy: fountain contains pond, pond contains the shallows,
-    pond contains each duck.
-
-    Part 1 had the fountain containing the ducks directly, which was true and
-    shallow -- the ducks are on the water, and the water is part of the
-    fountain. Wikidata says the same thing about the types (Q810524 is
-    `part of` Q483453), so the shape is borrowed rather than invented.
-
-    Ids name both ends because there are now two levels and
-    `rel:contains:west` no longer says which parent is meant. The Part 1 ids
-    are superseded, not renamed: an operator disposes them through the
-    command lane, since an edge cannot be updated into a different edge.
-    """
-    stamp = stamp or _now()
-    by_id = {entity.entity_id: entity for entity in entities}
-    fountain = by_id["ent:fountain:littlefield"]
-    pond = by_id["ent:pond:littlefield"]
-
-    def edge(parent: Entity, child: Entity) -> Relationship:
-        return Relationship(
-            # Both ends, by kind and name. Taking only the child's last
-            # segment read fine for ducks and produced
-            # `rel:contains:fountain-littlefield` for the pond, whose last
-            # segment is the venue. An id that needs you to know which end is
-            # which is not an id.
-            rel_id=(f"rel:contains:{parent.entity_id.split(':')[1]}-"
-                    f"{child.entity_id.split(':', 1)[1].replace(':', '-')}"),
-            kind="contains",
-            from_entity_id=parent.entity_id,
-            to_entity_id=child.entity_id,
-            properties=[],
-            source_id=SOURCE_ID,
-            stamp=stamp,
-        )
-
-    shallows = by_id["ent:shallows:littlefield"]
-
-    # The ducks stay children of the pond rather than of the shallows. They
-    # are on the water; the shallows are the region the venue keeps them in,
-    # which is a policy about them and not a place that contains them.
-    ducks = [e for e in entities if e.entity_id.startswith("ent:duck")]
-    return ([edge(fountain, pond), edge(pond, shallows)]
-            + [edge(pond, duck) for duck in ducks])
-
-
 class ModelPublisher:
     """
     Latched writers for both model topics, and the authority over what they
@@ -424,12 +396,9 @@ class ModelPublisher:
     def __init__(self, participant: DomainParticipant):
         self._entities = tt.make_writer(
             participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
-        self._relationships = tt.make_writer(
-            participant, TOPIC_MODEL_RELATIONSHIP_V1, Relationship, MODEL_LATCHED.name)
         self._poses = tt.make_writer(
             participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
         self._published: Dict[str, Entity] = {}
-        self._edges: Dict[str, Relationship] = {}
         # Per FAST entity: moves since the latched record was last refreshed,
         # and when its last fast pose went out. Both exist only for the fast
         # tier; a SLOW entity is latched on every move as it always was.
@@ -440,10 +409,6 @@ class ModelPublisher:
     def publish_entity(self, entity: Entity) -> None:
         self._entities.write(entity)
         self._published[entity.entity_id] = entity
-
-    def publish_relationship(self, relationship: Relationship) -> None:
-        self._relationships.write(relationship)
-        self._edges[relationship.rel_id] = relationship
 
     def owns(self, entity_id: str) -> bool:
         return entity_id in self._published
@@ -478,22 +443,23 @@ class ModelPublisher:
         entity.stamp = _now()
         self._entities.write(entity)
 
-        # Edges first on the way out, so nothing is left pointing at a
-        # tombstone that is about to be disposed.
-        cascaded = [rel_id for rel_id, edge in self._edges.items()
-                    if entity_id in (edge.from_entity_id, edge.to_entity_id)]
-
+        # There is no edge cascade any more, and the `settle` pause stays
+        # anyway: it is the gap between the tombstone and the dispose, which
+        # is what gives a reader a chance to see why the entity went before
+        # the instance stops existing. That was never about edges.
+        #
+        # What used to happen here: every edge touching this entity was
+        # disposed first, so nothing was left pointing at a tombstone.
+        # `spatial.owm/0.1` carries no relationship type, so an unmigrated
+        # consumer that still holds pre-1.8 edges now keeps a dangling one
+        # until it migrates. The cost is recorded in the census's GAP row,
+        # not papered over here -- the return value stays a list so callers
+        # read "nothing cascaded" rather than "no cascade exists".
         time.sleep(settle)
-
-        for rel_id in cascaded:
-            edge = self._edges.pop(rel_id)
-            # Disposed, not tombstoned. `Relationship` has no LifecycleState,
-            # so an edge cannot say why it went away -- it can only stop
-            # being there. Recorded in SPEC_COMPLIANCE as a design note.
-            self._relationships.dispose(edge)
 
         self._entities.dispose(entity)
         del self._published[entity_id]
+        cascaded: List[str] = []
         return cascaded
 
     def move(self, entity_id: str, pose: PoseSE3) -> Tuple[float, float, float]:
@@ -560,25 +526,6 @@ class ModelPublisher:
             flushed.append(entity_id)
         return flushed
 
-    def dispose_edge(self, rel_id: str, reason: str) -> bool:
-        """
-        Remove one edge. Not "retire" it -- it cannot be retired.
-
-        `Relationship` has no `LifecycleState`, so an edge has no way to say
-        why it went; it can only stop being there. The reason is carried in
-        this service's log and the operator tool's output and nowhere on the
-        wire, which is the gap recorded in SPEC_COMPLIANCE made visible one
-        more time rather than papered over with a field that does not exist.
-
-        Calling this verb `retire` would have contradicted that finding four
-        commits after publishing it.
-        """
-        edge = self._edges.pop(rel_id, None)
-        if edge is None:
-            return False
-        self._relationships.dispose(edge)
-        return True
-
     def set_extent(self, entity_id: str, extent: Aabb3) -> Tuple[List[float], List[float]]:
         """
         Change what an entity claims its bounds are. Returns the old ones.
@@ -604,8 +551,6 @@ class ModelPublisher:
         entities = seed_entities()
         for entity in entities:
             self.publish_entity(entity)
-        for relationship in seed_relationships(entities):
-            self.publish_relationship(relationship)
         return len(entities)
 
     def handle_command(self, command: ModelCommand) -> Optional[str]:
@@ -625,9 +570,10 @@ class ModelPublisher:
             if (command.subject_id.startswith("ent:")
                     and not self.owns(command.subject_id)):
                 return None
-            if (command.subject_id.startswith("rel:")
-                    and command.subject_id not in self._edges):
-                return None
+            # A `rel:` subject used to be checked against the edge table.
+            # The verb that took one is gone with the type, so a command
+            # naming an edge now falls through to the unknown-verb refusal,
+            # which says so in a sentence rather than silently ignoring it.
         if command.verb == "restore":
             count = self.restore_seed()
             return f"restore from {command.requester_id}: re-seeded {count} entities"
@@ -644,15 +590,6 @@ class ModelPublisher:
                     f"x {now.min_xyz[0]:.1f}..{now.max_xyz[0]:.1f}, "
                     f"y {was[0][1]:.1f}..{was[1][1]:.1f} -> "
                     f"y {now.min_xyz[1]:.1f}..{now.max_xyz[1]:.1f} "
-                    f"(asked by {command.requester_id})")
-        if command.verb == "dispose_edge":
-            if self.dispose_edge(command.subject_id, command.reason):
-                # The only place the reason survives.
-                return (f"disposed edge {command.subject_id} — "
-                        f"{command.reason!r} (asked by {command.requester_id}); "
-                        f"the edge itself carries no reason, it can only stop "
-                        f"being there")
-            return (f"declined: no edge {command.subject_id} here "
                     f"(asked by {command.requester_id})")
         if command.verb == "move":
             if not command.has_pose:
@@ -700,11 +637,12 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
     publisher = ModelPublisher(participant)
 
     entities = seed_entities()
-    relationships = seed_relationships(entities)
 
     print(f"model: domain {domain_id}, source {SOURCE_ID}")
+    print("model: types  spatial.owm/0.1 (SpatialDDS 1.8, provisional) "
+          "from spec 9c3e1f2")
+    print(f"model: scene  {SCENE}")
     print(f"model: entity topic       {TOPIC_MODEL_ENTITY_V1}")
-    print(f"model: relationship topic {TOPIC_MODEL_RELATIONSHIP_V1}")
     print(f"model: qos {MODEL_LATCHED.name} — {MODEL_LATCHED.note}")
 
     for entity in entities:
@@ -714,13 +652,9 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
         refs = ",".join(entity.content_refs) or "no content"
         print(f"model: entity {entity.entity_id} — {entity.basis.name}/"
               f"{entity.layer.name}, {placed}, {refs}")
-    for relationship in relationships:
-        publisher.publish_relationship(relationship)
-        print(f"model: relationship {relationship.rel_id} — "
-              f"{relationship.from_entity_id} {relationship.kind} "
-              f"{relationship.to_entity_id}")
-    print(f"model: seeded {len(entities)} entities, {len(relationships)} "
-          f"relationships; latched, holding")
+    print(f"model: seeded {len(entities)} entities; latched, holding")
+    print("model: no relationship lane — spatial.owm/0.1 carries no "
+          "relationship type (see docs/owm-1.8-census.md)")
 
     # The command lane. Retirement arrives here rather than being written
     # around us, because only the writer that latched a sample can make it
@@ -775,7 +709,8 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="SpatialDDS demo world model publisher (demo-local oarc_model)")
+        description="SpatialDDS demo world model publisher "
+                    "(spatial.owm/0.1, SpatialDDS 1.8)")
     parser.add_argument("--domain", type=int, default=None,
                         help="DDS domain id (default: SPATIALDDS_DDS_DOMAIN)")
     parser.add_argument("--quiet", action="store_true",

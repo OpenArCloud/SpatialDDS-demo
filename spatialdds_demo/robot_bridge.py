@@ -51,8 +51,14 @@ from spatialdds_demo.qos_profiles import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
 )
 from spatialdds_demo.tempo import Tempo
+# Still the pre-1.8 topics and the demo-local `oarc_model` types: this is a
+# later batch. The Open World Model demo migrated to `spatial.owm/0.1` on
+# scene-scoped topic names, so nothing publishes these three any more and
+# this lane sees an empty bus until it migrates too. The names are explicit
+# rather than inherited so that is visible here instead of being discovered
+# as silence. See docs/owm-1.8-census.md.
 from spatialdds_demo.topics import (
-    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
+    TOPIC_MODEL_COMMAND_V1_PRE18, TOPIC_MODEL_ENTITY_V1_PRE18, TOPIC_MODEL_POSE_V1_PRE18,
 )
 from spatialdds_idl.builtin import Time
 from spatialdds_idl.oarc_model import (
@@ -124,11 +130,11 @@ class RobotBridge:
 
     def __init__(self, participant: DomainParticipant, navigator=None):
         self._entities = tt.make_writer(
-            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+            participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
         self._poses = tt.make_writer(
-            participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
+            participant, TOPIC_MODEL_POSE_V1_PRE18, ModelPose, MODEL_FAST.name)
         self._commands = tt.make_reader(
-            participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
+            participant, TOPIC_MODEL_COMMAND_V1_PRE18, ModelCommand, MODEL_COMMAND.name)
         self._tempo = Tempo()
         self._goal: Optional[Tuple[float, float]] = None
         self._entity: Optional[Entity] = None
@@ -404,7 +410,7 @@ def already_published(participant: DomainParticipant,
     So a bridge looks before it writes, and refuses rather than joins.
     """
     reader = tt.make_reader(
-        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
     deadline = time.time() + settle
     while time.time() < deadline:
         for sample in tt.take_samples(reader) or []:
@@ -450,7 +456,7 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
     # it -- so a reshape reaches this robot too, with nothing here that knows
     # what a pond is.
     entities_reader = tt.make_reader(
-        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
     known: dict = {}
 
     def refresh_keepout():
