@@ -44,7 +44,11 @@ from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.model_service import venue_frame
+# The pre-1.8 frame, because this lane is pre-1.8. model_service's
+# venue_frame() returns 1.8's eight-member FrameRef and this file builds
+# 1.7 Entities; the mismatch serialized silently, dropping the four scale
+# members. Same frame, same UUID, this era's shape. See pre18.py.
+from spatialdds_demo.pre18 import venue_frame
 from spatialdds_demo.keepout import FREE, build_mask
 from spatialdds_demo.plaza import GROUND_Z, ROBOT_START_XY
 from spatialdds_demo.qos_profiles import (

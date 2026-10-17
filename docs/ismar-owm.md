@@ -15,10 +15,45 @@ field-level migration census, [`docs/owm-1.8-census.md`](owm-1.8-census.md).
 
 ---
 
+## Staged migration: what is live and what is pinned
+
+This page describes the demo whole, and two of its three limbs are pinned at
+the pre-1.8 types while their own batches are pending. Read this before the
+instructions below, which describe the demo as it will be and as it was, but
+not as it is today.
+
+| limb | state |
+| --- | --- |
+| the venue — model service, ducks, gnome, derived pond, operator scripts | **migrated**, `spatial.owm/0.1` on scene-scoped topics |
+| the web bridge and this browser view | **pinned pre-1.8**, awaiting the bridge batch |
+| the robot lane — `robot_bridge`, `robot_tier` | **pinned pre-1.8**, awaiting its own batch |
+
+The pinned lanes read the pre-1.8 topic names explicitly
+(`TOPIC_MODEL_ENTITY_V1_PRE18` and its siblings), which nothing publishes any
+more. So **steps 2 and 3 below have nothing to show today**: the browser gets
+an empty model and falls back to catalogue placement, and `Send Robot` has no
+command lane to reach. That is the staged plan rather than breakage, and
+`docs/world-model.md` says the same thing from the design side.
+
+Step 1 works as written. What can be demonstrated in the meantime is the venue
+read over the web binding, which is a stronger demonstration anyway because
+nothing in it is this repository's code:
+
+```bash
+python3 tools/run_owm_session.py --seconds 18             # capture a session
+python3 ../spatialdds-web/tools/run_gateway.py \
+    --mcap recordings/owm-littlefield.mcap --port 8831    # serve it
+python3 examples/list_owm_entities.py                     # read it
+```
+
+The migration's field-level account is [`owm-1.8-census.md`](owm-1.8-census.md);
+its acceptance evidence is
+[`recordings/owm-littlefield.evidence.md`](../recordings/owm-littlefield.evidence.md).
+
 ## Running it
 
 Two terminals. The first is the venue; the second is the robot that plans
-against it.
+against it. **Steps 2 and 3 await the batches named above.**
 
 ```bash
 # 1 — the venue: model service, gnome, ducks, derived pond
@@ -35,6 +70,11 @@ The tier takes about 20 s to bring nav2's lifecycle nodes to active. It shares
 the bridge container's network namespace, so the bridge has to be up first.
 
 ### What to point at
+
+Every item here reads the model through the browser, so all of it awaits the
+bridge batch. Kept because it is what the demo demonstrates, and because the
+measured numbers in it are the acceptance record for the robot tier that the
+later batch has to reproduce.
 
 Click any entity to open its panel — every field there is read off the entity,
 nothing is authored by the client.

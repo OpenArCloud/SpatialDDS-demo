@@ -26,7 +26,7 @@ from model_cache import ModelCache  # noqa: E402
 # entities still come from the model service, which has migrated: this
 # import pair is what a staged migration looks like from the outside.
 from spatialdds_demo.model_service import seed_entities  # noqa: E402
-from spatialdds_demo.pre18_relationships import seed_relationships  # noqa: E402
+from spatialdds_demo.pre18 import seed_relationships  # noqa: E402
 from spatialdds_idl.oarc_model import LifecycleState  # noqa: E402
 
 STAMP = {"sec": 1788400000, "nanosec": 0}

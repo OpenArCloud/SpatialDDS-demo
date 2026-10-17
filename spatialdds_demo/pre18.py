@@ -1,5 +1,5 @@
 """
-The retired relationship lane, kept for the consumers that have not migrated.
+The pre-1.8 surface, kept for the lanes that have not migrated.
 
 SpatialDDS 1.8's ``spatial.owm/0.1`` carries no relationship type: the module
 excludes relationships explicitly and reserves them as open design. The Open
@@ -13,17 +13,25 @@ this hierarchy. Nothing publishes it: ``ModelPublisher`` has no relationship
 writer any more, so an edge built here reaches DDS only if some unmigrated
 consumer writes it itself.
 
-When the bridge migrates, this file goes with it. It is a dated artifact by
-construction, which is why it says so at the top rather than looking like
-part of the demo.
+When the bridge and the robot lane migrate, this file goes with them. It is a
+dated artifact by construction, which is why it says so at the top rather than
+looking like part of the demo.
+
+It holds two things, and renaming it from `pre18_relationships` is why: the
+relationship seed above, and `venue_frame` below. Both exist for the same
+reason -- a consumer still on the demo-local types needs a value in that era's
+shape -- and a module named for only one of them would have gone on collecting
+the other in silence.
 """
 
+import uuid
 from typing import List, Optional
 
 from spatialdds_idl.builtin import Time
 from spatialdds_idl.oarc_model import Entity, Relationship
+from spatialdds_idl.spatial.common import CoordConvention, FrameRef
 
-from spatialdds_demo.model_service import SOURCE_ID, _now
+from spatialdds_demo.model_service import SOURCE_ID, VENUE_FRAME_FQN, _now
 
 
 def seed_relationships(entities: List[Entity],
@@ -72,3 +80,30 @@ def seed_relationships(entities: List[Entity],
     ducks = [e for e in entities if e.entity_id.startswith("ent:duck")]
     return ([edge(fountain, pond), edge(pond, shallows)]
             + [edge(pond, duck) for duck in ducks])
+
+
+def venue_frame() -> FrameRef:
+    """The venue frame in the four-member 1.7 shape.
+
+    `model_service.venue_frame()` returns 1.8's eight-member `FrameRef`, which
+    gained the metric scale declaration. A pre-1.8 lane that calls it builds a
+    1.7 `Entity` holding an object of the wrong era: dataclasses do not
+    type-check, so it constructs, and CycloneDDS then serializes against the
+    *declared* 1.7 type and silently drops the four scale members. 320 bytes
+    out, no error, and the wire result happens to equal this function's --
+    which is exactly why it would have gone unnoticed until the bridge batch
+    tried to read a scale that was never sent.
+
+    So the pin is honoured in the wiring too, not only in the topic names:
+    `_PRE18` lanes get a `_PRE18` frame. This is not a translation between the
+    two eras and nothing converts anything -- the frame's *identity* is a
+    constant, `VENUE_FRAME_FQN`, and both functions derive the same UUIDv5
+    from it. One source of truth for which frame this is; two type shapes for
+    the two eras that have to name it.
+    """
+    return FrameRef(
+        uuid=str(uuid.uuid5(uuid.NAMESPACE_URL, VENUE_FRAME_FQN)),
+        fqn=VENUE_FRAME_FQN,
+        has_coord_convention=True,
+        coord_convention=CoordConvention.ENU,
+    )
