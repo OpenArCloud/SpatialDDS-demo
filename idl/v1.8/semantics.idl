@@ -1,0 +1,212 @@
+// SPDX-License-Identifier: MIT
+// SpatialDDS Semantics 1.8
+
+#ifndef SPATIAL_CORE_INCLUDED
+#define SPATIAL_CORE_INCLUDED
+#include "core.idl"
+#endif
+#ifndef SPATIAL_SENSING_COMMON_INCLUDED
+#define SPATIAL_SENSING_COMMON_INCLUDED
+#include "common.idl"
+#endif
+
+module spatial {
+  module semantics {
+
+    const string MODULE_ID = "spatial.semantics/1.8";
+
+    typedef builtin::Time Time;
+    typedef spatial::core::TileKey TileKey;
+    typedef spatial::common::FrameRef FrameRef;
+
+    // ---------- Keypoints / pose skeletons (added 1.8) ----------
+
+    // One joint of a pose skeleton, in 3D. Uncertainty for a keypointed
+    // detection lives on the detection (observer_cov, and the detection's own
+    // covariance) rather than per joint: no producer surveyed for 1.8
+    // publishes per-joint covariance, and a field nobody fills is worse than
+    // one appended later when somebody does. APPENDABLE leaves that open.
+    @extensibility(APPENDABLE) struct Keypoint3D {
+      spatial::common::Vec3 position;   // joint position in the detection's frame_ref (metres)
+      float confidence;                 // [0..1] per-joint detector confidence
+      boolean has_visible;
+      boolean visible;                  // false = inferred/occluded rather than directly observed
+    };
+
+    // One skeleton edge, as a pair of indices into the keypoint sequence.
+    // Carried explicitly so a consumer that does not know the topology
+    // vocabulary can still draw the skeleton.
+    @extensibility(APPENDABLE) struct KeypointLink {
+      uint16 from_index;                // index into Detection3D.keypoints
+      uint16 to_index;                  // index into Detection3D.keypoints
+    };
+
+    // 2D detections per keyframe (image space)
+    @extensibility(APPENDABLE) struct Detection2D {
+      @key string det_id;       // unique per publisher
+      string node_id;           // keyframe id
+      string camera_id;         // camera
+      string class_id;          // ontology label
+      float  score;             // [0..1]
+      spatial::common::BBox2D bbox; // [u_min,v_min,u_max,v_max] (px)
+      boolean has_mask;         // if a pixel mask exists
+      string  mask_blob_id;     // BlobChunk ref (role="mask")
+      Time   stamp;
+      string source_id;
+    };
+
+    @extensibility(APPENDABLE) struct Detection2DSet {
+      @key string set_id;                 // batch id (e.g., node_id + seq)
+      string node_id;
+      string camera_id;
+      sequence<Detection2D, spatial::sensing::common::SZ_SMALL> dets;    // ≤256
+      Time   stamp;
+      string source_id;
+    };
+
+    // 3D detections in world/local frame (scene space)
+    @extensibility(APPENDABLE) struct Detection3D {
+      @key string det_id;
+      FrameRef frame_ref;        // e.g., "map" (pose known elsewhere)
+      boolean has_tile;
+      TileKey tile_key;          // valid when has_tile = true
+
+      string class_id;           // semantic label
+      float  score;              // [0..1]
+
+      // Oriented bounding box in frame_ref
+      spatial::common::Vec3 center;      // m
+      spatial::common::Vec3 size;        // (width, height, depth) in meters; see Size Convention
+      spatial::common::QuaternionXYZW q; // orientation (x,y,z,w) in GeoPose order
+
+      // Uncertainty (optional)
+      boolean has_covariance;
+      spatial::common::Mat3x3 cov_pos; // 3x3 position covariance (row-major)
+      spatial::common::Mat3x3 cov_rot; // 3x3 rotation covariance (row-major)
+
+      // Optional instance tracking
+      boolean has_track_id;
+      string  track_id;
+
+      Time   stamp;
+      string source_id;
+
+      // Optional attribute key-value pairs
+      boolean has_attributes;
+      sequence<spatial::common::MetaKV, 8> attributes; // valid when has_attributes == true
+
+      // Occlusion / visibility (0.0 = fully occluded, 1.0 = fully visible)
+      boolean has_visibility;
+      float   visibility;                // valid when has_visibility == true
+
+      // Evidence counts
+      boolean has_num_pts;
+      uint32  num_lidar_pts;             // valid when has_num_pts == true
+      uint32  num_radar_pts;             // valid when has_num_pts == true
+
+      // appended in 1.7 draft rev
+      boolean has_velocity;
+      spatial::common::Vec3 velocity;    // m/s in the detection's frame (valid when has_velocity == true)
+
+      // Observer pose covariance (added 1.8 Batch 2). observer_position is the
+      // sensor origin in this struct's frame_ref, in metres; observer_cov is the
+      // observer-pose covariance (COV_NONE when absent). Layout is row-major; the
+      // pose-covariance blocks are position m^2, position-rotation m*rad, and
+      // rotation rad^2; the observer pose is expressed in this struct's frame_ref.
+      boolean has_observer;
+      spatial::common::Vec3 observer_position;
+      spatial::core::CovMatrix observer_cov;
+      // Composition scope of observer_cov (added 1.8 Batch 2). Absent means
+      // COV_SCOPE_LOCAL — see spatial::common::CovScope.
+      boolean has_observer_cov_scope;
+      spatial::common::CovScope observer_cov_scope;
+
+      // Pose skeleton (added 1.8 Batch 3), appended at struct end per
+      // APPENDABLE rules. 3D-first: metric joint positions in this detection's
+      // frame_ref, not image coordinates.
+      //
+      // topology_id names the joint vocabulary as a borrowed identifier -- a
+      // URI, or a well-known token such as "COCO-17" -- rather than an enum,
+      // consistent with the standing refusal to define an ontology. It is not
+      // self-describing on its own, which is why keypoint_links is carried
+      // beside it: a consumer that has never heard of the vocabulary can still
+      // render the skeleton from the connectivity, and one that knows it can
+      // name the joints.
+      //
+      // Order is the identity of a joint: index i in keypoints is joint i of
+      // topology_id. A producer that cannot observe a joint MUST still emit it
+      // -- with visible false, or zero confidence -- rather than shortening the
+      // sequence, because every index after a dropped joint would otherwise
+      // mean something different and the links would point at the wrong ones.
+      boolean has_keypoints;
+      sequence<Keypoint3D, 192> keypoints;      // >= COCO-WholeBody (133)
+      string topology_id;                       // e.g. "COCO-17", or a vocabulary URI
+      sequence<KeypointLink, 256> keypoint_links;
+    };
+
+    @extensibility(APPENDABLE) struct Detection3DSet {
+      @key string set_id;                 // batch id
+      FrameRef frame_ref;                 // common frame for the set
+      boolean has_tile;
+      TileKey tile_key;                   // valid when has_tile = true
+      sequence<Detection3D, spatial::sensing::common::SZ_SMALL> dets;    // ≤256
+      Time   stamp;
+      string source_id;
+    };
+
+    // ---- Cross-source fused tracks ----
+    // A FusedTrack is a track correlated across multiple contributing sources
+    // (operators/modalities) by a fusion service. Provenance — which sources
+    // fed the track — is the reason the type exists; per-source detection
+    // links are carried out-of-band via core::EntityBinding. §3.3.2 registers
+    // FusedTrackSet as topic type fused_track (QoS DET_RT).
+    @extensibility(APPENDABLE) struct FusedTrack {
+      string track_id;                   // stable fused-track id
+      string object_class;               // semantic label
+      float  confidence;                 // [0..1]
+
+      // Position with optional covariance, in the set's frame_ref.
+      spatial::common::Vec3 position;    // meters
+      boolean has_position_cov;
+      spatial::common::Mat3x3 position_cov; // 3x3 position covariance (row-major)
+
+      // Velocity with optional covariance (mirrors Detection3D velocity).
+      boolean has_velocity;
+      spatial::common::Vec3 velocity;    // m/s in the set's frame_ref
+      boolean has_velocity_cov;
+      spatial::common::Mat3x3 velocity_cov; // 3x3 velocity covariance (row-major)
+
+      // Provenance — the contributing sources.
+      sequence<string, 16> source_operators;   // operator ids that fed this track
+      sequence<string, 16> source_modalities;  // e.g., "camera", "radar", "lidar"
+      uint32 source_count;                     // number of distinct contributing sources
+
+      double track_age_s;                      // seconds since the track was first observed
+
+      // Observer pose covariance, aggregate term (added 1.8 Batch 2). The combined
+      // observer uncertainty for the fused track (COV_NONE when absent); same
+      // units, row-major layout, and frame_ref convention as Detection3D. Per-source
+      // observer uncertainty, when a consumer needs it, is NOT carried here: a
+      // core::EntityBinding links each contributing source to a core::Node whose
+      // cov is that observer's uncertainty (see the semantics prose). The field
+      // serves fused consumers; the binding serves per-contributor ones.
+      boolean has_observer_cov;
+      spatial::core::CovMatrix observer_cov;
+      // Composition scope of observer_cov (added 1.8 Batch 2). Absent means
+      // COV_SCOPE_LOCAL — see spatial::common::CovScope.
+      boolean has_observer_cov_scope;
+      spatial::common::CovScope observer_cov_scope;
+    };
+
+    @extensibility(APPENDABLE) struct FusedTrackSet {
+      @key string stream_id;             // fusion stream this set belongs to
+      string schema_version;             // MUST be "spatial.semantics/1.8"
+      FrameRef frame_ref;                // common frame for the set
+      sequence<FusedTrack, spatial::sensing::common::SZ_SMALL> tracks;  // ≤256
+      Time   stamp;
+      string source_id;
+      uint64 seq;
+    };
+
+  }; // module semantics
+};

@@ -1,0 +1,362 @@
+// SPDX-License-Identifier: MIT
+// SpatialDDS Spatial Events Extension 1.8
+//
+// Typed, spatially-scoped events for zone monitoring, anomaly detection,
+// and smart infrastructure alerting.
+
+#ifndef SPATIAL_CORE_INCLUDED
+#define SPATIAL_CORE_INCLUDED
+#include "core.idl"
+#endif
+
+module spatial {
+  module events {
+
+    const string MODULE_ID = "spatial.events/1.8";
+
+    typedef builtin::Time Time;
+    typedef spatial::core::PoseSE3   PoseSE3;
+    typedef spatial::core::FrameRef  FrameRef;
+    typedef spatial::core::Aabb3     Aabb3;
+    typedef spatial::core::BlobRef   BlobRef;
+    typedef spatial::core::GeoPose   GeoPose;
+    typedef spatial::common::MetaKV  MetaKV;
+
+    // ================================================================
+    // ENUMS (scoped to avoid literal collisions in IDL compilers)
+    // ================================================================
+
+    module enums {
+      module zone_kind_enum {
+        // Zone classification — what kind of spatial region this is.
+        enum ZoneKind {
+          @value(0) RESTRICTED,       // entry prohibited or requires authorization
+          @value(1) SPEED_LIMITED,    // maximum speed enforced
+          @value(2) CAPACITY_LIMITED, // maximum occupancy enforced
+          @value(3) ONE_WAY,          // directional traffic constraint
+          @value(4) LOADING,          // loading/unloading area with dwell rules
+          @value(5) HAZARD,           // known hazard zone (chemical, height, machinery)
+          @value(6) MONITORING,       // general observation zone (no specific constraint)
+          @value(7) GEOFENCE,         // boundary-crossing detection only
+          @value(8) OTHER
+        };
+      };
+
+      module event_type_enum {
+        // Event type — what happened.
+        enum EventType {
+          @value(0)  ZONE_ENTRY,      // object entered the zone
+          @value(1)  ZONE_EXIT,       // object exited the zone
+          @value(2)  DWELL_TIMEOUT,   // object exceeded dwell time limit
+          @value(3)  SPEED_VIOLATION, // object exceeded speed limit
+          @value(4)  CAPACITY_BREACH, // zone occupancy exceeded capacity
+          @value(5)  WRONG_WAY,       // object traveling against one-way direction
+          @value(6)  PROXIMITY_ALERT, // two tracked objects closer than safe distance
+          @value(7)  UNATTENDED,      // object stationary without associated person
+          @value(8)  ANOMALY,         // general anomaly (ML-detected, pattern deviation)
+          @value(9)  LINE_CROSS,      // object crossed a defined trip line
+          @value(10) LOITERING,       // person/object lingering beyond threshold
+          @value(11) TAILGATING,      // unauthorized entry following authorized person
+          @value(12) OTHER,
+          // appended in 1.7 draft rev; ordinals frozen
+          @value(13) PREDICTED_CONFLICT // predicted future conflict/collision (event_start > stamp)
+        };
+      };
+
+      module severity_enum {
+        // Severity level.
+        enum Severity {
+          @value(0) INFO,             // informational (logging, analytics)
+          @value(1) WARNING,          // advisory — may require attention
+          @value(2) ALERT,            // actionable — requires human review
+          @value(3) CRITICAL          // immediate intervention required
+        };
+      };
+
+      module crossing_direction_enum {
+        // Which way an object crossed a CrossingLine, relative to the line's
+        // own LEFT/RIGHT convention (added 1.8). Tri-state: 0 is UNKNOWN, so a
+        // producer that detects a crossing but cannot resolve its direction
+        // says so rather than implying one.
+        enum CrossingDirection {
+          @value(0) CROSSING_UNKNOWN, // crossing detected, direction not resolved
+          @value(1) LEFT_TO_RIGHT,    // from the line's LEFT side to its RIGHT
+          @value(2) RIGHT_TO_LEFT     // from the line's RIGHT side to its LEFT
+        };
+      };
+
+      module event_state_enum {
+        // Event lifecycle state.
+        enum EventState {
+          @value(0) ACTIVE,           // event is ongoing
+          @value(1) RESOLVED,         // condition cleared (e.g., person left zone)
+          @value(2) ACKNOWLEDGED,     // human acknowledged the event
+          @value(3) SUPPRESSED        // suppressed by rule or operator
+        };
+      };
+    };
+
+    typedef enums::zone_kind_enum::ZoneKind ZoneKind;
+    typedef enums::event_type_enum::EventType EventType;
+    typedef enums::severity_enum::Severity Severity;
+    typedef enums::event_state_enum::EventState EventState;
+    typedef enums::crossing_direction_enum::CrossingDirection CrossingDirection;
+
+    // ================================================================
+    // 1. SPATIAL ZONES
+    // ================================================================
+
+    // (ZoneKind enum is defined in enums submodule; typedef above)
+
+    // Named spatial region with associated rules.
+    // Published with RELIABLE + TRANSIENT_LOCAL so late joiners
+    // receive the full zone layout.
+    @extensibility(APPENDABLE) struct SpatialZone {
+      @key string zone_id;              // unique zone identifier
+
+      string name;                      // human-readable name (e.g., "Loading Bay 3")
+      ZoneKind kind;                    // zone classification
+      FrameRef frame_ref;               // coordinate frame for geometry
+
+      // Zone geometry (axis-aligned in frame_ref)
+      boolean has_bounds;
+      Aabb3 bounds;                     // 3D bounding box (valid when has_bounds == true)
+
+      // Optional geo-anchor for earth-fixed zones
+      boolean has_geopose;
+      GeoPose geopose;                  // zone center in WGS84
+
+      // Zone rules (optional per kind)
+      boolean has_speed_limit_mps;
+      float   speed_limit_mps;          // max speed in m/s (for SPEED_LIMITED)
+
+      boolean has_capacity;
+      uint32  capacity;                 // max occupancy count (for CAPACITY_LIMITED)
+
+      boolean has_dwell_limit_sec;
+      float   dwell_limit_sec;          // max dwell time in seconds (for LOADING, RESTRICTED)
+
+      // Applicable object classes — which detection class_ids trigger events.
+      // Empty means all classes.
+      sequence<string, 32> class_filter;
+
+      // Schedule (optional) — zone is only active during specified hours.
+      // Format: ISO 8601 recurring interval or cron-like string in attributes.
+      boolean has_schedule;
+      string  schedule;                 // e.g., "R/2024-01-01T06:00:00/PT12H" or deployment-specific
+
+      // Owner / authority
+      string provider_id;               // who defines this zone
+      Time   stamp;                     // last update time
+
+      // Extensible metadata
+      sequence<MetaKV, 16> attributes;
+
+      string schema_version;            // MUST be "spatial.events/1.8"
+
+      // Polygon/prism geometry (added 1.8), appended at struct end per APPENDABLE
+      // rules. When has_polygon is true, the polygon takes precedence over bounds
+      // for containment, and consumers that understand polygons MUST prefer them;
+      // bounds MUST still carry the polygon's axis-aligned bounding box so
+      // box-only consumers degrade gracefully (back-compatibility rule). The ring
+      // is given in frame_ref's XY plane, CCW, not self-intersecting; the first
+      // vertex is NOT repeated (closure is implicit). z_min/z_max give the prism
+      // extent along frame_ref Z (z_max >= z_min); equal values denote a flat
+      // (2D) zone with no vertical extent.
+      boolean has_polygon;
+      sequence<spatial::common::Vec2, 256> polygon;
+      double z_min;
+      double z_max;
+    };
+
+
+    // ================================================================
+    // 1b. CROSSING LINES
+    // ================================================================
+
+    // An open path that objects cross, as distinct from a region they occupy
+    // (added 1.8). Published RELIABLE + TRANSIENT_LOCAL, like SpatialZone, so
+    // late joiners receive the full line layout.
+    //
+    // Why this is not a SpatialZone. A zone answers "is this point inside?";
+    // a crossing line has no interior to be inside of. It has two sides and it
+    // produces transitions between them. Expressing one as a degenerate
+    // sliver polygon reintroduces exactly the over/under-claiming that the
+    // 1.8 polygon work removed, and leaves every consumer's containment test
+    // answering a question the geometry cannot mean. `EventType.LINE_CROSS`
+    // has referred to "a defined trip line" since 1.5 without the spec ever
+    // giving that line a geometry; this is that type.
+    @extensibility(APPENDABLE) struct CrossingLine {
+      @key string line_id;              // unique crossing-line identifier
+
+      string name;                      // human-readable name (e.g., "Entrance Door 2")
+      FrameRef frame_ref;               // coordinate frame for geometry
+
+      // Geometry: an OPEN vertex sequence in frame_ref's XY plane, in order.
+      // At least 2 vertices. Unlike SpatialZone.polygon this is NOT closed and
+      // closure MUST NOT be inferred: the last vertex does not join the first,
+      // and a consumer that closes it is reading a region where a path was
+      // meant. A 2-vertex path is the common case (a single straight line);
+      // more vertices describe a polyline across an irregular opening.
+      sequence<spatial::common::Vec2, 256> path;
+
+      // Optional vertical band, same semantics as SpatialZone's prism extents:
+      // z_max >= z_min, and equal values denote a line with no vertical extent
+      // (crossing is evaluated in plan view). Absent means unbounded in Z.
+      boolean has_vertical_band;
+      double z_min;
+      double z_max;
+
+      // Optional enclosing box for coarse discovery and spatial indexing,
+      // mirroring the polygon fallback rule: when present it MUST contain the
+      // whole path, so a box-only consumer can filter without understanding
+      // paths. It is a filter, never a containment test for crossing.
+      boolean has_bounds;
+      Aabb3 bounds;
+
+      // Applicable object classes — which detection class_ids trigger
+      // crossings. Empty means all classes. Same rule as SpatialZone.
+      sequence<string, 32> class_filter;
+
+      // Owner / authority
+      string provider_id;               // who defines this line
+      Time   stamp;                     // last update time
+
+      // Extensible metadata
+      sequence<MetaKV, 16> attributes;
+
+      string schema_version;            // MUST be "spatial.events/1.8"
+    };
+
+    // ================================================================
+    // 2. SPATIAL EVENTS
+    // ================================================================
+
+    // (EventType, Severity, EventState enums are defined in enums submodule; typedefs above)
+
+    // A spatially-grounded event.
+    //
+    // Keyed by event_id. Publishers update the same event_id as state
+    // changes (ACTIVE → RESOLVED). Subscribers use KEEP_LAST per key
+    // to see the latest state of each event.
+    @extensibility(APPENDABLE) struct SpatialEvent {
+      @key string event_id;             // unique event identifier
+
+      EventType  type;                  // what happened
+      Severity   severity;              // how urgent
+      EventState state;                 // lifecycle state
+
+      // Where — zone reference (optional; not all events are zone-scoped)
+      boolean has_zone_id;
+      string  zone_id;                  // references SpatialZone.zone_id
+
+      // Where — 3D position of the event (in the zone's or scene's frame_ref)
+      boolean has_position;
+      spatial::common::Vec3 position;   // event location (meters)
+      FrameRef frame_ref;               // coordinate frame for position
+
+      // What — triggering detection(s)
+      boolean has_trigger_det_id;
+      string  trigger_det_id;           // primary triggering Detection3D.det_id
+
+      boolean has_trigger_track_id;
+      string  trigger_track_id;         // tracked object ID (from Detection3D.track_id)
+
+      string  trigger_class_id;         // class of triggering object (e.g., "person", "forklift")
+
+      // Who — secondary object for relational events (PROXIMITY_ALERT, TAILGATING)
+      boolean has_secondary_det_id;
+      string  secondary_det_id;
+
+      // Measured values (populated per event type)
+      boolean has_measured_speed_mps;
+      float   measured_speed_mps;       // for SPEED_VIOLATION
+
+      boolean has_measured_dwell_sec;
+      float   measured_dwell_sec;       // for DWELL_TIMEOUT, LOITERING, UNATTENDED
+
+      boolean has_measured_distance_m;
+      float   measured_distance_m;      // for PROXIMITY_ALERT
+
+      boolean has_zone_occupancy;
+      uint32  zone_occupancy;           // current count for CAPACITY_BREACH
+
+      // Confidence
+      float   confidence;               // [0..1] — event detection confidence
+
+      // Evidence — optional media snapshot or clip
+      boolean has_evidence;
+      BlobRef evidence;                 // reference to snapshot image or video clip
+
+      // Narrative — optional human-readable description
+      boolean has_description;
+      string  description;              // e.g., "Forklift stopped in pedestrian corridor
+                                        //  near anchor loading-bay-3 for 4 minutes"
+
+      // Timing
+      Time   event_start;               // when the event condition began
+      Time   stamp;                     // latest update time (may differ from event_start)
+
+      // Producer
+      string source_id;                 // who detected this event
+
+      // Extensible metadata
+      sequence<MetaKV, 8> attributes;
+
+      string schema_version;            // MUST be "spatial.events/1.8"
+
+      // appended in 1.7 draft rev
+      sequence<string, 8> participant_ids;  // symmetric participants (track or agent ids)
+
+      // Crossing-line events (added 1.8), appended at struct end per
+      // APPENDABLE rules. Populated for EventType.LINE_CROSS.
+      //
+      // `crossing_line_id` names the CrossingLine that was crossed. It is a
+      // separate field from `zone_id` on purpose: a crossing line is not a
+      // SpatialZone and its ids live in their own space, so carrying one in
+      // `zone_id` would make every zone lookup fail in a way that looks like
+      // missing data.
+      boolean has_crossing_line_id;
+      string  crossing_line_id;         // references CrossingLine.line_id
+
+      // Direction of travel through the line, relative to the line's own
+      // LEFT/RIGHT convention (see the Crossing-Line Side Convention in the
+      // conventions section). Typed rather than carried in `attributes`:
+      // direction is the whole point of a crossing event, and uncertainty or
+      // ignorance about it is expressed by CROSSING_UNKNOWN, not by absence.
+      boolean has_crossing;
+      CrossingDirection crossing_direction;
+    };
+
+
+    // ================================================================
+    // 3. ZONE STATE (periodic summary)
+    // ================================================================
+
+    // Lightweight periodic snapshot of a zone's current status.
+    // Enables dashboards and capacity management without maintaining
+    // event counters client-side.
+    @extensibility(APPENDABLE) struct ZoneState {
+      @key string zone_id;              // references SpatialZone.zone_id
+
+      uint32 current_occupancy;         // number of tracked objects currently in zone
+      boolean has_capacity;
+      uint32  capacity;                 // echoed from SpatialZone for convenience
+
+      // Active alert count by severity
+      uint32 active_info;
+      uint32 active_warning;
+      uint32 active_alert;
+      uint32 active_critical;
+
+      // Class breakdown (optional — top N classes present)
+      sequence<MetaKV, 8> class_counts; // namespace = class_id, json = {"count": N}
+
+      Time   stamp;
+      string source_id;
+      // schema_version intentionally omitted: ZoneState is a lightweight
+      // summary; version is inferred from the accompanying SpatialZone.
+    };
+
+  }; // module events
+};   // module spatial
