@@ -47,6 +47,29 @@ much larger batch and the AR demo needs its own census first.
 `/api/topics` and `/api/stats` have no consumer anywhere in the tree —
 flagged, not touched; deleting them is not this batch's business.
 
+### Those seven routes are 1.9 entry 5's concrete input
+
+The AR demo's seven are not homeless, they are early. `localize`,
+`catalog/query` and `frames` are request/response over a spatial service,
+which is exactly the shape 1.9 candidate entry 5 — the GeoPose Protocol
+successor as a service profile — exists to specify. This bridge is the
+standing implementation of that shape, so the routes are evidence rather than
+debt.
+
+Ready to paste into `spatialdds-web/directions/spatialdds-1.9-candidates.md`
+under entry 5, since that repository is read-only here:
+
+```markdown
+**Concrete input, 2026-10-17.** `SpatialDDS-demo`'s web bridge already serves
+this shape over seven routes the browser view depends on: `POST /v1/localize`,
+`POST /v1/catalog/query`, `GET /v1/frames`, `GET /v1/keepout`, `GET /health`,
+and discovery `search` as GET and POST. The bridge's 1.8 census
+(`docs/bridge-1.8-census.md`, finding 1) records why they could not migrate to
+Appendix N: N.3 is resources, N.5 is subscriptions, N.6 is commands, and none
+of them is request/response over a service. They are entry 5's use case with a
+running implementation attached.
+```
+
 ## Finding 2: N.5 is per-resource, the browser subscribes by pattern
 
 The browser opens one socket and asks for a wildcard:
