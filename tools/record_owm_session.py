@@ -106,6 +106,14 @@ LANES = [
 #: NotAliveDisposed on the way out. A first pass recorded one of those: a
 #: command-lane dispose with a UUID for a key, which the gateway's loader would
 #: not honour and which no reader could act on. Honest, and noise.
+#:
+#: The architectural reason, which is the one to keep: the volatile lanes are
+#: written by operator tools that exist for one command and exit, so what their
+#: endings shed is bookkeeping about processes. The latched world lanes are
+#: owned by the model service, which is the authority over what the venue
+#: contains. A dispose on a latched lane is therefore the only kind that is a
+#: claim about the world rather than about a writer, and the only kind worth
+#: putting in a durable record.
 LATCHED_TOPICS = frozenset(
     topic for topic, _cls, qos, _name in LANES if qos is MODEL_LATCHED)
 
