@@ -33,7 +33,34 @@ from spatialdds_demo.tempo import IDLE_FLOOR_S, LATCH_EVERY_N  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
     TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
 )
-from spatialdds_idl18.spatial.owm import Entity, ModelPose  # noqa: E402
+from spatialdds_idl18.spatial.owm import (  # noqa: E402
+    Basis, Entity, LifecycleState, ModelLayer, ModelPose,
+)
+from spatialdds_idl18.spatial.core import Aabb3, PoseSE3  # noqa: E402
+from spatialdds_demo.keepout import build_mask  # noqa: E402
+from spatialdds_idl18.builtin import Time  # noqa: E402
+from spatialdds_demo.model_service import venue_frame  # noqa: E402
+
+
+def _declared_box(entity_id: str, lo, hi) -> Entity:
+    """A DECLARED entity with an extent --- the only kind that legislates.
+
+    Local rather than imported from `test_keepout.py`: a test module is not a
+    fixture library, and the pond's real numbers live in
+    `spatialdds_demo.model_service`, not here. These are a *fixture* shaped
+    like it on purpose, so enlarging the real pond cannot silently change what
+    this test means.
+    """
+    return Entity(
+        entity_id=entity_id, basis=Basis.DECLARED, type_uris=[],
+        layer=ModelLayer.STATIC, frame_ref=venue_frame(), has_pose=True,
+        pose=PoseSE3(t=[(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, 0.0],
+                     q=[0.0, 0.0, 0.0, 1.0]),
+        has_extent=True,
+        extent=Aabb3(min_xyz=[lo[0], lo[1], -1.0], max_xyz=[hi[0], hi[1], 1.0]),
+        properties=[], external_refs=[], content_refs=[],
+        state=LifecycleState.ACTIVE, state_reason="", source_id="svc:test",
+        stamp=Time(sec=0, nanosec=0))
 
 DOMAIN = 64
 
@@ -279,8 +306,51 @@ class Kinematics(unittest.TestCase):
             if sim.goal is None:
                 break
         self.assertIsNone(sim.goal, "it should arrive")
+        # `goal is None` does not mean "arrived": it is also how the sim
+        # records giving up. Asserted explicitly because this test read as an
+        # arrival test while being satisfied by either outcome -- it only
+        # passed for the right reason because no keep-out was set.
+        self.assertIsNone(sim.abandoned,
+                          "a clear path must not report an abandoned goal")
         self.assertLess(abs(sim.x - 14.0), 0.2)
         self.assertLess(abs(sim.y - -14.0), 0.2)
+
+    def test_a_goal_behind_the_water_is_abandoned_out_loud(self):
+        """
+        The silence a web client met: 202 accepted, then a motionless robot.
+
+        `handle_command` declines a goal nobody will act on so the requester
+        is never left guessing, and `step` used to undo that by dropping a
+        blocked goal without a word. The reason cannot be known when the
+        command is accepted -- it depends on where the robot is when it meets
+        the boundary -- so it has to arrive from the mover.
+        """
+        sim = PlazaSim(x=12.0, y=-22.0)      # south of the declared pond
+        sim.keepout = build_mask([_declared_box("ent:pond:test",
+                                                (-1.5, -20.0), (25.5, -4.75))],
+                                 exclude_ids=(ENTITY_ID,))
+        self.assertIsNotNone(sim.keepout, "the fixture must declare water")
+        sim.goal = (12.0, -2.0)              # due north, straight through it
+        for _ in range(200):
+            sim.step(0.2)
+            if sim.goal is None:
+                break
+        self.assertIsNone(sim.goal, "the blocked goal is dropped")
+        self.assertIsNotNone(sim.abandoned,
+                             "and dropping it must be reported, not silent")
+        self.assertIn("declared keep-out", sim.abandoned)
+        self.assertIn("run the nav2 tier", sim.abandoned,
+                      "the note should say what does plan around it")
+        # Where it stopped, stated as the property rather than a number:
+        # it is standing somewhere the declaration permits. Checking a
+        # hand-computed y bound got this wrong once already --- the margin is
+        # the water's edge *plus the robot's footprint*, which `blocked`
+        # already knows and a literal in a test has to be kept in step with.
+        self.assertFalse(sim.blocked(sim.x, sim.y),
+                         "it must come to rest somewhere it is allowed to be")
+        self.assertGreater(sim.y, -22.0,
+                           "it should have made progress before stopping")
+        self.assertLess(sim.y, -2.0, "and nowhere near the goal it gave up on")
 
 
 if __name__ == "__main__":

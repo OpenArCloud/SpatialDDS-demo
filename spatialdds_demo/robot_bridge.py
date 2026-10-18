@@ -334,6 +334,10 @@ class PlazaSim:
                  yaw: float = math.pi, speed: float = 0.6):
         self.x, self.y, self.yaw, self.speed = x, y, yaw, speed
         self.goal: Optional[Tuple[float, float]] = None
+        #: Why the last goal was dropped, for the caller to report and clear.
+        #: `goal is None` alone cannot say: arriving and giving up both clear
+        #: it, and a sentinel only one branch sets is not a sentinel.
+        self.abandoned: Optional[str] = None
         # The venue's declared keep-out, when the caller has one to give.
         # `None` means "nothing has said where the water is", which is not the
         # same as "there is no water" -- so with no mask this refuses nothing
@@ -391,7 +395,24 @@ class PlazaSim:
         # declaration and finds a way round it, which is the demonstration.
         # This only declines to break it, which is enough to stop the dev
         # fallback contradicting the venue it is standing in.
+        #
+        # **And it says so.** Dropping the goal silently was the one thing
+        # `handle_command` refuses to do -- it declines a goal nobody will act
+        # on precisely so "the requester would [not] watch a robot sit still
+        # with no way to learn why" -- and then this abandoned accepted goals
+        # without a word. A web client got its 202 and a motionless robot. The
+        # reason cannot be known at accept time, because it depends on where
+        # the robot is when it meets the boundary, so it has to be reported
+        # from here.
         if self.blocked(x, y):
+            self.abandoned = (
+                f"goal ({gx:.2f}, {gy:.2f}) abandoned at "
+                f"({self.x:.2f}, {self.y:.2f}) — a straight line from here "
+                f"enters the venue's declared keep-out, and this kinematic "
+                f"fallback refuses to enter rather than planning around it. "
+                f"Send a waypoint clear of the water first, or run the nav2 "
+                f"tier (scripts/run_robot_tier.sh), which plans around the "
+                f"same declaration")
             self.goal = None
             return self.x, self.y, self.yaw
 
@@ -501,6 +522,9 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
         for note in bridge.poll_commands():
             print(f"robot: {note}", flush=True)
         x, y, yaw = sim.step(interval)
+        if sim.abandoned:
+            print(f"robot: {sim.abandoned}", flush=True)
+            sim.abandoned = None
         bridge.observed(x, y, yaw)
         note = bridge.tick()
         if note:
