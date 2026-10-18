@@ -29,13 +29,17 @@ python3 scripts/move_duck.py ent:duck:west 9.0 -12.0     # and watch it move
 python3 scripts/retire_entity.py ent:duck:east "winter"   # tombstone, then gone
 ```
 
-**The browser view is dark until the bridge migrates.**
-`SPATIALDDS_MODEL_LAYER=1` plus `curl localhost:8088/v1/model` used to serve
-the whole model to clients with no DDS participant. The web bridge is a later
-batch: it still reads the pre-1.8 topics with the demo-local types, so it sees
-an empty bus. Until then the model is read over the web binding instead, which
-is a better demonstration anyway because nothing in it is this repository's
-code:
+**The browser view is live, over the web binding.** `curl
+localhost:8088/v1/model` used to serve the whole model to clients with no DDS
+participant; that route and the pre-1.8 readers behind it were retired in
+`6c578ac`, because the bridge migrated and nothing read them any more. The
+model is now served by `bridges/web_bridge/binding.py` on `:8089` — Appendix
+N.3 for state, N.5 for live, N.6 for commands — and
+[`docs/ismar-owm.md`](ismar-owm.md) is the recipe.
+
+The model can also be read with **no stack at all**, straight out of a
+recording through the reference gateway, which is a sharper demonstration
+because nothing in it is this repository's code:
 
 ```bash
 docker run --rm -v "$PWD:/app" -w /app cyclonedds-python \\

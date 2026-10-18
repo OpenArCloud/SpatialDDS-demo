@@ -3,9 +3,23 @@
 ![The venue as a live model — robot, ducks and declared water at Littlefield Fountain](docs/images/owm-venue.jpg)
 
 Reference demos for **SpatialDDS 1.7** — the stamped release, 2026-08-23, tag
-`v1.7` — running on CycloneDDS. The repo vendors that release's IDL verbatim
-under [`idl/v1.7`](idl/v1.7), mirrors its manifest examples in
-[`manifests/v1.7`](manifests/v1.7), and ships five runnable demos.
+`v1.7` — running on CycloneDDS, **with the Open World Model lane on 1.8**. The
+repo vendors 1.7's IDL verbatim under [`idl/v1.7`](idl/v1.7), mirrors its
+manifest examples in [`manifests/v1.7`](manifests/v1.7), and ships five
+runnable demos.
+
+Two eras, deliberately, in two generated packages:
+
+| | era | generated from | used by |
+| --- | --- | --- | --- |
+| `spatialdds_idl` | **1.7**, stamped | [`idl/v1.7`](idl/v1.7) | the AR demo (`ar_demo/`, which drives a real OpenVPS), discovery, the MCAP / MQTT / ROS 2 bridges, the web bridge's own routes |
+| `spatialdds_idl18` | **1.8**, including provisional `spatial.owm/0.1` | [`idl/v1.8`](idl/v1.8) | the Open World Model: venue, ducks, robot, keep-out node, operator scripts, and the web binding |
+
+So "1.7" is right for everything except the world model, which moved in
+October 2026 and is documented member by member in
+[`docs/owm-1.8-census.md`](docs/owm-1.8-census.md). `bridges/web_bridge`
+imports both on purpose: its 1.7 routes serve the AR demo while
+`binding.py` serves the model over the 1.8 web binding.
 
 The spec lives at [spatialdds.org](https://spatialdds.org); its source is
 [OpenArCloud/SpatialDDS-spec](https://github.com/OpenArCloud/SpatialDDS-spec).
@@ -89,7 +103,7 @@ are not interchangeable: [which one do I want?](docs/servers-and-uis.md)
 
 | Adapter | Repo | What it does |
 |---|---|---|
-| Intel SceneScape sidecar | [spatialdds-scenescape](https://github.com/OpenArCloud/spatialdds-scenescape) | Publishes a stock SceneScape deployment's scene analytics as typed SpatialDDS samples: tracks, detections, polygon zones, crossing lines, events, and a georeference. Lives in its own repo because it tracks the 1.8 draft, while this repo pins the stamped 1.7. |
+| Intel SceneScape sidecar | [spatialdds-scenescape](https://github.com/OpenArCloud/spatialdds-scenescape) | Publishes a stock SceneScape deployment's scene analytics as typed SpatialDDS samples: tracks, detections, polygon zones, crossing lines, events, and a georeference. Lives in its own repo because it tracks the whole 1.8 draft, while this repo stays on stamped 1.7 outside the world-model lane. |
 
 ## Conformance, in one line
 
@@ -103,11 +117,18 @@ the generated types, the spec's topic names and the §3.3.3 profile table, with
 **no demo transport code**, and it exchanges samples with the demo in both
 directions.
 
-> **The pin is the `v1.7` tag, not the spec repo's `main`**, which is now the
-> 1.8 draft. Resyncing from main would mix draft IDL into a demo that documents
-> itself as 1.7 conformant, and the drift gate would not catch it — generated
-> output always matches whatever is vendored. Reasoning and resync instructions
-> are in [`scripts/generate_types.py`](scripts/generate_types.py).
+> **The 1.7 pin is the `v1.7` tag, not the spec repo's `main`.** Resyncing
+> `idl/v1.7` from main would mix draft IDL into the lanes that document
+> themselves as 1.7 conformant, and the drift gate would not catch it —
+> generated output always matches whatever is vendored, so it can only prove
+> the two agree, never that the right thing was vendored.
+>
+> The 1.8 bundle is vendored *separately* for that reason rather than by
+> upgrading the pin: `idl/v1.8` generates its own package, and the two trees
+> never share a module. `generate_types.py` takes `--spec-idl` to say which
+> bundle it is building, and the annotation gate checks both trees and fails
+> if it finds fewer than two. Reasoning and resync instructions are in
+> [`scripts/generate_types.py`](scripts/generate_types.py).
 
 ## Everything else
 

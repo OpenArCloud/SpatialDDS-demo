@@ -1,18 +1,20 @@
 # SpatialDDS Web Bridge
 
-> **The model lane is dark.** The Open World Model demo migrated to
-> SpatialDDS 1.8's `spatial.owm/0.1` on scene-scoped topic names. This bridge
-> is a later batch: it still reads the pre-1.8 topics with the demo-local
-> `oarc_model` types, so nothing publishes what it subscribes to and
-> `GET /v1/model` returns an empty model. Everything else here is unaffected.
-> See `docs/owm-1.8-census.md`.
+> **The model lane moved to its own process.** The Open World Model is served
+> by [`binding.py`](binding.py) over the SpatialDDS 1.8 web binding — N.3 for
+> state, N.5 per-resource sockets for live, N.6 for commands — on `:8089`.
+> `server.py`'s `GET /v1/model`, `POST /v1/model/command` and `GET /v1/keepout`
+> were retired with the pre-1.8 readers behind them in `6c578ac`; Appendix N
+> has no request/response shape for the AR demo's routes, so those stay here
+> unchanged. Two processes, two ports, one bus. See
+> `docs/bridge-1.8-census.md`.
 
 A FastAPI server that exposes the SpatialDDS bus to browsers and other HTTP/WebSocket
 clients. Two generations of endpoints live in the same process:
 
 | Surface | What it is | Who uses it |
 |---|---|---|
-| **Legacy** (`/v1/...`) | One-shot REST wrappers around localize + catalog, plus a fire-hose WebSocket. | The Cesium web demo under [`web/`](../../web/). Stable. |
+| **Legacy** (`/v1/...`) | One-shot REST wrappers around localize + catalog, frames and health, plus a fire-hose WebSocket. | The Cesium web demo under [`web/`](../../web/), for the AR demo only — its model lanes go to `binding.py`. Stable. |
 | **Generic** (`/ws`, `/api/...`) | Subscribe-based protocol with topic patterns, optional `msg_type` filtering, server-side rate limiting, and browser-to-DDS publishing. | Any browser app that wants to listen to or talk to the SpatialDDS bus without hard-coded topics. |
 
 Both are fed by one discovery-driven subscriber: it reads announces, resolves
@@ -288,87 +290,33 @@ GET /api/topics?stale_threshold_s=120
 GET /api/stats            → { uptime_s, clients_connected, total_dispatched, topics_active, dds_domain, publish_enabled }
 ```
 
-## World model (`/v1/model`) — demo-local
+## World model — moved to `binding.py`
 
-Prototype surface for the Open World Model layer. **Demo-local and
-non-normative:** `oarc_model` is not SpatialDDS 1.7 and has no registry row —
-see `ar_demo/SPEC_COMPLIANCE.md`. Off unless the publisher is running
-(`SPATIALDDS_MODEL_LAYER=1`); with nothing publishing, the endpoint returns an
-empty model rather than an error, so its shape never depends on a flag.
+**This section documented `GET /v1/model` and the pre-1.8 `oarc_model` lanes
+behind it, retired in `6c578ac`.** It is not kept as reference because every
+part of it changed: the topics are scene-scoped
+(`spatialdds/ut-austin-littlefield/world/entity/v1`), the types are
+`spatial.owm/0.1`, and the sample payload here carried a four-member
+`FrameRef` that 1.8 grew to eight.
 
-Two topics, both TRANSIENT_LOCAL with KEEP_LAST(1) per key:
+What replaced it, in [`binding.py`](binding.py), on `:8089`:
 
-| Logical topic | `msg_type` | Type |
-|---|---|---|
-| `spatialdds/model/entity/v1` | `oarc.model_entity` | `oarc_model::Entity` |
-| `spatialdds/model/relationship/v1` | `oarc.model_relationship` | `oarc_model::Relationship` |
+| | |
+|---|---|
+| state | `GET /{scene}/world/{entity,model_pose}/v1` — N.3, latched, a **collection** rather than a snapshot document |
+| live | `WS` at each resource's own URL — N.5, replay then live, one socket per resource |
+| commands | `POST /{scene}/world/model_command/v1` — N.6, `202` accepted or `409` declined *with a reason* |
 
-Both are subscribable on `/ws` like any other topic — same `subscribe`
-message, same `data` envelope, same typed-in/JSON-out conventions:
+It is not a mirror any more either, which was this section's main argument.
+The binding embeds the reference gateway from the `spatialdds` package and
+feeds it from the bus, so the latching is the gateway's and the only
+demo-local part is the pump. `docs/bridge-1.8-census.md` records what that
+cost and which of the AR demo's routes could not move.
 
-```json
-{"type": "subscribe", "id": "m1", "pattern": "spatialdds/model/*"}
-```
-
-`GET /v1/model` returns the bridge's latched mirror of both lanes.
-
-**It is a mirror, not a store.** DDS already hands a late-joining *reader* the
-whole model; this exists because an HTTP client is not a reader — a browser
-has no participant and no history to be replayed into. It holds nothing the
-bus does not, and a bridge restarted mid-session refills itself from the
-publisher's history within a poll or two rather than starting empty. Anything
-that would make it the source of truth for state the bus does not carry is
-the wrong change.
-
-
-```json
-{
-  "entities": [
-    {
-      "entity_id": "ent:duck:west",
-      "basis": "AUTHORED",
-      "type_uris": ["http://www.wikidata.org/entity/Q851478"],
-      "layer": "SLOW",
-      "frame_ref": {"uuid": "faab95ac-…", "fqn": "map/ut-littlefield-fountain",
-                    "has_coord_convention": true, "coord_convention": "ENU"},
-      "has_pose": true,
-      "pose": {"t": [6.5, -8.0, -1.423], "q": [0.0, 0.0, 0.0, 1.0]},
-      "has_extent": false,
-      "extent": {"min_xyz": [0.0, 0.0, 0.0], "max_xyz": [0.0, 0.0, 0.0]},
-      "properties": [], "external_refs": [],
-      "content_refs": ["catalog:89f2d953-076d-5c7d-9b74-1193f71685a6"],
-      "state": "ACTIVE", "state_reason": "",
-      "source_id": "svc:model:demo/venue",
-      "stamp": {"sec": 1788400000, "nanosec": 0}
-    }
-  ],
-  "relationships": [
-    {"rel_id": "rel:contains:west", "kind": "contains",
-     "from_entity_id": "ent:fountain:littlefield", "to_entity_id": "ent:duck:west",
-     "properties": [], "source_id": "svc:model:demo/venue",
-     "stamp": {"sec": 1788400000, "nanosec": 0}}
-  ],
-  "stamp": {"sec": 1788400000, "nanosec": 0}
-}
-```
-
-Conventions, all the same as everywhere else on this bridge: snake_case
-fields, enums as identifiers (`"AUTHORED"`, not `2`), and presence flags as
-`has_*` immediately before the member they guard. **Read the flag.** A member
-guarded by a false flag is still present and zeroed, so `pose` on an entity
-with `has_pose: false` is the frame origin and means nothing — absent and
-present-but-zero are identical bytes.
-
-`content_refs` uses the scheme `catalog:<content_id>`, naming a row from the
-catalogue. Several entities may carry the same reference: that is the point —
-the catalogue row is an *asset*, the entities are instances of it. Resolve it
-against catalogue results the client already has, because the catalogue
-filters on coverage and kind only and cannot be queried by id. That gap is
-written up in `ar_demo/SPEC_COMPLIANCE.md`.
-
-**No pagination.** The seeded model is four entities and three relationships;
-when that stops being true, this endpoint is the first thing that has to
-change.
+Note for a browser client: reading needs **no** credential and must not send
+one — these lanes are classified `public-cacheable`, and an `Authorization`
+header forces a CORS preflight the gateway does not answer, which turns a
+working read into an empty venue. See `docs/browser-credential-finding.md`.
 
 ## Browser client library
 
