@@ -151,8 +151,50 @@ export function container(): string | null {
   }
 }
 
+/**
+ * How many `docker exec` calls this run had to retry, and what they were.
+ *
+ * Exported so a spec or a reader can see the tally rather than having to scrape
+ * the log, and deliberately a running total: the point of the retry is to
+ * *measure* an intermittent, not to make it disappear.
+ */
+export const execRetries: string[] = [];
+
+/**
+ * Run a command in the stack container. One retry, loudly.
+ *
+ * **The retry is an instrument, not a mask.** This used `execSync` with no
+ * retry, and `restoreVenue` calls it from every `beforeEach`, so a single
+ * transient `docker exec` failure aborted the whole serial file. Measured on
+ * 2026-10-18: `move_duck.py --reset` failed in **two of four** full stack
+ * runs, always late in the file, and exited 0 every time it was run by hand
+ * immediately afterwards.
+ *
+ * A silent retry would hide an unexplained intermittent — the suite would go
+ * green and the cause would stop being visible. So every absorbed failure
+ * prints the command, the exit code and the stderr, and appends to
+ * `execRetries`, which means each firing adds evidence instead of vanishing.
+ * If the tally is routinely non-empty that is a finding with data attached,
+ * and the next step is the cause rather than a second retry.
+ *
+ * One retry, not three. Two attempts distinguish "transient" from "broken";
+ * more would start absorbing the second class as well.
+ */
 export function inContainer(name: string, command: string): string {
-  return execSync(`docker exec -w /app ${name} ${command}`).toString().trim();
+  const line = `docker exec -w /app ${name} ${command}`;
+  try {
+    return execSync(line).toString().trim();
+  } catch (first: any) {
+    const code = first?.status ?? '?';
+    const err = String(first?.stderr || first?.message || '').trim().slice(0, 400);
+    const note = `${command} — exit ${code}`;
+    execRetries.push(note);
+    console.log(`  exec:retry ${note}\n`
+              + `    cmd: ${line}\n`
+              + `    stderr: ${err || '(none captured)'}\n`
+              + `    retries so far this run: ${execRetries.length}`);
+    return execSync(line).toString().trim();
+  }
 }
 
 /**
