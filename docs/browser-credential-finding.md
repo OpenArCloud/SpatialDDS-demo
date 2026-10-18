@@ -284,6 +284,16 @@ characterize rather than for this repository to draft:
 The third is a client requirement and the only one of the three this
 repository has already paid for: see consequence 2 above.
 
+**And a note on why this kind of gap lasts.** Same-origin requests are not
+preflighted, so a dev server that proxies the API hides the whole problem.
+This demo now does exactly that — `web/vite.config.ts` proxies the scene
+prefix to the binding with `ws: true`, which makes tap-to-send work in
+development and changes nothing about the gap: a bundle served from any origin
+but the binding's is still blocked. The workaround is worth recording *as* a
+workaround, because it is the most likely reason a missing preflight survives
+contact with a working browser client for a long time — the configuration
+everybody develops in is the one configuration where it does not matter.
+
 **Routing, so no part lands in the wrong queue.** Three destinations, not
 two — the third was added on review and is the one easiest to lose, because it
 looks like B.

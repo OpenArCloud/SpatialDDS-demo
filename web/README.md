@@ -25,15 +25,38 @@ All optional. Put them in `web/.env.local`:
 | `VITE_CESIUM_ION_TOKEN` | Enables OSM Buildings and World Terrain. |
 | `VITE_CESIUM_ION_ASSET_ID` | Enables the **Photorealistic 3D Tiles** toggle. |
 
-**One caveat worth knowing before you set the token.** `Authorization` is not
-a CORS-safelisted header, so any cross-origin request carrying it preflights
-with `OPTIONS` — and the binding routes no `OPTIONS`, answering `405`. Two
-consequences while that stands: a credential on a *read* breaks the read
-(the page shows an empty venue, which is why the client sends none), and
-**Send Robot cannot reach the binding from a browser at all** when the page
-and the binding are different origins, which they are in dev (`:5173` vs
-`:8089`). The command path is correct and waiting on the gateway; use
-`tools/post_goto.py` to drive the robot meanwhile. Measured and filed in
+### Running it so that Send Robot works
+
+`Authorization` is not a CORS-safelisted header, so any **cross-origin**
+request carrying it preflights with `OPTIONS` — and the binding routes no
+`OPTIONS`, answering `405`. A page on `:5173` talking straight to `:8089` is
+cross-origin, so its command never leaves the browser. Reading is unaffected:
+those lanes are public and the client deliberately sends no credential on
+them, which is also why a token on a *read* would break it.
+
+Same-origin requests are not preflighted at all, so the dev server proxies the
+scene prefix to the binding (`server.proxy` in `vite.config.ts`, `ws: true`
+for N.5's sockets). Point the client at this origin and the whole lane works,
+tap-to-send included:
+
+```bash
+VITE_SPATIALDDS_BINDING_URL=http://localhost:5173 VITE_SPATIALDDS_BINDING_TOKEN=bridge-session npm run dev
+```
+
+Then: click **Send Robot** to arm it — the label flips to `Send Robot: On` —
+and *click the ground*. The button is a mode, not a send; arming it alone does
+nothing by design. `?debug=1` shows the outcome, `202` or a `409` with its
+reason.
+
+Without the proxy (plain `npm run dev`, client pointed at `:8089`) the venue
+still loads and still moves — only commanding is blocked. Drive the robot with
+`tools/post_goto.py` in that case, keeping targets clear of the declared pond
+or the robot correctly refuses.
+
+**The proxy fixes the dev loop and not the gap.** Any build served from an
+origin other than the binding's is still blocked, which is a fair guess at why
+a missing preflight survives so long in the wild: the dev server hides it.
+Measured and filed in
 [`docs/browser-credential-finding.md`](../docs/browser-credential-finding.md),
 blocker B, and queued for `spatialdds-web`.
 
