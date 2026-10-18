@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo.catalog_semantics import matches_catalog_filter
+from spatialdds_demo.plaza import enu_to_ecef_pose
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.discovery_bus import AnnouncePublisher
 from spatialdds_demo.json_mapping import from_json, to_json
@@ -139,44 +140,17 @@ def _enu_to_ecef_transform(fqn: str, anchor: Dict[str, Any]) -> Dict[str, Any]:
     Per the struct's comment the pose maps FROM the local frame INTO
     earth-fixed, i.e. ECEF metres: translation is the frame origin's ECEF
     position, rotation is the ENU basis at that origin.
+
+    The projection itself moved to `spatialdds_demo.plaza` on 2026-10-18, when
+    the venue began publishing its own georeference for the same frame. The two
+    are different claims and may differ --- but only through their anchors,
+    which are separate on purpose. Two copies of this arithmetic drifting apart
+    would be a bug dressed as a disagreement, and one of its failure modes is
+    silent: an inverted direction still yields a plausible pose.
     """
-    lat = math.radians(float(anchor["latitude"]))
-    lon = math.radians(float(anchor["longitude"]))
-    h = float(anchor.get("height", 0.0))
-
-    # WGS84.
-    a, f = 6378137.0, 1.0 / 298.257223563
-    e2 = f * (2.0 - f)
-    n = a / math.sqrt(1.0 - e2 * math.sin(lat) ** 2)
-    tx = (n + h) * math.cos(lat) * math.cos(lon)
-    ty = (n + h) * math.cos(lat) * math.sin(lon)
-    tz = (n * (1.0 - e2) + h) * math.sin(lat)
-
-    # Columns are the ENU axes expressed in ECEF.
-    sl, cl = math.sin(lon), math.cos(lon)
-    sp, cp = math.sin(lat), math.cos(lat)
-    r = [[-sl, -sp * cl, cp * cl],
-         [cl, -sp * sl, cp * sl],
-         [0.0, cp, sp]]
-
-    # Rotation matrix to quaternion (x, y, z, w), the GeoPose order.
-    trace = r[0][0] + r[1][1] + r[2][2]
-    if trace > 0.0:
-        s = math.sqrt(trace + 1.0) * 2.0
-        qw, qx = 0.25 * s, (r[2][1] - r[1][2]) / s
-        qy, qz = (r[0][2] - r[2][0]) / s, (r[1][0] - r[0][1]) / s
-    elif r[0][0] > r[1][1] and r[0][0] > r[2][2]:
-        s = math.sqrt(1.0 + r[0][0] - r[1][1] - r[2][2]) * 2.0
-        qw, qx = (r[2][1] - r[1][2]) / s, 0.25 * s
-        qy, qz = (r[0][1] + r[1][0]) / s, (r[0][2] + r[2][0]) / s
-    elif r[1][1] > r[2][2]:
-        s = math.sqrt(1.0 + r[1][1] - r[0][0] - r[2][2]) * 2.0
-        qw, qx = (r[0][2] - r[2][0]) / s, (r[0][1] + r[1][0]) / s
-        qy, qz = 0.25 * s, (r[1][2] + r[2][1]) / s
-    else:
-        s = math.sqrt(1.0 + r[2][2] - r[0][0] - r[1][1]) * 2.0
-        qw, qx = (r[1][0] - r[0][1]) / s, (r[0][2] + r[2][0]) / s
-        qy, qz = (r[1][2] + r[2][1]) / s, 0.25 * s
+    t, q = enu_to_ecef_pose(float(anchor["latitude"]),
+                            float(anchor["longitude"]),
+                            float(anchor.get("height", 0.0)))
 
     now = SpatialDDSValidator.now_time()
     return {
@@ -187,7 +161,7 @@ def _enu_to_ecef_transform(fqn: str, anchor: Dict[str, Any]) -> Dict[str, Any]:
         "to": {"uuid": str(uuid.uuid5(uuid.NAMESPACE_URL, "earth-fixed")),
                "fqn": "earth-fixed", "has_coord_convention": False,
                "coord_convention": "ENU"},
-        "pose": {"t": [tx, ty, tz], "q": [qx, qy, qz, qw]},
+        "pose": {"t": t, "q": q},
         "stamp": now,
         # The site is not going anywhere; an unbounded transform is the honest
         # statement, not a window that quietly expires.

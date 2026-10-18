@@ -24,6 +24,14 @@ TOPIC_MODEL_ENTITY_V1 = f"spatialdds/{SCENE}/world/entity/v1"
 TOPIC_MODEL_POSE_V1 = f"spatialdds/{SCENE}/world/model_pose/v1"
 TOPIC_MODEL_COMMAND_V1 = f"spatialdds/{SCENE}/world/model_command/v1"
 
+# The scene's own georeference: where its frame sits on the earth, published by
+# the party that declares the frame. `frames` is the stream segment the web
+# binding already uses for this kind of resource, so the N.3 path falls out of
+# the topic name with no mapping. The catalogue server announces a transform
+# for the same frame and keeps doing so --- a different claim, about where its
+# map sits. See docs/venue-georeference-census.md.
+TOPIC_FRAME_TRANSFORM_V1 = f"spatialdds/{SCENE}/frames/frame_transform/v1"
+
 # The pre-1.8 names and the retired relationship topic are gone, with the
 # last readers of them: the web bridge's `_ModelPump` and `/v1/model` surface
 # retired on 2026-10-18, and the robot tier had migrated a batch earlier. The

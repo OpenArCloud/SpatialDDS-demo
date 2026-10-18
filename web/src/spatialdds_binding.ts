@@ -96,6 +96,7 @@ export const SCENE = 'ut-austin-littlefield';
 const ENTITY_PATH = `/${SCENE}/world/entity/v1`;
 const POSE_PATH = `/${SCENE}/world/model_pose/v1`;
 const COMMAND_PATH = `/${SCENE}/world/model_command/v1`;
+const FRAMES_PATH = `/${SCENE}/frames/frame_transform/v1`;
 
 function authHeaders(): Record<string, string> {
   return BINDING_TOKEN ? { Authorization: `Bearer ${BINDING_TOKEN}` } : {};
@@ -198,6 +199,55 @@ export async function bindingCommand(
     };
   } catch (e) {
     return { accepted: false, status: 0, detail: String(e) };
+  }
+}
+
+/**
+ * The scene's own georeference, as N.3 serves it.
+ *
+ * **This is the scene's claim about where its frame sits**, published by
+ * `model_service` --- the party that declares the frame. The 1.7 catalogue
+ * server announces a transform for the same frame too, reachable through the
+ * bridge's `/v1/frames`, and that is a *different* claim: where its map sits.
+ * They coincide today. Neither is crowned, and `app.ts` states which it
+ * prefers rather than blending them.
+ *
+ * The returned map is keyed by the **child** frame's fqn, which is the local
+ * frame a pose is expressed in and so the thing a caller looks up.
+ *
+ * **The shape is adapted, and the direction is the part to get right.**
+ * `core::FrameTransform` names the global frame `parent_ref` and the local one
+ * `child_ref`, with `T_parent_child` mapping parent into child. The bridge's
+ * `/v1/frames` serves a `disco::Transform`, whose `from` is the *local* frame
+ * and `to` earth-fixed, carrying the same numbers. So `child_ref` is what
+ * `from` was. Mapping by name instead --- `from` to `parent_ref` --- inverts
+ * the transform and places the venue at the centre of the earth with every
+ * number still looking plausible, which is why the two resolvers are fed one
+ * shape built in one place.
+ *
+ * `from`/`to` are carried even though nothing reads them: the frame map is
+ * visible in the debug pane, and a half-filled row reads as missing data
+ * rather than unused data.
+ */
+export async function bindingFrames(): Promise<Record<string, any>> {
+  try {
+    const r = await fetch(`${BINDING_URL}${FRAMES_PATH}`);
+    if (!r.ok) {
+      return {};
+    }
+    const doc = await r.json();
+    const out: Record<string, any> = {};
+    for (const ft of (Array.isArray(doc) ? doc : [])) {
+      const fqn = ft?.child_ref?.fqn;
+      if (!fqn || !ft?.T_parent_child) {
+        continue;
+      }
+      out[fqn] = { pose: ft.T_parent_child, from: ft.child_ref,
+                   to: ft.parent_ref, stamp: ft.stamp };
+    }
+    return out;
+  } catch {
+    return {};
   }
 }
 

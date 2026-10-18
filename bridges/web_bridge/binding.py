@@ -68,8 +68,9 @@ from spatialdds_demo.dds_transport import require_dds_env      # noqa: E402
 from spatialdds_demo.qos_profiles import (                     # noqa: E402
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED)
 from spatialdds_demo.topics import (                           # noqa: E402
-    SCENE, TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1,
-    TOPIC_MODEL_POSE_V1)
+    SCENE, TOPIC_FRAME_TRANSFORM_V1, TOPIC_MODEL_COMMAND_V1,
+    TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1)
+from spatialdds_idl18.spatial.core import FrameTransform        # noqa: E402
 from spatialdds_idl18.spatial.owm import (                      # noqa: E402
     Entity, ModelCommand, ModelPose)
 
@@ -141,6 +142,14 @@ LANES: list[tuple[str, Any, Any, str, str]] = [
      "spatial::owm::ModelPose", "spatial.owm.ModelPose"),
     (TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND,
      "spatial::owm::ModelCommand", "spatial.owm.ModelCommand"),
+    # The scene's georeference. No ACCESS row below and none wanted: the
+    # package already defaults `spatial.core.FrameTransform` to latched and
+    # `public-cacheable`, which is right under N.4 --- a georeference is
+    # configured geometry --- and it is also the only classification a
+    # cross-origin page can read at all, since a credential would force a
+    # preflight the gateway does not answer (blocker B).
+    (TOPIC_FRAME_TRANSFORM_V1, FrameTransform, MODEL_LATCHED,
+     "spatial::core::FrameTransform", "spatial.core.FrameTransform"),
 ]
 
 

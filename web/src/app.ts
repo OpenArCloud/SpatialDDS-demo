@@ -18,7 +18,8 @@ import type { ModelEntity, RestExchange } from './spatialdds_bridge';
 // stay on the bridge. Two surfaces, two modules -- docs/bridge-1.8-census.md
 // finding 1 is why, and Appendix N has no RPC shape for the other seven.
 import {
-  bindingCommand, bindingEntities, canCommand, SCENE, subscribeModel
+  bindingCommand, bindingEntities, bindingFrames, canCommand, SCENE,
+  subscribeModel
 } from './spatialdds_binding';
 import type { CatalogItem, GeoPose } from './types';
 
@@ -98,6 +99,17 @@ let sendingRobot = false;
 let modelPlaced = 0;
 let catalogPlaced = 0;
 let lastFrames: Record<string, any> = {};
+
+/**
+ * How far apart two georeferences may be before it is worth saying so.
+ *
+ * Not zero: both sources project the same anchor through the same ENU→ECEF
+ * code, so they agree bit for bit today, but a float comparison that demands
+ * exactness would turn any future reordering of that arithmetic into a log
+ * line about nothing. A tenth of a metre is far below anything visible at
+ * venue scale and far above floating-point noise on numbers of magnitude 1e6.
+ */
+const FRAME_AGREEMENT_M = 0.1;
 let lastAssets: Record<string, { uri?: string; hash?: string }> = {};
 const ddsMessages: string[] = [];
 
@@ -322,7 +334,7 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
   if (!viewer) {
     return;
   }
-  const entity = viewer.entities.add({
+  const entity = placeEntity(viewer, {
     id,
     position: Cesium.Cartesian3.fromDegrees(geopose.lon_deg, geopose.lat_deg, geopose.alt_m),
     billboard: labelOnly ? undefined : {
@@ -381,6 +393,32 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
   });
 
   entityIds.add(entity.id as string);
+}
+
+/**
+ * Add an entity, replacing one that already has the id.
+ *
+ * Cesium's `entities.add` throws a `DeveloperError` on a duplicate id ---
+ * "An entity with id X already exists in this collection" --- and that is the
+ * right behaviour for a collection. It is the wrong behaviour for *placement*,
+ * which is a statement about where something is and must be safe to repeat.
+ *
+ * It became load-bearing when the model started loading on viewer-ready as
+ * well as after a localize: with the N.5 stream already placing entities as
+ * they arrive, a second bootstrap run reached these ids again and the page
+ * threw. The failure surfaced as `pageerror: T` --- a minified
+ * `DeveloperError` with an empty stack and no message --- which is worth
+ * recording, because nothing in it names the duplicate, the collection, or
+ * the id. It took wrapping `entities.add` from inside the page to find out
+ * that `ent:pond:observed` was being added twice.
+ */
+function placeEntity(v: Cesium.Viewer,
+                     options: Cesium.Entity.ConstructorOptions): Cesium.Entity {
+  const id = String(options.id ?? '');
+  if (id && v.entities.getById(id)) {
+    v.entities.removeById(id);
+  }
+  return v.entities.add(options);
 }
 
 function clearEntities() {
@@ -613,8 +651,92 @@ async function ensureContentService(position: GeoPose): Promise<string | null> {
  * is load-bearing here rather than only under a test flag: without it this
  * function could not resolve an asset without first running a coverage query.
  */
-async function bootstrapModel(): Promise<void> {
-  if (!bridgeActive || !currentPose) {
+/**
+ * Both frame sources, with the precedence stated rather than implied.
+ *
+ * Two services describe where `map/ut-littlefield-fountain` is: the scene
+ * itself, over the binding's own frames lane, and the 1.7 catalogue server,
+ * whose announce the bridge serves at `/v1/frames`. They are different claims
+ * --- the scene's is about the venue, the catalogue's about its map --- and
+ * both are kept. See docs/venue-georeference-census.md.
+ *
+ * **The rule: for the scene's entities, the scene's own lane wins.** The
+ * party that declares a frame is the authority on where it sits. The
+ * catalogue's announce is a fallback, which is what keeps the view working
+ * against a stack whose venue is not publishing a georeference yet.
+ *
+ * The spread order below *is* that rule, not an accident of which object was
+ * typed second: binding last means binding wins. Said explicitly because a
+ * reader cannot tell a deliberate spread from a careless one, and reversing
+ * these two lines would silently invert the policy.
+ */
+async function mergedFrames(): Promise<Record<string, any>> {
+  const [bridge, scene] = await Promise.all([bridgeFrames(), bindingFrames()]);
+  for (const fqn of Object.keys(scene)) {
+    if (!bridge[fqn]) {
+      continue;
+    }
+    // Both sources named this frame. Report a real disagreement once, with
+    // the number: a page that quietly prefers one looks identical to a page
+    // that only ever had one, and silence here is the blend the design
+    // forbids wearing different clothes.
+    const a = scene[fqn]?.pose?.t;
+    const b = bridge[fqn]?.pose?.t;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      const apart = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      if (apart > FRAME_AGREEMENT_M) {
+        appLog(`frames:disagree ${fqn} — the scene and the catalogue are `
+             + `${apart.toFixed(2)} m apart; using the scene's`);
+      }
+    }
+  }
+  return { ...bridge, ...scene };
+}
+
+/**
+ * Guards `bootstrapModel` against overlapping itself.
+ *
+ * It used to be reached from one place --- after a successful localize. Since
+ * it also runs on viewer-ready it can be entered three times in quick
+ * succession (ready, Localize, Discover), and two runs placing the same
+ * entities concurrently threw inside Cesium: a `pageerror` the live-bridge
+ * spec caught as soon as the viewer-ready call was added. Overlapping runs
+ * are collapsed onto the one already in flight, which is what "the second
+ * run is idempotent" needs in order to be true.
+ */
+let modelBootstrap: Promise<void> | null = null;
+
+function bootstrapModel(): Promise<void> {
+  if (!modelBootstrap) {
+    modelBootstrap = bootstrapModelOnce().finally(() => {
+      modelBootstrap = null;
+    });
+  }
+  return modelBootstrap;
+}
+
+async function bootstrapModelOnce(): Promise<void> {
+  // **No pose gate, and that is the point of the venue's georeference.**
+  //
+  // This required `currentPose` until 2026-10-18, so the model loaded only
+  // after a successful localization — which meant the whole world model was
+  // gated on the VPS, a service that has nothing to do with where the venue
+  // is. The reasoning made sense while content was placed relative to the
+  // camera; it stopped making sense when entities began carrying a frame and
+  // the scene began publishing where that frame sits. Placement is now
+  // earth-fixed arithmetic over data this function fetches itself, and the
+  // client's own position is not an input to it.
+  //
+  // The practical consequence is the one worth having: the venue draws with
+  // the AR stack down. A camera still needs localizing to know where *it* is,
+  // which is a different question and still the VPS's.
+  //
+  // `bridgeActive` is gone from the gate too. It is the 1.7 bridge's health
+  // probe, and the model comes from the binding — a different process on a
+  // different port. The catalogue lookups below still check it, because those
+  // genuinely are the bridge's.
+  if (!currentPose && new URLSearchParams(location.search).has('catalogpose')) {
+    lastModel = { entities: [] };
     return;
   }
   // `?catalogpose=1` forces the legacy path for side-by-side comparison: no
@@ -632,7 +754,8 @@ async function bootstrapModel(): Promise<void> {
     return;
   }
 
-  const frames = model.entities.some((e) => e.has_pose) ? await bridgeFrames() : {};
+  const frames = model.entities.some((e) => e.has_pose)
+    ? await mergedFrames() : {};
   const assets: Record<string, { uri?: string; hash?: string }> = {};
 
   // References the model carries. There is no coverage query in front of this
@@ -642,7 +765,7 @@ async function bootstrapModel(): Promise<void> {
     .map((entity) => catalogRefId(entity))
     .filter((id): id is string => !!id);
   const wanted = [...new Set(references)];
-  if (wanted.length) {
+  if (wanted.length && bridgeActive) {
     const found = await resolveContentIds(wanted);
     Object.assign(assets, found);
     const missing = wanted.filter((id) => !found[id]);
@@ -653,6 +776,12 @@ async function bootstrapModel(): Promise<void> {
     appLog(`catalog:by-id ${references.length} reference(s) over ` +
            `${wanted.length} id(s); resolved ${Object.keys(found).length}` +
            (missing.length ? `, unresolved ${missing.join(', ')}` : ''));
+  } else if (wanted.length) {
+    // The entities place regardless: an asset is what a thing *looks* like,
+    // not where it is. Said out loud because a venue of unadorned markers
+    // otherwise looks like a failure rather than a catalogue being absent.
+    appLog(`catalog:by-id skipped — no 1.7 bridge; ${wanted.length} asset `
+         + `reference(s) unresolved, entities still placed`);
   }
 
   lastFrames = frames;
@@ -746,6 +875,12 @@ async function handleDiscover() {
 
   // Frames and rows the model layer may not have needed. Merged rather than
   // replaced: the by-id lookups the bootstrap already did are still valid.
+  //
+  // This is also the third source joining the precedence `mergedFrames()`
+  // sets, and the order holds because what is already held wins here. Highest
+  // first: the scene's own frames lane, then whatever is held, then the
+  // coverage response's frames. Reversing this spread would let a coverage
+  // query overwrite the scene's claim about its own frame.
   lastFrames = { ...(response.frames || {}), ...lastFrames };
   lastAssets = { ...(response.assets || {}), ...lastAssets };
 
@@ -765,7 +900,12 @@ async function handleDiscover() {
  * has been kept at.
  */
 function connectModelStream() {
-  if (modelUnsubscribe || !bridgeActive) {
+  // `bridgeActive` is deliberately not consulted. These sockets are the
+  // binding's, on its own port, and requiring the 1.7 bridge's health probe
+  // meant that with the AR stack down the venue *drew but never moved* --- a
+  // gap the standalone acceptance missed because it checks placement, not
+  // liveness.
+  if (modelUnsubscribe) {
     return;
   }
   // One socket per resource behind the multiplexer in spatialdds_binding.ts.
@@ -1207,7 +1347,7 @@ function addItemEntity(item: CatalogItem) {
     const uri = /^(https?:)?\//i.test(item.model_url)
       ? item.model_url
       : `${import.meta.env.BASE_URL}${item.model_url}`;
-    const modelEntity = viewer.entities.add({
+    const modelEntity = placeEntity(viewer, {
       id: `${item.id}-model`,
       // Absolute height, resolved from the row's pose through the frame its
       // service announced. Clamping to the surface was the obvious alternative
@@ -1264,7 +1404,7 @@ function addItemEntity(item: CatalogItem) {
   // picked out, which reads as a claim about extent rather than as an object.
   if (item.extent) {
     const [sx, sy, sz] = item.extent.size;
-    const extentEntity = viewer.entities.add({
+    const extentEntity = placeEntity(viewer, {
       id: `${item.id}-extent`,
       position: Cesium.Cartesian3.fromDegrees(
         item.extent.lon_deg, item.extent.lat_deg, item.extent.alt_m),
@@ -1308,7 +1448,7 @@ function addItemEntity(item: CatalogItem) {
 
   // Legacy catalogue content, which has no entity to have declared anything.
   // The cube is a stand-in for "something is here", and nothing more.
-  const boxEntity = viewer.entities.add({
+  const boxEntity = placeEntity(viewer, {
     id: `${item.id}-box`,
     position: Cesium.Cartesian3.fromDegrees(item.geopose.lon_deg, item.geopose.lat_deg, item.geopose.alt_m),
     box: {
@@ -1912,6 +2052,25 @@ async function initBridgeMode() {
 
   renderReadout(viewer ? cameraGeoPose(viewer) : currentPose);
   await autoLocalizeIfThisIsTheDemosOwnVps();
+
+  // The venue, whether or not any of that worked.
+  //
+  // "What is here" is the model, and since the scene publishes where its own
+  // frame sits, drawing it needs nothing from the client's position nor from
+  // the 1.7 bridge — which is what lets the view work with the AR stack down.
+  // A successful localize has already called this; the call is still made
+  // here for the cases where none happened: no bridge, a VPS that is not this
+  // demo's, or `?autostart=0`. Repeating it is safe because placement is an
+  // upsert.
+  //
+  // **After the autostart decision, deliberately, and not at viewer-ready.**
+  // Loading it earlier raced this function: both want the bridge, and the
+  // model's own log traffic and fetches sometimes arrived in the middle of
+  // the localize exchange. The symptom was a page that had drawn the whole
+  // venue correctly while `autostart:` never appeared in its log at all —
+  // intermittent, and invisible unless something asserted on the boot
+  // sequence. `model-stack.spec.ts` did.
+  await bootstrapModel();
 }
 
 /**

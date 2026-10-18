@@ -39,6 +39,9 @@ from typing import Dict, List, Optional, Tuple
 from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
+from spatialdds_demo.plaza import (
+    EARTH_FIXED_FQN, VENUE_ANCHOR_HEIGHT_M, VENUE_ANCHOR_LAT_DEG,
+    VENUE_ANCHOR_LON_DEG, enu_to_ecef_pose)
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.qos_profiles import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
@@ -48,6 +51,7 @@ from spatialdds_demo.tempo import (
 )
 from spatialdds_demo.topics import (
     SCENE,
+    TOPIC_FRAME_TRANSFORM_V1,
     TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
 )
 from spatialdds_idl18.builtin import Time
@@ -56,7 +60,8 @@ from spatialdds_idl18.spatial.owm import (
 )
 from spatialdds_idl18.spatial.common import (
     CoordConvention, FrameRef, KV, ScaleStatus)
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
+from spatialdds_idl18.spatial.core import (
+    Aabb3, CovMatrix, FrameTransform, PoseSE3)
 
 # The frame the venue model is expressed in — the same one the client
 # localizes into and the same one the catalogue row names, so an entity pose
@@ -244,6 +249,60 @@ def venue_frame() -> FrameRef:
     )
 
 
+def earth_fixed_frame() -> FrameRef:
+    """The global frame, as a FrameRef.
+
+    `has_coord_convention` is false because ECEF is not an axis convention
+    `CoordConvention` can name --- the same statement the catalogue's announce
+    makes about the same frame. `has_scale` is false, which already means
+    metric: the spec says every pre-1.8 publisher is correct by construction,
+    and earth-fixed metres are metres.
+    """
+    return FrameRef(
+        uuid=str(uuid.uuid5(uuid.NAMESPACE_URL, EARTH_FIXED_FQN)),
+        fqn=EARTH_FIXED_FQN,
+        has_coord_convention=False,
+        coord_convention=CoordConvention.ENU,
+        has_scale=False,
+        scale_status=ScaleStatus.SCALE_UNKNOWN,
+        meters_per_unit=1.0,
+        display_unit="m",
+    )
+
+
+def venue_georeference() -> FrameTransform:
+    """Where the venue frame sits on the earth --- the scene's own claim.
+
+    **Direction, because this is the one thing here that fails silently.**
+    `parent_ref` is the *global* frame and `child_ref` the *local* one, with
+    `T_parent_child` mapping parent into child. The catalogue's announce uses
+    the opposite spelling --- `from` = the local frame, `to` = earth-fixed ---
+    and its pose carries exactly the same numbers. So `from` maps to
+    **child_ref** and `to` to **parent_ref**, and a translation that followed
+    the names instead would invert the transform and place the whole venue at
+    the centre of the earth, with every number still looking plausible.
+
+    `cov` is a union and has to say which arm it is using; `COV_NONE` is the
+    honest answer for a visual fix nobody put error bars on, and there is no
+    implicit absent value to leave it at.
+
+    The `child_ref` is `venue_frame()`, so this carries the frame's scale
+    declaration --- SCALE_DECLARED, 1 unit = 1 metre. The catalogue's
+    four-member 1.7 FrameRef has no room for that, which is the one thing the
+    scene's voice can say that the older route cannot.
+    """
+    t, q = enu_to_ecef_pose(VENUE_ANCHOR_LAT_DEG, VENUE_ANCHOR_LON_DEG,
+                            VENUE_ANCHOR_HEIGHT_M)
+    return FrameTransform(
+        transform_id=f"{EARTH_FIXED_FQN}->{VENUE_FRAME_FQN}",
+        parent_ref=earth_fixed_frame(),
+        child_ref=venue_frame(),
+        T_parent_child=PoseSE3(t=t, q=q),
+        stamp=_now(),
+        cov=CovMatrix(none=0),
+    )
+
+
 def seed_entities(stamp: Optional[Time] = None) -> List[Entity]:
     stamp = stamp or _now()
     frame = venue_frame()
@@ -398,6 +457,11 @@ class ModelPublisher:
             participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
         self._poses = tt.make_writer(
             participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
+        # Latched, like the entities: a georeference is state, and a tab
+        # opened five minutes from now has to be handed it without asking.
+        self._frames = tt.make_writer(
+            participant, TOPIC_FRAME_TRANSFORM_V1, FrameTransform,
+            MODEL_LATCHED.name)
         self._published: Dict[str, Entity] = {}
         # Per FAST entity: moves since the latched record was last refreshed,
         # and when its last fast pose went out. Both exist only for the fast
@@ -405,6 +469,9 @@ class ModelPublisher:
         # When to rewrite a FAST entity's latched record, and when it has
         # stopped moving. See spatialdds_demo/tempo.py.
         self._tempo = Tempo()
+
+    def publish_georeference(self, transform: FrameTransform) -> None:
+        self._frames.write(transform)
 
     def publish_entity(self, entity: Entity) -> None:
         self._entities.write(entity)
@@ -672,6 +739,21 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
     print(f"model: scene  {SCENE}")
     print(f"model: entity topic       {TOPIC_MODEL_ENTITY_V1}")
     print(f"model: qos {MODEL_LATCHED.name} — {MODEL_LATCHED.note}")
+
+    # The venue's own georeference, before the entities that reference the
+    # frame. Order matters for a late joiner only in the sense that both are
+    # latched and arrive together, but publishing the frame first means no
+    # window exists in which an entity names a frame this service has not
+    # placed.
+    georeference = venue_georeference()
+    publisher.publish_georeference(georeference)
+    print(f"model: frames topic       {TOPIC_FRAME_TRANSFORM_V1}")
+    print(f"model: georeference      {georeference.transform_id} — "
+          f"lat {VENUE_ANCHOR_LAT_DEG:.7f} lon {VENUE_ANCHOR_LON_DEG:.7f} "
+          f"h {VENUE_ANCHOR_HEIGHT_M:.3f} (WGS84, visual fix)")
+    print("model: the catalogue announces a transform for this frame too — "
+          "a different claim, about where its map sits; neither is crowned "
+          "(docs/venue-georeference-census.md)")
 
     for entity in entities:
         publisher.publish_entity(entity)

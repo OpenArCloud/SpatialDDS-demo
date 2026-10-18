@@ -50,3 +50,85 @@ GROUND_Z = -0.84
 # takes the nearer end, so this constant silently chooses which way the
 # demo's headline route sweeps on camera.
 ROBOT_START_XY = (17.0, -21.5)
+
+
+# --- the venue's georeference -----------------------------------------------
+#
+# Where `map/ut-littlefield-fountain` sits on the earth, as the *scene's* own
+# claim.
+#
+# The catalogue server announces a transform for the same frame, derived from
+# `SPATIALDDS_FRAME_ANCHORS`, and it keeps doing so: that is a different claim
+# --- where its *map* sits --- which coincides with this one today. Two
+# services describing one frame is the same arrangement the venue already has
+# for the pond, where a DECLARED box and a DERIVED observation disagree on
+# purpose and neither is crowned. See docs/venue-georeference-census.md.
+#
+# The numbers are the anchor the OpenVPS map was built against, copied here as
+# the venue's own statement rather than read from the catalogue's config: the
+# scene has to be able to say where it is without another service's file being
+# present. Height is WGS84 ellipsoidal, and the fix is visual rather than
+# surveyed --- aligning the capture's LiDAR cloud against photorealistic
+# tiles --- which is why `method` is VisualFix wherever this is reported.
+VENUE_ANCHOR_LAT_DEG = 30.28396857092828
+VENUE_ANCHOR_LON_DEG = -97.73974829101985
+VENUE_ANCHOR_HEIGHT_M = 145.083
+
+#: The global frame a local ENU frame is placed in. Not an axis convention the
+#: `CoordConvention` enum can name, which is why every FrameRef for it carries
+#: `has_coord_convention = false`.
+EARTH_FIXED_FQN = "earth-fixed"
+
+
+def enu_to_ecef_pose(lat_deg: float, lon_deg: float, height_m: float):
+    """A local ENU frame's origin and basis, in earth-fixed metres.
+
+    Returns ``(t, q)``: the translation is the frame origin's ECEF position,
+    and the quaternion (x, y, z, w) is the ENU basis at that origin. So the
+    pose maps **from** the local frame **into** earth-fixed.
+
+    Shared rather than copied, for this module's existing reason. The venue and
+    the catalogue make *different claims* about the same frame, and that is
+    deliberate --- but a difference between them should come from their
+    anchors, which are separate on purpose, never from two implementations of
+    the projection drifting apart. One of the ways this transform goes wrong is
+    silent: an inverted direction still produces a plausible pose and places
+    everything at the centre of the earth.
+    """
+    import math
+
+    lat, lon = math.radians(lat_deg), math.radians(lon_deg)
+    # WGS84.
+    a, f = 6378137.0, 1.0 / 298.257223563
+    e2 = f * (2.0 - f)
+    n = a / math.sqrt(1.0 - e2 * math.sin(lat) ** 2)
+    t = [(n + height_m) * math.cos(lat) * math.cos(lon),
+         (n + height_m) * math.cos(lat) * math.sin(lon),
+         (n * (1.0 - e2) + height_m) * math.sin(lat)]
+
+    # Columns are the ENU axes expressed in ECEF.
+    sl, cl = math.sin(lon), math.cos(lon)
+    sp, cp = math.sin(lat), math.cos(lat)
+    r = [[-sl, -sp * cl, cp * cl],
+         [cl, -sp * sl, cp * sl],
+         [0.0, cp, sp]]
+
+    trace = r[0][0] + r[1][1] + r[2][2]
+    if trace > 0.0:
+        sc = math.sqrt(trace + 1.0) * 2.0
+        qw, qx = 0.25 * sc, (r[2][1] - r[1][2]) / sc
+        qy, qz = (r[0][2] - r[2][0]) / sc, (r[1][0] - r[0][1]) / sc
+    elif r[0][0] > r[1][1] and r[0][0] > r[2][2]:
+        sc = math.sqrt(1.0 + r[0][0] - r[1][1] - r[2][2]) * 2.0
+        qw, qx = (r[2][1] - r[1][2]) / sc, 0.25 * sc
+        qy, qz = (r[0][1] + r[1][0]) / sc, (r[0][2] + r[2][0]) / sc
+    elif r[1][1] > r[2][2]:
+        sc = math.sqrt(1.0 + r[1][1] - r[0][0] - r[2][2]) * 2.0
+        qw, qx = (r[0][2] - r[2][0]) / sc, (r[0][1] + r[1][0]) / sc
+        qy, qz = 0.25 * sc, (r[1][2] + r[2][1]) / sc
+    else:
+        sc = math.sqrt(1.0 + r[2][2] - r[0][0] - r[1][1]) * 2.0
+        qw, qx = (r[1][0] - r[0][1]) / sc, (r[0][2] + r[2][0]) / sc
+        qy, qz = (r[1][2] + r[2][1]) / sc, 0.25 * sc
+
+    return t, [qx, qy, qz, qw]
