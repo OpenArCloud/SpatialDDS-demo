@@ -281,7 +281,7 @@ it) but "**require it to be stated**": a web binding whose transport is
 `fetch` and `WebSocket` from a page needs its CORS behaviour specified, most
 naturally as an implementation-requirements note rather than new protocol.
 
-Three candidate sentences' worth of substance, for the spec agent to
+Four candidate sentences' worth of substance, for the spec agent to
 characterize rather than for this repository to draft:
 
 - an endpoint MUST answer `OPTIONS` for every resource it serves, and MUST
@@ -291,12 +291,24 @@ characterize rather than for this repository to draft:
   the requesting `Origin` with `Vary: Origin` when the response is not
   cacheable --- otherwise a credential that N.4 requires buys a response the
   client cannot read;
+- an **N.8 problem document** MUST be readable by the client it is addressed
+  to, which on this wire means it carries the same reach as a success. This is
+  the sharpest of the three and it was learned the hard way: `spatialdds-web`
+  0.5.3 gave the preflight and the successful GET their origin and left every
+  problem document without one, so a cross-origin `401`, `409` or `400`
+  rejected at the `fetch` and the client received **neither status nor body**.
+  N.8 exists to make a refusal a *stated reason* rather than a number, and a
+  reason the client cannot read gives up precisely that — **N.8 defeated by
+  transport**, with nothing in the specification to notice it. Fixed in 0.5.4;
+  recorded there as finding 34b;
 - and a client SHOULD NOT send a credential to a resource whose access class
   does not require one, because on this wire a volunteered credential changes
   a readable response into an unreadable one.
 
-The third is a client requirement and the only one of the three this
-repository has already paid for: see consequence 2 above.
+The last is a client requirement and the only one of the four this
+repository has already paid for: see consequence 2 above. The problem-document
+row is the one the *gateway* paid for, twice — once by omitting it and once by
+fixing it in the wrong shape first.
 
 **And a note on why this kind of gap lasts, which the fix does not retire.**
 Same-origin requests are not preflighted, so a dev server that proxies the API
