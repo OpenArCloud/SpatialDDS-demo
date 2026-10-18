@@ -25,11 +25,19 @@ from spatialdds_demo.keepout import (  # noqa: E402
     FREE, KEEPOUT_BASES, OCCUPIED, build_mask, contributing, describe,
 )
 from spatialdds_demo.model_service import seed_entities, venue_frame  # noqa: E402
-from spatialdds_idl.builtin import Time  # noqa: E402
-from spatialdds_idl.oarc_model import (  # noqa: E402
+# 1.8, the era `seed_entities` and `venue_frame` above belong to. This file
+# built 1.7 `oarc_model` entities around a 1.8 `venue_frame()` until
+# 2026-10-17 -- the same cross-era wiring b31b4e8 fixed in robot_bridge.py,
+# missed in that batch because this file tests pure geometry and so never
+# serialized anything: `spatialdds_demo/keepout.py` imports neither era and
+# reads `.extent` and `.pose` off whatever it is handed, so the mismatch
+# could not fail. It was still a file holding two type systems at once, and
+# the next person to add a serializing assertion here would have inherited it.
+from spatialdds_idl18.builtin import Time  # noqa: E402
+from spatialdds_idl18.spatial.owm import (  # noqa: E402
     Basis, Entity, LifecycleState, ModelLayer,
 )
-from spatialdds_idl.spatial.core import Aabb3, PoseSE3  # noqa: E402
+from spatialdds_idl18.spatial.core import Aabb3, PoseSE3  # noqa: E402
 
 ROBOT_ID = "ent:robot:tb3"
 
