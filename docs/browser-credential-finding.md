@@ -250,13 +250,57 @@ This is 1.9 material rather than an erratum. N.4 is not self-contradictory —
 it is browser-hostile, which is a different and more interesting problem, and
 the spec agent characterizes it while this repository files it.
 
-**Routing, so neither half lands in the wrong queue:** blocker **A** is the
-spec agent's to characterize (N.4's credential carriage, with subprotocol as
-the likely answer). Blocker **B** is a candidate improvement for the
-`spatialdds-web` gateway — answer the preflight, allow the `Authorization`
-header, echo the `Origin` with `Vary: Origin` — and asking the specification
-for it would be asking the wrong body for a thing the implementation can
-simply do.
+### A third thing to route, and it is neither A nor B
+
+**Added 2026-10-18 on review.** B's *fix* is an implementation's, and that
+stays ruled: a gateway answers `OPTIONS`, allows the header, echoes the
+`Origin`, and no specification sentence is needed to permit any of it. But the
+fact that **every** reference gateway could omit all of it and still conform
+is itself a specification gap, and it is a different one from A.
+
+Appendix N's flagship consumer is a browser. A binding written for browsers
+that says nothing about preflight behaviour leaves its most obvious client
+unable to use its command surface at all, while the endpoint passes every
+conformance check --- which is what happened here, against a gateway with no
+defect in it. So the general lesson is **not** "permit this" (nothing forbids
+it) but "**require it to be stated**": a web binding whose transport is
+`fetch` and `WebSocket` from a page needs its CORS behaviour specified, most
+naturally as an implementation-requirements note rather than new protocol.
+
+Three candidate sentences' worth of substance, for the spec agent to
+characterize rather than for this repository to draft:
+
+- an endpoint MUST answer `OPTIONS` for every resource it serves, and MUST
+  include `Authorization` and `Content-Type` among the allowed request
+  headers wherever it accepts them;
+- an authorized response MUST carry `Access-Control-Allow-Origin`, echoing
+  the requesting `Origin` with `Vary: Origin` when the response is not
+  cacheable --- otherwise a credential that N.4 requires buys a response the
+  client cannot read;
+- and a client SHOULD NOT send a credential to a resource whose access class
+  does not require one, because on this wire a volunteered credential changes
+  a readable response into an unreadable one.
+
+The third is a client requirement and the only one of the three this
+repository has already paid for: see consequence 2 above.
+
+**Routing, so no part lands in the wrong queue.** Three destinations, not
+two — the third was added on review and is the one easiest to lose, because it
+looks like B.
+
+**A** is the spec agent's to characterize: N.4's credential carriage, with
+subprotocol carriage the likely answer.
+
+**B** is a candidate improvement for the `spatialdds-web` gateway — answer the
+preflight, allow the `Authorization` header, echo the `Origin` with
+`Vary: Origin`. Asking the specification for it would be asking the wrong body
+for a thing the implementation can simply do.
+
+**The third** is the spec agent's too: that a browser-facing binding must
+*state* its preflight behaviour, as an implementation-requirements note. It is
+separate from B because it explains why nothing obliged anyone to do B — a
+gateway could omit all of it and still conform. **B is the fix; the third is
+why the fix was optional.**
 
 Ready to paste into `spatialdds-web/directions/spatialdds-1.9-candidates.md`
 as a gateway candidate, since that repository's queue is where B belongs and
