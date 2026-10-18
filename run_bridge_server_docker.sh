@@ -65,7 +65,7 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
   -e SPATIALDDS_FRAME_ANCHORS="${SPATIALDDS_FRAME_ANCHORS:-/app/bridges/web_bridge/tests/frame_anchors_fountain.json}" \
   -e SPATIALDDS_MODEL_LAYER="${SPATIALDDS_MODEL_LAYER:-0}" \
   -e SPATIALDDS_BINDING_TOKEN="${SPATIALDDS_BINDING_TOKEN:-bridge-session}" \
-  -e SPATIALDDS_BINDING_VERSION="${SPATIALDDS_BINDING_VERSION:-0.5.2}" \
+  -e SPATIALDDS_BINDING_VERSION="${SPATIALDDS_BINDING_VERSION:-0.5.3}" \
   -e PYTHONDONTWRITEBYTECODE=1 \
   -v "${PWD}:/app" \
   cyclonedds-python bash -lc "\

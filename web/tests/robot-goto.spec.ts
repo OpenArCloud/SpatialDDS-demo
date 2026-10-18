@@ -113,8 +113,17 @@ test('a tap on the ground sends the robot there', async ({ page, request }) => {
     const entities = await (await fetch(
       `${bindingUrl}/${scene}/world/entity/v1`)).json();
     const robot = entities.find((e: any) => e.entity_id === 'ent:robot:tb3');
-    const frames = (await (await fetch('http://localhost:8088/v1/frames')).json()).frames;
-    const frame = frames[robot.frame_ref.fqn];
+    // The frame from the scene's own lane, not the 1.7 bridge's `/v1/frames`.
+    // This read `http://localhost:8088/v1/frames` until 2026-10-18, which is
+    // the dependency the georeference batch removed from the page and left
+    // behind here --- so the spec still needed the AR stack to compute a
+    // target the page itself no longer needs it for. Found by running it
+    // against a venue-and-binding-only stack, where the fetch simply failed.
+    const transforms = await (await fetch(
+      `${bindingUrl}/${scene}/frames/frame_transform/v1`)).json();
+    const ft = transforms.find(
+      (t: any) => t.child_ref?.fqn === robot.frame_ref.fqn);
+    const frame = { pose: ft.T_parent_child };
     const [qx, qy, qz, qw] = frame.pose.q;
     const rot = (q: number[], v: number[]) => {
       const [a, b, c, d] = q;

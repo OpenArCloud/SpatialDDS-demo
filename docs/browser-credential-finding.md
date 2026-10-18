@@ -12,8 +12,19 @@ rewiring and the spec repository is not this batch's. **Origin:** the web
 bridge's browser lane, 2026-10-18, which is the first browser client to meet
 the binding.
 
-**Status, 2026-10-18: ruled on, both ways — and reading is fixed here while
-commanding is not.** This venue's model lanes are reclassified
+**Status, 2026-10-18 (second revision): blocker B is fixed in the gateway;
+blocker A is unchanged and still the specification's.**
+`spatialdds[server]` 0.5.3 answers the preflight on every path and echoes the
+asking origin on an authorized operator-scoped response, so a cross-origin
+page can now read a gated resource and POST an N.6 command. Verified from
+PyPI; the demo pins 0.5.3. What remains is A — a browser cannot put a
+credential on a WebSocket handshake at all — plus the specification note that
+nothing required any of B in the first place. The rest of this filing is kept
+as written, because the reasoning is what made the fix findable and the
+measurements are what made it provable.
+
+**Status, 2026-10-18 (first revision): ruled on, both ways — and reading is
+fixed here while commanding is not.** This venue's model lanes are reclassified
 `public-cacheable` and the browser reads them with no credential, which
 dissolves the *downstream* problem here; the gap stays filed as 1.9 material
 because reclassification only helps where the data is genuinely public, and
@@ -25,8 +36,9 @@ it: a command always carries a credential, so it always trips blocker B's
 unanswered preflight, and **N.6 is unreachable from a browser for every access
 class** — reclassifying cannot help, because the credential is the trigger.
 See "B is wider than operator-scoped" below. That makes B's gateway fix a
-prerequisite for the browser's command lane rather than a tidy-up, and it is
-queued for `spatialdds-web`, not the specification.
+prerequisite for the browser's command lane rather than a tidy-up — and it
+was met in `spatialdds-web` 0.5.3 rather than asked of the specification. See
+the second revision above.
 
 ---
 
@@ -100,9 +112,11 @@ OPTIONS /…/world/model_command/v1
 
 Nothing on the page can work around that — it is the browser enforcing CORS
 correctly against a gateway that does not answer. So "a tab POSTs a `goto`"
-does not work cross-origin today, and `web/tests/robot-goto.spec.ts` probes
-this preflight and skips with the reason rather than failing, which also means
-it starts running again by itself when the gateway answers. The demo's own
+did not work cross-origin, and `web/tests/robot-goto.spec.ts` probes this
+preflight and skips with the reason rather than failing — which is how it
+started running again by itself when 0.5.3 began answering, with no edit to
+the spec. That was the shape's whole purpose, and it is the part of this
+filing that paid for itself. The demo's own
 `tools/post_goto.py` is unaffected: it is not a browser and enforces no CORS,
 which is exactly why this went unnoticed.
 
@@ -284,15 +298,21 @@ characterize rather than for this repository to draft:
 The third is a client requirement and the only one of the three this
 repository has already paid for: see consequence 2 above.
 
-**And a note on why this kind of gap lasts.** Same-origin requests are not
-preflighted, so a dev server that proxies the API hides the whole problem.
-This demo now does exactly that — `web/vite.config.ts` proxies the scene
-prefix to the binding with `ws: true`, which makes tap-to-send work in
-development and changes nothing about the gap: a bundle served from any origin
-but the binding's is still blocked. The workaround is worth recording *as* a
-workaround, because it is the most likely reason a missing preflight survives
-contact with a working browser client for a long time — the configuration
-everybody develops in is the one configuration where it does not matter.
+**And a note on why this kind of gap lasts, which the fix does not retire.**
+Same-origin requests are not preflighted, so a dev server that proxies the API
+hides the whole problem. This demo does exactly that —
+`web/vite.config.ts` proxies the scene prefix to the binding with `ws: true`.
+
+**Its status changed on 0.5.3 and the proxy stays.** It was load-bearing:
+without it, tap-to-send could not work in development at all. Now it is a
+convenience — one origin, no preflight round trip, no token baked into a dev
+bundle — and the thing it used to work around is fixed upstream. Keeping it is
+right for development and the distinction is worth writing down, because the
+proxy is also the single most likely reason a missing preflight survives
+contact with a working browser client for months: **the configuration
+everybody develops in is the one configuration where it does not matter.**
+This gap was found by a page talking *directly* to another port, which is the
+configuration a deployment has and a dev server usually does not.
 
 **Routing, so no part lands in the wrong queue.** Three destinations, not
 two — the third was added on review and is the one easiest to lose, because it
@@ -301,10 +321,11 @@ looks like B.
 **A** is the spec agent's to characterize: N.4's credential carriage, with
 subprotocol carriage the likely answer.
 
-**B** is a candidate improvement for the `spatialdds-web` gateway — answer the
-preflight, allow the `Authorization` header, echo the `Origin` with
-`Vary: Origin`. Asking the specification for it would be asking the wrong body
-for a thing the implementation can simply do.
+**B** was a candidate improvement for the `spatialdds-web` gateway — answer
+the preflight, allow the `Authorization` header, echo the `Origin` with
+`Vary: Origin`. Asking the specification for it would have been asking the
+wrong body for a thing the implementation could simply do, and the
+implementation did it: 0.5.3, finding 34 there. **Closed.**
 
 **The third** is the spec agent's too: that a browser-facing binding must
 *state* its preflight behaviour, as an implementation-requirements note. It is
@@ -312,9 +333,12 @@ separate from B because it explains why nothing obliged anyone to do B — a
 gateway could omit all of it and still conform. **B is the fix; the third is
 why the fix was optional.**
 
-Ready to paste into `spatialdds-web/directions/spatialdds-1.9-candidates.md`
-as a gateway candidate, since that repository's queue is where B belongs and
-this batch is the demo repository's:
+**Dispatched, 2026-10-18.** This was a block staged for
+`spatialdds-web`'s queue, because B belonged to that repository and the batch
+that found it was this one's. It was never queued: it was implemented instead,
+as 0.5.3, and is recorded there as finding 34 with its own gate
+(`gates/cors_preflight.py`, 16 checks). Kept below as the ask that was made,
+so the fix can be read against it:
 
 ```markdown
 **Gateway candidate: answer the CORS preflight.** `gw_http` routes no

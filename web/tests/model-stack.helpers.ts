@@ -77,15 +77,34 @@ export async function venueEntities(request: any, timeout = 4000): Promise<any[]
  * this returns true and the spec runs again with no edit.
  */
 export async function browserCanCommand(request: any): Promise<boolean> {
+  const origin = 'http://127.0.0.1:4173';
   try {
-    const r = await request.fetch(
+    const pre = await request.fetch(
       `${BINDING_URL}/${SCENE}/world/model_command/v1`,
       { method: 'OPTIONS', timeout: 4000,
-        headers: { Origin: 'http://127.0.0.1:4173',
+        headers: { Origin: origin,
                    'Access-Control-Request-Method': 'POST',
                    'Access-Control-Request-Headers': 'authorization,content-type' } });
-    return r.status() >= 200 && r.status() < 300
-      && Boolean(r.headers()['access-control-allow-origin']);
+    if (!(pre.status() >= 200 && pre.status() < 300
+          && Boolean(pre.headers()['access-control-allow-origin']))) {
+      return false;
+    }
+    // **Half the contract is not the contract.** This checked only the
+    // preflight until 2026-10-18, so it armed on binding 0.5.3 — which
+    // answered the preflight and then returned a `202` with no allowed
+    // origin, so the page's `fetch` rejected on a command that had in fact
+    // published. The spec went from skipping to failing, and the system and
+    // the client disagreed about whether the robot had been told to move.
+    //
+    // So probe the reply as well. A POST with no credential is the safe way:
+    // it is refused, publishes nothing, and its `401` is built by the same
+    // hand-written path the `202` is — so if that names the asking origin,
+    // the reply a real command gets will too. Fixed in 0.5.4.
+    const refused = await request.fetch(
+      `${BINDING_URL}/${SCENE}/world/model_command/v1`,
+      { method: 'POST', timeout: 4000, data: {},
+        headers: { Origin: origin, 'Content-Type': 'application/json' } });
+    return Boolean(refused.headers()['access-control-allow-origin']);
   } catch {
     return false;
   }
