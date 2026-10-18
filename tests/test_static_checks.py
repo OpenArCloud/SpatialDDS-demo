@@ -29,22 +29,22 @@ REPO = Path(__file__).resolve().parent.parent
 # Generated output is not ours to lint, and idlc's star-imports trip the
 # checker for reasons that say nothing about this repo's correctness.
 #
-# `spatialdds_idl18/` joins the list on the same terms as `spatialdds_idl/`,
-# and it is worth saying what it hides rather than letting the prefix do it
-# silently. Both generated trees annotate nested members with a dotted string
-# -- `cov_pos: 'spatialdds_idl18.spatial.common.Mat3x3'` -- while importing
-# only `spatial` from the root package, so the dotted name is genuinely
-# unbound. pyflakes is right: `typing.get_type_hints()` on a generated
-# dataclass raises NameError in both trees, today, and has since the 1.7
-# cutover. CycloneDDS does not use `get_type_hints` and resolves these with
-# its own machinery, so every serializer builds and every demo works.
-#
-# Not fixed here, deliberately: the fix is one line in the generator's
-# discriminator patcher, and applying it would regenerate the shared 1.7
-# package that 46 files across four unmigrated demos import -- the blast
-# radius docs/owm-1.8-census.md measured and this batch was told to avoid.
-# Filed in docs/owm-1.8-spec-queue.md for whoever regenerates next.
+# This exclusion used to carry a paragraph about what it hid: both generated
+# trees annotated nested members with a dotted string naming the root package
+# while importing only `spatial`, so `typing.get_type_hints()` raised
+# NameError on every generated dataclass. That is fixed in the generator now
+# and checked by `GeneratedTypesIntrospect` below, so the exclusion is back to
+# meaning only what it says --- a style checker is the wrong tool for
+# generated code --- and the property it was covering has a test instead of a
+# comment.
 SKIP_PREFIXES = ("spatialdds_idl/", "spatialdds_idl18/", "idl/", "web/public/")
+
+#: Every generated tree in the repository. Derived from what is on disk rather
+#: than listed, because the second one appeared mid-programme and a hand-kept
+#: list would have checked only the one somebody remembered.
+GENERATED_TREES = sorted(
+    p.name for p in REPO.iterdir()
+    if p.is_dir() and p.name.startswith("spatialdds_idl"))
 
 
 def _tracked_python() -> list:
@@ -253,3 +253,68 @@ class MermaidDiagramsParse(unittest.TestCase):
                 problems.append(f"{rel} (block {n}): {', '.join(missing)}")
         self.assertEqual(problems, [], "undeclared mermaid participants:\n  " +
                          "\n  ".join(problems))
+
+
+class GeneratedTypesIntrospect(unittest.TestCase):
+    """Every generated dataclass answers `typing.get_type_hints()`.
+
+    This is the check that replaced an exclusion's apology. idlc annotates a
+    nested member with a fully-qualified string --- `'spatialdds_idl18.spatial
+    .common.Mat3x3'` --- and imports only `spatial` from the root package, so
+    the root name was unbound and `get_type_hints` raised NameError on every
+    generated type in both trees, from the 1.7 cutover until 2026-10-18.
+
+    Nothing broke, which is why it lasted: CycloneDDS resolves these
+    annotations with its own machinery and never calls `get_type_hints`. But
+    `get_type_hints` is how dataclass-based tooling reads a type, so schema
+    generators, validators and API frameworks could not introspect these
+    bindings at all --- a type system whose Python bindings cannot be read by
+    standard means is smaller than it looks.
+
+    Checked over both trees and every module in them, because the defect was
+    uniform and a spot check would have passed on any file idlc happened to
+    emit without a nested member.
+    """
+
+    def test_every_generated_dataclass_resolves_its_annotations(self):
+        import dataclasses
+        import importlib
+        import pkgutil
+        import typing
+
+        self.assertGreaterEqual(
+            len(GENERATED_TREES), 2,
+            f"expected both generated trees, found {GENERATED_TREES} -- the "
+            f"discovery is broken, not the code")
+
+        checked = 0
+        failures = []
+        for tree in GENERATED_TREES:
+            pkg = importlib.import_module(tree)
+            for mod in pkgutil.walk_packages(pkg.__path__, f"{tree}."):
+                try:
+                    m = importlib.import_module(mod.name)
+                except Exception:
+                    continue          # optional deps are not this test's business
+                for name in dir(m):
+                    obj = getattr(m, name)
+                    if not (isinstance(obj, type)
+                            and dataclasses.is_dataclass(obj)
+                            and obj.__module__ == mod.name):
+                        continue
+                    checked += 1
+                    try:
+                        typing.get_type_hints(obj)
+                    except NameError as e:
+                        failures.append(f"{mod.name}.{name}: {e}")
+        self.assertEqual(
+            failures[:6], [],
+            f"{len(failures)} generated dataclass(es) cannot resolve their "
+            f"own annotations; first few: {failures[:6]}")
+        self.assertGreater(
+            checked, 100,
+            f"only {checked} dataclasses examined across {GENERATED_TREES} -- "
+            f"too few to be the whole of two generated trees, so the walk is "
+            f"broken rather than the code clean")
+        print(f"\n  get_type_hints: {checked} generated dataclass(es) across "
+              f"{len(GENERATED_TREES)} tree(s), all resolvable")

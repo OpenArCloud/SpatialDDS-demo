@@ -146,14 +146,26 @@ hints, which makes these bindings quietly unusable by that whole category of
 consumer. A SpatialDDS type system whose Python bindings cannot be
 introspected by standard means is a smaller type system than it looks.
 
-**The fix, and why not in this batch.** One line in the generator's patcher:
-emit `import spatialdds_idl18` (or rewrite the annotation to the already-bound
-`spatial.common.Mat3x3`) in any file it touches. Applying it means
-regenerating, and regenerating the shared 1.7 package reaches the 46 files
-across four unmigrated demos that `docs/owm-1.8-census.md` measured and this
-batch was directed to leave alone. So it is filed, and
-`tests/test_static_checks.py` names it at the exclusion that hides it rather
-than skipping the tree silently.
+**The fix, and when it happened.** One step in the generator's patcher:
+`bind_root_package` emits `import <package>` in any generated file carrying a
+dotted annotation that names the root, which is the name those annotations
+were already using. **Fixed on 2026-10-18**, after the robot and bridge
+batches had made regenerating the shared 1.7 tree safe — 35 files changed
+across both trees, every one exactly +3/−0 (two comment lines and the import),
+and `typing.get_type_hints()` now resolves on all 229 generated dataclasses.
+
+`tests/test_static_checks.py` carried a paragraph at its exclusion explaining
+what the skip hid; that paragraph is gone, replaced by
+`GeneratedTypesIntrospect`, which walks both trees and calls
+`get_type_hints()` on every generated dataclass. Shown failable: with the
+imports stripped from one tree it reports 31 unresolvable classes. The
+exclusion is back to meaning only what it says — a style checker is the wrong
+tool for generated code — and the property it was covering has a test instead
+of an apology.
+
+The tree count is derived from what is on disk rather than listed, because
+the second generated tree appeared mid-programme and a hand-kept list would
+have checked only the one somebody remembered.
 
 **How it was found.** By that gate. Adding a second generated tree put
 `spatialdds_idl18/` in front of a check whose skip list knew only about

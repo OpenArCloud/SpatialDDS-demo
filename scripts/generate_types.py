@@ -212,6 +212,55 @@ def fix_union_discriminators(root: Path, package: str) -> list[str]:
     return fixed
 
 
+def bind_root_package(root: Path, package: str) -> list[str]:
+    """Bind the root package name every dotted annotation already uses.
+
+    idlc annotates a nested member with a fully-qualified *string* --- e.g.
+    ``cov_pos: 'spatialdds_idl18.spatial.common.Mat3x3'`` --- while importing
+    only ``from spatialdds_idl18 import spatial``. So the root name in those
+    annotations is unbound, and ``typing.get_type_hints()`` on any generated
+    dataclass raises ``NameError``. CycloneDDS never calls it, which is why
+    every demo worked and the defect sat in both trees since the 1.7 cutover
+    --- but ``get_type_hints`` is how dataclass-based tooling introspects a
+    type, so schema generators, validators and API frameworks could not read
+    these bindings at all.
+
+    Reported as entry 3 of ``docs/owm-1.8-spec-queue.md`` on 2026-10-17 and
+    fixed here, which is the only place it can be fixed: the annotations are
+    idlc's output and the import block is this script's to patch.
+
+    One import per file, and only where such an annotation actually appears,
+    so a file without one is left byte-identical and the diff is exactly the
+    set of files that carried the defect.
+    """
+    bound: list[str] = []
+    marker = f"'{package}."
+    for path in sorted(root.rglob("*.py")):
+        source = path.read_text()
+        if marker not in source:
+            continue
+        if re.search(rf"^import {re.escape(package)}$", source, re.M):
+            continue
+        anchor = re.search(rf"^from {re.escape(package)} import .*$",
+                           source, re.M)
+        if anchor is None:
+            raise SystemExit(
+                f"{path}: carries {marker}… annotations and has no "
+                f"`from {package} import …` line to anchor the root import to "
+                f"— the generated layout changed, so report rather than guess")
+        source = (source[:anchor.start()]
+                  + "# generate_types.py: bind the root name the dotted\n"
+                  + "# annotations below already use, so get_type_hints works\n"
+                  + f"import {package}\n"
+                  + source[anchor.start():])
+        path.write_text(source)
+        bound.append(str(path.relative_to(root)))
+    if bound:
+        print(f"  bound the root package in {len(bound)} file(s), so "
+              f"get_type_hints resolves their annotations")
+    return bound
+
+
 def fix_python_keyword_fields(root: Path) -> dict[str, dict[str, str]]:
     """
     Rename fields whose IDL name is a Python keyword, preserving the wire name.
@@ -352,6 +401,9 @@ def generate(out_dir: Path, package: str) -> list[str]:
         # Nest first: the discriminator imports must name the final package.
         nest_packages(staging, out_dir, package)
         fixed = fix_union_discriminators(out_dir, package)
+        # Bind the root name the annotations already use, so
+        # `typing.get_type_hints()` resolves them. Entry 3 of the spec queue.
+        bind_root_package(out_dir, package)
         aliases = fix_python_keyword_fields(out_dir)
         write_field_aliases(out_dir, aliases)
         for typename in sorted(aliases):

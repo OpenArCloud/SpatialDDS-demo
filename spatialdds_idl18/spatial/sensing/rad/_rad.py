@@ -15,6 +15,9 @@ import cyclonedds.idl.annotations as annotate
 import cyclonedds.idl.types as types
 
 # root module import for resolving types
+# generate_types.py: bind the root name the dotted
+# annotations below already use, so get_type_hints works
+import spatialdds_idl18
 from spatialdds_idl18 import spatial
 
 if TYPE_CHECKING:
