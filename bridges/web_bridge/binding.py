@@ -109,8 +109,9 @@ HEARTBEAT_S = 5.0
 #: holding a valid token; and a browser cannot put a credential on a
 #: WebSocket handshake, which N.4 requires and forbids every alternative to.
 #: Both blockers are measured in `docs/browser-credential-finding.md`, which
-#: stays filed because reclassification dissolves the problem only where the
-#: data happens to be public.
+#: routes them apart --- the handshake to the specification, the CORS half to
+#: the gateway's own queue --- and stays filed because reclassification
+#: dissolves the problem only where the data happens to be public.
 #:
 #: The cost, stated: public means a positive `max-age`, 300s from the
 #: package's default, so a shared cache may hand a new client a venue up to

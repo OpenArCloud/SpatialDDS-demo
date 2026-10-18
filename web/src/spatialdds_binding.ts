@@ -38,8 +38,11 @@
  * `Access-Control-Allow-Origin`, so a page on :5173 cannot read :8089 even
  * holding a valid token; and a browser cannot put a credential on a
  * WebSocket handshake, which N.4 requires and forbids the alternatives to.
- * Both are measured in `docs/browser-credential-finding.md`, filed as 1.9
- * material because reclassifying only helps where the data is public.
+ * Both are measured in `docs/browser-credential-finding.md`, which routes
+ * them apart: the handshake (blocker A) is a specification question, the
+ * CORS half (blocker B) is a gateway improvement needing no specification
+ * change. They stay filed because reclassifying only helps where the data is
+ * genuinely public.
  *
  * So state and live need nothing. `VITE_SPATIALDDS_BINDING_TOKEN` is needed
  * only to send a command, and without it Send Robot says so rather than
@@ -212,8 +215,9 @@ export function subscribeModel(handlers: ModelHandlers): () => void {
     // header on a WebSocket handshake, and N.4 requires the credential in a
     // header and forbids the alternatives. These lanes are reachable only
     // because the bridge classifies them public --- see
-    // docs/browser-credential-finding.md for the measurement, and the 1.9
-    // question it leaves open for lanes that must stay gated.
+    // docs/browser-credential-finding.md, blocker A, for the measurement and
+    // the specification question it leaves open for lanes that must stay
+    // gated.
     let ws: WebSocket;
     try {
       ws = new WebSocket(`${wsBase}${path}`);
