@@ -24,20 +24,12 @@ TOPIC_MODEL_ENTITY_V1 = f"spatialdds/{SCENE}/world/entity/v1"
 TOPIC_MODEL_POSE_V1 = f"spatialdds/{SCENE}/world/model_pose/v1"
 TOPIC_MODEL_COMMAND_V1 = f"spatialdds/{SCENE}/world/model_command/v1"
 
-# The pre-1.8 names, kept because the consumers that have not migrated still
-# read them: the web bridge and the robot tier are later batches, and they are
-# still built against the demo-local `oarc_model` types. Nothing publishes
-# these any more, which is the honest state of a staged migration rather than
-# a compatibility layer -- see docs/owm-1.8-census.md.
-TOPIC_MODEL_ENTITY_V1_PRE18 = "spatialdds/model/entity/v1"
-TOPIC_MODEL_POSE_V1_PRE18 = "spatialdds/model/pose/v1"
-TOPIC_MODEL_COMMAND_V1_PRE18 = "spatialdds/model/command/v1"
-
-# `Relationship` has no 1.8 home: the module excludes relationships
-# explicitly and reserves them as open design. The topic is retired with the
-# type rather than kept pointing at a demo-local struct, and the census's GAP
-# row is what carries the loss forward.
-TOPIC_MODEL_RELATIONSHIP_V1_RETIRED = "spatialdds/model/relationship/v1"
+# The pre-1.8 names and the retired relationship topic are gone, with the
+# last readers of them: the web bridge's `_ModelPump` and `/v1/model` surface
+# retired on 2026-10-18, and the robot tier had migrated a batch earlier. The
+# names are recorded in docs/owm-1.8-census.md and docs/bridge-1.8-census.md
+# rather than kept here as constants nothing reads. `Relationship` itself has
+# no 1.8 home and is open design --- docs/relationship-candidate-1.9.md.
 
 
 def TOPIC_ANCHORS_DELTA(zone: str) -> str:

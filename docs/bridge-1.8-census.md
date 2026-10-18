@@ -10,36 +10,56 @@ buried.
 
 ## Finding 1: the bridge is mostly not an OWM bridge
 
-It serves **16 routes**. The browser consumes **10**. Only **3** carry the
+It serves **16 routes**. The *app* consumes **8**. Only **3** carry the
 lanes this batch is about.
 
-| route | consumed by | lane |
-| --- | --- | --- |
-| `GET /v1/model` | browser (5 sites), tests | **OWM downstream** |
-| `POST /v1/model/command` | browser (2 sites) | **OWM upstream** |
-| `WS /ws` | browser (2 sites), tests | **OWM live** (and generic) |
-| `GET /health` | browser (6 sites), tests | AR demo |
-| `POST /v1/localize` | browser (3 sites), tests | AR demo — VPS |
-| `POST /v1/catalog/query` | browser (2 sites) | AR demo — catalogue |
-| `GET /v1/frames` | browser (3 sites) | AR demo |
-| `GET /v1/keepout` | browser (1 site) | robot tier view |
-| `GET /.well-known/spatialdds/search` (GET+POST) | browser (5), tests (3) | discovery |
-| `GET /.well-known/spatialdds/bootstrap` | tests only (3) | discovery |
-| `WS /v1/stream` | browser (1 site) | raw envelope firehose |
-| `GET /`, `GET /debug` | tests only / none | operator |
-| `GET /api/topics`, `GET /api/stats` | **no consumer found** | dead? |
+**Amended 2026-10-18, and the amendment is the interesting part.** The first
+version of this table had one column, "browser", and counted every `web/`
+match into it --- so `web/tests/` arrived as browser evidence. That inflated
+every row and got three things wrong: the AR demo's routes are **six**, not
+seven; `GET /v1/keepout` had **no app consumer at all**; and `WS /v1/stream`
+has **none anywhere** --- its one "browser site" was a sentence in a comment
+mentioning the route, not a call to it. The counts below are call sites, found
+by reading what `fetchJson` and `new WebSocket` are actually handed, which is
+the only thing that makes a route consumed. The ratification of finding 1
+stood on the old numbers; better evidence wins.
+
+| route | app | tests | lane | after part 2 |
+| --- | --- | --- | --- | --- |
+| `GET /v1/model` | 1 | 12 | **OWM downstream** | **retired** |
+| `POST /v1/model/command` | 1 | 1 | **OWM upstream** | **retired** |
+| `WS /ws` | 2 | yes | **OWM live** (and generic) | kept (generic) |
+| `GET /health` | 1 | yes | AR demo | kept |
+| `POST /v1/localize` | 1 | yes | AR demo — VPS | kept |
+| `POST /v1/catalog/query` | 2 | yes | AR demo — catalogue | kept |
+| `GET /v1/frames` | 2 | yes | AR demo | kept |
+| `GET /v1/keepout` | **0** | 1 | robot tier view | **retired** |
+| `GET /.well-known/spatialdds/search` (GET+POST) | 1 | yes | discovery | kept |
+| `GET /.well-known/spatialdds/bootstrap` | 0 | yes | discovery | kept |
+| `WS /v1/stream` | **0** | 0 | raw envelope firehose | kept, unconsumed |
+| `GET /`, `GET /debug` | 0 | tests / none | operator | kept |
+| `GET /api/topics`, `GET /api/stats` | **0** | 0 | dead? | kept, unconsumed |
+
+`/v1/keepout` is worth a sentence of its own, because its docstring argued for
+it: it described itself as the §6.1 door for a ROS process that runs a
+different CycloneDDS major and so cannot join the bus in-process. That was
+true when it was written and false by the time it was retired ---
+`robot_tier/keepout_node.py` subscribes to `TOPIC_MODEL_ENTITY_V1` directly
+and calls `build_mask` itself, which the robot batch's migration is what made
+possible. **A route's own account of who needs it ages**, and this one aged
+into the only argument for keeping a route nothing called.
 
 So "the bridge moves to the web binding" cannot mean *replace this surface*.
-Seven browser-consumed routes are the AR demo's — one-shot RPC for localize
-and catalogue queries, frame lookups — and Appendix N has no RPC surface to
-move them to: N.3 is resources, N.5 is subscriptions, N.6 is commands.
+Six app-consumed routes are the AR demo's — one-shot RPC for localize and
+catalogue queries, frame lookups, health, discovery search, and the generic
+`/ws` — and Appendix N has no RPC surface to move them to: N.3 is resources, N.5 is subscriptions, N.6 is commands.
 Rewriting them would be migrating the AR demo, which no directive has scoped
 and which this one explicitly is not.
 
 **Reading the directive against that:** §3's lanes are the OWM ones —
 "model entities, robot pose" down, "a `goto` command" up. So this batch adds
 the binding for those three routes' worth of function and retires the three
-custom routes, while the AR demo's seven keep working unchanged. The bridge
+custom routes, while the AR demo's six keep working unchanged. The bridge
 ends up serving its own surface *and* the binding, which is a hybrid worth
 naming rather than discovering. If the intent was the whole surface, that is a
 much larger batch and the AR demo needs its own census first.
@@ -47,9 +67,9 @@ much larger batch and the AR demo needs its own census first.
 `/api/topics` and `/api/stats` have no consumer anywhere in the tree —
 flagged, not touched; deleting them is not this batch's business.
 
-### Those seven routes are 1.9 entry 5's concrete input
+### Those six routes are 1.9 entry 5's concrete input
 
-The AR demo's seven are not homeless, they are early. `localize`,
+The AR demo's six are not homeless, they are early. `localize`,
 `catalog/query` and `frames` are request/response over a spatial service,
 which is exactly the shape 1.9 candidate entry 5 — the GeoPose Protocol
 successor as a service profile — exists to specify. This bridge is the
@@ -61,9 +81,11 @@ under entry 5, since that repository is read-only here:
 
 ```markdown
 **Concrete input, 2026-10-17.** `SpatialDDS-demo`'s web bridge already serves
-this shape over seven routes the browser view depends on: `POST /v1/localize`,
-`POST /v1/catalog/query`, `GET /v1/frames`, `GET /v1/keepout`, `GET /health`,
-and discovery `search` as GET and POST. The bridge's 1.8 census
+this shape over six routes the browser app actually calls:
+`POST /v1/localize`, `POST /v1/catalog/query`, `GET /v1/frames`,
+`GET /health`, discovery `search`, and the generic `WS /ws`. (An earlier
+draft of this paste listed `GET /v1/keepout` among them; it had no app
+consumer and was retired on 2026-10-18.) The bridge's 1.8 census
 (`docs/bridge-1.8-census.md`, finding 1) records why they could not migrate to
 Appendix N: N.3 is resources, N.5 is subscriptions, N.6 is commands, and none
 of them is request/response over a service. They are entry 5's use case with a
@@ -272,11 +294,34 @@ rewiring inherits a token question the custom surface never had.
 | `pre18.seed_relationships` | `web_bridge/test_model_cache.py` | none |
 
 As `60d5cc6` predicted: this is the last consumer, so the whole pre-1.8
-surface falls out of use with it. Whether to **delete** the constants, the
-`pre18` module and the 1.7 compile lane is flagged for James rather than
-taken: the 1.7 build still compiles `idl/demo/oarc_model.idl`, and the
-question of whether it earns its keep is answered in the report with the facts,
-not in a commit.
+surface falls out of use with it.
+
+**Done 2026-10-18.** The constants, `spatialdds_demo/pre18.py`,
+`model_cache.py` and `test_model_cache.py` are deleted, along with
+`server.py`'s `_ModelPump`, `GET /v1/model`, `POST /v1/model/command` and
+`GET /v1/keepout`. One thing came out of that which the table above did not
+predict: the keyed-ness guard in `tests/test_command_lane.py` was reading
+`idl/demo/oarc_model.idl` while every type in the same file had moved to
+`spatial.owm` — so it was asserting a property of a file its subject no longer
+came from. The property holds in both IDLs, which is exactly why nothing
+noticed. Re-aimed at `idl/v1.8/provisional/owm.idl` and shown failable there.
+
+**The 1.7 model compile lane: orphaned, and not retired.** After the above,
+`idl/demo/oarc_model.idl` and the `spatialdds_idl/oarc_model/` tree it
+generates have **no consumer at all**. Measured, not assumed: no Python
+outside the generated tree imports `spatialdds_idl.oarc_model` (the only
+remaining importer is the package's own `__init__`), and no test reads the
+`.idl` as text any more now that the guard above is re-aimed. Every other
+mention in the tree is prose in a docstring or a census.
+
+So retiring it is a four-step edit with no code consequence — delete
+`idl/demo/oarc_model.idl`, drop `oarc_model` from `spatialdds_idl/__init__.py`
+and its `__all__`, regenerate, and correct seven prose references (three test
+docstrings, `ar_demo/SPEC_COMPLIANCE.md`, and three censuses). **Not taken**,
+per the batch directive: reported with the facts, left for James. Note the one
+thing that makes it more than cosmetic: `spatialdds_idl/` is the 1.7 tree the
+whole AR demo still compiles against, so the regeneration touches a tree six
+other lanes import even though the removal itself is inert.
 
 ## The stop condition: met, by Finding 4
 
@@ -300,5 +345,5 @@ this census still holds.
 
 SceneScape — its live serving becomes nearly free after this, and becoming
 free is not being done; untouched. OpenVPS, deployment, and any
-`spatialdds-web` edit. The AR demo's seven routes, per Finding 1. The ROS
+`spatialdds-web` edit. The AR demo's six routes, per Finding 1. The ROS
 tier, which `92d9232` left where it was.

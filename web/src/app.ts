@@ -79,7 +79,7 @@ let restOverlayVisible = false;
 const restMessages: string[] = [];
 let ddsSocket: WebSocket | null = null;
 
-// --- world model layer (demo-local oarc_model) -------------------------------
+// --- world model layer (`spatial.owm/0.1`, over the 1.8 web binding) --------
 // Present only when something is publishing; see handleDiscover.
 // The multiplexer's teardown, not a socket: there are two now.
 let modelUnsubscribe: (() => void) | null = null;
@@ -1118,8 +1118,8 @@ function describeEntity(item: CatalogItem): string | undefined {
         white-space:nowrap">${k}</td><td style="padding:2px 0">${v}</td></tr>`).join('')}
     </table>
     <p style="margin:10px 0 0;opacity:.6">From the world model layer
-      (<code>oarc_model</code>, demo-local) — every field above is read off the
-      entity, not authored here.</p>
+      (<code>spatial.owm/0.1</code>, provisional) — every field above is read
+      off the entity as Appendix N.3 served it, not authored here.</p>
   </div>`;
 }
 

@@ -62,7 +62,12 @@ class CommandLane(unittest.TestCase):
         inside `take()` while deserializing the key, before any Python of ours
         saw the sample. So the guard has to be here.
         """
-        source = (REPO / "idl" / "demo" / "oarc_model.idl").read_text()
+        # The 1.8 provisional module, because that is what this test's
+        # `ModelCommand` is. It read `idl/demo/oarc_model.idl` until
+        # 2026-10-18 -- the guard kept passing after the imports above moved
+        # to `spatial.owm`, which made it a check on a file the subject no
+        # longer came from. The property holds in both; the aim did not.
+        source = (REPO / "idl" / "v1.8" / "provisional" / "owm.idl").read_text()
         block = source[source.index("struct ModelCommand"):]
         self.assertIn("@key string command_id", block,
                       "ModelCommand must be keyed or an exiting writer kills the reader")

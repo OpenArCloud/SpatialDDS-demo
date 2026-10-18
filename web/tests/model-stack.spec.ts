@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  BRIDGE_URL, container, inContainer, moverRunning, readyPage, restoreVenue,
-  startMover, stopMover, look
+  container, inContainer, moverRunning, readyPage, restoreVenue,
+  startMover, stopMover, look, venueEntities
 } from './model-stack.helpers';
 
 /**
@@ -35,9 +35,7 @@ test.beforeAll(async ({ request }) => {
     return;
   }
   try {
-    const model = await (await request.get(`${BRIDGE_URL}/v1/model`,
-                                           { timeout: 4000 })).json();
-    if (!(model.entities || []).length) {
+    if (!(await venueEntities(request)).length) {
       stack = null;
     }
   } catch {
@@ -487,8 +485,7 @@ test('the ducks wander in an open tab, and stop dead when the mover does',
 
     // And the bus agrees with the tab: one truth, not a screen that kept its
     // own last known positions.
-    const model = await (await request.get(`${BRIDGE_URL}/v1/model`)).json();
-    const onBus = Object.fromEntries((model.entities || [])
+    const onBus = Object.fromEntries((await venueEntities(request))
       .filter((e: any) => e.entity_id.startsWith('ent:duck'))
       .map((e: any) => [e.entity_id, e.pose.t]));
     expect(Object.keys(onBus).sort()).toEqual(Object.keys(still).sort());
@@ -515,11 +512,10 @@ test('shrinking the pond crowds the ducks on every open tab', async ({ browser }
   const second = await browser.newPage();
 
   const bounds = async () => {
-    const model = await (await first.request.get(`${BRIDGE_URL}/v1/model`)).json();
     // The shallows, not the pond: since the pond was declared honestly it
     // covers the whole pool, and the box the ducks are clamped into is the
     // smaller claim the venue makes about where they go.
-    const box = (model.entities || []).find(
+    const box = (await venueEntities(first.request)).find(
       (e: any) => e.entity_id === 'ent:shallows:littlefield');
     return { min: box.extent.min_xyz, max: box.extent.max_xyz };
   };
@@ -566,8 +562,7 @@ test('shrinking the pond crowds the ducks on every open tab', async ({ browser }
 
     // The bus decides when this is true, not a timer.
     await expect.poll(async () => {
-      const model = await (await first.request.get(`${BRIDGE_URL}/v1/model`)).json();
-      return (model.entities || [])
+      return (await venueEntities(first.request))
         .filter((e: any) => e.entity_id.startsWith('ent:duck'))
         .every((e: any) => e.pose.t[0] >= small.min[0] && e.pose.t[0] <= small.max[0]
                         && e.pose.t[1] >= small.min[1] && e.pose.t[1] <= small.max[1]);

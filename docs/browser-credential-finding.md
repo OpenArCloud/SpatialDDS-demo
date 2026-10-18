@@ -12,11 +12,21 @@ rewiring and the spec repository is not this batch's. **Origin:** the web
 bridge's browser lane, 2026-10-18, which is the first browser client to meet
 the binding.
 
-**Status, 2026-10-18: ruled on, both ways.** This venue's model lanes are
-reclassified `public-cacheable` and the browser is wired, which dissolves the
-problem *here*; the gap stays filed as 1.9 material because reclassification
-only helps where the data is genuinely public. Option 2 below is flagged as
-the likely specification answer for lanes that must stay gated.
+**Status, 2026-10-18: ruled on, both ways — and reading is fixed here while
+commanding is not.** This venue's model lanes are reclassified
+`public-cacheable` and the browser reads them with no credential, which
+dissolves the *downstream* problem here; the gap stays filed as 1.9 material
+because reclassification only helps where the data is genuinely public, and
+option **(a)** is flagged as the likely specification answer for lanes that
+must stay gated.
+
+The upstream half is **not** dissolved, and running the browser is what showed
+it: a command always carries a credential, so it always trips blocker B's
+unanswered preflight, and **N.6 is unreachable from a browser for every access
+class** — reclassifying cannot help, because the credential is the trigger.
+See "B is wider than operator-scoped" below. That makes B's gateway fix a
+prerequisite for the browser's command lane rather than a tidy-up, and it is
+queued for `spatialdds-web`, not the specification.
 
 ---
 
@@ -66,6 +76,56 @@ So the earlier claim here — "fetch() can set a header, so N.3 and N.6 work
 from a browser" — was wrong for the cross-origin case, which is the only case
 a separate Vite dev server has. It was measured with `aiohttp`, which does not
 enforce CORS. Corrected rather than quietly dropped.
+
+### B is wider than "operator-scoped", and that was measured the hard way
+
+**Amended 2026-10-18, from the browser actually running.** The paragraph above
+describes B as operator-scoped responses being unreachable, which is true and
+is not the whole shape. The preflight is forced by the **request** carrying
+`Authorization`, not by the resource's access class — so B blocks *any*
+credentialed cross-origin request to this gateway, whatever the resource is
+classified as. Two consequences, both measured against binding 0.5.2 with a
+page on another origin:
+
+**1. N.6 is unreachable from a browser for every access class.** A command
+always carries a credential, so it always preflights:
+
+```
+OPTIONS /…/world/model_command/v1
+  Access-Control-Request-Method: POST
+  Access-Control-Request-Headers: authorization,content-type
+→ HTTP/1.1 405 Method Not Allowed
+  Allow: GET,HEAD,POST
+```
+
+Nothing on the page can work around that — it is the browser enforcing CORS
+correctly against a gateway that does not answer. So "a tab POSTs a `goto`"
+does not work cross-origin today, and `web/tests/robot-goto.spec.ts` probes
+this preflight and skips with the reason rather than failing, which also means
+it starts running again by itself when the gateway answers. The demo's own
+`tools/post_goto.py` is unaffected: it is not a browser and enforces no CORS,
+which is exactly why this went unnoticed.
+
+**2. A client must not volunteer a credential to a public lane.** The
+converse, and the sharper lesson. `GET /{scene}/world/entity/v1` is
+`public-cacheable` and answers `200` with `Access-Control-Allow-Origin: *` to
+a plain cross-origin GET. Send a *valid* `Authorization` header with it and
+the page gets nothing at all — not a 401, but a failed preflight before any
+request is made:
+
+```
+GET     entity/v1, no credential    → 200, Access-Control-Allow-Origin: *
+OPTIONS entity/v1, authorization    → 405 Allow: GET,HEAD,POST
+GET     entity/v1, with credential  → 200  (from curl; a browser never gets here)
+```
+
+The client sent that header until 2026-10-18, on the reasoning that a
+credential is harmless where it is not required. It is not harmless: it is the
+difference between a venue that loads and a venue that is silently empty. It
+was invisible because the acceptance run had no token configured, so the
+header was never added — **a credential path that is only exercised when a
+credential exists is untested in exactly the configuration that has one.**
+`spatialdds_binding.ts` now carries the token on the command lane alone.
 
 **B needs no specification change and should not be asked of one.** A gateway
 may answer the preflight, permit the `Authorization` request header, and echo
@@ -197,3 +257,22 @@ the likely answer). Blocker **B** is a candidate improvement for the
 header, echo the `Origin` with `Vary: Origin` — and asking the specification
 for it would be asking the wrong body for a thing the implementation can
 simply do.
+
+Ready to paste into `spatialdds-web/directions/spatialdds-1.9-candidates.md`
+as a gateway candidate, since that repository's queue is where B belongs and
+this batch is the demo repository's:
+
+```markdown
+**Gateway candidate: answer the CORS preflight.** `gw_http` routes no
+`OPTIONS`, so every cross-origin request carrying `Authorization` is refused
+at the preflight with `405 Allow: GET,HEAD,POST` and never reaches the
+handler. Measured against 0.5.2 from a page on another origin
+(`SpatialDDS-demo`, `docs/browser-credential-finding.md`): N.6 commands are
+unreachable from a browser for **every** access class, because a command
+always carries a credential; and a `public-cacheable` GET that would answer
+`200` with `Access-Control-Allow-Origin: *` fails outright if the client
+volunteers a credential it does not need. Fix: route `OPTIONS`, allow the
+`Authorization` and `Content-Type` request headers, and echo the requesting
+`Origin` with `Vary: Origin` on an authorized response — the credential stays
+required and the response stays `no-store`, so no gate is weakened.
+```

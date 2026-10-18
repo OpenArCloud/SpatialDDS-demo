@@ -15,7 +15,28 @@ import { execSync } from 'node:child_process';
  * guardrail. The fix is to remove the decision rather than to remember
  * harder.
  */
+/**
+ * The command lane's credential, baked in here because this is where the
+ * build is.
+ *
+ * Vite inlines `import.meta.env.VITE_*` at build time, so a token supplied to
+ * the *preview* server arrives far too late: the bundle is already compiled
+ * with `||""` in its place, the page's Send Robot button is correctly inert,
+ * and tap-to-send fails on a missing credential that looks for all the world
+ * like a bridge problem. Reading the venue over N.3/N.5 needs nothing --- the
+ * bridge classifies those lanes `public-cacheable` --- and only commanding is
+ * `operator-scoped`. Matches SPATIALDDS_BINDING_TOKEN's default in
+ * run_bridge_server_docker.sh.
+ *
+ * Noted because it is this file's own lesson a third time: the first fix for
+ * it went into `webServer.command`, which the docstring above says outright
+ * does not always run. The decision has to be removed, not remembered.
+ */
+const BINDING_TOKEN = process.env.SPATIALDDS_BINDING_TOKEN || 'bridge-session';
+
 export default function build() {
   execSync('npm run build', { cwd: new URL('..', import.meta.url).pathname,
-                              stdio: 'inherit' });
+                              stdio: 'inherit',
+                              env: { ...process.env,
+                                     VITE_SPATIALDDS_BINDING_TOKEN: BINDING_TOKEN } });
 }

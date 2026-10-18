@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import {
-  BRIDGE_URL, container, inContainer, readyPage, restoreVenue, look,
-  moverRunning, startMover, stopMover
+  container, inContainer, readyPage, restoreVenue, look,
+  moverRunning, startMover, stopMover, venueEntities, sendCommand
 } from './model-stack.helpers';
 
 /**
@@ -81,19 +81,17 @@ function tierRunning(): boolean {
 }
 
 async function robotOnBus(request: any): Promise<[number, number] | null> {
-  const model = await (await request.get(`${BRIDGE_URL}/v1/model`)).json();
-  const r = (model.entities || []).find((e: any) => e.entity_id === 'ent:robot:tb3');
+  const r = (await venueEntities(request))
+    .find((e: any) => e.entity_id === 'ent:robot:tb3');
   return r ? [r.pose.t[0], r.pose.t[1]] : null;
 }
 
 async function sendGoto(request: any, x: number, y: number) {
-  return request.post(`${BRIDGE_URL}/v1/model/command`, {
-    data: { verb: 'goto', subject_id: 'ent:robot:tb3',
-            // The navigator plans in 2D and ignores this, but it should
-            // still be the ground rather than a number nothing stands on:
-            // GROUND_Z in spatialdds_demo/plaza.py.
-            pose: { t: [x, y, -1.15], q: [0, 0, 0, 1] } }
-  });
+  // The navigator plans in 2D and ignores the z, but it should still be the
+  // ground rather than a number nothing stands on: GROUND_Z in
+  // spatialdds_demo/plaza.py.
+  return sendCommand(request, 'goto', 'ent:robot:tb3',
+                     { t: [x, y, -1.15], q: [0, 0, 0, 1] });
 }
 
 // POND_MIN/POND_MAX in spatialdds_demo/model_service.py: the box the venue
@@ -186,27 +184,18 @@ test('a journey around the water, with the law in the costmap', async ({ page, r
                     track[track.length - 1][1] - GOAL[1])).toBeLessThan(1.5);
 });
 
-test('a duck is a decoration, not an obstacle', async ({ request }) => {
-  /**
-   * The claim the keep-out policy exists to make, asserted where it lives
-   * rather than inferred from a path: the mask a robot navigates by is built
-   * from DECLARED extents, and no AUTHORED entity contributes a cell.
-   */
-  test.setTimeout(120_000);
-  const keepout = await (await request.get(`${BRIDGE_URL}/v1/keepout`)).json();
-  const model = await (await request.get(`${BRIDGE_URL}/v1/model`)).json();
-
-  const authored = (model.entities || [])
-    .filter((e: any) => e.basis === 'AUTHORED')
-    .map((e: any) => e.entity_id);
-  expect(authored.length, 'the venue should have decorations').toBeGreaterThan(0);
-  for (const id of authored) {
-    expect(keepout.contributors,
-           `${id} is AUTHORED and must not forbid a cell`).not.toContain(id);
-  }
-  console.log(`  ${authored.length} AUTHORED entities contribute nothing; `
-    + `the keep-out is ${keepout.contributors.join(', ')}`);
-});
+// `a duck is a decoration, not an obstacle` stood here until 2026-10-18. It
+// read `GET /v1/keepout`, which retired with the bridge's pre-1.8 model
+// readers -- and the route's docstring claimed a ROS consumer it no longer
+// had: `robot_tier/keepout_node.py` joins the bus directly on
+// TOPIC_MODEL_ENTITY_V1 and calls `build_mask` itself, so nothing fetched the
+// mask over HTTP by the time it went.
+//
+// The claim is not lost, and it was never well made here: this venue's
+// AUTHORED entities have no extent at all, so "AUTHORED contributes nothing"
+// passed trivially against them. It is asserted properly in
+// `tests/test_keepout.py::test_an_authored_region_contributes_nothing`, which
+// gives an AUTHORED entity a box first and so can actually fail.
 
 test('the venue changes its mind about the water, mid-journey',
      async ({ page, request }) => {
@@ -298,17 +287,17 @@ test('the venue changes its mind about the water, mid-journey',
 
     // 2. The ducks are where the shallows say, and the shallows did not
     //    change. A command addressed to the water is not addressed to them.
-    const model = await (await request.get(`${BRIDGE_URL}/v1/model`)).json();
-    const pond = (model.entities || [])
+    const entities = await venueEntities(request);
+    const pond = entities
       .find((e: any) => e.entity_id === 'ent:pond:littlefield');
     const [nx, ny] = pond.extent.min_xyz;
     const [xx, xy] = pond.extent.max_xyz;
-    const shallows = (model.entities || [])
+    const shallows = entities
       .find((e: any) => e.entity_id === 'ent:shallows:littlefield');
     expect(shallows.extent.min_xyz.slice(0, 2),
            'the shallows are a different claim and must be untouched')
       .toEqual([9.5, -18.0]);
-    const ducks = (model.entities || [])
+    const ducks = entities
       .filter((e: any) => e.entity_id.startsWith('ent:duck:'));
     for (const duck of ducks) {
       const [x, y] = duck.pose.t;
@@ -368,11 +357,8 @@ test('the sim dies, and both the watching tab and a late one are told',
    * from the live stream would show a late-joiner an empty plaza.
    */
   test.setTimeout(600_000);
-  const onBus = async () => {
-    const model = await (await request.get(`${BRIDGE_URL}/v1/model`)).json();
-    return (model.entities || [])
-      .find((e: any) => e.entity_id === 'ent:robot:tb3');
-  };
+  const onBus = async () => (await venueEntities(request))
+    .find((e: any) => e.entity_id === 'ent:robot:tb3');
   const drawnRobot = async (p: any) => {
     await p.waitForFunction(() => {
       const v = (window as any).__viewer;

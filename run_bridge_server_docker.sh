@@ -43,7 +43,7 @@ echo "Starting bridge + VPS + catalog in Docker"
 echo "Container name: ${bridge_name}"
 echo "Service logs will be written under bridges/web_bridge/logs/"
 
-docker run --rm -p 8088:8088 --name "${bridge_name}" \
+docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
   -w /app \
   -e PYTHONUNBUFFERED=1 \
   -e SPATIALDDS_TRANSPORT=dds \
@@ -64,6 +64,8 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
   -e SPATIALDDS_CATALOG_SEED="${SPATIALDDS_CATALOG_SEED:-/app/bridges/web_bridge/tests/catalog_seed_fountain.json}" \
   -e SPATIALDDS_FRAME_ANCHORS="${SPATIALDDS_FRAME_ANCHORS:-/app/bridges/web_bridge/tests/frame_anchors_fountain.json}" \
   -e SPATIALDDS_MODEL_LAYER="${SPATIALDDS_MODEL_LAYER:-0}" \
+  -e SPATIALDDS_BINDING_TOKEN="${SPATIALDDS_BINDING_TOKEN:-bridge-session}" \
+  -e SPATIALDDS_BINDING_VERSION="${SPATIALDDS_BINDING_VERSION:-0.5.2}" \
   -e PYTHONDONTWRITEBYTECODE=1 \
   -v "${PWD}:/app" \
   cyclonedds-python bash -lc "\
@@ -72,6 +74,7 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
     vps_log=\"\$BRIDGE_LOG_DIR/vps_server_\$BRIDGE_LOG_BTS.log\"; \
     catalog_log=\"\$BRIDGE_LOG_DIR/catalog_server_\$BRIDGE_LOG_BTS.log\"; \
     model_log=\"\$BRIDGE_LOG_DIR/model_server_\$BRIDGE_LOG_BTS.log\"; \
+    binding_log=\"\$BRIDGE_LOG_DIR/binding_\$BRIDGE_LOG_BTS.log\"; \
     bridge_log=\"\$BRIDGE_LOG_DIR/bridge_server_\$BRIDGE_LOG_BTS.log\"; \
     python3 -m pip install -r /app/requirements.txt -r /app/bridges/web_bridge/requirements.txt; \
     python3 ar_demo/spatialdds_demo_server.py --detailed >\"\$vps_log\" 2>&1 &\
@@ -88,6 +91,10 @@ docker run --rm -p 8088:8088 --name "${bridge_name}" \
       if [ \"\$SPATIALDDS_DUCK_MOVER\" = \"1\" ]; then \
         python3 -m spatialdds_demo.duck_mover >\"\$BRIDGE_LOG_DIR/mover_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
       fi; \
+      python3 -m pip install --quiet \"spatialdds[server]==\$SPATIALDDS_BINDING_VERSION\"; \
+      python3 -m bridges.web_bridge.binding --host 0.0.0.0 --port 8089 \
+        --domain \"\$SPATIALDDS_DDS_DOMAIN\" --token \"\$SPATIALDDS_BINDING_TOKEN\" \
+        >\"\$binding_log\" 2>&1 &\
     fi; \
     python3 bridges/web_bridge/server.py >\"\$bridge_log\" 2>&1\
   " >/dev/null 2>&1 &

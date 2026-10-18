@@ -35,9 +35,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import (
-    FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect,
-)
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -75,7 +73,6 @@ for p in (str(_HERE), str(_BRIDGES)):
 from topic_router import TopicRouter  # noqa: E402
 from client_manager import ClientManager  # noqa: E402
 from announce_cache import AnnounceCache  # noqa: E402
-from model_cache import ModelCache  # noqa: E402
 
 DEFAULT_LAT = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LAT", "30.284996"))
 DEFAULT_LON = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LON", "-97.739494"))
@@ -103,7 +100,6 @@ class SpatialDDSBridge:
         # Kept, not created per request: the command lane is VOLATILE, so a
         # fresh writer would drop its own first sample while discovery caught
         # up -- and that sample is somebody's tap on the map.
-        self._commands = None
         self._announces = AnnounceCache()
         self._client_frame_ref = SpatialDDSValidator.create_frame_ref("client/handset")
         self._stream_ref = SpatialDDSValidator.create_frame_ref("rig/front_cam")
@@ -302,52 +298,6 @@ class SpatialDDSBridge:
             return to_json(typed)
         finally:
             _unlock(self._request_lock)
-
-    def publish_model_command(self, verb: str, subject_id: str,
-                              pose: Optional[Dict[str, Any]] = None,
-                              reason: str = "") -> Dict[str, Any]:
-        """Write one ModelCommand. The writer is kept, because the lane is
-        VOLATILE and a writer created per request would drop its own sample
-        while discovery caught up."""
-        from spatialdds_demo.qos_profiles import MODEL_COMMAND
-        from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1_PRE18
-        from spatialdds_idl.oarc_model import ModelCommand
-
-        self.ensure_transport()
-        if self._commands is None:
-            from spatialdds_demo import typed_transport as tt
-            self._commands = tt.make_writer(
-                self._announce_participant, TOPIC_MODEL_COMMAND_V1_PRE18,
-                ModelCommand, MODEL_COMMAND.name)
-            # Discovery, not a retry: a VOLATILE writer with nobody attached
-            # drops the sample on the floor, and the first command a tab sends
-            # would vanish with no trace anywhere.
-            deadline = time.time() + 5.0
-            while (time.time() < deadline
-                   and not self._commands.get_publication_matched_status().current_count):
-                time.sleep(0.05)
-
-        now = time.time()
-        command = {
-            "command_id": str(uuid.uuid4()),
-            "verb": verb,
-            "subject_id": subject_id,
-            "reason": reason,
-            "requester_id": "web:browser",
-            "has_pose": pose is not None,
-            "pose": pose or {"t": [0.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]},
-            "has_extent": False,
-            "extent": {"min_xyz": [0.0, 0.0, 0.0], "max_xyz": [0.0, 0.0, 0.0]},
-            "stamp": {"sec": int(now), "nanosec": int((now % 1) * 1e9)},
-        }
-        self._commands.write(from_json(ModelCommand, command))
-        _emit_dds_event({
-            "ts": now, "dir": "tx", "domain": self._domain_id,
-            "msg_type": "oarc.model_command",
-            "logical_topic": TOPIC_MODEL_COMMAND_V1_PRE18,
-            "request_id": command["command_id"], "payload": command,
-        })
-        return {"published": command}
 
     def catalog_query(
         self,
@@ -615,7 +565,6 @@ client_mgr = ClientManager(TopicRouter())
 _event_loop: Optional[asyncio.AbstractEventLoop] = None
 _publisher = None  # _BrowserPublisher (lazy)
 _envelope_sub = None  # _StreamPump (typed readers, discovered from announces)
-_model_sub = None     # _ModelPump (typed readers on the model lanes)
 _total_dispatched = 0
 _start_time_ns = time.time_ns()
 ALLOW_PUBLISH = os.getenv("SPATIALDDS_BRIDGE_ALLOW_PUBLISH", "1") not in ("0", "false", "no")
@@ -809,136 +758,6 @@ class _StreamPump:
             self._thread.join(timeout=2)
 
 
-# The world model lanes. Demo-local `oarc_model`, off unless the publisher is
-# running -- see SPATIALDDS_MODEL_LAYER in run_bridge_server_docker.sh.
-model_cache = ModelCache()
-
-# `/ws` msg_type values, matching the rows in SPEC_COMPLIANCE. The stream
-# protocol's msg_type has always been the announced 3.3.2 type name; these
-# lanes are not announced, so the demo-local extension names stand in.
-MODEL_ENTITY_TYPE = "oarc.model_entity"
-# A dispose carries no sample, so there is nothing to forward as an Entity.
-# It goes out under its own type rather than as a half-filled one: a client
-# that receives `{"entity_id": ...}` shaped like an Entity has to guess
-# whether the missing fields mean "gone" or "not sent".
-MODEL_ENTITY_DISPOSED_TYPE = "oarc.model_entity_disposed"
-MODEL_RELATIONSHIP_DISPOSED_TYPE = "oarc.model_relationship_disposed"
-# The tempo lane. Forwarded live and deliberately *not* folded into the cache:
-# `/v1/model` answers "what is here", which is the latched record, and a
-# client that wants the current position of something moving subscribes.
-# Mixing the two would make the snapshot fresher than the thing it mirrors.
-MODEL_POSE_TYPE = "oarc.model_pose"
-MODEL_RELATIONSHIP_TYPE = "oarc.model_relationship"
-
-
-class _ModelPump:
-    """
-    Typed readers on the two model topics, feeding the cache and `/ws`.
-
-    Separate from `_StreamPump` because that one discovers its lanes from
-    announces, and the model publisher deliberately does not announce: there
-    is no MODEL in `ServiceKind`, and inventing a service to carry two topics
-    would change what discovery returns for every existing client. So the
-    lanes are opened directly, the way the announce cache opens its own.
-
-    Every live sample is handed to `_stream_callback`, the bridge's single
-    JSON edge, so model records reach `/ws` subscribers by exactly the path
-    every other topic uses -- no second serialisation, no separate protocol.
-    """
-
-    def __init__(self, domain_id: int, poll_interval: float = 0.05):
-        from cyclonedds.domain import DomainParticipant
-
-        from spatialdds_demo import typed_transport as tt
-        from spatialdds_demo.qos_profiles import MODEL_FAST, MODEL_LATCHED
-        from spatialdds_demo.topics import (
-            TOPIC_MODEL_ENTITY_V1_PRE18, TOPIC_MODEL_POSE_V1_PRE18,
-            TOPIC_MODEL_RELATIONSHIP_V1_RETIRED,
-        )
-        from spatialdds_idl.oarc_model import Entity, ModelPose, Relationship
-
-        self._tt = tt
-        self._interval = poll_interval
-        self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-        participant = DomainParticipant(domain_id)
-        self._participant = participant
-        self._entity_reader = tt.make_reader(
-            participant, TOPIC_MODEL_ENTITY_V1_PRE18, Entity, MODEL_LATCHED.name)
-        self._relationship_reader = tt.make_reader(
-            participant, TOPIC_MODEL_RELATIONSHIP_V1_RETIRED, Relationship,
-            MODEL_LATCHED.name)
-        self._pose_reader = tt.make_reader(
-            participant, TOPIC_MODEL_POSE_V1_PRE18, ModelPose, MODEL_FAST.name)
-        self._entity_topic = TOPIC_MODEL_ENTITY_V1_PRE18
-        self._relationship_topic = TOPIC_MODEL_RELATIONSHIP_V1_RETIRED
-        self._pose_topic = TOPIC_MODEL_POSE_V1_PRE18
-
-    def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def poll_once(self) -> int:
-        """Drain both readers. Returns how many live samples were applied."""
-        applied = 0
-        stamp_ns = time.time_ns()
-        for sample in self._tt.take_with_state(self._entity_reader):
-            if sample.data is not None:
-                model_cache.admit_entity(sample.data, sample.instance_handle)
-                _stream_callback(MODEL_ENTITY_TYPE, self._entity_topic,
-                                 to_json(sample.data), stamp_ns)
-                applied += 1
-            else:
-                # Evicting quietly was enough while nothing was ever removed.
-                # Now that entities retire, a client that is not told stays
-                # holding a duck that no longer exists.
-                removed = model_cache.dispose_entity(sample.instance_handle)
-                if removed:
-                    _stream_callback(MODEL_ENTITY_DISPOSED_TYPE, self._entity_topic,
-                                     {"entity_id": removed}, stamp_ns)
-        # Poses first: they are the cheapest and the most perishable, and a
-        # tick that spent its time on entity records before forwarding them
-        # would add latency to the only lane that cares about it.
-        for sample in self._tt.take_with_state(self._pose_reader):
-            if sample.data is not None:
-                _stream_callback(MODEL_POSE_TYPE, self._pose_topic,
-                                 to_json(sample.data), stamp_ns)
-                applied += 1
-            # A dispose on this lane carries no entity_id the cache could use
-            # and means nothing on its own: the entity's existence is the
-            # entity topic's business, and its disposal is announced there.
-        for sample in self._tt.take_with_state(self._relationship_reader):
-            if sample.data is not None:
-                model_cache.admit_relationship(sample.data, sample.instance_handle)
-                _stream_callback(MODEL_RELATIONSHIP_TYPE, self._relationship_topic,
-                                 to_json(sample.data), stamp_ns)
-                applied += 1
-            else:
-                removed = model_cache.dispose_relationship(sample.instance_handle)
-                if removed:
-                    _stream_callback(MODEL_RELATIONSHIP_DISPOSED_TYPE,
-                                     self._relationship_topic,
-                                     {"rel_id": removed}, stamp_ns)
-        return applied
-
-    def _run(self) -> None:
-        failures = 0
-        while not self._stop.is_set():
-            try:
-                self.poll_once()
-            except Exception as error:
-                # One bad sample must not take the lane down -- but a lane
-                # that is failing every poll and saying nothing is worse than
-                # one that stops. Report the first, then every hundredth.
-                failures += 1
-                if failures == 1 or failures % 100 == 0:
-                    print(f"model: poll failed ({failures}): {error!r}", flush=True)
-            self._stop.wait(self._interval)
-
-    def stop(self) -> None:
-        self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=2)
 
 
 def _ensure_publisher():
@@ -971,13 +790,6 @@ def on_startup() -> None:
     # request/reply pairs correlate themselves, on their own typed topics.
     _envelope_sub = _StreamPump(domain_id)
     _envelope_sub.start()
-
-    # The model lanes are always read. With no publisher running the readers
-    # simply stay empty, and `/v1/model` reports an empty model rather than
-    # failing -- so the endpoint's shape does not depend on a flag.
-    global _model_sub
-    _model_sub = _ModelPump(domain_id)
-    _model_sub.start()
 
 
 @app.on_event("shutdown")
@@ -1063,115 +875,6 @@ def catalog_query(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc))
 
 
-@app.get("/v1/keepout")
-def keepout(request: Request, response: Response) -> Dict[str, Any]:
-    """
-    Where the model says a robot may not go.
-
-    **Law, not perception.** This is built from DECLARED extents alone -- what
-    the venue legislates, never what a sensor happened to bound -- and it is
-    the same `spatialdds_demo.keepout` a participant on the bus would call.
-    Only the last hop differs: a ROS process runs a different major version of
-    CycloneDDS than this repo does, so it cannot join the bus in-process, and
-    this is the door §6.1 exists for. The contract survives the substitution;
-    the transport is carriage.
-
-    It is a **policy-tempo feed**, not a control loop. The mask changes when
-    the venue legislates, which is rare, and never because a robot moved.
-    `cmd_vel` and odom stay inside ROS where they belong.
-
-    `etag` is a hash of the grid: a caller that already has it can skip the
-    body, and one that cannot reach us at all should keep the last mask it
-    got. A robot navigating briefly on last-known law is behaving correctly --
-    the same last-seen semantics `UNOBSERVED` carries.
-    """
-    import base64
-    import hashlib
-
-    from spatialdds_demo.keepout import build_mask
-    from spatialdds_demo.robot_bridge import ENTITY_ID as ROBOT_ENTITY_ID
-    from spatialdds_idl.oarc_model import Entity
-
-    snapshot = model_cache.snapshot(SpatialDDSValidator.now_time())
-    entities = []
-    for row in snapshot["entities"]:
-        try:
-            entities.append(from_json(Entity, row))
-        except Exception:
-            # One undecodable entity must not deny a robot the whole of the
-            # law. Skipping it is safe in the direction that matters: a
-            # smaller keep-out is a smaller claim, and the omission is
-            # visible in `contributors`.
-            continue
-    mask = build_mask(entities, exclude_ids=(ROBOT_ENTITY_ID,))
-    if mask is None:
-        # No mask is not an empty mask: an empty grid would tell a planner
-        # everywhere is clear on the authority of a model that said nothing.
-        response.headers["Cache-Control"] = "no-store"
-        return {"mask": None,
-                "reason": "nothing in the model constrains a robot"}
-
-    # Both answers share a shape, with `mask` present in each. An earlier
-    # version put the grid at the top level and only the empty answer carried
-    # a `mask` key, so a caller checking `body["mask"] is None` read every
-    # successful response as "nothing forbidden" -- a sentinel that only one
-    # branch sets is not a sentinel.
-    body = {
-        "mask": {
-            "resolution": mask.resolution,
-            "width": mask.width,
-            "height": mask.height,
-            "origin": {"x": mask.origin_x, "y": mask.origin_y},
-            "frame": "map",
-            "data_b64": base64.b64encode(mask.data).decode("ascii"),
-        },
-        "contributors": list(mask.contributors),
-    }
-    etag = hashlib.sha256(
-        f"{mask.width}x{mask.height}@{mask.origin_x},{mask.origin_y}".encode()
-        + mask.data).hexdigest()[:32]
-    body["etag"] = etag
-    response.headers["ETag"] = etag
-    if request.headers.get("if-none-match") == etag:
-        response.status_code = 304
-        return {}
-    return body
-
-
-@app.post("/v1/model/command")
-def model_command(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Publish a ModelCommand on behalf of a browser.
-
-    The client cannot join the bus, so the bridge asks for it -- and asks in
-    exactly the form an operator tool would, on the same lane, with the same
-    verbs. There is no browser-only path into the model: whatever a tab can
-    do here, a script at a terminal can do identically, which is the property
-    that keeps the demo honest about what the model's interface actually is.
-
-    This returns what was published, not what happened. Whether anything acts
-    on it is between the command lane and whoever owns the subject; the caller
-    learns the outcome by watching the model, the same as everybody else.
-    """
-    verb = (payload or {}).get("verb")
-    subject_id = (payload or {}).get("subject_id")
-    if not verb or not subject_id:
-        raise HTTPException(status_code=400,
-                            detail="verb and subject_id are required")
-    pose = (payload or {}).get("pose")
-    if pose is not None and not (
-            isinstance(pose, dict) and isinstance(pose.get("t"), list)
-            and len(pose["t"]) == 3):
-        raise HTTPException(status_code=400,
-                            detail="pose must be {t: [x, y, z], q: [x, y, z, w]}")
-    try:
-        return bridge.publish_model_command(
-            verb=verb, subject_id=subject_id, pose=pose,
-            reason=(payload or {}).get("reason", ""))
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-
 @app.websocket("/v1/stream")
 async def stream(websocket: WebSocket) -> None:
     await broadcaster.connect(websocket)
@@ -1209,26 +912,6 @@ def frames() -> Dict[str, Any]:
     return {"frames": out}
 
 
-@app.get("/v1/model")
-def model_snapshot() -> Dict[str, Any]:
-    """
-    The whole world model, from the bridge's latched mirror.
-
-    A DDS client does not need this: both model topics are TRANSIENT_LOCAL, so
-    a late-joining reader is handed the model by the middleware. This is the
-    same view for clients that have no participant -- a browser, or curl.
-
-    Shape: `{"entities": [...], "relationships": [...], "stamp": {...}}`, with
-    entities and relationships in the typed-in/JSON-out form used everywhere
-    else on this bridge -- snake_case fields, enums as identifiers, presence
-    flags as `has_*` beside the member they guard.
-
-    No pagination. The model is four entities; when that stops being true this
-    is the first thing that has to change.
-    """
-    return model_cache.snapshot(SpatialDDSValidator.now_time())
-
-
 @app.get("/api/topics")
 def api_topics(stale_threshold_s: float = 30.0) -> Dict[str, Any]:
     """Topics seen on the bus within ``stale_threshold_s`` seconds."""
@@ -1257,7 +940,6 @@ def api_stats() -> Dict[str, Any]:
         "dds_domain": bridge._domain_id,
         "publish_enabled": ALLOW_PUBLISH,
         "announce_cache": bridge.announce_stats(),
-        "model_cache": model_cache.stats(),
     }
 
 

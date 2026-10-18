@@ -14,8 +14,113 @@ import { expect } from '@playwright/test';
 
 export const BRIDGE_URL =
   process.env.VITE_SPATIALDDS_BRIDGE_URL || 'http://localhost:8088';
+
+/**
+ * The binding, which is where the model now is.
+ *
+ * `server.py`'s `GET /v1/model` retired on 2026-10-18 with the pre-1.8
+ * readers behind it. These specs read the venue over Appendix N.3 instead,
+ * from `bridges/web_bridge/binding.py` on its own port --- two processes, so
+ * two base URLs, the same split `web/src/spatialdds_binding.ts` makes for
+ * the browser.
+ */
+export const BINDING_URL =
+  process.env.VITE_SPATIALDDS_BINDING_URL || 'http://localhost:8089';
+export const SCENE = 'ut-austin-littlefield';
+/** Needed only to command. Reading these lanes needs no credential. */
+export const BINDING_TOKEN =
+  process.env.VITE_SPATIALDDS_BINDING_TOKEN || 'bridge-session';
 export const SEEDED_ENTITIES = 7;      // + the observed pond
-export const SEEDED_RELATIONSHIPS = 4;
+
+/**
+ * The venue's entities, as N.3 serves them.
+ *
+ * **A collection, not a snapshot document.** The old `/v1/model` answered
+ * `{entities, relationships}`; `GET /{scene}/world/entity/v1` answers an
+ * array. The `relationships` half has no 1.8 counterpart at all --- the
+ * provisional module carries no relationship type, so the four the venue used
+ * to seed are gone rather than moved, and every assertion that counted them
+ * went with them. `docs/relationship-candidate-1.9.md` is where that loss is
+ * argued; this helper is not the place to paper over it.
+ */
+export async function venueEntities(request: any, timeout = 4000): Promise<any[]> {
+  const r = await request.get(
+    `${BINDING_URL}/${SCENE}/world/entity/v1`, { timeout });
+  const doc = await r.json();
+  return Array.isArray(doc) ? doc : [];
+}
+
+/**
+ * Can a *browser* send an N.6 command to this binding at all?
+ *
+ * **Probed rather than assumed, so this unblocks itself.** A command needs a
+ * credential, `Authorization` is not CORS-safelisted, so a cross-origin POST
+ * carrying one preflights --- and the gateway routes no `OPTIONS`, so the
+ * preflight 405s and the POST is never attempted. Nothing on the page can
+ * work around it: it is the browser enforcing CORS correctly against a
+ * gateway that does not answer.
+ *
+ * Measured 2026-10-18 against binding 0.5.2:
+ *
+ * ```
+ * OPTIONS /{scene}/world/model_command/v1
+ *   Access-Control-Request-Method: POST
+ *   Access-Control-Request-Headers: authorization,content-type
+ * -> 405 Allow: GET,HEAD,POST
+ * ```
+ *
+ * This is blocker B in `docs/browser-credential-finding.md`, and it is the
+ * `spatialdds-web` gateway's to fix (answer the preflight, allow the header,
+ * echo the Origin) --- not a specification question and not something to
+ * paper over here. So the tap-to-send spec asks this first and skips with the
+ * reason when the answer is no. When the gateway starts answering `OPTIONS`,
+ * this returns true and the spec runs again with no edit.
+ */
+export async function browserCanCommand(request: any): Promise<boolean> {
+  try {
+    const r = await request.fetch(
+      `${BINDING_URL}/${SCENE}/world/model_command/v1`,
+      { method: 'OPTIONS', timeout: 4000,
+        headers: { Origin: 'http://127.0.0.1:4173',
+                   'Access-Control-Request-Method': 'POST',
+                   'Access-Control-Request-Headers': 'authorization,content-type' } });
+    return r.status() >= 200 && r.status() < 300
+      && Boolean(r.headers()['access-control-allow-origin']);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send one command over N.6, the way the page does.
+ *
+ * A POST to the resource, with a complete `spatial.owm.ModelCommand` --- the
+ * binding validates against the published schema before any backend sees it,
+ * so the guarded members have to be present and `stamp.sec` has to be a
+ * decimal *string* per N.1. The old bridge filled a partial command in
+ * server-side. 202 is accepted, 409 is a decline *with a reason*, and both
+ * are answers.
+ */
+export async function sendCommand(
+    request: any, verb: string, subjectId: string,
+    pose?: { t: number[]; q: number[] }, reason = ''): Promise<any> {
+  const now = Date.now() / 1000;
+  return request.post(`${BINDING_URL}/${SCENE}/world/model_command/v1`, {
+    headers: { Authorization: `Bearer ${BINDING_TOKEN}` },
+    data: {
+      command_id: `cmd:spec:${verb}-${Math.floor(now * 1000)}`,
+      verb,
+      subject_id: subjectId,
+      reason,
+      requester_id: 'playwright',
+      has_pose: Boolean(pose),
+      pose: pose || { t: [0, 0, 0], q: [0, 0, 0, 1] },
+      has_extent: false,
+      extent: { min_xyz: [0, 0, 0], max_xyz: [0, 0, 0] },
+      stamp: { sec: String(Math.floor(now)), nanosec: 0 }
+    }
+  });
+}
 
 export function container(): string | null {
   try {
@@ -44,9 +149,8 @@ export async function restoreVenue(request: any, name: string): Promise<void> {
   await expect
     .poll(async () => {
       try {
-        const model = await (await request.get(`${BRIDGE_URL}/v1/model`,
-                                               { timeout: 4000 })).json();
-        const ducks = (model.entities || [])
+        const entities = await venueEntities(request);
+        const ducks = entities
           .filter((e: any) => e.entity_id.startsWith('ent:duck:'));
         const placed = ducks.every((d: any) =>
           d.state === 'ACTIVE'
@@ -58,12 +162,13 @@ export async function restoreVenue(request: any, name: string): Promise<void> {
         // and asserting a count made the suite depend on which flags the
         // stack happened to be launched with. An eighth entity is not a
         // reason for a duck test to fail.
-        const ids = new Set((model.entities || []).map((e: any) => e.entity_id));
+        const ids = new Set(entities.map((e: any) => e.entity_id));
         const seeded = ['ent:fountain:littlefield', 'ent:pond:littlefield',
                         'ent:duck:catalog-pose', 'ent:duck:west', 'ent:duck:east'];
-        return seeded.every((id) => ids.has(id))
-          && (model.relationships || []).length >= SEEDED_RELATIONSHIPS
-          && placed;
+        // No relationship clause any more: 1.8 has no relationship type, so
+        // the four this used to wait for cannot come back and waiting on
+        // them would never return.
+        return seeded.every((id) => ids.has(id)) && placed;
       } catch {
         return false;
       }

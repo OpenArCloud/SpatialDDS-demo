@@ -48,5 +48,9 @@ export default defineConfig({
     port: 4173,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000
+    // No `env` here on purpose. This command does not run when a preview
+    // server is already listening, so anything the bundle needs at build
+    // time belongs in tests/global-setup.ts, which always runs --- the
+    // command lane's token included.
   }
 });

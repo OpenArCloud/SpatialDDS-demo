@@ -44,9 +44,18 @@
  * change. They stay filed because reclassifying only helps where the data is
  * genuinely public.
  *
- * So state and live need nothing. `VITE_SPATIALDDS_BINDING_TOKEN` is needed
+ * So state and live need nothing, and must be asked for with nothing: a
+ * credential volunteered to a public lane trips the same unanswered preflight
+ * and the venue comes up empty. `VITE_SPATIALDDS_BINDING_TOKEN` is needed
  * only to send a command, and without it Send Robot says so rather than
  * failing quietly.
+ *
+ * **And with it, a cross-origin command still does not arrive today.** A
+ * credentialed POST preflights, the gateway answers no `OPTIONS`, so N.6 is
+ * unreachable from a browser for every access class until that is fixed in
+ * `spatialdds-web`. Measured, filed and queued as blocker B; the code here is
+ * correct and waiting on the gateway, which is why it is kept rather than
+ * stubbed.
  */
 import type { ModelEntity } from './spatialdds_bridge';
 
@@ -100,17 +109,35 @@ export function canCommand(): boolean {
 /**
  * The latched venue, as N.3 serves it.
  *
+ * **Sends no credential, deliberately, even when one is configured.** These
+ * lanes are `public-cacheable` and a public response carries
+ * `Access-Control-Allow-Origin: *`, which a cross-origin page needs. Adding
+ * an `Authorization` header does not merely fail to help --- it breaks the
+ * read outright, because `Authorization` is not CORS-safelisted, so the
+ * request *preflights*, and the gateway routes no `OPTIONS`:
+ *
+ * ```
+ * OPTIONS /{scene}/world/entity/v1   (Access-Control-Request-Headers: authorization)
+ *   -> 405 Allow: GET,HEAD,POST
+ * GET     /{scene}/world/entity/v1   (no credential)
+ *   -> 200, Access-Control-Allow-Origin: *
+ * ```
+ *
+ * Measured 2026-10-18. The page sent the header here until then and the venue
+ * came up empty the moment a token was configured --- invisible while the
+ * acceptance ran tokenless. This is blocker B in
+ * `docs/browser-credential-finding.md`, reached from the other side: not a
+ * gated resource refusing a browser, but a client volunteering a credential
+ * to a resource that never asked for one. Carry it only where N.4 requires
+ * it, which here is the command lane alone.
+ *
  * Returns an empty array rather than throwing, for the reason the old
  * snapshot did: "no model" and "no model layer" lead a client to the same
- * place, which is catalogue placement. A 401 lands here too, and that is
- * correct --- an app without a credential has no model, and saying so once in
- * the log beats a stack trace per reload.
+ * place, which is catalogue placement.
  */
 export async function bindingEntities(): Promise<ModelEntity[]> {
   try {
-    const r = await fetch(`${BINDING_URL}${ENTITY_PATH}`, {
-      headers: authHeaders()
-    });
+    const r = await fetch(`${BINDING_URL}${ENTITY_PATH}`);
     if (!r.ok) {
       return [];
     }

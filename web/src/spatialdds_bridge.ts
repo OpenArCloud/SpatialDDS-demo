@@ -482,7 +482,11 @@ export function resolveInFrame(
 }
 
 /**
- * The world model layer — demo-local `oarc_model`, non-normative.
+ * The world model layer — `spatial.owm/0.1`, provisional in 1.8.
+ *
+ * The shape is what Appendix N.3 serves at
+ * `/{scene}/world/entity/v1`; `spatialdds_binding.ts` fetches it and
+ * this type is the contract between them.
  *
  * The catalogue says what content exists: one duck.glb, one checksum, one
  * URI. The model says what is *there* — entities with identity, each pointing
@@ -673,7 +677,7 @@ export function hasUnknownType(entity: ModelEntity): boolean {
 }
 
 /**
- * The four ways a claim can be arrived at, from `oarc_model`'s Basis enum.
+ * The four ways a claim can be arrived at, from `spatial.owm`'s Basis enum.
  *
  * Listed in full rather than as the two this deployment happens to publish.
  * A filter that only knows the values it has seen is not a filter, it is a
