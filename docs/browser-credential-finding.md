@@ -6,10 +6,11 @@ rewiring and the spec repository is not this batch's. **Origin:** the web
 bridge's browser lane, 2026-10-18, which is the first browser client to meet
 the binding.
 
-This one stops work rather than annotating it: the live half of the browser
-rewiring has no conformant path, so the batch's part 1 cannot complete and
-part 2's precondition — "with the browser off the dead lanes" — cannot be
-met.
+**Status, 2026-10-18: ruled on, both ways.** This venue's model lanes are
+reclassified `public-cacheable` and the browser is wired, which dissolves the
+problem *here*; the gap stays filed as 1.9 material because reclassification
+only helps where the data is genuinely public. Option 2 below is flagged as
+the likely specification answer for lanes that must stay gated.
 
 ---
 
@@ -29,6 +30,18 @@ that is a platform constraint, not an implementation gap. So for an
 `operator-scoped` resource, N.5's subscription is reachable by every client
 *except* the one the web binding most obviously exists for.
 
+**And there is a second blocker, which the first measurement missed.** An
+operator-scoped response carries `Cache-Control: no-store` and
+`Vary: Authorization` and **no `Access-Control-Allow-Origin`** — correctly, by
+the same decision that gated it, since a browser must not be invited to
+attach a credential ambiently cross-origin. So a page on `:5173` could not
+read `:8089` *even holding a valid token*. The table below was measured with
+`aiohttp`, which does not enforce CORS, so it understated the problem: the
+claim "fetch() can set a header, so N.3 and N.6 work from a browser" was
+wrong for the cross-origin case, which is the only case a separate Vite dev
+server has. Corrected here rather than quietly: operator-scoped is
+unreachable from a browser on two counts, not one.
+
 ## Measured against the live bridge
 
 ```
@@ -37,33 +50,40 @@ N.5 WS   with subprotocol only     : 401  <- a browser cannot do better
 N.5 WS   with Authorization header : connected
 ```
 
-The three rows are the whole finding. `fetch()` can set a header, so N.3 and
-N.6 work from a browser. A WebSocket cannot, so N.5 does not. The gateway's
-`_authorized` reads `Authorization` and nothing else, which is exactly what
-N.4 says to do.
+Those rows isolate the handshake: `aiohttp` can set a header and connects, a
+browser cannot and gets 401. The gateway's `_authorized` reads `Authorization`
+and nothing else, which is exactly what N.4 says to do — there is no
+implementation defect in it. Read them together with the CORS paragraph
+above, which the rows do not show because the client measuring them does not
+enforce CORS.
 
-Consequence for this demo: the browser can fetch the venue and POST a `goto`,
-and cannot watch anything move. The ducks and the robot are the demo.
+So for an operator-scoped lane the browser is refused twice: no credential on
+the handshake, and no CORS on the HTTP responses it would have needed first.
 
-## Three ways out, and the third is the cheapest
+## Three ways out, named rather than numbered
 
-**1. Bless a header a browser can actually set.** The standard practice is the
+Named because this document has been cited by number in two places with two
+different orders, and a cross-reference that depends on list position is a
+footgun. The names are stable.
+
+**(a) Subprotocol carriage — bless a header a browser can actually set.** The standard practice is the
 subprotocol — `Sec-WebSocket-Protocol: bearer.<token>` — which is a header,
 so it breaches neither N.4's letter nor its reasoning: it does not appear in a
 URL, a proxy log line, or a `Referer`. It is the only credential channel the
 WebSocket API exposes. N.4 would need a sentence permitting it and naming the
-form, and the reference gateway would need to read it. The demo's client
-already sends it, inert, so the line stops being inert when the mechanism
-lands.
+form, and the reference gateway would need to read it. The demo's client does
+not send it: these lanes are public now, so there is nothing to carry, and a
+client sending an inert credential at a surface that does not want one would
+be cargo rather than preparation.
 
-**2. A single-use ticket.** `GET` a short-lived ticket over HTTP with the
+**(b) A single-use ticket.** `GET` a short-lived ticket over HTTP with the
 real credential, then present it in the subscription URL. This is what several
 WebSocket deployments do, and it arguably sidesteps N.4 because a one-shot
 ticket is not a credential. It costs a new endpoint, a lifetime, and a
 revocation story, and it puts a secret-shaped string in a URL for the exact
 duration the rule was written to prevent. Worth naming and not recommending.
 
-**3. Question the access class, which may be the actual error.** N.4's own
+**(c) Reclassify — question the access class, which may be the actual error.** N.4's own
 guidance:
 
 > An endpoint SHOULD classify by what a resource describes rather than by who
@@ -93,15 +113,39 @@ cannot express "this instance is configuration and that one is an
 observation", which is the real tension — and it is the same shape as N.4's
 own worked example, where a zone is public and a detection inside it is not.
 
-## What this batch did with it
+## What was done about it
 
-Stopped, and reported. `web/src/spatialdds_binding.ts` is written: N.3 state,
-N.6 commands and the per-resource multiplexer the census called for, with the
-socket's 401 documented at the line that causes it rather than worked around.
-It is not wired into `app.ts`, because a browser that shows a static venue and
-cannot watch it change is a worse demo than one that is honestly dark, and
-that judgement is not the agent's to make unilaterally.
+**(c), for this venue.** `bridges/web_bridge/binding.py` carries an
+`ACCESS` table that classifies the entity and pose lanes `public-cacheable`
+and keeps the command lane `operator-scoped` — reading the venue and driving
+it being different questions. N.4 instructs *the endpoint* to classify by
+what a resource describes, so the override belongs there rather than in the
+package's by-type defaults, and no release was needed.
 
-Nothing was done to `bridges/web_bridge/server.py`'s model readers either:
-part 2 retires them once the browser is off them, and the browser cannot
-come off them until this is settled.
+Verified cross-origin with no credential, which is exactly what the page does:
+
+```
+N.3 state      : 200, 8 entities, CORS=*
+N.5 live       : entity=27 events, pose=88 events (no credential)
+N.6 no token   : 401 (must refuse)
+N.6 with token : 202 accepted
+```
+
+**And the gap stays filed**, because that is a judgement about this venue's
+data and not about the type. A deployment whose model carried observations of
+people would get no such override and would meet both blockers unchanged. The
+per-type-versus-per-instance tension is N.4's own — a zone is public and a
+detection inside it is not — and a per-type access class cannot express it.
+
+For the specification, the question is **(a), subprotocol carriage** — the
+option flagged on review as the likely spec-level answer for data that
+genuinely must stay operator-scoped. It is the established ecosystem
+workaround, it is a header rather than a URL, and it breaches neither N.4's
+letter nor its reasoning. Without it, "operator-scoped N.5 stream" and
+"browser client" remain mutually exclusive, and **(b)** stays named and
+argued against: a one-shot ticket still puts a secret-shaped string in a URL
+for exactly the duration the rule exists to prevent.
+
+This is 1.9 material rather than an erratum. N.4 is not self-contradictory —
+it is browser-hostile, which is a different and more interesting problem, and
+the spec agent characterizes it while this repository files it.

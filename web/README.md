@@ -19,7 +19,9 @@ All optional. Put them in `web/.env.local`:
 
 | Variable | Effect |
 |---|---|
-| `VITE_SPATIALDDS_BRIDGE_URL` | Bridge to talk to. Defaults to `http://localhost:8088`. |
+| `VITE_SPATIALDDS_BRIDGE_URL` | Bridge to talk to for the AR demo's routes — localize, catalogue, frames, health, discovery. Defaults to `http://localhost:8088`. |
+| `VITE_SPATIALDDS_BINDING_URL` | The 1.8 web binding, which serves the model lanes. Defaults to `http://localhost:8089`. Two variables because they are two processes: `bridges/web_bridge/server.py` and `bridges/web_bridge/binding.py`. |
+| `VITE_SPATIALDDS_BINDING_TOKEN` | Needed **only to send a command**. Reading the venue needs nothing: the bridge classifies its model lanes `public-cacheable` per N.4, because what they describe is configured geometry plus a simulated robot and three ducks. Driving the robot is operator-scoped, so Send Robot needs the token the bridge prints in its banner. |
 | `VITE_CESIUM_ION_TOKEN` | Enables OSM Buildings and World Terrain. |
 | `VITE_CESIUM_ION_ASSET_ID` | Enables the **Photorealistic 3D Tiles** toggle. |
 

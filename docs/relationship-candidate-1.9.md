@@ -104,11 +104,16 @@ and gets `retire`, or it does not and needs a verb that admits the difference.
   the tombstone so nothing pointed at it — is now empty by construction, and
   `tests/test_model_layer.py` asserts the empty list rather than dropping the
   assertion.
-- One consumer is left holding a dangling reference. The web bridge has not
-  migrated; it still reads the pre-1.8 topics and still builds its fixtures
-  from the retired seed, which now lives in
-  `spatialdds_demo/pre18_relationships.py` for exactly as long as that is
-  true.
+- One consumer was left holding a dangling reference, and on 2026-10-18 it
+  stopped. The browser view is now wired to the 1.8 binding, and the eight
+  client lines that read a `relationships` array are gone with the key:
+  five in `web/src/app.ts` (the snapshot's type, two empty-model literals,
+  the loaded-count log line) and three in `web/src/spatialdds_bridge.ts`
+  (the `ModelSnapshot` type and the snapshot fetch). The four mentions that
+  remain in those files are prose saying why the key is absent.
+  **That is this entry's predicted cost, paid and countable.** The hierarchy
+  the venue used to publish is now claimed by nothing: a client that wants
+  containment computes it from geometry or does without.
 
 **What would make this a 1.9 row rather than a backlog note.** A second
 independent consumer that needs edges. One demo losing a hierarchy it authored

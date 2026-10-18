@@ -79,6 +79,54 @@ SPEC_COMMIT = "9c3e1f2"
 #: How often the pump says what it has moved. See `Pump.run`.
 HEARTBEAT_S = 5.0
 
+#: What this venue's model lanes describe, and therefore how they are served.
+#:
+#: **The endpoint classifies, which is N.4's instruction and not a liberty
+#: taken here:** "An endpoint SHOULD classify by what a resource describes
+#: rather than by who asks: configured geometry --- zones, crossing lines,
+#: frames, georeferences --- is ordinarily public, and observations of people
+#: ordinarily are not."
+#:
+#: The package's `gateway.DURABILITY` defaults `spatial.owm.Entity` to
+#: operator-scoped by *type*, which is the right default for a type that can
+#: carry anything. What this venue's lanes actually carry is a fountain, a
+#: pond, declared bounds and a frame --- configured geometry, which N.4 calls
+#: ordinarily public, and which the same table already serves as public for
+#: `SpatialZone`, `GeoAnchor` and `FrameTransform` --- plus a simulated robot
+#: and three rubber ducks. Nothing here is an observation of a person.
+#:
+#: **The tension is real and is N.4's own.** A per-type access class cannot
+#: say "this instance is configuration and that one is an observation", which
+#: is exactly the zone-versus-detection case N.4 works through: a zone is
+#: public and a detection inside it is not. This override is a judgement about
+#: *this venue's* data, not a claim that `spatial.owm.Entity` is public in
+#: general. A deployment whose model carried people would not get this
+#: override, and the per-instance question stays open upstream.
+#:
+#: And it is what makes the browser lane possible at all. Operator-scoped
+#: responses carry `Cache-Control: no-store, Vary: Authorization` and **no
+#: `Access-Control-Allow-Origin`**, so a page on :5173 cannot read :8089 even
+#: holding a valid token; and a browser cannot put a credential on a
+#: WebSocket handshake, which N.4 requires and forbids every alternative to.
+#: Both blockers are measured in `docs/browser-credential-finding.md`, which
+#: stays filed because reclassification dissolves the problem only where the
+#: data happens to be public.
+#:
+#: The cost, stated: public means a positive `max-age`, 300s from the
+#: package's default, so a shared cache may hand a new client a venue up to
+#: five minutes old. Bounded in practice --- the N.3 fetch is an opening
+#: snapshot and the N.5 replay that follows comes from live state, not the
+#: cache, so the first live event corrects it.
+ACCESS: dict[str, str] = {
+    "spatial.owm.Entity": gateway.PUBLIC,
+    "spatial.owm.ModelPose": gateway.PUBLIC,
+    # The command lane stays operator-scoped. It is the write surface: a POST
+    # here moves a robot, and "who may read the venue" is a different question
+    # from "who may drive it". N.4's advice is about what a resource
+    # describes, and what this one describes is an instruction.
+    "spatial.owm.ModelCommand": gateway.OPERATOR,
+}
+
 #: The closure each type needs, in dependency order. Same list the recorder
 #: embeds in an MCAP, for the same reason: a reader parses one schema record
 #: as a single translation unit.
@@ -121,8 +169,12 @@ def build_state() -> gateway.State:
                     f"(SpatialDDS-spec {SPEC_COMMIT})")
     for topic, _cls, _qos, _colons, fqn in LANES:
         _scene, stream, type_seg, version = topic.split("/")[1:]
-        latched, access = gateway.DURABILITY.get(
+        latched, _default_access = gateway.DURABILITY.get(
             fqn, (False, gateway.OPERATOR))
+        # Durability from the package's table, access from this endpoint's
+        # own classification. See ACCESS above for why the two come from
+        # different places.
+        access = ACCESS.get(fqn, _default_access)
         agg = model.get(fqn)
         keys = [m.name for m in (agg.members if agg else []) if m.is_key]
         res = gateway.Resource(SCENE, stream, type_seg, version, topic, fqn,
@@ -335,11 +387,15 @@ def main() -> int:
     print(f"bridge: binding  spatialdds[server] "
           f"{__import__('spatialdds').__version__} from PyPI, embedded")
     print(f"bridge: types    {st.type_source}")
-    for topic, _c, _q, _colons, fqn in LANES:
-        latched, access = gateway.DURABILITY.get(fqn,
-                                                 (False, gateway.OPERATOR))
-        print(f"bridge: lane     {topic}  "
-              f"{'TRANSIENT_LOCAL' if latched else 'VOLATILE':16} {access}")
+    # Read off the resources actually built, not recomputed from the
+    # package's table: the banner said operator-scoped for all three lanes
+    # for as long as it consulted DURABILITY directly, while the endpoint was
+    # serving two of them public. A banner that reports what it would have
+    # done instead of what it did is worse than none.
+    for res in sorted(st.resources.values(), key=lambda r: r.topic):
+        print(f"bridge: lane     {res.topic}  "
+              f"{'TRANSIENT_LOCAL' if res.latched else 'VOLATILE':16} "
+              f"{res.access}")
     print(f"bridge: commands {sorted(registry.types())}")
     print(f"bridge: serving  {base}")
     print(f"bridge: token    {token}")

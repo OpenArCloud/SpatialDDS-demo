@@ -418,26 +418,15 @@ function ecefToGeodetic(x: number, y: number, z: number) {
  * separately they could disagree about where the same duck is, which is
  * exactly the class of bug this layer exists to remove.
  */
-/**
- * Ask the model for something, through the bridge.
- *
- * The same lane and the same verbs an operator tool uses at a terminal --
- * there is deliberately no browser-only path into the model. What comes back
- * is what was published, not what happened: whether anything acts on it is
- * between the lane and whoever owns the subject, and the caller finds out by
- * watching the model like everybody else.
+/*
+ * `bridgeCommand` lived here, POSTing a partial command to
+ * `/v1/model/command` for the bridge to complete server-side. Commands are
+ * N.6 now -- `bindingCommand()` in spatialdds_binding.ts -- and the binding
+ * validates a complete `ModelCommand` against its published schema before
+ * any backend sees it, so the client builds the whole record including the
+ * guarded members and `stamp.sec` as a decimal string. A malformed command
+ * is a 400 with a problem document rather than a server guessing.
  */
-export async function bridgeCommand(
-  verb: string,
-  subjectId: string,
-  pose?: { t: number[]; q: number[] },
-  reason = ''
-): Promise<{ published?: Record<string, unknown> }> {
-  return await fetchJson('/v1/model/command', {
-    method: 'POST',
-    body: JSON.stringify({ verb, subject_id: subjectId, pose, reason })
-  }) as { published?: Record<string, unknown> };
-}
 
 /**
  * The inverse of `resolveInFrame`: an earth-fixed point, in a frame's metres.
@@ -518,10 +507,11 @@ export type ModelEntity = {
   state?: string;
 };
 
-export type ModelSnapshot = {
-  entities: ModelEntity[];
-  relationships: Record<string, any>[];
-};
+// `ModelSnapshot` is gone with `bridgeModelSnapshot`. It carried a
+// `relationships` array, and `spatial.owm/0.1` has no relationship type --
+// see docs/relationship-candidate-1.9.md. State now comes from
+// `bindingEntities()` in spatialdds_binding.ts as a plain array, which is
+// what N.3 serves.
 
 /**
  * Type URI to a human label.
@@ -578,24 +568,13 @@ export function catalogRefId(entity: ModelEntity): string | null {
   return null;
 }
 
-/**
- * Whether a model layer is present at all.
- *
- * Returns an empty model rather than throwing when the bridge predates the
- * endpoint or nothing is publishing — "no model" and "no model layer" lead to
- * the same client behaviour, which is to fall back to catalogue placement.
+/*
+ * `bridgeModelSnapshot` lived here. The model lanes moved to the 1.8 binding,
+ * so state is `bindingEntities()` and live is `subscribeModel()`, both in
+ * spatialdds_binding.ts. What stays in this module is the AR demo's seven
+ * request/response routes, which Appendix N has no shape for: localize,
+ * catalogue queries, frames, keepout, health and discovery search.
  */
-export async function bridgeModelSnapshot(): Promise<ModelSnapshot> {
-  try {
-    const payload = await fetchJson('/v1/model') as Partial<ModelSnapshot>;
-    return {
-      entities: Array.isArray(payload.entities) ? payload.entities : [],
-      relationships: Array.isArray(payload.relationships) ? payload.relationships : []
-    };
-  } catch {
-    return { entities: [], relationships: [] };
-  }
-}
 
 /**
  * A model entity as something the renderer can draw.

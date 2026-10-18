@@ -9,11 +9,17 @@ import {
 import { mockDiscover, mockLocalize } from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  BASIS_VALUES, bridgeCommand, bridgeFrames, bridgeModelSnapshot, catalogRefId,
+  BASIS_VALUES, bridgeFrames, catalogRefId,
   disambiguate, displayName, localInFrame, matchesBasis, modelEntityToItem, observeRest, parseBasisFilter,
   planModelRender, resolveContentIds, resolveInFrame, typeLabel
 } from './spatialdds_bridge';
 import type { ModelEntity, RestExchange } from './spatialdds_bridge';
+// The model lanes live on the 1.8 binding now; the AR demo's seven routes
+// stay on the bridge. Two surfaces, two modules -- docs/bridge-1.8-census.md
+// finding 1 is why, and Appendix N has no RPC shape for the other seven.
+import {
+  bindingCommand, bindingEntities, canCommand, SCENE, subscribeModel
+} from './spatialdds_binding';
 import type { CatalogItem, GeoPose } from './types';
 
 const readoutEl = document.getElementById('readout') as HTMLPreElement | null;
@@ -75,14 +81,18 @@ let ddsSocket: WebSocket | null = null;
 
 // --- world model layer (demo-local oarc_model) -------------------------------
 // Present only when something is publishing; see handleDiscover.
-let modelSocket: WebSocket | null = null;
+// The multiplexer's teardown, not a socket: there are two now.
+let modelUnsubscribe: (() => void) | null = null;
 const modelItems = new Map<string, CatalogItem>();
 // The frames and catalogue rows the last discovery resolved against, kept so a
 // live entity update can be placed without re-querying anything.
 // The model as last read, kept so the catalogue can ask which rows it has
 // already claimed without re-fetching. `null` means "not loaded yet", which
 // is different from "loaded and empty" and drives the retry in handleDiscover.
-let lastModel: { entities: ModelEntity[]; relationships: unknown[] } | null = null;
+// No `relationships`: `spatial.owm/0.1` carries no relationship type, so the
+// hierarchy the pre-1.8 snapshot carried is gone rather than empty. The 1.9
+// candidate is docs/relationship-candidate-1.9.md.
+let lastModel: { entities: ModelEntity[] } | null = null;
 const tempoAnnounced = new Set<string>();
 let sendingRobot = false;
 let modelPlaced = 0;
@@ -610,11 +620,11 @@ async function bootstrapModel(): Promise<void> {
   // `?catalogpose=1` forces the legacy path for side-by-side comparison: no
   // model, and the catalogue places content from its own pose.
   if (new URLSearchParams(location.search).has('catalogpose')) {
-    lastModel = { entities: [], relationships: [] };
+    lastModel = { entities: [] };
     return;
   }
 
-  const model = await bridgeModelSnapshot();
+  const model = { entities: await bindingEntities() };
   lastModel = model;
   if (!model.entities.length) {
     // No model layer publishing is not an error; it is an empty world, and
@@ -687,8 +697,7 @@ async function bootstrapModel(): Promise<void> {
     ? `basis=${[...basisFilter.wanted].join(',')} — ${plan.hidden} hidden`
     : '';
   refreshItemCount();
-  appLog(`model:loaded ${modelPlaced} entities, ${model.relationships.length} ` +
-         `relationships` +
+  appLog(`model:loaded ${modelPlaced} entities over N.3` +
          (plan.hidden ? `; ${plan.hidden} hidden by basis filter` : ''));
   connectModelStream();
 }
@@ -727,7 +736,7 @@ async function handleDiscover() {
   if (lastModel === null) {
     await bootstrapModel();
   }
-  const model = lastModel || { entities: [], relationships: [] };
+  const model = lastModel || { entities: [] };
 
   const basisFilter = parseBasisFilter(
     new URLSearchParams(location.search).get('basis'));
@@ -756,80 +765,54 @@ async function handleDiscover() {
  * has been kept at.
  */
 function connectModelStream() {
-  if (modelSocket || !bridgeActive) {
+  if (modelUnsubscribe || !bridgeActive) {
     return;
   }
-  const wsUrl = `${wsUrlFromBridgeUrl(BRIDGE_URL)}/ws`;
-  try {
-    modelSocket = new WebSocket(wsUrl);
-  } catch (error) {
-    appLog(`model:ws failed (${String(error)})`);
-    modelSocket = null;
-    return;
-  }
-  modelSocket.onopen = () => {
-    modelSocket?.send(JSON.stringify({
-      type: 'subscribe', id: 'model', pattern: 'spatialdds/model/*'
-    }));
-    appLog('model:ws watching spatialdds/model/*');
-  };
-  modelSocket.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data as string) as {
-        type?: string; msg_type?: string; payload?: ModelEntity;
-      };
-      if (msg.type !== 'data') {
-        return;
+  // One socket per resource behind the multiplexer in spatialdds_binding.ts.
+  // This used to open one socket and ask for `pattern: 'spatialdds/model/*'`,
+  // which N.5 has no equivalent for: a subscription is reached at a
+  // resource's own URL and replays that resource's latched set. The
+  // translation lives in the binding client so this function stays about
+  // what the scene does with an event.
+  modelUnsubscribe = subscribeModel({
+    onStatus: (line) => appLog(line),
+
+    onReplayComplete: (lane, replayed) =>
+      appLog(`model:${lane} replayed ${replayed} latched sample(s), now live`),
+
+    onRemoved: (entityId) => {
+      const removed = removeModelEntity(entityId);
+      if (removed) {
+        modelPlaced = Math.max(0, modelPlaced - 1);
       }
-      // The entity is gone. The bridge sends this under its own type because
-      // a dispose carries no sample; see the bridge's _ModelPump.
-      if (msg.msg_type === 'oarc.model_entity_disposed') {
-        const goneId = (msg.payload as { entity_id?: string } | undefined)?.entity_id;
-        if (goneId) {
-          const removed = removeModelEntity(goneId);
-          if (removed) {
-            modelPlaced = Math.max(0, modelPlaced - 1);
-          }
-          refreshItemCount();
-          appLog(`model:disposed ${goneId} — removed from the scene`);
-        }
-        return;
-      }
-      // The tempo lane: a bare pose for something already on screen. It
-      // carries no identity, type or extent, because none of those changed --
-      // which is the whole reason it exists as a separate message.
-      if (msg.msg_type === 'oarc.model_pose') {
-        const fast = msg.payload as unknown as
-          { entity_id?: string; pose?: { t: number[]; q: number[] } };
-        if (fast?.entity_id && fast.pose) {
-          applyFastPose(fast.entity_id, fast.pose);
-        }
-        return;
-      }
-      if (msg.msg_type !== 'oarc.model_entity') {
-        return;
-      }
-      const entity = msg.payload;
+      refreshItemCount();
+      appLog(`model:disposed ${entityId} — removed from the scene`);
+    },
+
+    // The tempo lane: a bare pose for something already on screen. It carries
+    // no identity, type or extent because none of those changed, which is the
+    // whole reason it is a separate resource.
+    onPose: (entityId, pose) => applyFastPose(entityId, pose),
+
+    onEntity: (entity) => {
       if (!entity?.entity_id) {
         return;
       }
-
       // A tombstone: the last thing the entity says, and the only place the
-      // reason is carried. It is logged before the dispose that follows,
-      // because after the dispose there is nothing left to ask.
+      // reason is carried. Logged before the dispose that follows it, because
+      // after the dispose there is nothing left to ask.
       if (entity.state === 'RETIRED') {
         appLog(`model:retired ${entity.entity_id} — ` +
                `${entity.state_reason || 'no reason given'}`);
         const marker = viewer?.entities.getById(entity.entity_id);
         if (marker?.label) {
-          // Say it on the map too, for the beat before it disappears.
           marker.label.text = new Cesium.ConstantProperty(
             `${displayName(entity)} — retired`);
         }
         return;
       }
-      // The filter applies to updates too, and says so rather than relying
-      // on `known` being absent for a hidden entity. That happens to be true
+      // The filter applies to updates too, and says so rather than relying on
+      // `known` being absent for a hidden entity. That happens to be true
       // today -- hidden entities were never drawn, so there is nothing to
       // move -- but it is an accident of the guard below, and a filter whose
       // enforcement is accidental leaks the first time the guard changes.
@@ -849,11 +832,8 @@ function connectModelStream() {
       moveItemEntity(item);
       appLog(`model:moved ${entity.entity_id} -> ` +
              `${item.geopose.lat_deg.toFixed(6)}, ${item.geopose.lon_deg.toFixed(6)}`);
-    } catch {
-      // A malformed frame is not worth tearing the socket down for.
     }
-  };
-  modelSocket.onclose = () => { modelSocket = null; };
+  });
 }
 
 /**
@@ -963,15 +943,24 @@ async function sendRobotTo(ecef: Cesium.Cartesian3): Promise<void> {
     return;
   }
   const [x, y, z] = local;
-  try {
-    await bridgeCommand('goto', ROBOT_ENTITY_ID,
-                        { t: [x, y, z], q: [0, 0, 0, 1] });
-    // What was asked, not what happened: the robot bridge decides whether it
-    // can take the goal, and the answer arrives as the robot moving.
-    appLog(`robot:goto asked (${x.toFixed(2)}, ${y.toFixed(2)}) — ` +
-           `watch the model for whether it was accepted`);
-  } catch (error) {
-    appLog(`robot:goto failed (${String(error)})`);
+  if (!canCommand()) {
+    appLog('robot:send — no VITE_SPATIALDDS_BINDING_TOKEN. Reading the venue ' +
+           'needs nothing; driving it is operator-scoped, so a command needs ' +
+           'the bridge\'s token');
+    return;
+  }
+  // N.6, and a decline is an answer rather than an exception: 202 when the
+  // bridge took the command onto the bus, 409 with a reason when it would
+  // not. Both are reported, because M.1 makes a refusal a first-class
+  // outcome and silence would be the absence it exists to replace.
+  const outcome = await bindingCommand('goto', ROBOT_ENTITY_ID,
+                                       { t: [x, y, z], q: [0, 0, 0, 1] },
+                                       'tapped in the browser');
+  if (outcome.accepted) {
+    appLog(`robot:goto accepted (${x.toFixed(2)}, ${y.toFixed(2)}) — ` +
+           `${outcome.detail}`);
+  } else {
+    appLog(`robot:goto ${outcome.status} — ${outcome.detail}`);
   }
 }
 
@@ -1028,7 +1017,8 @@ function applyFastPose(entityId: string, pose: { t: number[]; q: number[] }) {
   // traffic itself for anyone who wants it.
   if (!tempoAnnounced.has(entityId)) {
     tempoAnnounced.add(entityId);
-    appLog(`model:tempo ${entityId} — following ${'spatialdds/model/pose/v1'}`);
+    appLog(`model:tempo ${entityId} — following ` +
+           `spatialdds/${SCENE}/world/model_pose/v1`);
   }
 }
 
@@ -1475,13 +1465,19 @@ const DDS_OVERLAY_PATTERNS = [
   'spatialdds/*/discovery/announce/v1',  // services arriving and departing
   'spatialdds/vps/*',                    // localize request and reply
   'spatialdds/catalog/*',                // content query and reply
-  // The world model lanes. Nothing appears here at start-up even though the
-  // model is already on the bus: both topics are latched, so the seed was
-  // delivered to the bridge's reader when *it* joined, and a browser opening
-  // later is a new subscriber to the bridge, not to DDS. What shows up here
-  // is what crosses the bus while you are watching -- an entity republished
-  // by scripts/move_duck.py, for instance.
-  'spatialdds/model/*'
+  // The world model lanes, scene-scoped since the 1.8 migration. Nothing
+  // appears here at start-up even though the model is already on the bus: the
+  // entity lane is latched, so the seed was delivered to the bridge's reader
+  // when *it* joined, and a browser opening later is a new subscriber to the
+  // bridge, not to DDS. What shows up here is what crosses the bus while you
+  // are watching -- an entity republished by scripts/move_duck.py, for
+  // instance.
+  //
+  // This is the *overlay*, which is the AR demo's raw-envelope firehose on
+  // the bridge's own `/ws` and keeps its pattern subscribe. The model's own
+  // lanes are N.5 sockets now and do not come through here; see
+  // connectModelStream.
+  `spatialdds/${SCENE}/world/*`
 ];
 
 function connectDdsOverlay() {

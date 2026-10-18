@@ -26,13 +26,24 @@
  * multiplexer that closes that gap on this side: two sockets in, one typed
  * callback interface out, so the rest of the app does not have to learn N.5.
  *
- * **It needs a credential.** The binding serves `spatial.owm.Entity` as
- * `operator-scoped` per N.4, which is the binding's ruling about site data
- * and not this demo's preference. The old `/v1/model` was unauthenticated, so
- * the rewiring inherits a token the custom surface never had. It comes from
- * `VITE_SPATIALDDS_BINDING_TOKEN`; with no token the model lane is simply
- * absent and the app falls back to catalogue placement exactly as it does
- * when no bridge is running.
+ * **Reading needs no credential; commanding does.** The bridge classifies
+ * this venue's model lanes `public-cacheable` --- N.4 asks an endpoint to
+ * classify by what a resource *describes*, and these describe a fountain, a
+ * pond, declared bounds, a frame, a simulated robot and three rubber ducks.
+ * The command lane stays `operator-scoped`, because what it describes is an
+ * instruction: reading the venue and driving it are different questions.
+ *
+ * That split is what makes this module possible at all. An operator-scoped
+ * response carries `no-store`, `Vary: Authorization` and **no**
+ * `Access-Control-Allow-Origin`, so a page on :5173 cannot read :8089 even
+ * holding a valid token; and a browser cannot put a credential on a
+ * WebSocket handshake, which N.4 requires and forbids the alternatives to.
+ * Both are measured in `docs/browser-credential-finding.md`, filed as 1.9
+ * material because reclassifying only helps where the data is public.
+ *
+ * So state and live need nothing. `VITE_SPATIALDDS_BINDING_TOKEN` is needed
+ * only to send a command, and without it Send Robot says so rather than
+ * failing quietly.
  */
 import type { ModelEntity } from './spatialdds_bridge';
 
@@ -78,8 +89,8 @@ function authHeaders(): Record<string, string> {
   return BINDING_TOKEN ? { Authorization: `Bearer ${BINDING_TOKEN}` } : {};
 }
 
-/** Whether a credential is configured at all. */
-export function bindingConfigured(): boolean {
+/** Whether a credential is configured --- needed only for commands. */
+export function canCommand(): boolean {
   return Boolean(BINDING_TOKEN);
 }
 
@@ -189,13 +200,6 @@ export type ModelHandlers = {
  * Returns a function that closes both sockets and stops reconnecting.
  */
 export function subscribeModel(handlers: ModelHandlers): () => void {
-  if (!bindingConfigured()) {
-    handlers.onStatus(
-      'model: no VITE_SPATIALDDS_BINDING_TOKEN, so the model lane is absent — ' +
-      'the binding serves entities operator-scoped per N.4');
-    return () => undefined;
-  }
-
   const sockets: WebSocket[] = [];
   let stopped = false;
 
@@ -204,24 +208,15 @@ export function subscribeModel(handlers: ModelHandlers): () => void {
       return;
     }
     const wsBase = BINDING_URL.replace(/^http/, 'ws');
-    // **This cannot authenticate, and that is a reported finding rather than
-    // a bug here.** N.4 requires the credential in the `Authorization`
-    // header "for both GET and the WebSocket handshake" and forbids a query
-    // parameter; the browser WebSocket API cannot set any header. So an
-    // operator-scoped N.5 resource has no conformant path from a browser,
-    // and the gateway's `_authorized` reads `Authorization` and nothing
-    // else. The subprotocol below is the usual workaround -- it is a header,
-    // `Sec-WebSocket-Protocol`, so it does not breach N.4's query-parameter
-    // rule -- but the binding does not read it, so this socket is refused
-    // with 401 until the specification blesses a mechanism and the gateway
-    // implements it. See docs/browser-credential-finding.md.
-    //
-    // It is sent anyway rather than omitted: when the mechanism does land,
-    // this is the line that stops being inert, and a client that sent
-    // nothing would look like it had never tried.
+    // No credential here, and none is possible: a browser cannot set a
+    // header on a WebSocket handshake, and N.4 requires the credential in a
+    // header and forbids the alternatives. These lanes are reachable only
+    // because the bridge classifies them public --- see
+    // docs/browser-credential-finding.md for the measurement, and the 1.9
+    // question it leaves open for lanes that must stay gated.
     let ws: WebSocket;
     try {
-      ws = new WebSocket(`${wsBase}${path}`, [`bearer.${BINDING_TOKEN}`]);
+      ws = new WebSocket(`${wsBase}${path}`);
     } catch (e) {
       handlers.onStatus(`model:${lane} socket failed (${String(e)})`);
       return;
