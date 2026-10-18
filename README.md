@@ -46,8 +46,15 @@ says so member by member.
 ```bash
 SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_POND_WATCH=1 ./run_bridge_server_docker.sh
 scripts/run_robot_tier.sh              # second terminal: nav2 plans the routes
-cd web && npm run dev                  # → http://localhost:5173/
+cd web && VITE_SPATIALDDS_BINDING_URL=http://localhost:5173 \
+          VITE_SPATIALDDS_BINDING_TOKEN=bridge-session npm run dev
 ```
+
+State and live come over the 1.8 web binding on `:8089`, which the first
+command starts alongside the bridge. The two variables point the client at
+this dev server's proxy so `Send Robot` can carry its credential same-origin —
+[`docs/ismar-owm.md`](docs/ismar-owm.md) explains why, and plain
+`npm run dev` still shows the venue live without them.
 
 The screenshot above is that view. **[Full recipe →](docs/ismar-owm.md)** —
 including the ROS 2 robot tier, which is what makes the keep-out real.

@@ -15,37 +15,29 @@ field-level migration census, [`docs/owm-1.8-census.md`](owm-1.8-census.md).
 
 ---
 
-## Staged migration: what is live and what is pinned
+## Migration: all three limbs are live
 
-This page describes the demo whole, and two of its three limbs are pinned at
-the pre-1.8 types while their own batches are pending. Read this before the
-instructions below, which describe the demo as it will be and as it was, but
-not as it is today.
+The staged migration is finished. This page described two of three limbs as
+pinned at the pre-1.8 types from 2026-10-17 until 2026-10-18, and told the
+reader that steps 2 and 3 had "nothing to show today" --- which was true when
+written and is not now.
 
 | limb | state |
 | --- | --- |
 | the venue — model service, ducks, gnome, derived pond, operator scripts | **migrated**, `spatial.owm/0.1` on scene-scoped topics |
-| the web bridge and this browser view | **pinned pre-1.8**, awaiting the bridge batch |
-| the robot lane — `robot_bridge`, `robot_tier` | **pinned pre-1.8**, awaiting its own batch |
+| the robot lane — `robot_bridge`, `robot_tier` | **migrated** (`92d9232`), reading `TOPIC_MODEL_*_V1` directly |
+| the web bridge and this browser view | **migrated** (`f5f4a6e`, `6c578ac`): state over Appendix N.3, live over N.5, commands over N.6 |
 
-The pinned lanes read the pre-1.8 topic names explicitly
-(`TOPIC_MODEL_ENTITY_V1_PRE18` and its siblings), which nothing publishes any
-more. So **steps 2 and 3 below have nothing to show today**: the browser gets
-an empty model and falls back to catalogue placement, and `Send Robot` has no
-command lane to reach. That is the staged plan rather than breakage, and
-`docs/world-model.md` says the same thing from the design side.
+The pre-1.8 topic names and the `_PRE18` constants are gone, with the
+`_ModelPump` and `/v1/model` surface that read them. The browser now talks to
+two processes: `server.py` on `:8088` for the AR demo's routes, and
+`binding.py` on `:8089` for the model. **Step 1 starts both** --- the launcher
+brings the binding up with the model layer, since without the venue there is
+nothing for it to serve.
 
-Step 1 works as written. What can be demonstrated in the meantime is the venue
-read over the web binding, which is a stronger demonstration anyway because
-nothing in it is this repository's code:
+Field-level record: [`docs/owm-1.8-census.md`](owm-1.8-census.md) for the
+venue, [`docs/bridge-1.8-census.md`](bridge-1.8-census.md) for the bridge.
 
-```bash
-docker run --rm -v "$PWD:/app" -w /app cyclonedds-python \\
-    bash tools/capture_owm_session.sh                     # capture a session
-python3 ../spatialdds-web/tools/run_gateway.py \
-    --mcap recordings/owm-littlefield.mcap --port 8831    # serve it
-python3 examples/list_owm_entities.py                     # read it
-```
 
 The migration's field-level account is [`owm-1.8-census.md`](owm-1.8-census.md);
 its acceptance evidence is
@@ -64,18 +56,34 @@ SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_POND_WATCH=1 ./run_bridge_server_docker.sh
 scripts/run_robot_tier.sh
 
 # 3 — the browser
-cd web && npm install && npm run dev        # → http://localhost:5173/
+cd web && npm install
+VITE_SPATIALDDS_BINDING_URL=http://localhost:5173 \
+VITE_SPATIALDDS_BINDING_TOKEN=bridge-session npm run dev   # → :5173
 ```
+
+**Those two variables are what make `Send Robot` work**, and the reason is
+not obvious. A command is `operator-scoped`, so it carries a credential;
+`Authorization` is not CORS-safelisted, so a cross-origin POST preflights; and
+the binding routes no `OPTIONS`. A page on `:5173` talking straight to `:8089`
+therefore cannot command it at all. Pointing the client at `:5173` sends the
+request through this dev server's proxy instead, same-origin, where no
+preflight happens --- `server.proxy` in `web/vite.config.ts`, `ws: true` for
+N.5's sockets. Reading the venue needs neither variable: those lanes are
+public and the client deliberately sends no credential on them.
+
+Plain `npm run dev` still shows the whole venue, live and moving. Only
+commanding is blocked, and `tools/post_goto.py` drives the robot from a
+terminal in that case. The gap is filed at
+[`docs/browser-credential-finding.md`](browser-credential-finding.md),
+blocker B, and queued as a gateway fix for `spatialdds-web`.
 
 The tier takes about 20 s to bring nav2's lifecycle nodes to active. It shares
 the bridge container's network namespace, so the bridge has to be up first.
 
 ### What to point at
 
-Every item here reads the model through the browser, so all of it awaits the
-bridge batch. Kept because it is what the demo demonstrates, and because the
-measured numbers in it are the acceptance record for the robot tier that the
-later batch has to reproduce.
+Every item here reads the model through the browser, over the web binding.
+The measured numbers are the acceptance record for the robot tier.
 
 Click any entity to open its panel — every field there is read off the entity,
 nothing is authored by the client.
