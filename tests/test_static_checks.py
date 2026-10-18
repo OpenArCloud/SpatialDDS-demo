@@ -16,6 +16,7 @@ Two real bugs sat in this repo for six days, both invisible to a green suite:
 Neither needs a bus, a broker or ROS 2 to detect. Both take milliseconds.
 """
 
+import json
 import os
 import pathlib
 import re
@@ -145,12 +146,36 @@ class CdkStackSynthesises(unittest.TestCase):
         env = dict(os.environ,
                    CDK_DEFAULT_ACCOUNT=os.environ.get("CDK_DEFAULT_ACCOUNT", "000000000000"),
                    CDK_DEFAULT_REGION=os.environ.get("CDK_DEFAULT_REGION", "us-east-1"))
+
+        # Which config to synthesise, and why the example is a *better*
+        # subject than a skip.
+        #
+        # `deploy/aws/config.yaml` is gitignored -- it holds one operator's
+        # account, region and VPC -- so this test passed on the machine that
+        # had one and **could not pass on a fresh clone at all**, which a
+        # clone into a tmp dir found on 2026-10-18. The app is right to refuse
+        # the example on a real deploy; a test is not a deploy.
+        #
+        # Synthesising the example when there is no real config is strictly
+        # more useful than skipping: `config.yaml.example` is the file every
+        # new deployer copies, so a broken one breaks the first deploy anybody
+        # attempts, and nothing else here reads it. The app takes the path as
+        # CDK context, which reaches a bare `python3 app.py` through
+        # CDK_CONTEXT_JSON.
+        aws_dir = REPO / "deploy" / "aws"
+        config = aws_dir / "config.yaml"
+        if not config.is_file():
+            config = aws_dir / "config.yaml.example"
+            if not config.is_file():
+                self.skipTest("neither config.yaml nor config.yaml.example")
+            env["CDK_CONTEXT_JSON"] = json.dumps({"config_file": str(config)})
         result = subprocess.run([sys.executable, "app.py"], cwd=cdk_dir,
                                 capture_output=True, text=True, timeout=180,
                                 env=env)
         self.assertEqual(
             result.returncode, 0,
-            f"cdk app failed to synthesise:\n{result.stderr[-2000:]}")
+            f"cdk app failed to synthesise with {config.name}:\n"
+            f"{result.stderr[-2000:]}")
 
 
 class EntryPointsAreImportable(unittest.TestCase):

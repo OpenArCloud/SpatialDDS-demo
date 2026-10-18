@@ -28,7 +28,10 @@ test('live 1.7 bridge: localize + discover against real DDS', async ({ page, req
 
   const consoleErrors: string[] = [];
   page.on('console', (msg) => {
-    if (msg.type() === 'error') consoleErrors.push(msg.text());
+    if (msg.type() === 'error') {
+      const url = msg.location()?.url || '';
+      consoleErrors.push(url ? `${msg.text()} [${url}]` : msg.text());
+    }
   });
   page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
 

@@ -8,8 +8,21 @@ import { expect, test } from '@playwright/test';
 test('map aligner loads a cloud and emits a transform', async ({ page, request }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
 
+  // Is the cloud actually there? `ok()` cannot answer that.
+  //
+  // The clouds are installed locally and git-ignored, so this guard exists to
+  // skip on a checkout without them --- and it did not: both the dev server
+  // and `vite preview` answer an unknown path with **200 and the SPA's
+  // index.html**, so `near.ok()` is true for a file that does not exist. The
+  // test then parsed HTML as a point cloud and *failed* where it was written
+  // to skip, which a fresh clone found on 2026-10-18.
+  //
+  // So ask the property instead of the status: a PLY file begins with the
+  // magic word `ply`. An HTML fallback does not.
   const near = await request.get('/aligner/fountain2_near.ply').catch(() => null);
-  test.skip(!near || !near.ok(), 'no aligner point cloud installed');
+  const isPly = Boolean(near && near.ok()
+    && (await near.text()).slice(0, 3).toLowerCase() === 'ply');
+  test.skip(!isPly, 'no aligner point cloud installed');
 
   const errors: string[] = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

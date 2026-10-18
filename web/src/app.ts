@@ -1695,11 +1695,27 @@ function enableFpsControls(activeViewer: Cesium.Viewer) {
 }
 
 async function loadSceneAssets(activeViewer: Cesium.Viewer) {
-  try {
-    const buildings = await Cesium.createOsmBuildingsAsync();
-    activeViewer.scene.primitives.add(buildings);
-  } catch (error) {
-    console.warn('OSM Buildings unavailable:', error);
+  // OSM Buildings is an *Ion* asset, so it needs the Ion token like anything
+  // else there. This asked for it unconditionally, and without a token the
+  // request is `api.cesium.com/v1/assets/96188/endpoint?access_token=` ->
+  // **401**, which the browser logs as a console error. The `catch` below
+  // only sees the rejected promise; it cannot unlog the network failure.
+  //
+  // That made a fresh clone fail `live-bridge.spec.ts`, which asserts the app
+  // logs no console errors --- a test about the DDS bridge, failing on an
+  // absent Cesium credential. The guard already existed a few hundred lines
+  // up, where it picks OpenStreetMap imagery; it simply was not applied here.
+  // The README says this token *enables* buildings and terrain, so not having
+  // one has to mean "without them", not "with an error".
+  if (!HAS_ION_TOKEN) {
+    appLog('cesium: no Ion token — skipping OSM Buildings (an Ion asset)');
+  } else {
+    try {
+      const buildings = await Cesium.createOsmBuildingsAsync();
+      activeViewer.scene.primitives.add(buildings);
+    } catch (error) {
+      console.warn('OSM Buildings unavailable:', error);
+    }
   }
 
   // No world terrain, deliberately.
