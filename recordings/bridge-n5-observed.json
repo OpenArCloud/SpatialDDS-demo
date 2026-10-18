@@ -1,0 +1,37 @@
+{
+  "entity": {
+    "by_event": {
+      "end_of_replay": 1,
+      "sample": 176
+    },
+    "by_key": {
+      "ent:duck:catalog-pose": 29,
+      "ent:duck:east": 29,
+      "ent:duck:west": 29,
+      "ent:fountain:littlefield": 1,
+      "ent:gnome:visitor": 1,
+      "ent:pond:littlefield": 1,
+      "ent:pond:observed": 15,
+      "ent:robot:tb3": 70,
+      "ent:shallows:littlefield": 1
+    },
+    "end_of_replay_markers": 1,
+    "events": 177,
+    "replayed_count_claimed": 9
+  },
+  "model_pose": {
+    "by_event": {
+      "end_of_replay": 1,
+      "sample": 751
+    },
+    "by_key": {
+      "ent:duck:catalog-pose": 136,
+      "ent:duck:east": 136,
+      "ent:duck:west": 136,
+      "ent:robot:tb3": 343
+    },
+    "end_of_replay_markers": 1,
+    "events": 752,
+    "replayed_count_claimed": 0
+  }
+}

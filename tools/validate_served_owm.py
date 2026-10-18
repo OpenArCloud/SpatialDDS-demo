@@ -53,7 +53,8 @@ def _get(url: str, token: str | None, accept: str = "application/json"):
 
 
 async def _subscribe(url: str, token: str | None,
-                     settle: float = 2.0) -> list[dict]:
+                     settle: float = 2.0,
+                     window: float | None = None) -> list[dict]:
     """Every event on the N.5 subscription, replay and live both.
 
     A recording's live events are sent as fast as the socket takes them and
@@ -61,17 +62,34 @@ async def _subscribe(url: str, token: str | None,
     than a close. `settle` is how long a silence has to last before this stops
     reading; the marker tells us the replay is complete, nothing tells us the
     live window is.
+
+    **Against a live endpoint a silence means nothing.** A venue whose ducks
+    move six times a second still has gaps, and a lane that is quiet right now
+    may be busy in a second. Run against a live bridge with the default
+    settle, this reported zero payloads on two lanes that an N.5 subscriber
+    had just observed 323 samples on -- a count that was wrong rather than
+    small. So `window` reads for a fixed duration instead of stopping on
+    silence, and the report says which bound it used: against a live backend
+    the count is a **floor, not a total**, and the difference has to be on the
+    page.
     """
     events: list[dict] = []
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     ws_url = url.replace("http://", "ws://").replace("https://", "wss://")
+    deadline = None if window is None else (
+        asyncio.get_event_loop().time() + window)
     async with aiohttp.ClientSession(headers=headers) as session:
         async with session.ws_connect(ws_url, heartbeat=None) as ws:
             while True:
+                if deadline is not None and \
+                        asyncio.get_event_loop().time() >= deadline:
+                    break
                 try:
                     msg = await asyncio.wait_for(ws.receive(), timeout=settle)
                 except asyncio.TimeoutError:
-                    break
+                    if deadline is None:
+                        break
+                    continue              # a live lane may simply be quiet
                 if msg.type is not aiohttp.WSMsgType.TEXT:
                     break
                 events.append(json.loads(msg.data))
@@ -86,6 +104,12 @@ def main() -> int:
     ap.add_argument("--token", default=None)
     ap.add_argument("--out", type=Path, default=None,
                     help="write the report here as well as to stdout")
+    ap.add_argument("--window", type=float, default=None,
+                    help="read each lane for this many seconds instead of "
+                         "stopping at the first silence. Required against a "
+                         "live endpoint, where a quiet lane is not a finished "
+                         "one; with it the counts are a floor, not a total, "
+                         "and the report says so.")
     args = ap.parse_args()
     base = args.endpoint.rstrip("/")
 
@@ -132,7 +156,7 @@ def main() -> int:
 
         # The subscription, read as a consumer reads it: the latched replay,
         # the marker, then every live event the recording carried.
-        events = asyncio.run(_subscribe(url, args.token))
+        events = asyncio.run(_subscribe(url, args.token, window=args.window))
         markers = [e for e in events if e.get("event") == "end_of_replay"]
         if len(markers) != 1:
             failures.append(f"{fqn}: {len(markers)} end_of_replay markers, "
@@ -158,7 +182,12 @@ def main() -> int:
                      f"({replayed} replayed, {n_ok - replayed} live)")
 
     total = sum(v for k, v in counts.items() if not k.endswith(":non-sample"))
-    report = ["validated against the endpoint's own published schemas", ""]
+    bound = (f"each lane read for {args.window:g}s (a live endpoint: these "
+             f"counts are a FLOOR, not a total)" if args.window else
+             "each lane read to its first silence (a recording: the counts "
+             "are the whole file)")
+    report = ["validated against the endpoint's own published schemas",
+              f"  bound: {bound}", ""]
     report += lines
     non = {k: v for k, v in counts.items() if k.endswith(":non-sample")}
     if non:
