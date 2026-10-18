@@ -1,4 +1,10 @@
-# For the spec queue: a browser cannot subscribe to an operator-scoped N.5 resource
+# A browser cannot reach an operator-scoped resource: two blockers, two queues
+
+*(Filed under `browser-credential-finding.md`. The title said "for the spec
+queue" and "N.5" until 2026-10-18, when the second blocker turned out to be
+an HTTP-side CORS problem the implementation can fix without the
+specification. The filename is kept because the client module and the bridge
+census both cite it.)*
 
 **Where this belongs.** Appendix N.4, and the web-binding queue in
 `SpatialDDS-spec`. Written here because the finding comes from the browser
@@ -30,17 +36,50 @@ that is a platform constraint, not an implementation gap. So for an
 `operator-scoped` resource, N.5's subscription is reachable by every client
 *except* the one the web binding most obviously exists for.
 
-**And there is a second blocker, which the first measurement missed.** An
-operator-scoped response carries `Cache-Control: no-store` and
-`Vary: Authorization` and **no `Access-Control-Allow-Origin`** — correctly, by
-the same decision that gated it, since a browser must not be invited to
-attach a credential ambiently cross-origin. So a page on `:5173` could not
-read `:8089` *even holding a valid token*. The table below was measured with
-`aiohttp`, which does not enforce CORS, so it understated the problem: the
-claim "fetch() can set a header, so N.3 and N.6 work from a browser" was
-wrong for the cross-origin case, which is the only case a separate Vite dev
-server has. Corrected here rather than quietly: operator-scoped is
-unreachable from a browser on two counts, not one.
+**And there is a second blocker, which the first measurement missed — but it
+is a different kind of problem, and the distinction is the point of this
+section.** Operator-scoped is unreachable from a browser on two counts:
+
+| | blocker | kind |
+| --- | --- | --- |
+| **A** | a browser cannot put a credential on a WebSocket handshake, and N.4 requires a header and forbids the alternatives | **specification-level** |
+| **B** | operator-scoped HTTP responses are unreachable cross-origin: the CORS preflight is unanswered and the response carries no `Access-Control-Allow-Origin` | **implementation-remediable, no spec change** |
+
+Blocker **B** measured on the live bridge:
+
+```
+OPTIONS /…/world/model_command/v1
+  Origin: http://localhost:5173
+  Access-Control-Request-Method: GET
+  Access-Control-Request-Headers: authorization
+→ HTTP/1.1 405 Method Not Allowed
+  Allow: GET,HEAD,POST
+```
+
+An `Authorization` header is not CORS-safelisted, so a cross-origin `fetch`
+carrying one *preflights* — and the gateway routes no `OPTIONS`, so the
+preflight 405s and the GET is never attempted. Beyond that, the
+operator-scoped branch of `_cache_headers` sets `no-store` and
+`Vary: Authorization` and no `Access-Control-Allow-Origin` at all.
+
+So the earlier claim here — "fetch() can set a header, so N.3 and N.6 work
+from a browser" — was wrong for the cross-origin case, which is the only case
+a separate Vite dev server has. It was measured with `aiohttp`, which does not
+enforce CORS. Corrected rather than quietly dropped.
+
+**B needs no specification change and should not be asked of one.** A gateway
+may answer the preflight, permit the `Authorization` request header, and echo
+the requesting `Origin` on an authorized operator-scoped response with
+`Vary: Origin`. That weakens no gate: the credential is still required, and
+the response stays `no-store`. Echoing the origin rather than sending `*` is
+the conservative form and keeps the header out of any shared-cache
+interaction — which matters least here, since the resource is uncacheable
+anyway, and is still the right default. **This half belongs on the
+`spatialdds-web` queue as a candidate gateway improvement, not on the spec
+queue.**
+
+Everything below about credential carriage is blocker **A**, which is the
+specification question.
 
 ## Measured against the live bridge
 
@@ -50,15 +89,16 @@ N.5 WS   with subprotocol only     : 401  <- a browser cannot do better
 N.5 WS   with Authorization header : connected
 ```
 
-Those rows isolate the handshake: `aiohttp` can set a header and connects, a
-browser cannot and gets 401. The gateway's `_authorized` reads `Authorization`
-and nothing else, which is exactly what N.4 says to do — there is no
-implementation defect in it. Read them together with the CORS paragraph
-above, which the rows do not show because the client measuring them does not
-enforce CORS.
+Those rows isolate blocker **A**, the handshake: `aiohttp` can set a header
+and connects, a browser cannot and gets 401. The gateway's `_authorized`
+reads `Authorization` and nothing else, which is exactly what N.4 says to do
+— there is no implementation defect in it, which is why this half is a
+specification question and not a bug report.
 
-So for an operator-scoped lane the browser is refused twice: no credential on
-the handshake, and no CORS on the HTTP responses it would have needed first.
+The rows do not show blocker **B**, because the client measuring them does
+not enforce CORS. Both are needed for the whole picture: a browser is refused
+at the preflight before it reaches the GET, and refused at the handshake if it
+got that far.
 
 ## Three ways out, named rather than numbered
 
@@ -149,3 +189,11 @@ for exactly the duration the rule exists to prevent.
 This is 1.9 material rather than an erratum. N.4 is not self-contradictory —
 it is browser-hostile, which is a different and more interesting problem, and
 the spec agent characterizes it while this repository files it.
+
+**Routing, so neither half lands in the wrong queue:** blocker **A** is the
+spec agent's to characterize (N.4's credential carriage, with subprotocol as
+the likely answer). Blocker **B** is a candidate improvement for the
+`spatialdds-web` gateway — answer the preflight, allow the `Authorization`
+header, echo the `Origin` with `Vary: Origin` — and asking the specification
+for it would be asking the wrong body for a thing the implementation can
+simply do.
