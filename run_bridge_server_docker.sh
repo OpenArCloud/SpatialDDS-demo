@@ -28,6 +28,16 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# SPATIALDDS_MOCK_VPS — the demo's own mock VPS, on by default because it is
+# what makes the AR demo self-contained. Set it to 0 to run against a real
+# localization service instead: selection is by discovery, so the demo needs
+# no other change — the page asks
+# `/.well-known/spatialdds/search?kind=VPS` and takes what answers. The flag
+# exists because "the mock never started" is a load-bearing condition rather
+# than a tidy one: with two VPS services announced, `bridgeFindService` takes
+# the first by service_id order, so which one serves the demo would be decided
+# by a sort. See docs/vps-selection-finding.md.
+
 # SPATIALDDS_ROBOT_SIM — the kinematic robot, for looking at the demo without
 # the nav2 tier. Off when the tier is running: it owns the same key, and two
 # writers would put one robot in two places. The bridge refuses rather than
@@ -58,6 +68,7 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
   -e SPATIALDDS_ROBOT_SIM="${SPATIALDDS_ROBOT_SIM:-0}" \
   -e SPATIALDDS_POND_WATCH="${SPATIALDDS_POND_WATCH:-0}" \
   -e SPATIALDDS_DUCK_MOVER="${SPATIALDDS_DUCK_MOVER:-1}" \
+  -e SPATIALDDS_MOCK_VPS="${SPATIALDDS_MOCK_VPS:-1}" \
   -e SPATIALDDS_VPS_SERVICE_ID="${SPATIALDDS_VPS_SERVICE_ID:-svc:vps:demo/austin-downtown}" \
   -e SPATIALDDS_VPS_SERVICE_NAME="${SPATIALDDS_VPS_SERVICE_NAME:-MockVPS-Austin}" \
   -e SPATIALDDS_DEMO_MANIFEST_URI="spatialdds://vps.example.com/zone:austin-downtown/manifest:vps" \
@@ -77,7 +88,9 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
     binding_log=\"\$BRIDGE_LOG_DIR/binding_\$BRIDGE_LOG_BTS.log\"; \
     bridge_log=\"\$BRIDGE_LOG_DIR/bridge_server_\$BRIDGE_LOG_BTS.log\"; \
     python3 -m pip install -r /app/requirements.txt -r /app/bridges/web_bridge/requirements.txt; \
-    python3 ar_demo/spatialdds_demo_server.py --detailed >\"\$vps_log\" 2>&1 &\
+    if [ \"\$SPATIALDDS_MOCK_VPS\" = \"1\" ]; then \
+      python3 ar_demo/spatialdds_demo_server.py --detailed >\"\$vps_log\" 2>&1 &\
+    fi; \
     python3 ar_demo/spatialdds_catalog_server.py --detailed >\"\$catalog_log\" 2>&1 &\
     if [ \"\$SPATIALDDS_MODEL_LAYER\" = \"1\" ]; then \
       python3 -m spatialdds_demo.model_service --quiet >\"\$model_log\" 2>&1 &\
