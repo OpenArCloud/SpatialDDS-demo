@@ -431,11 +431,57 @@ function addMarker(id: string, name: string, geopose: GeoPose, imageUrl: string,
  * the id. It took wrapping `entities.add` from inside the page to find out
  * that `ent:pond:observed` was being added twice.
  */
+/**
+ * How far away the venue's contents still mean anything.
+ *
+ * The page opens at `START_HEIGHT_M` --- 20,000 km, the whole globe --- and
+ * nothing here used to carry a distance condition, so three ducks, a
+ * TurtleBot, a gnome and a set of pond extents were drawn over Texas from
+ * orbit. A 0.3 m duck legible at continental scale is not a feature.
+ *
+ * Six kilometres keeps a wide aerial view of the campus working and stops
+ * there. The venue itself is about 30 m across, so this is two orders of
+ * magnitude of headroom rather than a tight crop.
+ */
+const VENUE_VISIBLE_RANGE_M = 6_000;
+
+/**
+ * What stays visible at any distance.
+ *
+ * The user marker is how someone finds the venue in the first place: scoping
+ * it to the venue's own range would hide the one thing that tells you where
+ * to zoom.
+ */
+const ALWAYS_VISIBLE_IDS = new Set(['user-location']);
+
+/**
+ * Cesium puts `distanceDisplayCondition` on each graphics object rather than
+ * on the entity, so it has to be applied per graphic. These are the kinds the
+ * demo actually constructs; the loop below skips any that are absent and
+ * never overwrites one a caller set deliberately.
+ */
+const DISTANCE_SCOPED_GRAPHICS = [
+  'billboard', 'label', 'box', 'model', 'point', 'polygon', 'polyline'
+] as const;
+
 function placeEntity(v: Cesium.Viewer,
                      options: Cesium.Entity.ConstructorOptions): Cesium.Entity {
   const id = String(options.id ?? '');
   if (id && v.entities.getById(id)) {
     v.entities.removeById(id);
+  }
+  // Applied here because this is the only `entities.add` in the page. A
+  // convention repeated at each construction site is a convention that will
+  // be missed at the next one.
+  if (!ALWAYS_VISIBLE_IDS.has(id)) {
+    for (const key of DISTANCE_SCOPED_GRAPHICS) {
+      const graphic = (options as Record<string, any>)[key];
+      if (graphic && typeof graphic === 'object'
+          && graphic.distanceDisplayCondition === undefined) {
+        graphic.distanceDisplayCondition =
+          new Cesium.DistanceDisplayCondition(0.0, VENUE_VISIBLE_RANGE_M);
+      }
+    }
   }
   return v.entities.add(options);
 }
