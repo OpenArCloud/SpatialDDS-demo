@@ -198,13 +198,44 @@ export function inContainer(name: string, command: string): string {
 }
 
 /**
- * Put the venue back the way it was seeded, and wait until it is.
+ * Put the venue back the way it was seeded — including its dynamics — and wait
+ * until it is.
  *
  * Every stack-driving test starts here rather than assuming what the last one
  * left behind. The wait is the important half: `--restore` returns as soon as
  * the request is sent, three hops before the bridge's cache agrees.
+ *
+ * **Quiesce, reset, assert, then restore the motion.** This asserted every
+ * duck within 1 cm of its seed pose while the stack's own duck mover was
+ * still running — `SPATIALDDS_DUCK_MOVER` defaults to 1 in
+ * run_bridge_server_docker.sh — so it could only succeed by sampling between
+ * two of the mover's steps. Measured mid-failure on 2026-10-18: a mover alive
+ * and the ducks 0.58, 2.10 and 4.12 m off seed. **Earlier green runs were won
+ * races**, usually won because some preceding spec had left the mover stopped.
+ * That is the honest epitaph for every pass this function used to report.
+ *
+ * A fixture that asserts positions while a writer it knows about keeps
+ * writing is not testing state, it is racing. So the mover is stopped first
+ * and started again afterwards **only if it was running when we arrived** —
+ * which keeps the mover's meaning intact for both spec families: the ones
+ * that assert where something *is* get stillness, and the ones that assert
+ * that something *moves* get their motion back. Restarting unconditionally
+ * would hand a mover to a stack launched without one.
+ *
+ * The alternative — the launcher not starting a mover for test runs — was
+ * considered and rejected: it changes what the stack *is*, and the motion
+ * assertions the retirement batch added exist precisely because the shipped
+ * stack moves.
+ *
+ * `startMover`'s default bounds and `duck_mover`'s own default are both
+ * `shallows`, so the restart reproduces what the launcher started rather than
+ * quietly substituting a different box.
  */
 export async function restoreVenue(request: any, name: string): Promise<void> {
+  const moverWasRunning = moverRunning(name);
+  if (moverWasRunning) {
+    stopMover(name);
+  }
   inContainer(name, 'python3 scripts/retire_entity.py --restore');
   inContainer(name, 'python3 scripts/move_duck.py --reset');
   await expect
@@ -235,6 +266,11 @@ export async function restoreVenue(request: any, name: string): Promise<void> {
       }
     }, { timeout: 30_000 })
     .toBe(true);
+
+  // The venue is quiet and correct; give it its motion back if it had any.
+  if (moverWasRunning) {
+    startMover(name);
+  }
 }
 
 // As seeded in spatialdds_demo/model_service.py.
@@ -297,6 +333,25 @@ export function moverRunning(name: string): boolean {
 }
 
 export function stopMover(name: string): void {
+  stopMoverNow(name);
+  // **Wait for it to actually be gone.** `pkill` returns as soon as the
+  // signal is sent, so `moverRunning` a few milliseconds later can still see
+  // the dying process — and a caller that reads "running" there draws the
+  // opposite conclusion from the truth. That bit `restoreVenue`: called from
+  // a `beforeEach` just after a `beforeAll` had stopped the mover, it saw one
+  // alive, recorded "was running", and **restarted a mover the suite had
+  // deliberately stopped**, defeating the file-level quiesce and failing a
+  // distance assertion two tests later.
+  //
+  // Bounded rather than unbounded: if the thing will not die in two seconds
+  // that is a finding, and the caller should see the state rather than hang.
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline && moverRunning(name)) {
+    execSync('sleep 0.1');
+  }
+}
+
+function stopMoverNow(name: string): void {
   try {
     // Anchored, and this matters more than it looks. The container's PID 1 is
     // the startup shell, whose command line *contains* the string
