@@ -1,0 +1,98 @@
+# The declared pond is a wall across the plaza, and two thirds of the lawn is one tap away from nowhere
+
+**Filed 2026-10-19, after "the robot refuses to move to the grass" was
+reported against the deployed demo for the third time. It is not a regression
+and not a nav defect: the keep-out refusal has behaved this way since
+`2bca874` (2026-09-30), and the kinematic tier declines by design. What had
+never been measured is how much of the venue that leaves reachable.**
+
+## The measurement
+
+`ent:pond:littlefield` is `DECLARED` with an axis-aligned extent of
+
+    x [ -1.50 ..  25.50]   y [-20.00 ..  -4.75]    27.00 x 15.25 m
+
+in a venue roughly 28 m wide. `ent:shallows:littlefield` adds a second
+declared box inside it. Those two are the whole keep-out --
+`KEEPOUT_BASES = ("DECLARED",)` -- and the rasteriser fills each box whole.
+
+So the keep-out is not an obstacle in the plaza. It is a **wall across the
+plaza**, from one edge to the other, 15 m deep.
+
+With the robot at its start position `ROBOT_START_XY = (17.0, -21.5)`, just
+south of the wall, and the kinematic tier's 1.2 m clearance applied as eight
+points on a circle:
+
+    185 of 553 legal cells are reachable in one tap  (33%)
+
+(Re-derived from `POND_MIN`/`POND_MAX`, `SHALLOWS_MIN`/`SHALLOWS_MAX`,
+`ROBOT_START_XY` and `CLEARANCE_M`, on a 1 m lattice over
+x [-6, 30], y [-26, 2] -- so it needs no running stack to reproduce, and it
+moves if any of those four constants does.)
+
+Everything north of the water -- the whole upper half of the venue, legal
+ground the robot is permitted to stand on -- is unreachable by a straight
+line, because every straight line to it crosses the declared box. That is the
+entire content of the complaint: the grass *is* legal, and one tap cannot get
+there.
+
+## It is a wall with a door
+
+The fountain's extent is `OBSERVED`, so it never becomes keep-out, and the
+ground off the plaza's west edge is therefore legal. Driven and verified, in
+three straight segments:
+
+    goto (-4, -23)   arrived after 34.5 s
+    goto (-4,   0)   arrived after 34.5 s
+    goto ( 8,   3)   arrived at (7.91, 2.98) after 19.5 s
+
+and back the same way to within 0.05 m of the start. So the north lawn is
+reachable; nothing is fenced off absolutely. nav2 finds that door on its own
+-- `plaza.py` already notes that the start position decides whether it rounds
+the west or the east end -- which is why the abandonment message points at
+`scripts/run_robot_tier.sh`.
+
+## What the fix is, and what it is not
+
+**Not the policy.** Admitting `OBSERVED` extents into the keep-out was tried
+and is worse, and `tests/test_keepout.py` keeps the reasoning: the fountain's
+bounding box "forbade 916 m2 of mostly-dry plaza and swallowed the pond
+whole, so reshaping the water changed the robot's world by zero cells", and
+the robot's own start sits inside it -- under that policy the robot "began
+life in a forbidden cell". `OBSERVED` locates, `DECLARED` legislates, and
+that distinction is load-bearing.
+
+**Not the fountain's existing extent**, for the same reason: it is a claim
+about where the fountain is, not a model of its geometry, and it covers the
+robot's start.
+
+**The declaration.** The venue already tells its own consumers what is
+wrong with it, in the pond entity's published `demo.note`:
+
+> The venue declares a rectangle around a pool that is not one, so the box
+> covers dry paving at the northern bays -- over-claiming, which is the safe
+> direction for something a machine is told to stay out of.
+
+Over-claiming *is* the safe direction, and that reasoning is sound in
+isolation. What it does not account for is that this particular over-claim
+spans the venue, so the safety is bought by making two thirds of the lawn
+unreachable in one gesture. A U-shaped pool wants the arms of the U as
+separate declared boxes -- which is already the established idiom here, since
+the shallows is a second box beside the pond for exactly the reason that "no
+single rectangle does both". Leaving the northern bays' dry paving out of the
+declaration would open a corridor through the middle and need no planner
+change at all.
+
+Not done here because the waterline is a survey question, not a code one.
+This records the cost precisely so the geometry can be chosen against a
+number.
+
+## Why it kept being reported as a regression
+
+Because the robot went quiet. A `goto` is accepted before anyone can know
+whether it is drivable, so the refusal arrives later -- and it used to arrive
+only on the robot process's stdout. From the browser the sequence was
+`robot:goto accepted` and then a motionless robot, which looks exactly like a
+tap that was ignored, three times over. Refusals now ride the robot's latched
+entity and the page reports them; see the `demo.nav_status` property and
+`web/tests/nav-refusal.spec.ts`.
