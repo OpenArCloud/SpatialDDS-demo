@@ -28,7 +28,7 @@ test('smoke: cesium app loads and responds to mock endpoints', async ({ page, re
   await page.goto('/?autostart=0');
 
   await expect(page.locator('#cesiumContainer')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Localize (Mock VPS)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Localize (Mock)' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Discover Content (Mock Catalog)' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
 
@@ -36,7 +36,7 @@ test('smoke: cesium app loads and responds to mock endpoints', async ({ page, re
   // assertion here looked for 'status: ready', a string the app never emits —
   // the readout starts at 'status: idle' and is then replaced wholesale by
   // renderReadout's GeoPose block.)
-  await expect(page.locator('#modeBadge')).toContainText('Mock Mode');
+  await expect(page.locator('#modeBadge')).toContainText('No Bridge');
   await expect(page.locator('#readout')).toContainText('message: mock mode');
 
   // Mock localize returns a fixed pose ~18 m up. Poll for the altitude to drop

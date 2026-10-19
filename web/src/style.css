@@ -63,6 +63,17 @@ body {
   border-color: rgba(248, 113, 113, 0.45);
 }
 
+/* Before the health probe answers, the badge is not reporting a verdict --
+   it is reporting that it does not have one yet. It used to open on the
+   failure wording in the failure colour, so every load flashed "Mock Mode"
+   in red and a dead bridge was indistinguishable from a page that had been
+   open for 200 ms. Grey, and neither of the two answers. */
+#modeBadge[data-mode='unknown'] {
+  background: rgba(148, 163, 184, 0.18);
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
 #controls {
   display: flex;
   flex-direction: column;

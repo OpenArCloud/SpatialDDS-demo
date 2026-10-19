@@ -6,7 +6,8 @@ import {
   queryFrameUrl,
   type QueryFrameManifest
 } from './query_frames';
-import { mockDiscover, mockLocalize } from './mock_spatialdds';
+import { LOOKING_NORTH_UPRIGHT, mockDiscover, mockLocalize }
+  from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
   BASIS_VALUES, bridgeFrames, catalogRefId,
@@ -122,17 +123,29 @@ const EYE_HEIGHT_M = 1.7;
 const START_HEIGHT_M = 20_000_000.0;
 const START_VIEW_HEADING_DEG = 0.0;
 const START_VIEW_PITCH_DEG = -90.0;
-// A body->ENU quaternion (ROS REP-103: x-forward, y-left, z-up): a quarter
-// turn about up, so the camera looks north along the Main Mall, level.
+// A body->ENU quaternion placing the camera level, looking north along the
+// Main Mall.
 //
-// This used to hold [0.4967, -0.0336, -0.0585, 0.8653], which is not a body
+// **Two corrections live in this constant's history, and the second was
+// invisible until a failed localization stopped hiding it.**
+//
+// It first held [0.4967, -0.0336, -0.0585, 0.8653], which is not a body
 // orientation at all -- it is bit-for-bit the ENU->ECEF rotation for this
 // latitude and longitude, i.e. the frame's own basis mistaken for a pose in
-// it. Read as body->ENU it rolls the camera onto its side. Only the mock
-// prior uses this; the real VPS path takes its prior from the query-frame
-// manifest and is unaffected.
-const START_Q: [number, number, number, number] =
-  [0, 0, 0.7071067811865476, 0.7071067811865476];
+// it.
+//
+// It then held [0, 0, 0.7071, 0.7071] with the note "a quarter turn about up,
+// so the camera looks north ... level". That reasoning holds only in a
+// convention where up is +Z. `orientationFromGeoPose` reads forward from +X
+// and up from *-Y* -- measured from four real localizer poses, and documented
+// where it is applied -- so a yaw about Z carries -Y onto the horizon: north,
+// level, and rolled a quarter turn onto its side. Nothing showed it while
+// every localization claimed success, because the camera was flown to the
+// *service's* orientation; the moment a `VPS_FAILED` left the prior in place,
+// the roll appeared on screen.
+//
+// `LOOKING_NORTH_UPRIGHT` is the quaternion that satisfies both axes at once.
+const START_Q: [number, number, number, number] = LOOKING_NORTH_UPRIGHT;
 
 const ENV = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env;
 const HAS_ION_TOKEN = Boolean(ENV.VITE_CESIUM_ION_TOKEN);
@@ -260,7 +273,13 @@ function setModeBadge(mode: 'bridge' | 'mock', detail: string) {
   if (!modeBadgeEl) {
     return;
   }
-  modeBadgeEl.textContent = mode === 'bridge' ? 'DDS Bridge' : 'Mock Mode';
+  // "No Bridge", not "Mock Mode". The badge says whether the 1.7 bridge is
+  // answering; the Localize button says which localize you are about to ask
+  // for, and that is now permanently "Localize (Mock)" because the plain
+  // button no longer calls a service. Two different questions that both used
+  // the word "mock" read as one, and a live bridge with a mock button looked
+  // like a page that had failed over.
+  modeBadgeEl.textContent = mode === 'bridge' ? 'DDS Bridge' : 'No Bridge';
   modeBadgeEl.dataset.mode = mode;
   if (detail) {
     modeBadgeEl.title = detail;
@@ -450,33 +469,13 @@ async function ensureVpsService(prior: GeoPose): Promise<string | null> {
   return vpsServiceId;
 }
 
-/**
- * The frame the VPS is asked to localize.
- *
- * A browser has no camera, so the demo sends what it is looking at: the
- * rendered Cesium view, as a real JPEG. That is not a photograph and a real
- * VPS would not match against it — but it is real bytes of a realistic size,
- * which is what makes the request honest. Until this existed the request
- * referenced a blob containing the ASCII string `MOCK_IMAGE_3`, and nothing
- * ever published even that.
- *
- * Returns null if the canvas cannot be read, in which case the bridge falls
- * back to its placeholder and localization still works.
- */
-function captureQueryImage(): string | null {
-  if (!viewer) {
-    return null;
-  }
-  try {
-    viewer.render();
-    const dataUrl = viewer.canvas.toDataURL('image/jpeg', 0.7);
-    const comma = dataUrl.indexOf(',');
-    return comma > 0 ? dataUrl.slice(comma + 1) : null;
-  } catch (error) {
-    appLog(`capture: failed (${String(error)})`);
-    return null;
-  }
-}
+// `captureQueryImage` lived here: it rendered the Cesium view to a JPEG and
+// sent it as the query frame. Its own docstring said "a real VPS would not
+// match against it", which turned out to be the whole story -- against the
+// deployed service every such request came back `VPS_FAILED`. Its only caller
+// was the plain Localize button, which is now an honest mock, so the function
+// is gone rather than left uncalled: a canvas-capture nobody invokes is one
+// more thing a reader has to rule out.
 
 /**
  * One localization at a time.
@@ -516,13 +515,29 @@ async function handleLocalize() {
   await withLocalizeLock(() => localizeOnce());
 }
 
+/**
+ * The plain Localize button: an explicit mock that puts you in the venue.
+ *
+ * **It used to send a Cesium render to whatever VPS was discovered**, and
+ * against a real photogrammetric service that cannot succeed -- the map is
+ * built from photographs, and a synthetic render matches none of them. Every
+ * press returned `VPS_FAILED`. What it bought was a request that could only
+ * fail, dressed as a localization.
+ *
+ * So this is a mock and says so. It drops the camera at the demo's own start
+ * position, upright and looking north, which is what the button was wanted
+ * for: getting into the venue without a localization. The real VPS path is
+ * "Localize with Image", which sends an actual photograph from the scan and
+ * can therefore be answered.
+ *
+ * The cost of the change, stated: with no query-frame bundle installed there
+ * is now no way to exercise a real `/v1/localize` from the UI. That is the
+ * right trade here -- a button whose only outcome is a refusal taught nobody
+ * anything -- but it is a trade.
+ */
 async function localizeOnce() {
   const prior = await seedPriorGeopose();
-  const queryImage = bridgeActive ? captureQueryImage() : null;
-  if (queryImage) {
-    appLog(`capture: ${Math.round((queryImage.length * 3) / 4 / 1024)} KB query frame`);
-  }
-  await localizeWith(prior, queryImage);
+  await localizeWith(prior, null, { mock: true });
 }
 
 /**
@@ -581,16 +596,44 @@ function priorFromManifest(manifest: QueryFrameManifest): GeoPose {
 }
 
 /** Everything both localize paths share once the request is decided. */
-async function localizeWith(prior: GeoPose, queryImage: string | null) {
-  const serviceId = bridgeActive ? await ensureVpsService(prior) : null;
-  const response = bridgeActive
-    ? await bridgeLocalize(prior, serviceId, queryImage)
-    : await mockLocalize();
+async function localizeWith(prior: GeoPose, queryImage: string | null,
+                            options: { mock?: boolean } = {}) {
+  // `mock` is the caller's decision, not a consequence of the bridge being
+  // down: the plain button mocks even with a live bridge, because the request
+  // it could make is one no photogrammetric VPS can answer.
+  const useMock = options.mock === true || !bridgeActive;
+  const serviceId = useMock ? null : await ensureVpsService(prior);
+  const response = useMock
+    ? await mockLocalize(prior)
+    : await bridgeLocalize(prior, serviceId, queryImage);
+  // **Whether it worked is a field on the response, and it has to be read.**
+  // `parseLocalizeResponse` already decides this correctly -- `success` is
+  // `status === 'VPS_SUCCESS'`, with an explicit note that an unknown status
+  // must not read as one -- and this function used to throw that away, logging
+  // `localize:success` unconditionally and flying the camera to
+  // `response.geopose`. On a failure that geopose is the *prior*, which the
+  // parser substitutes deliberately, so the symptom was not an error but a
+  // confident-looking localization that had not happened: the camera snapped
+  // to the prior's own quarter-turn-about-up `START_Q` and the readout showed
+  // the position we had sent in. Found because that quarter turn was visible
+  // on screen, which is a poor substitute for reading the field.
+  const located = response.quality.success;
   currentPose = response.geopose;
   clearEntities();
   addMarker('user-location', 'You are here', response.geopose, markerUrl);
 
-  appLog(`localize:success ${response.geopose.lat_deg.toFixed(5)},${response.geopose.lon_deg.toFixed(5)}`);
+  if (located) {
+    appLog(`localize:success ${response.geopose.lat_deg.toFixed(5)},${response.geopose.lon_deg.toFixed(5)}`);
+  } else {
+    // The prior is still the best position estimate there is, so the model
+    // below still loads against it -- but nothing here may claim the service
+    // placed us, and the camera must not be flown to an orientation no
+    // localizer returned.
+    appLog(`localize:failed service reported no fix `
+         + `(confidence ${response.quality.confidence.toFixed(2)}); `
+         + `holding the prior ${response.geopose.lat_deg.toFixed(5)},`
+         + `${response.geopose.lon_deg.toFixed(5)} and not moving the camera`);
+  }
 
   // Knowing where we are is the only precondition the model had. Waiting for
   // a second click to ask for it was never a decision, just where the code
@@ -600,7 +643,7 @@ async function localizeWith(prior: GeoPose, queryImage: string | null) {
   lastModel = null;
   void bootstrapModel();
 
-  if (viewer) {
+  if (viewer && located) {
     try {
       viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(
@@ -2024,7 +2067,9 @@ async function initBridgeMode() {
 
   if (bridgeActive) {
     setModeBadge('bridge', `DDS domain ${status.dds_domain ?? 'unknown'}`);
-    if (localizeBtn) localizeBtn.textContent = 'Localize (DDS)';
+    // Named for what it does, in both modes: the real service is reached by
+    // "Localize with Image".
+    if (localizeBtn) localizeBtn.textContent = 'Localize (Mock)';
     if (discoverBtn) discoverBtn.textContent = 'Discover Content (DDS)';
     // Enabled only with a bundle installed: without one there is no real
     // photograph to send, and no anchor to search for a VPS around.
@@ -2038,7 +2083,7 @@ async function initBridgeMode() {
     appLog('bridge:online');
   } else {
     setModeBadge('mock', status.message);
-    if (localizeBtn) localizeBtn.textContent = 'Localize (Mock VPS)';
+    if (localizeBtn) localizeBtn.textContent = 'Localize (Mock)';
     if (discoverBtn) discoverBtn.textContent = 'Discover Content (Mock Catalog)';
     // The mock returns a canned downtown pose and never reads the image, so
     // offering the button here would imply a localization that never happened.
@@ -2106,13 +2151,15 @@ async function autoLocalizeIfThisIsTheDemosOwnVps() {
   // already in the overlay. The bridge serialises localize requests, so a
   // suite where every open page asks for one queues behind itself.
   if (new URLSearchParams(location.search).get('autostart') === '0') {
-    appLog('autostart: disabled by ?autostart=0 — press Localize');
+    appLog('autostart: disabled by ?autostart=0 — press Localize (Mock), or '
+         + 'Localize with Image for the real service');
     return;
   }
   if (!bridgeActive) {
-    // No bridge: `mockLocalize` is a local function returning a canned pose,
-    // so nothing is asked of anyone.
-    appLog('autostart: mock mode — localizing without a click');
+    // No bridge: `mockLocalize` is a local function placing the camera at the
+    // demo's own start position, so nothing is asked of anyone.
+    appLog('autostart: no bridge — placing the camera in the venue without a '
+         + 'click');
     await handleLocalize();
     return;
   }
@@ -2120,8 +2167,13 @@ async function autoLocalizeIfThisIsTheDemosOwnVps() {
     const prior = await seedPriorGeopose();
     const serviceId = await ensureVpsService(prior);
     if (!serviceId?.startsWith(DEMO_VPS_PREFIX)) {
+      // A real service is announced, so nothing is sent to it unasked: a
+      // localization against someone else's VPS is a request with a cost.
+      // The button named here is the one that can actually be answered --
+      // "Localize (Mock)" never leaves the page.
       appLog(`autostart: held — ${serviceId || 'no VPS announced'} is not the ` +
-             `demo's own; press Localize to send a real request`);
+             `demo's own; press Localize with Image to send it a real ` +
+             `photograph, or Localize (Mock) to just stand in the venue`);
       return;
     }
     appLog(`autostart: ${serviceId} is the demo's mock — localizing without a click`);

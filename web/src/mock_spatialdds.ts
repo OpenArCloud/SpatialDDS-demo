@@ -1,26 +1,42 @@
-import type { CatalogItem, DiscoverResponse, GeoPose, LocalizeResponse, TimeStamp } from './types';
-
-const FIXED_STAMP: TimeStamp = {
-  sec: 1700000000,
-  nanosec: 0
-};
-
-const BASE_GEOPOSE: GeoPose = {
-  lat_deg: 30.284996,
-  lon_deg: -97.739494,
-  alt_m: 18,
-  q: [0.4967, -0.0336, -0.0585, 0.8653],
-  stamp: FIXED_STAMP,
-  cov: 'COV_NONE'
-};
+import type { CatalogItem, DiscoverResponse, GeoPose, LocalizeResponse } from './types';
 
 
 
-export async function mockLocalize(): Promise<LocalizeResponse> {
+/**
+ * Looking north, level and upright, as a body->ENU quaternion.
+ *
+ * **Not a yaw.** `orientationFromGeoPose` reads forward from +X and up from
+ * *-Y*, measured from what the localizer actually returns. A quarter turn
+ * about Z -- which is what `START_Q` held, described in its own comment as
+ * "a quarter turn about up, so the camera looks north ... level" -- does give
+ * forward=north, but it carries -Y onto the horizon, so up points *east* and
+ * the camera arrives rolled 90 degrees. That roll is what made this visible
+ * on screen.
+ *
+ * This quaternion is the one that satisfies both axes: +X -> north,
+ * -Y -> up. Checked numerically against the same arithmetic the page applies.
+ */
+export const LOOKING_NORTH_UPRIGHT: [number, number, number, number] =
+  [-0.5, -0.5, 0.5, 0.5];
+
+/**
+ * A localization that did not happen, and says where it put you.
+ *
+ * Takes the position rather than inventing one. It used to return
+ * `BASE_GEOPOSE` -- 30.284996, -97.739494, about 148 m north of the venue,
+ * carrying `[0.4967, -0.0336, -0.0585, 0.8653]`, which is bit-for-bit the
+ * ENU->ECEF rotation for that latitude and longitude: the frame's own basis
+ * mistaken for a pose in it, reading as a camera pitched 60 degrees out of
+ * level. So the mock dropped you in the wrong place, facing the wrong way.
+ *
+ * Given the demo's own start position it now drops you exactly there, upright
+ * and looking north along the Main Mall.
+ */
+export async function mockLocalize(at: GeoPose): Promise<LocalizeResponse> {
   return {
     request_id: 'req-localize-001',
     service_id: 'mock-vps-01',
-    geopose: BASE_GEOPOSE,
+    geopose: { ...at, q: LOOKING_NORTH_UPRIGHT },
     quality: {
       success: true,
       confidence: 0.91,

@@ -79,15 +79,41 @@ test('a deployed AR demo renders, connects and localizes', async ({ page }) => {
          'globe is a flat colour — imagery or Cesium assets did not load')
     .toBeGreaterThan(50);
 
-  // A localization that actually returns: the altitude collapsing from the
-  // ~2e7 m default to ground level is what proves the VPS answered.
-  await page.evaluate(() => document.getElementById('btnLocalize')?.click());
+  // A localization that actually returns.
+  //
+  // **The altitude collapsing to ground level does not prove a VPS answered**,
+  // and this spec used to say that it did. It is equally produced by the mock,
+  // and -- before the page read `quality.success` -- by a `VPS_FAILED` whose
+  // substituted prior sits at ground level too. What proves a service answered
+  // is the service saying so, so that is what is asserted; the altitude stays
+  // as the check that the camera was actually moved.
+  //
+  // The image button, because the plain one is an explicit mock by design.
+  const canLocalizeForReal = await page.evaluate(
+    () => !(document.getElementById('btnLocalizeImage') as any)?.disabled);
+  await page.evaluate((real) => {
+    document.getElementById(real ? 'btnLocalizeImage' : 'btnLocalize')?.click();
+  }, canLocalizeForReal);
   await expect
     .poll(async () => {
       const text = (await page.locator('#readout').getAttribute('data-geopose')) || '';
       return Number(/alt=([\d.]+)m/.exec(text)?.[1] ?? NaN);
     }, { timeout: 40_000 })
     .toBeLessThan(1000);
+
+  const localizeLines: string[] = await page.evaluate(
+    () => ((window as any).__appLogs || []).filter(
+      (l: string) => l.startsWith('localize:')));
+  expect(localizeLines.filter((l) => l.startsWith('localize:failed')),
+         `the localization was refused: ${localizeLines.join(' | ')}`)
+    .toEqual([]);
+  if (!canLocalizeForReal) {
+    // Said out loud: this deployment carries no query-frame bundle, so the
+    // line above was satisfied by the mock and this spec has not exercised a
+    // VPS at all.
+    console.log('  no query-frame bundle on this deployment — localized '
+              + 'against the mock, so no VPS was exercised here');
+  }
 
   // Nothing this deployment serves 404s. Cesium fetches its own assets
   // lazily, so a wrong base surfaces here rather than in the page's status —
