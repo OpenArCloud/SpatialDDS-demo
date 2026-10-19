@@ -12,12 +12,17 @@ rewiring and the spec repository is not this batch's. **Origin:** the web
 bridge's browser lane, 2026-10-18, which is the first browser client to meet
 the binding.
 
-**Status, 2026-10-18 (second revision): blocker B is fixed in the gateway;
-blocker A is unchanged and still the specification's.**
-`spatialdds[server]` 0.5.3 answers the preflight on every path and echoes the
-asking origin on an authorized operator-scoped response, so a cross-origin
-page can now read a gated resource and POST an N.6 command. Verified from
-PyPI; the demo pins 0.5.3. What remains is A — a browser cannot put a
+**Status, 2026-10-18 (third revision): blocker B is fixed in the gateway, and
+it took two releases; blocker A is unchanged and still the specification's.**
+`spatialdds[server]` 0.5.3 answered the preflight on every path and echoed the
+asking origin on an authorized GET. **0.5.4 finished it**, and the gap between
+them is the instructive part: 0.5.3 gave the origin to the three responses
+built from the shared cache-header helper and missed the two built by hand —
+the N.6 command lane's own `202`, and every N.8 problem document. So a command
+*published* while the page that sent it read `TypeError: Failed to fetch`, and
+a `401` was unreadable by the client it was written for. Both verified from
+PyPI; the demo pins **0.5.4**, and `web/tests/robot-goto.spec.ts` runs rather
+than skipping as a result. What remains is A — a browser cannot put a
 credential on a WebSocket handshake at all — plus the specification note that
 nothing required any of B in the first place. The rest of this filing is kept
 as written, because the reasoning is what made the fix findable and the

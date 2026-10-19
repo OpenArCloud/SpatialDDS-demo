@@ -19,7 +19,7 @@
 # venue its own metadata says was removed. Read that file's header for the
 # argument.
 #
-# The bridge needs `spatialdds[server]` 0.5.3 from PyPI, which the demo image
+# The bridge needs `spatialdds[server]` 0.5.4 from PyPI, which the demo image
 # does not carry: the binding is a dependency of this lane, not of the demo.
 set -u
 export SPATIALDDS_TRANSPORT=dds
@@ -44,9 +44,11 @@ python3 -c "import mcap" 2>/dev/null || python3 -m pip install --quiet "mcap>=1.
 # nothing and every POST was refused. On 0.5.1 and earlier `notify` enqueued
 # from a foreign thread without waking the loop, so a parked subscriber was
 # fed nothing. 0.5.3 answers the CORS preflight an `Authorization` header
-# forces, without which no browser can command this lane at all. An inexact
-# pin would let a session run on any of those and look like a bridge defect.
-BINDING="${BINDING:-0.5.3}"
+# forces, without which no browser can reach this lane at all --- and 0.5.4
+# puts an origin on the reply, without which a command *publishes* while the
+# page that sent it reads a failure. An inexact pin would let a session run on
+# any of those and look like a bridge defect.
+BINDING="${BINDING:-0.5.4}"
 python3 -c "import spatialdds, sys; sys.exit(0 if spatialdds.__version__=='$BINDING' else 1)" 2>/dev/null || {
   say "installing spatialdds[server]==$BINDING from PyPI (the binding, embedded)"
   python3 -m pip install --quiet "spatialdds[server]==$BINDING" || {
