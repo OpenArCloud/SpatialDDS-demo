@@ -28,6 +28,24 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# SPATIALDDS_DDS_DOMAIN and SPATIALDDS_DDS_CONFIG — so this stack can join a
+# bus somebody else already owns.
+#
+# The domain was a fixed 1, which is right on a laptop and wrong beside
+# another deployment: OpenVPS's AWS variant serves on domain 0 with multicast
+# off and unicast peer discovery, so a demo hardcoded to domain 1 with
+# multicast on shares a host with it and sees nothing. Not an error either ---
+# Cyclone reports an absence of peers, so the symptom is an empty venue and a
+# localization that never answers.
+#
+# `SPATIALDDS_DDS_CONFIG` names a file to mount *at* /etc/cyclonedds.xml
+# rather than pointing CYCLONEDDS_URI elsewhere, because `require_dds_env`
+# refuses any other URI. That guard carries no stated reason, so it is
+# satisfied rather than loosened: a single config path shared by every process
+# in the container is a defensible thing to insist on, and changing the file
+# behind the path gets the same result without touching a rule whose purpose
+# is not written down. See deploy/aws/cyclonedds-colocated.xml.
+
 # SPATIALDDS_MOCK_VPS — the demo's own mock VPS, on by default because it is
 # what makes the AR demo self-contained. Set it to 0 to run against a real
 # localization service instead: selection is by discovery, so the demo needs
@@ -57,7 +75,7 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
   -w /app \
   -e PYTHONUNBUFFERED=1 \
   -e SPATIALDDS_TRANSPORT=dds \
-  -e SPATIALDDS_DDS_DOMAIN=1 \
+  -e SPATIALDDS_DDS_DOMAIN="${SPATIALDDS_DDS_DOMAIN:-1}" \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   -e PYTHONPATH=/app \
   -e BRIDGE_LOG_BTS="${bts}" \
@@ -79,6 +97,7 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
   -e SPATIALDDS_BINDING_VERSION="${SPATIALDDS_BINDING_VERSION:-0.5.4}" \
   -e PYTHONDONTWRITEBYTECODE=1 \
   -v "${PWD}:/app" \
+  ${SPATIALDDS_DDS_CONFIG:+-v "${SPATIALDDS_DDS_CONFIG}:/etc/cyclonedds.xml:ro"} \
   cyclonedds-python bash -lc "\
     set -e; \
     mkdir -p \"\$BRIDGE_LOG_DIR\"; \

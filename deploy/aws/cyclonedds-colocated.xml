@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Cyclone DDS config for running this demo *beside another SpatialDDS
+  deployment on one host* — specifically OpenVPS's `spatialdds` AWS variant.
+
+  Point the launcher at it:
+
+      SPATIALDDS_DDS_DOMAIN=0 \
+      SPATIALDDS_DDS_CONFIG=$PWD/deploy/aws/cyclonedds-colocated.xml \
+      SPATIALDDS_MOCK_VPS=0 ./run_bridge_server_docker.sh
+
+  It is mounted *at* /etc/cyclonedds.xml rather than named by CYCLONEDDS_URI,
+  which `require_dds_env` refuses to let differ.
+
+  **Why it is not the default, and why the default cannot be used there.**
+  The repository's `cyclonedds.xml` leaves multicast on, which is correct
+  everywhere this demo normally runs. An AWS VPC does not carry multicast, so
+  OpenVPS's variant turns it off and discovers unicast against a peer list —
+  and two participants that disagree about multicast on one host do not fail,
+  they simply never find each other. Cyclone reports an absence of peers, not
+  an error, so the visible symptom is an empty venue and a localize that never
+  returns. That asymmetry is the whole reason this file exists.
+
+  Deliberately a byte-for-byte match of the discovery half of
+  `openvps-deploy/deploy/aws/cyclonedds.xml.in` (with no PEERS marker to
+  render): the two sides have to agree, and the way to keep them agreeing is
+  to copy rather than to re-derive. `ParticipantIndex=auto` probes the local
+  port range, which is what makes an empty peer list right for a single host —
+  both stacks on one instance is exactly that case.
+
+  For two hosts, each side needs the other's private address as a Peer. That
+  is the `DdsPeers` stack parameter on OpenVPS's side and would need the
+  mirror here; not written until something needs it.
+-->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface autodetermine="true"/>
+      </Interfaces>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <Peers></Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>
