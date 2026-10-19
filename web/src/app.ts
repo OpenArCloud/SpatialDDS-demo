@@ -903,6 +903,7 @@ async function bootstrapModelOnce(): Promise<void> {
              `another entity claims the same name`);
       item.name = qualified;
     }
+    reportNavStatus(entity);
     modelItems.set(entity.entity_id, item);
     addItemEntity(item);
     modelPlaced += 1;
@@ -1283,6 +1284,36 @@ function removeModelEntity(entityId: string): number {
  * which is the point: if the panel is wrong the model is wrong, and there is
  * no second description to drift away from the first.
  */
+/**
+ * Say when a service refuses something we asked it to do.
+ *
+ * A `goto` is accepted onto the bus before anybody can know whether it is
+ * drivable -- whether a straight line crosses declared water depends on where
+ * the robot is when it meets the boundary -- so the refusal necessarily
+ * arrives later, on the entity's own latched record. Without this the page
+ * showed `robot:goto accepted` and then nothing: the tap looked ignored, and
+ * the reason existed only in the robot's stdout on the server.
+ *
+ * Keyed by entity and compared against the last value, because the record is
+ * latched: a new subscriber replays it, and every cadence tick rewrites it.
+ * Logging on arrival rather than on change would turn one refusal into a
+ * running commentary.
+ */
+const lastNavStatus = new Map<string, string>();
+
+function reportNavStatus(entity: ModelEntity): void {
+  const status = (entity.properties || [])
+    .find((kv: { key?: string }) => kv.key === 'demo.nav_status')?.value || '';
+  const previous = lastNavStatus.get(entity.entity_id) || '';
+  if (status === previous) {
+    return;
+  }
+  lastNavStatus.set(entity.entity_id, status);
+  if (status) {
+    appLog(`model:refused ${entity.entity_id} — ${status}`);
+  }
+}
+
 function describeEntity(item: CatalogItem): string | undefined {
   const entity = item.entity;
   if (!entity) {
@@ -1304,6 +1335,11 @@ function describeEntity(item: CatalogItem): string | undefined {
   rows.push(['Layer', `${entity.layer} — how fast it is expected to change`]);
   rows.push(['State', entity.state_reason
     ? `${entity.state} (${entity.state_reason})` : String(entity.state)]);
+  const navStatus = (entity.properties || [])
+    .find((kv: any) => kv.key === 'demo.nav_status')?.value;
+  if (navStatus) {
+    rows.push(['Last refusal', navStatus]);
+  }
   rows.push(['Frame', `${entity.frame_ref?.fqn} (${entity.frame_ref?.uuid})`]);
   if (entity.has_pose && entity.pose?.t) {
     const [x, y, z] = entity.pose.t;

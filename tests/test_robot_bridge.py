@@ -198,6 +198,79 @@ class WhatItPublishes(unittest.TestCase):
             [], "the expensive record should not follow every pose")
 
 
+class ARefusalReachesWhoeverAsked(unittest.TestCase):
+    """
+    A `goto` is accepted before anyone can know whether it is drivable, so the
+    refusal necessarily comes later. It used to come only on this process's
+    stdout: a browser that tapped the lawn saw `robot:goto accepted` and a
+    robot that never moved, with the reason in a server log it had no way to
+    read. These cover the lane that carries it back.
+    """
+
+    def setUp(self):
+        self.participant = _participant(DOMAIN + 2)
+        self.bridge = RobotBridge(self.participant)
+        self.entities = tt.make_reader(
+            self.participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        time.sleep(0.5)
+        tt.take_samples(self.entities)
+
+    def _drain(self, seconds=0.6):
+        got, deadline = [], time.time() + seconds
+        while time.time() < deadline:
+            got.extend(tt.take_samples(self.entities) or [])
+            time.sleep(0.02)
+        return [e for e in got if e.entity_id == ENTITY_ID]
+
+    @staticmethod
+    def _nav_status(entity):
+        for kv in entity.properties or []:
+            if kv.key == "demo.nav_status":
+                return kv.value
+        return None
+
+    def test_an_ordinary_record_carries_no_refusal(self):
+        """The field appears because something was refused, not by default."""
+        self.bridge.observed(20.0, -9.0, 0.0)
+        seen = self._drain()
+        self.assertTrue(seen, "the robot should appear on its first pose")
+        self.assertIsNone(self._nav_status(seen[-1]),
+                          "a robot that has refused nothing should say nothing")
+
+    def test_a_refusal_is_published_on_the_latched_record(self):
+        self.bridge.observed(20.0, -9.0, 0.0)
+        self._drain(0.4)
+        self.bridge.refused("goal (1.00, 2.00) abandoned at (20.00, -9.00) "
+                            "— it enters the declared keep-out")
+        seen = self._drain()
+        self.assertTrue(seen, "the refusal should republish the record at once "
+                              "rather than waiting for the latch cadence")
+        self.assertIn("abandoned", self._nav_status(seen[-1]) or "",
+                      "the reason has to travel, not just the fact")
+
+    def test_the_refusal_keeps_the_pose_it_was_refused_at(self):
+        """
+        Where the robot stopped is part of the reason. A record that carried
+        the refusal but reset the pose would say the goal was abandoned
+        somewhere the robot has never been.
+        """
+        self.bridge.observed(12.5, -3.25, 0.0)
+        self._drain(0.4)
+        self.bridge.refused("blocked")
+        seen = self._drain()
+        self.assertTrue(seen)
+        self.assertAlmostEqual(seen[-1].pose.t[0], 12.5, places=3)
+        self.assertAlmostEqual(seen[-1].pose.t[1], -3.25, places=3)
+
+    def test_a_refusal_before_the_first_pose_is_not_published(self):
+        """
+        There is no record to amend, and a refusal cannot precede the robot it
+        is about. Publishing one would announce a robot by complaining.
+        """
+        self.bridge.refused("blocked before we ever reported a pose")
+        self.assertEqual(self._drain(0.4), [])
+
+
 class GoingQuiet(unittest.TestCase):
     """UNOBSERVED, and why it is not a dispose."""
 

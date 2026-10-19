@@ -151,7 +151,30 @@ class RobotBridge:
     # --- what it publishes ------------------------------------------------
 
     def _record(self, pose: PoseSE3, state: LifecycleState,
-                reason: str = "") -> Entity:
+                reason: str = "", nav_status: str = "") -> Entity:
+        """
+        `nav_status` is how a refusal reaches whoever asked for it.
+
+        A `goto` is accepted onto the bus before anyone knows whether it can
+        be driven: whether a straight line crosses declared water depends on
+        where the robot is when it meets the boundary. So the acceptance is
+        honest and the refusal arrives later -- and until now it arrived only
+        on this process's stdout. A browser that tapped the lawn saw
+        `robot:goto accepted` and a motionless robot, which is precisely the
+        silence the abandonment message was written to end; it ended it for
+        whoever was reading the server log, and for nobody else.
+
+        The latched entity is the lane that was already there: every client
+        reads it, it is the robot's own record to describe itself with, and
+        `demo.*` properties are where this demo says things of its own.
+        """
+        properties = [
+            KV(key="demo.label", value="TurtleBot"),
+            KV(key="demo.note",
+               value="A self-localizing robot reporting where it believes it is. OBSERVED because it is looking at the world, not fusing other people's claims about it."),
+        ]
+        if nav_status:
+            properties.append(KV(key="demo.nav_status", value=nav_status))
         return Entity(
             entity_id=ENTITY_ID,
             basis=Basis.OBSERVED,
@@ -162,9 +185,7 @@ class RobotBridge:
             pose=pose,
             has_extent=False,
             extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0]),
-            properties=[KV(key="demo.label", value="TurtleBot"),
-                        KV(key="demo.note",
-                           value="A self-localizing robot reporting where it believes it is. OBSERVED because it is looking at the world, not fusing other people's claims about it.")],
+            properties=properties,
             external_refs=[],
             content_refs=[f"catalog:{ROBOT_CONTENT_ID}"],
             state=state,
@@ -192,6 +213,23 @@ class RobotBridge:
         # find out the robot is alive again would be told late.
         if self._tempo.observed(ENTITY_ID, now) or first or was_silent:
             self._entities.write(self._entity)
+
+    def refused(self, why: str) -> None:
+        """
+        Republish the latched record with a refusal on it, now.
+
+        Off the cadence deliberately: this is a change of *state*, like the
+        robot appearing or coming back, and the whole point is that the client
+        that asked learns promptly rather than up to four poses later.
+
+        A no-op before the first pose, because there is no record to amend and
+        a refusal cannot precede the robot it is about.
+        """
+        if self._entity is None:
+            return
+        self._entity = self._record(self._entity.pose, LifecycleState.ACTIVE,
+                                    nav_status=why)
+        self._entities.write(self._entity)
 
     # --- what it is asked to do -------------------------------------------
 
@@ -522,10 +560,15 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
         for note in bridge.poll_commands():
             print(f"robot: {note}", flush=True)
         x, y, yaw = sim.step(interval)
-        if sim.abandoned:
-            print(f"robot: {sim.abandoned}", flush=True)
+        abandoned = sim.abandoned
+        if abandoned:
+            print(f"robot: {abandoned}", flush=True)
             sim.abandoned = None
         bridge.observed(x, y, yaw)
+        if abandoned:
+            # After `observed`, so the amended record is the one carrying the
+            # current pose rather than being overwritten by it a line later.
+            bridge.refused(abandoned)
         note = bridge.tick()
         if note:
             print(f"robot: {note}", flush=True)
