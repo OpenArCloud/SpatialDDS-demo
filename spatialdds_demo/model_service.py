@@ -86,23 +86,15 @@ LATCH_EVERY_N_MOVES = LATCH_EVERY_N
 IDLE_FLUSH_S = IDLE_FLOOR_S
 IDLE_FLUSH_FACTOR = IDLE_FACTOR
 
-VENUE_FRAME_FQN = "map/ut-littlefield-fountain"
-
-# The one catalogue row all three ducks render from. Asset, not instance.
-DUCK_CONTENT_ID = "89f2d953-076d-5c7d-9b74-1193f71685a6"
-
-SOURCE_ID = "svc:model:demo/venue"
-
-# Between a tombstone and the dispose that follows it. For people, not for
-# delivery -- see ModelPublisher.retire.
-TOMBSTONE_SETTLE_S = 1.5
-
 # The fast tier's two numbers.
 #
 # A FAST entity's every move goes out on the pose topic; its latched entity
 # record is refreshed every Nth move, so a late joiner is at most N-1 moves
 # behind and converges on the next pose that arrives.
-LATCH_EVERY_N_MOVES = 5
+# The value is `tempo.LATCH_EVERY_N`, re-exported above. It used to be
+# repeated here as a literal, which shadowed the import: the two agreed,
+# so nothing broke, and changing tempo.py would silently not have
+# reached this module.
 
 # And the flush that makes rest state exact. When a thing stops moving, the
 # stream stops carrying it and the latch is whatever it was at the last
@@ -126,12 +118,14 @@ LATCH_EVERY_N_MOVES = 5
 # So the threshold is derived: a floor, and a multiple of the interval the
 # entity is actually being updated at. A thing moving every 100 ms is idle
 # after a beat; a thing moving every ten seconds is not idle after eleven.
-IDLE_FLUSH_S = 1.0
-IDLE_FLUSH_FACTOR = 3.0
+# `tempo.IDLE_FLOOR_S` and `tempo.IDLE_FACTOR`, re-exported above — same
+# shadowing, same reason for removing the literals.
 # How much of the observed interval survives each new measurement. Low enough
 # to follow a cadence change within a few updates, high enough that one late
 # sample does not convince it everything stopped.
-GAP_SMOOTHING = 0.7
+# `tempo.GAP_SMOOTHING`, imported at the top of this module. This literal
+# shadowed the import rather than duplicating an assignment, which is why
+# an AST scan for repeated assignments missed it.
 
 # Borrowed vocabulary. The layer mints no types of its own: Wikidata's
 # canonical entity URIs, in the http:// form Wikidata publishes.

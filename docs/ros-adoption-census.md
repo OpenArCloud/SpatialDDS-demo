@@ -13,6 +13,13 @@ All four seams turn out to be **configuration or naming, not library changes.**
 Two things the swap surfaced outside them do need decisions, and both are
 below.
 
+> **Amended 2026-10-19, after the build.** This census was incomplete. It
+> enumerated what the four seams needed and did not enumerate every field the
+> page reads off the robot's record — and one of them, `content_refs`, is not
+> configurable in the library and has no demo-side workaround. The adoption is
+> therefore deferred; see `ros-adoption-blocker.md`. Everything below still
+> holds, and everything that does not depend on the swap landed.
+
 ---
 
 ## Seam 1 — keep-out in no-hardware mode

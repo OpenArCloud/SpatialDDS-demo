@@ -3,3 +3,16 @@ typing-extensions>=4.0.0
 
 # Optional: for enhanced testing
 pytest>=7.0.0
+
+# The robot lane runs on the published spatialdds_ros library rather than on
+# this repository's own robot_bridge. **Pinned to a commit, not a branch.**
+# Every consumed artifact in this programme is pinned and bumped deliberately:
+# a library change should be a decision with a diff to read, not something a
+# rebuild picks up silently.
+#
+# Note it ships a top-level `spatialdds_idl18` of its own, byte-identical to
+# this repository's today. This repo's root wins on sys.path, so the demo runs
+# its own types; `tests/test_idl_trees_agree.py` is the gate that asserts the
+# two have not drifted, because a mismatch between two generated trees shows
+# up as a plausible wrong value rather than an exception.
+spatialdds_ros @ git+https://github.com/OpenArCloud/spatialdds-ros@e8e5ec20bff1bbd40809276bb8a8606dfb41e965

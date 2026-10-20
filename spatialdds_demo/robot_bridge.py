@@ -5,9 +5,38 @@ The robot's northbound half: a sensed pose becomes a model entity.
     python3 -m spatialdds_demo.robot_bridge            # with the built-in sim
     python3 -m spatialdds_demo.robot_bridge --source ros
 
+**This was to have retired on 2026-10-19 in favour of `spatialdds_ros`, and
+did not.** The adoption is blocked on one field: the library's `RobotAdapter`
+hard-codes `content_refs=[]` with no configuration for it, and this robot's
+`catalog:` reference is what makes the page draw a TurtleBot rather than a pin.
+There is no demo-side workaround — the library publishes no reference at all,
+so no reader can find one. Filed for spatialdds-ros; see
+`docs/ros-adoption-blocker.md` for the whole argument and
+`docs/ros-adoption-census.md` for the four seams that *are* ready. When
+`content_refs` becomes configurable, `RobotBridge`, `already_published`,
+`_now` and `yaw_quaternion` retire (247 lines), `PlazaSim` and
+`KinematicNavigator` stay as the venue's own geometry, and `_run_kinematic`
+shrinks to wiring. The library is already a pinned dependency, so that is one
+commit.
+
 **This is a ROS node that speaks SpatialDDS, not a protocol converter.** It
-subscribes to what a navigating robot already publishes (`/amcl_pose`) and
-publishes `oarc_model` directly. Nothing is translated into an envelope type
+subscribes to what a navigating robot already publishes and publishes
+`oarc_model` directly.
+
+**What it actually subscribes to, since this said `/amcl_pose` for a while and
+meant it as a description of the design rather than of the code.** The ROS
+path reads `nav_msgs/Odometry` on `/odom` (see `_run_with_ros`). In the demo's
+tier that is map-frame by construction: `robot_tier/plaza_sim_node.py`
+publishes `map -> odom` as a *static identity* transform, and says so — "this
+sim knows exactly where the robot is, so there is no drift for a localizer to
+correct". On a real robot it is not: odom drifts against map, which is the
+entire reason AMCL publishes a correction, so reading `/odom` there would
+publish a slowly-diverging claim about where the robot sits on the earth with
+every number looking plausible. The right input is a map-frame pose — the TF
+chain `map -> base_link`, which is what nav2 itself consumes — and that is
+what `spatialdds_ros.robot_node` defaults to. This function keeps `/odom`
+because it is correct for the simulator it runs in, and retires with the
+adoption rather than being half-fixed on its way out. Nothing is translated into an envelope type
 and back; there is no new wire mapping in `bridges/ros2_bridge` for this,
 because it is a citizen of both worlds rather than a translator between them.
 
@@ -347,6 +376,15 @@ class RobotBridge:
 # demo whose robot visibly overlaps water it is refusing to enter has lost the
 # argument regardless of what the arithmetic says. One metre of drawn radius
 # plus a little.
+#
+# **So this is not a physical fact and must not be read as one.** A real
+# TurtleBot is 0.14 m across the plates. On the real-robot path the clearance
+# is nav2's footprint and inflation radius, which nav2 already owns and
+# computes from the robot it is driving — see `robot_tier/nav2_params.yaml`
+# and `robot_tier/keepout_node.py`, where the venue's declaration becomes a
+# costmap filter and nav2 renders its own clearance around it. The number
+# below belongs to this sim and to the asset it draws, and it does not travel:
+# `spatialdds_ros` ruled it out of the library for exactly this reason.
 CLEARANCE_M = 1.2
 
 
