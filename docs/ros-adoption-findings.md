@@ -9,6 +9,14 @@ reachable only with a real peer.
 
 ## 1. `spatialdds_ros` crashes on an `InvalidSample` — for the library
 
+> **Closed in spatialdds-ros 0.2.1 (`aa52a74`), 2026-10-19.** `take_samples`
+> now reads sample state, `take_with_state` is the general read beneath it,
+> and the library's suite has a peer with a lifetime
+> (`APeerThatDies`). The workaround below is retired. The fix also closed a
+> second call site nothing here had reached: `already_published` took
+> `.entity_id` off a tombstone, so an adapter could crash *at startup*
+> because an unrelated robot exited while it was checking its own key.
+
 **The robot died the first time any peer joined and left the command lane.**
 
 ```
@@ -55,6 +63,31 @@ the writer disposed or dropped, and the reader polled after.
 ---
 
 ## 2. Two transports disagree about where QoS goes — an observation
+
+> **Closed in spatialdds-ros 0.2.1 (`aa52a74`), 2026-10-19**, and this
+> finding had the mechanism wrong. The refusal is **not** a function of
+> construction order. A topic name is unique within a participant and its QoS
+> must agree among every *live* `Topic` object for that name — in either
+> direction:
+>
+> | first (held) | second | |
+> |---|---|---|
+> | profile | default | `INCONSISTENT_POLICY` |
+> | default | profile | `INCONSISTENT_POLICY` |
+> | profile | profile | accepted |
+> | default | default | accepted |
+>
+> Order only decides which call is refused, and **retention** decides which
+> that is in practice: `typed_transport.get_topic` caches its topic objects
+> deliberately, so this repository's convention persisted and the library's
+> was the call that failed. The library now creates topics with default QoS
+> and keeps §3.3.3 on the endpoints, where request/offered is decided.
+>
+> What produced the correction: the first probe written for the fix discarded
+> its first `Topic`, which let the name go free and made every combination
+> look accepted — the opposite error, and the one that would have shipped a
+> vacuous test. `spatialdds-ros/docs/failability.md` §4 carries the table and
+> both construction orders shown failing.
 
 Both this repository and the library apply spec §3.3.3 profiles, and their
 `QosProfile.to_qos()` results are *identical*. They disagree about **where**:

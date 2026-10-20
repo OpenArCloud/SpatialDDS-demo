@@ -16,9 +16,16 @@ pytest>=7.0.0
 # robot's `catalog:` reference, so the page would have drawn a pin instead of
 # a TurtleBot. See docs/ros-adoption-blocker.md.
 #
+# Bumped e7b897d -> aa52a74 (0.2.1) on 2026-10-19: the two library findings
+# the adoption produced, both fixed. Its `take_samples` now reads sample
+# state, which retires the labelled `InvalidSample` workaround in
+# `robot_bridge._run_kinematic`; and its topics carry default QoS, so the
+# topic-QoS collision that forced the keep-out reader onto the library's
+# transport is gone. See docs/ros-adoption-findings.md.
+#
 # Note it ships a top-level `spatialdds_idl18` of its own, byte-identical to
 # this repository's today. This repo's root wins on sys.path, so the demo runs
 # its own types; `tests/test_idl_trees_agree.py` is the gate that asserts the
 # two have not drifted, because a mismatch between two generated trees shows
 # up as a plausible wrong value rather than an exception.
-spatialdds_ros @ git+https://github.com/OpenArCloud/spatialdds-ros@e7b897da773617aee1d824784184f00bc3834709
+spatialdds_ros @ git+https://github.com/OpenArCloud/spatialdds-ros@aa52a743db87bc31465de1c8964d2661f2c70e82

@@ -85,18 +85,17 @@ from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.model_service import VENUE_FRAME_FQN
 from spatialdds_demo.keepout import FREE, build_mask
 from spatialdds_demo.plaza import GROUND_Z, ROBOT_START_XY
-from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
+from spatialdds_demo.qos_profiles import MODEL_LATCHED
 from spatialdds_demo.tempo import Tempo
 # Migrated to `spatial.owm/0.1` on the scene-scoped topic names, same scene as
 # the venue it stands in -- the robot is in the Littlefield plaza, not a second
 # venue. This lane was pinned at the pre-1.8 names while the OWM pilot ran so
 # the cost of staging was visible in source rather than discovered as silence;
 # docs/robot-1.8-census.md is the field-level check that took the pin out.
-from spatialdds_demo.topics import (
-    SCENE, TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1)
+from spatialdds_demo.topics import SCENE, TOPIC_MODEL_ENTITY_V1
 from spatialdds_idl18.builtin import Time
 from spatialdds_idl18.spatial.owm import (
-    Basis, Entity, LifecycleState, ModelCommand, ModelLayer, ModelPose,
+    Basis, Entity, LifecycleState, ModelLayer, ModelPose,
 )
 from spatialdds_idl18.spatial.common import KV
 from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
@@ -365,28 +364,20 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
     # The venue's law, read off the latched topic the way any consumer reads
     # it -- so a reshape reaches this robot too, with nothing here that knows
     # what a pond is.
-    # **The library's transport, not this repository's, and the reason is a
-    # collision rather than a preference.** Both apply the same §3.3.3
-    # profile, and the two `QosProfile.to_qos()` results are identical — but
-    # they disagree about where it goes. `typed_transport.get_topic` creates
-    # the `Topic` with *default* QoS and puts the profile on the endpoints;
-    # `spatialdds_ros.transport` puts it on the topic as well. Both are legal
-    # DDS, and in one participant they are not compatible: the adapter creates
-    # the entity topic first, this reader asked for the same name with
-    # different topic QoS, and CycloneDDS refused it with
-    # `DDS_RETCODE_INCONSISTENT_POLICY` — on the *second* creation, which made
-    # it look like a problem with this reader.
+    # **The library's transport, not this repository's: one convention per
+    # topic, for a lane the library owns.** Both apply the same §3.3.3
+    # profile and the two `QosProfile.to_qos()` results are identical, so
+    # either would match on the wire. Reading a library-owned lane with the
+    # library's own transport keeps that from being something to re-check.
     #
-    # So the lane the library owns is opened with the library's transport.
-    # One convention per topic. Filed as an observation for spatialdds-ros in
-    # `docs/ros-adoption-census.md`: making topic QoS part of the contract is
-    # a choice a consumer has to match, and it is not obvious from outside.
+    # It was a hard collision until spatialdds-ros 0.2.1. The library put the
+    # profile on its `Topic` objects as well as its endpoints, and a topic's
+    # QoS must agree among every live topic object for that name, so this
+    # reader was refused with `DDS_RETCODE_INCONSISTENT_POLICY`. The library
+    # now creates topics with default QoS, as `typed_transport.get_topic`
+    # always has, and the conventions agree.
     entities_reader = ros_tt.make_reader(
         participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
-    # Part of the InvalidSample workaround above. The library's transport, so
-    # the command topic's QoS agrees with the adapter's own reader on it.
-    commands_reader = ros_tt.make_reader(
-        participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
     known: dict = {}
 
     def refresh_keepout():
@@ -433,25 +424,8 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
         note = refresh_keepout()
         if note:
             print(f"robot: {note}", flush=True)
-        # **Labelled workaround for a library defect, 2026-10-19.**
-        # `adapter.poll_commands()` crashes on an `InvalidSample`:
-        # `spatialdds_ros.transport.take_samples` filters `s is not None`,
-        # but CycloneDDS's `take()` also yields `InvalidSample` for dispose
-        # and no-writer notifications, and `handle_command` then reads
-        # `.subject_id` off one and raises
-        # `AttributeError: 'InvalidSample' object has no attribute
-        # 'subject_id'`. The robot died the first time any peer joined and
-        # left the command lane — which the library's own tests never did.
-        #
-        # Filed for spatialdds-ros (see `docs/ros-adoption-census.md`). The
-        # workaround uses the library's *public* `handle_command` with this
-        # repository's filter, which unwraps `.data` and drops invalid
-        # samples. Remove it, and the loop below, when the library's
-        # `take_samples` is fixed.
-        for command in tt.take_samples(commands_reader):
-            note = adapter.handle_command(command)
-            if note:
-                print(f"robot: {note}", flush=True)
+        for note in adapter.poll_commands():
+            print(f"robot: {note}", flush=True)
         x, y, yaw = sim.step(interval)
         abandoned = sim.abandoned
         if abandoned:
