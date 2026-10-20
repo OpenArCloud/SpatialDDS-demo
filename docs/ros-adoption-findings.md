@@ -1,0 +1,107 @@
+# What the adoption found
+
+**Filed 2026-10-19, during the swap the four-seam ruling authorised.** Three
+findings, in the order they cost time. The first is the one the brief predicted
+adoption would surface and the library's own acceptance could not: a defect
+reachable only with a real peer.
+
+---
+
+## 1. `spatialdds_ros` crashes on an `InvalidSample` — for the library
+
+**The robot died the first time any peer joined and left the command lane.**
+
+```
+AttributeError: 'InvalidSample' object has no attribute 'subject_id'
+  spatialdds_ros/adapter.py:218, via poll_commands
+```
+
+`spatialdds_ros.transport.take_samples` filters only `None`:
+
+```python
+return [s for s in (reader.take(N=n) or []) if s is not None]
+```
+
+CycloneDDS's `take()` also yields `InvalidSample` objects — dispose and
+no-writer notifications carry instance state and no payload. `handle_command`
+then reads `.subject_id` off one and raises. This repository's own transport
+has always got it right, and the contrast is the whole finding:
+
+```python
+# spatialdds_demo/typed_transport.py:187
+return [s.data for s in take_with_state(reader, n=n) if s.data is not None]
+```
+
+**Why the library's own 153 tests never saw it.** Nothing in them ever joined
+and left a command lane. Every test wrote commands from a writer that outlived
+the reader, so no invalid sample was ever produced. The defect needs a *peer
+with a lifetime* — which is the first thing a real deployment supplies and the
+last thing a unit test does.
+
+Found here within a minute of the swap, because the demo's capture tool starts
+its own robot, that robot is correctly refused by the one-writer-per-key guard,
+and its participant then goes away — producing exactly the sample the library
+cannot read.
+
+**Worked around with a labelled note** in `robot_bridge._run_kinematic`: the
+demo polls with its own filter and calls the library's *public*
+`handle_command` per sample. The workaround and the loop it replaces are both
+marked, and both come out when the library's `take_samples` is fixed.
+
+**For the library:** `take_samples` should unwrap `.data` and drop invalid
+samples, and a test should produce one — a writer created, a sample written,
+the writer disposed or dropped, and the reader polled after.
+
+---
+
+## 2. Two transports disagree about where QoS goes — an observation
+
+Both this repository and the library apply spec §3.3.3 profiles, and their
+`QosProfile.to_qos()` results are *identical*. They disagree about **where**:
+
+| | topic QoS | endpoint QoS |
+|---|---|---|
+| `spatialdds_demo.typed_transport` | default | the profile |
+| `spatialdds_ros.transport` | the profile | the profile |
+
+Both are legal DDS. In one participant they are not compatible: the adapter
+creates the entity topic first, this repository's reader asks for the same
+name with different topic QoS, and CycloneDDS refuses with
+`DDS_RETCODE_INCONSISTENT_POLICY` — on the *second* creation, which makes it
+look like a problem with whichever endpoint happened to be built later.
+
+Fixed here by opening the lanes the library owns with the library's transport.
+One convention per topic.
+
+**For the library:** making topic QoS part of the contract is a choice every
+consumer has to match, and nothing about the API says so. Worth either
+documenting or dropping — the library's own
+`_topic` already excludes Lifespan for a closely related reason, which is the
+same lesson one policy short.
+
+---
+
+## 3. The gnome can lose a startup race — pre-existing
+
+`scripts/gnome_publisher.py` writes one latched `Entity` and holds. In one
+container cycle during this batch the binding never saw it: the entity was
+provably on the bus (a fresh late-joining reader saw all nine instances,
+`ent:gnome:visitor` among them) and the binding's pump had logged 89 entity
+samples without it. `model-stack.spec.ts`'s "a fresh tab shows the venue"
+failed on the missing gnome.
+
+Restarting the publisher alone fixed it, which locates the fault in delivery
+to one subscriber rather than in the publisher or the page.
+
+**Not attributable to the swap.** The gnome is published by a separate process
+this batch does not touch, and the probable trigger is mine but incidental: the
+capture tool was run twice against the live domain, each run joining and
+leaving with its own participants, and a single latched sample is exactly what
+discovery churn can strand.
+
+**What would fix it properly:** the gnome should re-assert on a cadence the way
+the announce does. "Write once and hold" trusts TRANSIENT_LOCAL to survive
+every future subscriber *and* all discovery churn, and a demo entity that can
+silently fail to appear is worth more than one line of a publisher. Filed
+rather than fixed because it is the venue's publisher, not the robot lane, and
+this batch owns the latter.

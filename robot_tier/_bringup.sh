@@ -18,7 +18,25 @@ sleep 3
 # The robot bridge, in ROS mode: one process reading /odom, owning
 # ent:robot:tb3 on the bus, and driving through nav2. It refuses to start if
 # something else is already publishing that key -- see already_published().
-python3 -m spatialdds_demo.robot_bridge --source ros &
+# **The library's node, not the demo's bridge** (adopted 2026-10-19). Same
+# job, and its pose input defaults to the TF chain `map -> base_link` rather
+# than `/odom` — which matters here more than anywhere: `plaza_sim_node`
+# publishes `map -> odom` as a static identity, so `/odom` happened to be
+# map-frame in this tier and would not be on a localizing robot. Retiring the
+# function retired the defect.
+#
+# Anchorless on purpose: `model_service` publishes this frame's
+# FrameTransform and the scene keeps the single claim.
+python3 -m spatialdds_ros.robot_node --ros-args \
+  -p scene:=ut-austin-littlefield \
+  -p entity_id:=ent:robot:tb3 \
+  -p frame_id:=map/ut-littlefield-fountain \
+  -p source_id:=svc:robot:demo/tb3 \
+  -p label:=TurtleBot \
+  -p ground_z:=-0.84 \
+  -p domain:=${SPATIALDDS_DDS_DOMAIN:-1} \
+  -p content_refs:='[catalog:dcef7c31-1d5f-54aa-9344-899912f9d34a]' \
+  -p external_refs:='[wikidata=Q4810574]' &
 sleep 2
 
 ros2 run nav2_planner planner_server    --ros-args --params-file "$PARAMS" &

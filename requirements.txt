@@ -10,9 +10,15 @@ pytest>=7.0.0
 # a library change should be a decision with a diff to read, not something a
 # rebuild picks up silently.
 #
+# Bumped e8e5ec2 -> e7b897d on 2026-10-19: that release added `content_refs`
+# and `external_refs` to its Config, which is what the robot lane needed. The
+# earlier pin could not be adopted — the library had nowhere to carry this
+# robot's `catalog:` reference, so the page would have drawn a pin instead of
+# a TurtleBot. See docs/ros-adoption-blocker.md.
+#
 # Note it ships a top-level `spatialdds_idl18` of its own, byte-identical to
 # this repository's today. This repo's root wins on sys.path, so the demo runs
 # its own types; `tests/test_idl_trees_agree.py` is the gate that asserts the
 # two have not drifted, because a mismatch between two generated trees shows
 # up as a plausible wrong value rather than an exception.
-spatialdds_ros @ git+https://github.com/OpenArCloud/spatialdds-ros@e8e5ec20bff1bbd40809276bb8a8606dfb41e965
+spatialdds_ros @ git+https://github.com/OpenArCloud/spatialdds-ros@e7b897da773617aee1d824784184f00bc3834709

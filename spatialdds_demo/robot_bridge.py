@@ -71,6 +71,10 @@ from typing import List, Optional, Tuple
 
 from cyclonedds.domain import DomainParticipant
 
+from spatialdds_ros import transport as ros_tt
+from spatialdds_ros.adapter import RobotAdapter, already_published
+from spatialdds_ros.config import Config
+
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 # The 1.8 frame now, which is the whole of this lane's type-level change: the
@@ -78,12 +82,10 @@ from spatialdds_demo.dds_transport import require_dds_env
 # members 1.8 added cannot alter what this file does -- they alter what it
 # declares, which is that the robot's pose is in a frame that says on the wire
 # it is metric.
-from spatialdds_demo.model_service import venue_frame
+from spatialdds_demo.model_service import VENUE_FRAME_FQN
 from spatialdds_demo.keepout import FREE, build_mask
 from spatialdds_demo.plaza import GROUND_Z, ROBOT_START_XY
-from spatialdds_demo.qos_profiles import (
-    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
-)
+from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
 from spatialdds_demo.tempo import Tempo
 # Migrated to `spatial.owm/0.1` on the scene-scoped topic names, same scene as
 # the venue it stands in -- the robot is in the Littlefield plaza, not a second
@@ -91,8 +93,7 @@ from spatialdds_demo.tempo import Tempo
 # the cost of staging was visible in source rather than discovered as silence;
 # docs/robot-1.8-census.md is the field-level check that took the pin out.
 from spatialdds_demo.topics import (
-    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
-)
+    SCENE, TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1)
 from spatialdds_idl18.builtin import Time
 from spatialdds_idl18.spatial.owm import (
     Basis, Entity, LifecycleState, ModelCommand, ModelLayer, ModelPose,
@@ -125,14 +126,37 @@ START_XY = ROBOT_START_XY
 SIM_HZ = 5.0
 
 
-def _now() -> Time:
-    now = time.time()
-    return Time(sec=int(now), nanosec=int((now % 1) * 1e9))
+def venue_config(domain_id: int) -> Config:
+    """
+    How this venue configures `spatialdds_ros`.
 
+    Every venue-specific fact the library needs, in one place, so the
+    difference between "the library's behaviour" and "this demo's" is a
+    function rather than a diff.
 
-def yaw_quaternion(yaw: float) -> list:
-    """Identity faces east in this frame; see the seeder's comments."""
-    return [0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)]
+    **Anchorless on purpose.** `model_service` publishes the scene's own
+    `FrameTransform` for this frame, and the scene keeps the single claim: a
+    second publisher would be two services asserting where the venue sits.
+    The library's anchorless mode is exactly this, and it publishes no writer
+    on the frames lane at all — see `docs/ros-adoption-census.md` seam 2.
+
+    **`content_refs` is what makes the page draw a robot.** Without this
+    reference the client has nothing to resolve and renders a marker, which is
+    the honest rendering of a robot that has not said what it looks like — and
+    it is why the adoption waited for `spatialdds_ros` 0.2.0.
+    """
+    return Config(
+        scene=SCENE,
+        entity_id=ENTITY_ID,
+        frame_id=VENUE_FRAME_FQN,
+        source_id=SOURCE_ID,
+        label="TurtleBot",
+        type_uri=TYPE_MOBILE_ROBOT,
+        content_refs=(f"catalog:{ROBOT_CONTENT_ID}",),
+        external_refs=(("wikidata", "Q4810574"),),
+        ground_z=GROUND_Z,
+        domain=domain_id,
+    )
 
 
 class KinematicNavigator:
@@ -147,226 +171,6 @@ class KinematicNavigator:
     def send(self, x: float, y: float) -> str:
         self._sim.goal = (x, y)
         return f"the kinematic sim is heading for ({x:.2f}, {y:.2f})"
-
-
-class RobotBridge:
-    """
-    Owns `ent:robot:tb3`. Publishes its latched record and its fast poses.
-
-    No ROS in here: it is handed poses and handed a navigator. In the tier the
-    caller feeds it `/odom` and gives it a nav2 action client; in the dev
-    fallback the caller feeds it a kinematic sim and gives it that sim's goal
-    setter. Both call the same two methods, which keeps the interesting
-    behaviour -- cadence, latching, going quiet, declining -- testable without
-    a robot or a ROS installation.
-    """
-
-    def __init__(self, participant: DomainParticipant, navigator=None):
-        self._entities = tt.make_writer(
-            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
-        self._poses = tt.make_writer(
-            participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
-        self._commands = tt.make_reader(
-            participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
-        self._tempo = Tempo()
-        self._goal: Optional[Tuple[float, float]] = None
-        self._entity: Optional[Entity] = None
-        self._silent = False
-        self._last_seen = 0.0
-        # Whoever actually drives. `None` means the bridge accepts goals and
-        # records them, which is what the unit tests exercise.
-        self._navigator = navigator
-
-    # --- what it publishes ------------------------------------------------
-
-    def _record(self, pose: PoseSE3, state: LifecycleState,
-                reason: str = "", nav_status: str = "") -> Entity:
-        """
-        `nav_status` is how a refusal reaches whoever asked for it.
-
-        A `goto` is accepted onto the bus before anyone knows whether it can
-        be driven: whether a straight line crosses declared water depends on
-        where the robot is when it meets the boundary. So the acceptance is
-        honest and the refusal arrives later -- and until now it arrived only
-        on this process's stdout. A browser that tapped the lawn saw
-        `robot:goto accepted` and a motionless robot, which is precisely the
-        silence the abandonment message was written to end; it ended it for
-        whoever was reading the server log, and for nobody else.
-
-        The latched entity is the lane that was already there: every client
-        reads it, it is the robot's own record to describe itself with, and
-        `demo.*` properties are where this demo says things of its own.
-        """
-        properties = [
-            KV(key="demo.label", value="TurtleBot"),
-            KV(key="demo.note",
-               value="A self-localizing robot reporting where it believes it is. OBSERVED because it is looking at the world, not fusing other people's claims about it."),
-        ]
-        if nav_status:
-            properties.append(KV(key="demo.nav_status", value=nav_status))
-        return Entity(
-            entity_id=ENTITY_ID,
-            basis=Basis.OBSERVED,
-            type_uris=[TYPE_MOBILE_ROBOT],
-            layer=ModelLayer.FAST,
-            frame_ref=venue_frame(),
-            has_pose=True,
-            pose=pose,
-            has_extent=False,
-            extent=Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0]),
-            properties=properties,
-            external_refs=[],
-            content_refs=[f"catalog:{ROBOT_CONTENT_ID}"],
-            state=state,
-            state_reason=reason,
-            source_id=SOURCE_ID,
-            stamp=_now(),
-        )
-
-    def observed(self, x: float, y: float, yaw: float,
-                 now: Optional[float] = None) -> None:
-        """A new pose from upstream. Fast lane always; latch on cadence."""
-        now = time.time() if now is None else now
-        pose = PoseSE3(t=[x, y, GROUND_Z], q=yaw_quaternion(yaw))
-        first = self._entity is None
-        was_silent = self._silent
-        self._entity = self._record(pose, LifecycleState.ACTIVE)
-        self._last_seen = now
-        self._silent = False
-
-        self._poses.write(ModelPose(entity_id=ENTITY_ID, pose=pose,
-                                    source_id=SOURCE_ID, stamp=self._entity.stamp))
-        # The record is written on the cadence -- and unconditionally when the
-        # robot first appears or comes back, because those are changes of
-        # *state*, not of position, and a client waiting four more poses to
-        # find out the robot is alive again would be told late.
-        if self._tempo.observed(ENTITY_ID, now) or first or was_silent:
-            self._entities.write(self._entity)
-
-    def refused(self, why: str) -> None:
-        """
-        Republish the latched record with a refusal on it, now.
-
-        Off the cadence deliberately: this is a change of *state*, like the
-        robot appearing or coming back, and the whole point is that the client
-        that asked learns promptly rather than up to four poses later.
-
-        A no-op before the first pose, because there is no record to amend and
-        a refusal cannot precede the robot it is about.
-        """
-        if self._entity is None:
-            return
-        self._entity = self._record(self._entity.pose, LifecycleState.ACTIVE,
-                                    nav_status=why)
-        self._entities.write(self._entity)
-
-    # --- what it is asked to do -------------------------------------------
-
-    def handle_command(self, command: ModelCommand) -> Optional[str]:
-        """
-        `goto`, and nothing else. Returns a line for the log, or None when the
-        command was not addressed to us.
-
-        Silence for somebody else's subject, for the same reason the model
-        service is silent about the robot: the lane has several owners and a
-        refusal from the wrong one reads as the system disagreeing with
-        itself. A malformed command *about the robot* is a different matter
-        and gets a reason.
-
-        What it reports is what was accepted, not what was sent. A goal the
-        robot cannot take -- because nothing is publishing its pose, so there
-        is nothing to navigate from -- is declined here rather than queued
-        silently for a robot that may never come back.
-        """
-        if command.subject_id != ENTITY_ID:
-            return None
-        if command.verb != "goto":
-            return None
-        if not command.has_pose:
-            # A zeroed pose is a well-formed request to drive to the frame
-            # origin. Declining is the only reading that cannot be mistaken
-            # for obedience -- the same ethic as set_extent's guard.
-            return f"declined: goto for {ENTITY_ID} carried no pose"
-        if self._entity is None or self._silent:
-            return (f"declined: goto for {ENTITY_ID} — no pose from "
-                    f"{SOURCE_ID}, so there is nothing to navigate from")
-
-        # The other half of "nothing to navigate from": the robot may be
-        # reporting its pose perfectly while the thing that would drive it is
-        # not accepting goals. Declining with that reason beats accepting a
-        # goal nobody will act on -- the requester would watch a robot sit
-        # still with no way to learn why.
-        if self._navigator is not None:
-            unavailable = self._navigator.available()
-            if unavailable:
-                return (f"declined: goto for {ENTITY_ID} — {unavailable}")
-
-        x, y = command.pose.t[0], command.pose.t[1]
-        self._goal = (x, y)
-        if self._navigator is None:
-            return (f"accepted goto ({x:.2f}, {y:.2f}) "
-                    f"(asked by {command.requester_id})")
-        # What the navigator accepted, not what was sent. If nav2 rounds,
-        # clamps or refuses, that is what belongs in the log.
-        outcome = self._navigator.send(x, y)
-        return f"{outcome} (asked by {command.requester_id})"
-
-    def poll_commands(self) -> List[str]:
-        """Drain the command lane. The caller decides what to do with the
-        notes; the goal is already set."""
-        notes = []
-        try:
-            batch = tt.take_samples(self._commands) or []
-        except Exception as error:
-            # Untrusted traffic, the same as every other reader here.
-            return [f"command lane read failed: {error!r}"]
-        for command in batch:
-            note = self.handle_command(command)
-            if note:
-                notes.append(note)
-        return notes
-
-    @property
-    def goal(self) -> Optional[Tuple[float, float]]:
-        return self._goal
-
-    def clear_goal(self) -> None:
-        self._goal = None
-
-    def tick(self, now: Optional[float] = None) -> Optional[str]:
-        """
-        Housekeeping between poses. Returns what it did, for the log.
-
-        Two jobs: flush the latch when the robot stops moving, and declare it
-        UNOBSERVED when we stop hearing from it at all.
-        """
-        now = time.time() if now is None else now
-        if self._entity is None:
-            return None
-
-        if not self._silent and now - self._last_seen > self.silence_threshold():
-            self._silent = True
-            quiet_for = now - self._last_seen
-            self._entity = self._record(
-                self._entity.pose, LifecycleState.UNOBSERVED,
-                f"no pose from {SOURCE_ID} for {quiet_for:.1f}s; this is where "
-                f"it was last seen, not where it is")
-            self._entities.write(self._entity)
-            self._tempo.forget(ENTITY_ID)
-            return f"unobserved after {quiet_for:.1f}s of silence"
-
-        if not self._silent and self._tempo.idle(now):
-            self._entities.write(self._entity)
-            return "latch flushed — it stopped moving"
-        return None
-
-    def silence_threshold(self) -> float:
-        """Derived from the feed's own cadence, with a floor."""
-        return self._tempo.threshold(ENTITY_ID)
-
-    @property
-    def state(self) -> str:
-        return "UNOBSERVED" if self._silent else "ACTIVE"
 
 
 # How much room the robot keeps around itself, in metres.
@@ -496,45 +300,43 @@ class PlazaSim:
         return self.x, self.y, self.yaw
 
 
-def already_published(participant: DomainParticipant,
-                      settle: float = 2.5) -> Optional[str]:
-    """
-    Is somebody else already publishing this robot?
-
-    One writer per key is the rule the whole model rests on, and this is the
-    one place two processes could plausibly break it: the demo stack can start
-    a bridge with its own kinematic sim, and the robot tier starts one driven
-    by nav2. Two of them would put one robot in two places -- the exact
-    two-writers state Part 2 spent itself closing -- and the symptom would be
-    a robot that teleports rather than an error anyone could read.
-
-    So a bridge looks before it writes, and refuses rather than joins.
-    """
-    reader = tt.make_reader(
-        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
-    deadline = time.time() + settle
-    while time.time() < deadline:
-        for sample in tt.take_samples(reader) or []:
-            if sample.entity_id == ENTITY_ID:
-                return sample.source_id
-        time.sleep(0.05)
-    return None
+def _library_version() -> str:
+    import spatialdds_ros
+    return spatialdds_ros.__version__
 
 
-def run(domain_id: Optional[int] = None, source: str = "ros",
+def run(domain_id: Optional[int] = None, source: str = "kinematic",
         hz: float = SIM_HZ) -> int:
     domain_id = require_dds_env() if domain_id is None else domain_id
     participant = DomainParticipant(domain_id)
 
-    existing = already_published(participant)
+    if source == "ros":
+        # **Retired 2026-10-19 in favour of the library's own node**, which
+        # does the same job and defaults its pose input to the TF chain
+        # `map -> base_link` rather than `/odom`. That difference is the
+        # point: this function read `/odom`, which is map-frame only because
+        # `robot_tier/plaza_sim_node.py` publishes `map -> odom` as a static
+        # identity, and on a localizing robot it would have published a
+        # slowly-diverging claim about where the robot sits on the earth.
+        # Retiring the function retires the defect, rather than fixing code
+        # on its way out.
+        print("robot: --source ros has moved to the library's own node, which "
+              "reads TF map->base_link instead of /odom:\n"
+              "  python3 -m spatialdds_ros.robot_node --ros-args \\\n"
+              f"      -p scene:={SCENE} -p entity_id:={ENTITY_ID} \\\n"
+              f"      -p frame_id:={VENUE_FRAME_FQN} \\\n"
+              f"      -p content_refs:='[catalog:{ROBOT_CONTENT_ID}]'\n"
+              "robot_tier/_bringup.sh already runs that.", file=sys.stderr)
+        return 2
+
+    config = venue_config(domain_id)
+    existing = already_published(participant, config)
     if existing is not None:
         print(f"robot: {ENTITY_ID} is already being published by {existing}. "
               f"Refusing to start: one writer per key, and two of us would "
               f"put one robot in two places.", file=sys.stderr)
         return 1
 
-    if source == "ros":
-        return _run_with_ros(participant, domain_id)
     return _run_kinematic(participant, domain_id, hz)
 
 
@@ -550,14 +352,41 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
     but it reads the venue's declaration off the same bus and declines to
     cross it, so the fallback no longer contradicts the world it stands in.
     """
+    config = venue_config(domain_id)
     sim = PlazaSim()
-    bridge = RobotBridge(participant, navigator=KinematicNavigator(sim))
+    # **The library owns the lanes; this module owns the geometry.** The seam
+    # is the `Navigator` protocol plus `observed()`/`refused()`, so the sim,
+    # its mask, its clearance and its abandonment message never cross into
+    # the library — see `docs/ros-adoption-census.md` seam 1. Behaviour is
+    # identical because it is the same code, on both sides of the seam.
+    adapter = RobotAdapter(participant, config,
+                           navigator=KinematicNavigator(sim))
 
     # The venue's law, read off the latched topic the way any consumer reads
     # it -- so a reshape reaches this robot too, with nothing here that knows
     # what a pond is.
-    entities_reader = tt.make_reader(
+    # **The library's transport, not this repository's, and the reason is a
+    # collision rather than a preference.** Both apply the same §3.3.3
+    # profile, and the two `QosProfile.to_qos()` results are identical — but
+    # they disagree about where it goes. `typed_transport.get_topic` creates
+    # the `Topic` with *default* QoS and puts the profile on the endpoints;
+    # `spatialdds_ros.transport` puts it on the topic as well. Both are legal
+    # DDS, and in one participant they are not compatible: the adapter creates
+    # the entity topic first, this reader asked for the same name with
+    # different topic QoS, and CycloneDDS refused it with
+    # `DDS_RETCODE_INCONSISTENT_POLICY` — on the *second* creation, which made
+    # it look like a problem with this reader.
+    #
+    # So the lane the library owns is opened with the library's transport.
+    # One convention per topic. Filed as an observation for spatialdds-ros in
+    # `docs/ros-adoption-census.md`: making topic QoS part of the contract is
+    # a choice a consumer has to match, and it is not obvious from outside.
+    entities_reader = ros_tt.make_reader(
         participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+    # Part of the InvalidSample workaround above. The library's transport, so
+    # the command topic's QoS agrees with the adapter's own reader on it.
+    commands_reader = ros_tt.make_reader(
+        participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
     known: dict = {}
 
     def refresh_keepout():
@@ -577,8 +406,17 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
         return (f"keep-out from {', '.join(sim.keepout.contributors)} "
                 f"({sim.keepout.occupied_cells} cells)")
 
-    print(f"robot: domain {domain_id}, source {SOURCE_ID} — kinematic mode")
-    print(f"robot: owns {ENTITY_ID}; straight lines, declines declared cells")
+    for note in config.startup_notes():
+        print(f"robot: {note}", flush=True)
+    print(f"robot: owns {ENTITY_ID} through spatialdds_ros "
+          f"{_library_version()}; straight lines, declines declared cells",
+          flush=True)
+    # The library's anchorless note says another participant may own the
+    # georeference. Here one does, and saying so is the demo's business
+    # rather than the library's — it cannot see who else is publishing.
+    print(f"robot: the venue publishes the georeference for "
+          f"{VENUE_FRAME_FQN}; this robot runs anchorless so the scene keeps "
+          f"the single claim", flush=True)
 
     stop = False
 
@@ -595,19 +433,36 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
         note = refresh_keepout()
         if note:
             print(f"robot: {note}", flush=True)
-        for note in bridge.poll_commands():
-            print(f"robot: {note}", flush=True)
+        # **Labelled workaround for a library defect, 2026-10-19.**
+        # `adapter.poll_commands()` crashes on an `InvalidSample`:
+        # `spatialdds_ros.transport.take_samples` filters `s is not None`,
+        # but CycloneDDS's `take()` also yields `InvalidSample` for dispose
+        # and no-writer notifications, and `handle_command` then reads
+        # `.subject_id` off one and raises
+        # `AttributeError: 'InvalidSample' object has no attribute
+        # 'subject_id'`. The robot died the first time any peer joined and
+        # left the command lane — which the library's own tests never did.
+        #
+        # Filed for spatialdds-ros (see `docs/ros-adoption-census.md`). The
+        # workaround uses the library's *public* `handle_command` with this
+        # repository's filter, which unwraps `.data` and drops invalid
+        # samples. Remove it, and the loop below, when the library's
+        # `take_samples` is fixed.
+        for command in tt.take_samples(commands_reader):
+            note = adapter.handle_command(command)
+            if note:
+                print(f"robot: {note}", flush=True)
         x, y, yaw = sim.step(interval)
         abandoned = sim.abandoned
         if abandoned:
             print(f"robot: {abandoned}", flush=True)
             sim.abandoned = None
-        bridge.observed(x, y, yaw)
+        adapter.observed(x, y, yaw)
         if abandoned:
             # After `observed`, so the amended record is the one carrying the
             # current pose rather than being overwritten by it a line later.
-            bridge.refused(abandoned)
-        note = bridge.tick()
+            adapter.refused(abandoned)
+        note = adapter.tick()
         if note:
             print(f"robot: {note}", flush=True)
         reported += 1
@@ -618,101 +473,16 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
     return 0
 
 
-def _run_with_ros(participant: DomainParticipant, domain_id: int) -> int:
-    """
-    The tier: one process holding both stacks, end to end.
-
-    It reads `/odom` from ROS, owns `ent:robot:tb3` on the SpatialDDS bus,
-    takes `goto` off the command lane, and issues `NavigateToPose` to nav2 --
-    natively on both sides, with nothing relayed. `bridges/ros2_bridge` has
-    held rclpy and a CycloneDDS participant in one process since long before
-    this, and this follows it.
-
-    rclpy is imported here rather than at module scope so the rest of this
-    file stays importable on a machine with no ROS, which is where its tests
-    run.
-    """
-    import rclpy
-    from geometry_msgs.msg import PoseStamped
-    from nav2_msgs.action import NavigateToPose
-    from nav_msgs.msg import Odometry
-    from rclpy.action import ActionClient
-    from rclpy.node import Node
-
-    from spatialdds_demo.plaza import GROUND_Z as PLAZA_Z
-
-    class Nav2Navigator:
-        """nav2, asked properly and reported honestly."""
-
-        def __init__(self, node):
-            self._node = node
-            self._client = ActionClient(node, NavigateToPose, "navigate_to_pose")
-
-        def available(self) -> Optional[str]:
-            if not self._client.server_is_ready():
-                # One reason, said plainly. "nav2 is down" and "nav2 is up but
-                # inactive" look identical from here and lead to the same
-                # place: nothing will drive.
-                return "nav2 is not accepting goals (no navigate_to_pose server)"
-            return None
-
-        def send(self, x: float, y: float) -> str:
-            goal = NavigateToPose.Goal()
-            goal.pose.header.frame_id = "map"
-            goal.pose.header.stamp = self._node.get_clock().now().to_msg()
-            goal.pose.pose.position.x = x
-            goal.pose.pose.position.y = y
-            goal.pose.pose.position.z = PLAZA_Z
-            goal.pose.pose.orientation.w = 1.0
-            self._client.send_goal_async(goal)
-            return f"nav2 accepted a goal at ({x:.2f}, {y:.2f})"
-
-    class RobotBridgeNode(Node):
-        def __init__(self):
-            super().__init__("spatialdds_robot_bridge")
-            self._bridge = RobotBridge(participant,
-                                       navigator=Nav2Navigator(self))
-            self.create_subscription(Odometry, "/odom", self._on_odom, 20)
-            self.create_timer(0.1, self._tick)
-            self.get_logger().info(
-                f"robot: owns {ENTITY_ID} on SpatialDDS domain {domain_id}, "
-                f"reading /odom and driving through nav2 — one process, "
-                f"both stacks")
-
-        def _on_odom(self, msg) -> None:
-            q = msg.pose.pose.orientation
-            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                             1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-            self._bridge.observed(msg.pose.pose.position.x,
-                                  msg.pose.pose.position.y, yaw)
-
-        def _tick(self) -> None:
-            for note in self._bridge.poll_commands():
-                self.get_logger().info(f"robot: {note}")
-            note = self._bridge.tick()
-            if note:
-                self.get_logger().info(f"robot: {note}")
-
-    rclpy.init()
-    node = RobotBridgeNode()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
-    return 0
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Publish a robot's sensed pose into the world model")
     parser.add_argument("--domain", type=int, default=None)
-    parser.add_argument("--source", choices=("ros", "kinematic"), default="ros",
-                        help="ros: read /odom and drive through nav2 (the "
-                             "demo). kinematic: an internal straight-line sim "
-                             "that honours no keep-out, for iteration.")
+    parser.add_argument("--source", choices=("ros", "kinematic"),
+                        default="kinematic",
+                        help="kinematic: the venue's own straight-line sim, "
+                             "which honours the declared keep-out. ros: "
+                             "moved to spatialdds_ros.robot_node; this prints "
+                             "the invocation and exits.")
     parser.add_argument("--hz", type=float, default=SIM_HZ)
     args = parser.parse_args()
     return run(args.domain, args.source, args.hz)

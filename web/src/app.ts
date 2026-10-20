@@ -1303,7 +1303,11 @@ const lastNavStatus = new Map<string, string>();
 
 function reportNavStatus(entity: ModelEntity): void {
   const status = (entity.properties || [])
-    .find((kv: { key?: string }) => kv.key === 'demo.nav_status')?.value || '';
+    // `nav.status`, not `demo.nav_status`: the key is the library's
+    // published convention and unprefixed on purpose. This demo had scoped a
+    // general fact to itself, which a second consumer would have had to know
+    // whose demo it was to read.
+    .find((kv: { key?: string }) => kv.key === 'nav.status')?.value || '';
   const previous = lastNavStatus.get(entity.entity_id) || '';
   if (status === previous) {
     return;
@@ -1336,7 +1340,7 @@ function describeEntity(item: CatalogItem): string | undefined {
   rows.push(['State', entity.state_reason
     ? `${entity.state} (${entity.state_reason})` : String(entity.state)]);
   const navStatus = (entity.properties || [])
-    .find((kv: any) => kv.key === 'demo.nav_status')?.value;
+    .find((kv: any) => kv.key === 'nav.status')?.value;
   if (navStatus) {
     rows.push(['Last refusal', navStatus]);
   }

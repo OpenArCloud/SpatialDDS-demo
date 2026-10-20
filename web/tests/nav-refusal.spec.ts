@@ -8,7 +8,7 @@ import { BINDING_URL, SCENE } from './model-stack.helpers';
  * drivable: whether a straight line crosses declared water depends on where
  * the robot is when it meets the boundary. So the acceptance is honest and
  * the refusal arrives later, on the robot's own latched record as
- * `demo.nav_status`.
+ * `nav.status`.
  *
  * Before this existed the page said `robot:goto accepted` and then nothing.
  * The robot's reason went to its stdout on the server, which a browser cannot
@@ -48,7 +48,7 @@ test('a refusal on the robot\'s record is reported, once', async ({
     e.entity_id === 'ent:robot:tb3'
       ? { ...e,
           properties: [...(e.properties || []),
-                       { key: 'demo.nav_status', value: REFUSAL }] }
+                       { key: 'nav.status', value: REFUSAL }] }
       : e);
 
   await page.route(`${BINDING_URL}/${SCENE}/world/entity/v1`, (route) =>

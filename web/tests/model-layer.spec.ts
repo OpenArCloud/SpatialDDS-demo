@@ -233,13 +233,35 @@ test.describe("a stranger's entity", () => {
   });
 
   test('it is named from the URI tail — poor, and accurate', () => {
-    // No demo.label, no known type. The tail is what this publisher claimed
+    // No label property, no known type. The tail is what this publisher
     // the thing is, which beats both a made-up name and no name at all.
     expect(displayName(GNOME)).toBe('garden-gnome');
   });
 
+  test('both label keys are read, and the convention wins', () => {
+    // `label` is spatialdds_ros's published convention; `demo.label` is what
+    // this venue still publishes on every entity it owns — the fountain, the
+    // pond, the shallows, every duck, the gnome. Reading only the first would
+    // have renamed the whole venue after its types while reconciling the
+    // robot's key, so both are read. This pins the precedence so neither half
+    // can be dropped by accident.
+    const conventional = {
+      ...GNOME, properties: [{ key: 'label', value: 'Gnorman' }] };
+    expect(displayName(conventional)).toBe('Gnorman');
+
+    const venueScoped = {
+      ...GNOME, properties: [{ key: 'demo.label', value: 'Old Gnorman' }] };
+    expect(displayName(venueScoped)).toBe('Old Gnorman');
+
+    const both = {
+      ...GNOME,
+      properties: [{ key: 'demo.label', value: 'Old Gnorman' },
+                   { key: 'label', value: 'Gnorman' }] };
+    expect(displayName(both)).toBe('Gnorman');
+  });
+
   test('the naming fallback stops at the first thing that is true', () => {
-    const withLabel = { ...GNOME, properties: [{ key: 'demo.label', value: 'Gnorman' }] };
+    const withLabel = { ...GNOME, properties: [{ key: 'label', value: 'Gnorman' }] };
     expect(displayName(withLabel)).toBe('Gnorman');
 
     const knownType = { ...GNOME, type_uris: ['http://www.wikidata.org/entity/Q483453'] };
@@ -270,7 +292,7 @@ test.describe("a stranger's entity", () => {
     const duck = {
       entity_id: 'ent:duck:west',
       type_uris: ['http://www.wikidata.org/entity/Q851478'],
-      properties: [{ key: 'demo.label', value: 'Bobbin' }],
+      properties: [{ key: 'label', value: 'Bobbin' }],
       frame_ref: { fqn: VENUE }, has_pose: true, pose: POSE,
       content_refs: [`catalog:${DUCK_CONTENT_ID}`]
     };

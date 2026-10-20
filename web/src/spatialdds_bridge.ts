@@ -648,7 +648,24 @@ export function disambiguate(entities: ModelEntity[]): Map<string, string> {
 }
 
 export function displayName(entity: ModelEntity): string {
-  const label = modelProperty(entity, 'demo.label');
+  // **Two keys, and the order is the point.** `label` is the published
+  // convention — `spatialdds_ros` uses it, unprefixed, because a name is a
+  // general fact and scoping it to one deployment makes every other consumer
+  // guess whose deployment it was.
+  //
+  // `demo.label` is still read, because this venue still publishes it: the
+  // fountain, the pond, the shallows, every duck and the gnome all carry it
+  // from `model_service` and `pond_watch`. Reading only `label` would have
+  // stripped the name off every one of them while reconciling the robot's —
+  // a far larger regression than the thing being fixed, and invisible except
+  // as a venue full of entities suddenly named after their types.
+  //
+  // Converging the venue onto `label` is the end state and is deliberately
+  // not done here: this batch owns the robot lane, and rewriting what every
+  // venue entity publishes is its own decision. Until then the convention
+  // wins where both are present.
+  const label = modelProperty(entity, 'label')
+    || modelProperty(entity, 'demo.label');
   if (label) {
     return label;
   }
