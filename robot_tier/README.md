@@ -12,10 +12,22 @@ keep-out — so it stops at the water's edge. nav2 goes round.
 ## Running it
 
 ```bash
-docker build -t spatialdds-robot-tier:latest robot_tier/     # once; slow, see below
+docker build -t spatialdds-robot-tier:latest -f robot_tier/Dockerfile .
 ./run_bridge_server_docker.sh                                # terminal 1, no ROBOT_SIM
 scripts/run_robot_tier.sh                                    # terminal 2
 ```
+
+**The build context is the repo root**, not `robot_tier/`. The Dockerfile
+installs the demo's own `requirements.txt`, which lives at the root, and
+copies the tree to `/ws` because `_bringup.sh` runs out of it. This said
+`robot_tier/` until 2026-10-20 and could not work: `COPY requirements.txt`
+failed to resolve and the build never started.
+
+**Rebuild it when the `spatialdds_ros` pin moves.** That requirement install
+is how the image gets the library, so an image built before a pin bump runs
+the previous one -- or, if the bump was the adoption that introduced it, has
+no library at all. `_bringup.sh` checks before launching and refuses rather
+than coming up half-alive; see below.
 
 `run_robot_tier.sh` shares the bridge container's network namespace
 (`--network container:dds_bridge…`) rather than joining a docker network. Both

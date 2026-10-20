@@ -51,7 +51,12 @@ fi
 if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
   echo "Image ${IMAGE} not found. Build it first (this takes a while --"
   echo "it builds CycloneDDS from source):"
-  echo "  docker build -t ${IMAGE} robot_tier/"
+  # The repo root is the build context, not robot_tier/: the Dockerfile
+  # installs the demo's own requirements.txt, which is at the root, and
+  # copies the whole tree to /ws because _bringup.sh runs out of it. Said
+  # the other way round here until 2026-10-20, which could not work --
+  # `COPY requirements.txt` failed to resolve and the build never started.
+  echo "  docker build -t ${IMAGE} -f robot_tier/Dockerfile ."
   exit 1
 fi
 

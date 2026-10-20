@@ -135,13 +135,65 @@ spans the venue, so the safety is bought by making two thirds of the lawn
 unreachable in one gesture. A U-shaped pool wants the arms of the U as
 separate declared boxes -- which is already the established idiom here, since
 the shallows is a second box beside the pond for exactly the reason that "no
-single rectangle does both". Leaving the northern bays' dry paving out of the
-declaration would open a corridor through the middle and need no planner
-change at all.
+single rectangle does both".
 
-Not done here because the waterline is a survey question, not a code one.
-This records the cost precisely so the geometry can be chosen against a
-number.
+### Correction, 2026-10-20: the geometry is not the fix
+
+This section claimed that leaving the northern bays' dry paving out of the
+declaration "would open a corridor through the middle and need no planner
+change at all". **That was never measured, and it is wrong.** Measured, from
+`ROBOT_START_XY`, one tap:
+
+| declaration | reachable |
+|---|---|
+| one rectangle, as declared | 192 / 553 (35%) |
+| box depth 15.25 m -> 12.00 m | 192 |
+| box depth 15.25 m -> 10.00 m | 192 |
+| box depth 15.25 m -> 8.00 m | 192 |
+| split, 3 m corridor through the middle | 194 / 557 |
+| split, 6 m corridor through the middle | 201 / 583 |
+| clearance 1.2 m -> 0.4 m, box unchanged | 229 / 641 (36%) |
+
+Shrinking the box's depth changes the reachable count by **nothing at all**.
+A 6 m corridor moves it by nine cells. Lowering the robot's clearance to a
+fifth gains four percentage points.
+
+**The limit is the straight-line driver, not the shape of the obstacle.**
+One-tap reachability under that tier is the question "is there an
+unobstructed straight line to the target", and a corridor the robot is not
+lined up with answers it no better than a wall: the robot starts at x = 17,
+a mid-plaza slot sits near x = 12.5, and almost no straight line threads it.
+Any geometry that keeps the water declared leaves the answer near 35%.
+
+So the declaration's shape is worth fixing on its own merits -- it forbids
+dry paving, and it disagrees with the venue's own observation, both recorded
+above -- but not as a way to make the lawn reachable. It cannot do that.
+
+### What does fix it: the robot's own planner
+
+Run on 2026-10-20, one tap from the start to the far grass, the goal the
+kinematic tier had declined every time:
+
+    goto (6.00, -3.00)
+      (17.00, -23.00) -> west along the south bank -> (-2.49, -19.69)
+                      -> north up the west side    -> (-2.11,  -4.33)
+                      -> east onto the grass       -> ( 5.69,  -3.14)
+      nav2: "Reached the goal!"  bt_navigator: "Goal succeeded"
+      the robot's record carried no `nav.status`: nothing was refused
+
+with the identical declaration -- 415 m2 of keep-out plus a 74 m2 shoulder,
+rasterised 350x233 at 0.10 m from `ent:pond:littlefield` and
+`ent:shallows:littlefield`, reaching nav2 as a costmap filter. The venue did
+not change its mind about the water; the robot gained the ability to go
+round it.
+
+That is the fix, and it is also the demo's actual thesis: the no-go zones are
+the venue's, arriving at runtime, where a robot would ordinarily carry a
+keep-out PGM drawn once at commissioning. `scripts/run_robot_tier.sh`.
+
+Not done to the declaration here because the waterline is a survey question,
+not a code one. This records the cost precisely so the geometry can be chosen
+against a number -- while being clear that the number it buys is small.
 
 ## Why it kept being reported as a regression
 

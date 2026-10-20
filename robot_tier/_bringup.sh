@@ -11,6 +11,24 @@ export SPATIALDDS_DDS_DOMAIN=${SPATIALDDS_DDS_DOMAIN:-1}
 export CYCLONEDDS_URI=file:///etc/cyclonedds.xml
 PARAMS=/ws/robot_tier/nav2_params.yaml
 
+# **The image carries `spatialdds_ros` from requirements.txt, and a stale
+# image has the wrong one or none.** Checked here, before anything starts,
+# because every launch below is backgrounded: when the adoption moved the
+# robot to the library on 2026-10-19 and this image was not rebuilt, the node
+# died with `No module named 'spatialdds_ros'` into its own stdout while nav2
+# and the keep-out came up healthy. The tier looked fine and nothing owned
+# ent:robot:tb3 on the bus -- a planner with nothing to drive and no page to
+# drive it from. Refusing to start says that in one line instead.
+if ! python3 -c "import spatialdds_ros" 2>/dev/null; then
+  echo "robot_tier: this image has no spatialdds_ros, so nothing would own" >&2
+  echo "  ent:robot:tb3 -- nav2 and the keep-out would run with no robot." >&2
+  echo "  The image installs it from requirements.txt; rebuild after a pin" >&2
+  echo "  bump, from the repo root:" >&2
+  echo "    docker build -t spatialdds-robot-tier:latest -f robot_tier/Dockerfile ." >&2
+  exit 1
+fi
+echo "robot_tier: spatialdds_ros $(python3 -c 'import spatialdds_ros as r; print(r.__version__)')"
+
 python3 /ws/robot_tier/plaza_sim_node.py &
 python3 /ws/robot_tier/keepout_node.py &
 sleep 3
