@@ -45,11 +45,28 @@ GROUND_Z = -0.84
 # here rather than hidden.
 #
 # The third move is presentational, and worth knowing before changing this
-# again: from here, in front of the pond, nav2 rounds the *west* end on the
-# way to the grass behind it; from (20, -22) it rounded the east. The planner
-# takes the nearer end, so this constant silently chooses which way the
-# demo's headline route sweeps on camera.
-ROBOT_START_XY = (17.0, -21.5)
+# again: from (17, -21.5), in front of the pond, nav2 rounded the *west* end
+# on the way to the grass behind it; from (20, -22) it rounded the east. The
+# planner takes the nearer end, so this constant silently chooses which way
+# the demo's headline route sweeps on camera.
+#
+# The fourth move, 2026-10-19, is about room. The declared box's south edge
+# is y = -20.00 and the kinematic tier clears 1.2 m, so the legal band south
+# of the water begins at y = -21.20 -- and y = -21.5 put the robot 0.30 m
+# into it, against a wall that spans the venue. In a live session it had
+# drifted to y = -21.27, leaving 0.07 m: every goal with any northward
+# component was refused on the first step, including a 0.7 m nudge onto
+# ground that is plainly dry on screen. That reads as a robot that cannot
+# move at all rather than one declining the water, which is the complaint
+# this has generated three times.
+#
+# y = -23.0 gives 1.80 m of northward room and raises one-tap reachability
+# from 185/553 cells to 192/553. The gain is small because the wall still
+# spans the plaza -- the room is the point, not the reachability.
+#
+# **x is deliberately unchanged**, so the west/east choice above is not
+# disturbed; it was not re-measured, because that needs the nav2 tier up.
+ROBOT_START_XY = (17.0, -23.0)
 
 
 # --- the venue's georeference -----------------------------------------------

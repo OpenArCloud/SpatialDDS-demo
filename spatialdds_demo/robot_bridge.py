@@ -83,7 +83,7 @@ from spatialdds_demo.dds_transport import require_dds_env
 # declares, which is that the robot's pose is in a frame that says on the wire
 # it is metric.
 from spatialdds_demo.model_service import VENUE_FRAME_FQN
-from spatialdds_demo.keepout import FREE, build_mask
+from spatialdds_demo.keepout import FREE, build_mask, contributing
 from spatialdds_demo.plaza import GROUND_Z, ROBOT_START_XY
 from spatialdds_demo.qos_profiles import MODEL_LATCHED
 from spatialdds_demo.tempo import Tempo
@@ -379,18 +379,39 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
     entities_reader = ros_tt.make_reader(
         participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
     known: dict = {}
+    # The contributing extents as last rasterised; None until the first read,
+    # which is a different statement from "nothing contributes" (an empty
+    # tuple) and has to stay distinguishable from it.
+    law = None
 
     def refresh_keepout():
-        changed = False
         for sample in tt.take_samples(entities_reader) or []:
             if sample.entity_id == ENTITY_ID:
                 continue                      # never keep yourself out
-            before = known.get(sample.entity_id)
             known[sample.entity_id] = sample
-            if before is None or _extent_of(before) != _extent_of(sample):
-                changed = True
-        if not changed:
+
+        # **Only a contributing extent can change the law.** Diffing every
+        # entity's extent reported a change on almost every tick: the venue
+        # republishes `ent:pond:observed` continuously, and a DERIVED
+        # observation of the water is exactly what must *not* be able to move
+        # a keep-out. Measured on one session before this: 455 "the law
+        # changed" lines, all of them reporting the same 41463 cells, against
+        # 112 pose heartbeats. A real reshape would have been invisible in it.
+        #
+        # The signature is taken from `contributing()` -- the same function
+        # the rasteriser uses -- so the thing being watched for change and the
+        # thing being rasterised cannot drift apart. It also catches what the
+        # extent diff could not: an entity that stops contributing at all,
+        # because it was retired or its basis changed, alters the signature
+        # without any extent moving.
+        nonlocal law
+        signature = tuple(sorted(
+            (e.entity_id, _extent_of(e))
+            for e in contributing(list(known.values()),
+                                  exclude_ids=(ENTITY_ID,))))
+        if signature == law:
             return None
+        law = signature
         sim.keepout = build_mask(list(known.values()), exclude_ids=(ENTITY_ID,))
         if sim.keepout is None:
             return "no declared keep-out on the bus — refusing nothing"

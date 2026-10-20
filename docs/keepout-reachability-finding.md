@@ -36,6 +36,62 @@ line, because every straight line to it crosses the declared box. That is the
 entire content of the complaint: the grass *is* legal, and one tap cannot get
 there.
 
+## Update, 2026-10-19 evening: the start was 0.30 m from the wall
+
+Reported again from the live stack, and this time not as "it won't cross the
+pond" but as **"I can't even edge it onto the grass"** -- with a screenshot
+showing visibly dry bank in front of the robot.
+
+That is a second effect of the same rectangle, and it had not been measured.
+The legal band south of the water begins at `y = -21.20` (the box's south
+edge, `-20.00`, less the tier's 1.2 m clearance). `ROBOT_START_XY` was
+`(17.0, -21.5)`: **0.30 m inside it.** In the session that prompted this the
+robot had drifted to `y = -21.27`, leaving **0.07 m**, and every goal with
+any northward component was refused on the first step:
+
+    goto (24.00, -20.60)  ->  abandoned at (23.30, -21.27)
+
+a 0.7 m nudge onto dry-looking ground. Driven the other way it moved at once,
+`(23.30, -21.27) -> (25.92, -22.95)`, arrived. So the robot was never stuck;
+it was pinned against a wall it cannot see, which reads identically.
+
+`ROBOT_START_XY` is now `(17.0, -23.0)` -- 1.80 m of room, one-tap
+reachability `192/553` (35%). The reachability barely moves, because the wall
+still spans the plaza. **The room is the point.**
+
+### The declaration also disagrees with the venue's own observation
+
+Noticed while measuring the above, and not yet acted on:
+
+| | x | y |
+|---|---|---|
+| `ent:pond:littlefield` (DECLARED) | `-1.50 .. 25.50` | `-20.00 .. -4.75` |
+| `ent:pond:observed` (DERIVED) | `-2.41 .. 26.23` | `-21.15 .. -4.03` |
+
+The south edges differ by **1.15 m, in the unsafe direction**: the venue's own
+derived observation puts water *further south* than its declaration does. The
+legal band starts at `-21.20`, which is **0.05 m** from the observed
+waterline -- so the strip the robot is confined to is, by the venue's own
+measurement, the water's edge.
+
+Nothing checks that the DECLARED box contains the DERIVED one. That check is
+worth having on its own terms: a venue contradicting itself about where its
+water is should not be something a person finds by driving a robot into it.
+
+### And the law was reported as changing 455 times
+
+`refresh_keepout` diffed every known entity's extent, so the venue's
+continuous republishing of `ent:pond:observed` -- a DERIVED claim, which by
+policy cannot contribute -- reported a change on nearly every tick: **455
+"keep-out from ..." lines, every one of them naming the same 41463 cells**,
+against 112 pose heartbeats in the same log. A real reshape would have been
+invisible in that. The change is now detected from `contributing()`, the same
+function the rasteriser uses, so what is watched and what is rasterised
+cannot drift apart -- and an entity that stops contributing (retired, or its
+basis changed) now registers, which the extent diff could not see at all.
+
+---
+
 ## It is a wall with a door
 
 The fountain's extent is `OBSERVED`, so it never becomes keep-out, and the

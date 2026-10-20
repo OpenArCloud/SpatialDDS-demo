@@ -21,11 +21,16 @@ import {
 
 const OUT = process.env.P44_OUT || join(tmpdir(), 'spatialdds-robot');
 const TIER = 'robot_tier';
-// ROBOT_START_XY in spatialdds_demo/plaza.py. Copied rather than imported
-// because this is TypeScript reading a Python constant; the test below
-// asserts the separation from the goal, so a drift shows up as a failure
-// rather than as a journey that no longer goes anywhere.
-const START: [number, number] = [20.0, -22.0];
+// ROBOT_START_XY in spatialdds_demo/plaza.py, copied rather than imported
+// because this is TypeScript reading a Python constant.
+//
+// The previous note here claimed a drift would show up as a failure. It does
+// not, and this copy had already drifted: it read (20, -22) while the Python
+// constant was (17, -21.5), and nothing anywhere noticed. What the test below
+// actually asserts is that the robot *arrives* at whatever this says, which
+// is true of any drivable point -- so the copy is unenforced, and plaza.py is
+// the source if the two disagree again.
+const START: [number, number] = [17.0, -23.0];
 // The far side of the water. A straight line from START to here crosses
 // the declared pond end to end, so the only legal route is round one end
 // of it -- which is the journey worth filming, and the thing that changes
