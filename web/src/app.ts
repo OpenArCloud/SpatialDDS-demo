@@ -30,6 +30,7 @@ const localizeImageBtn = document.getElementById('btnLocalizeImage') as HTMLButt
 const framePick = document.getElementById('framePick') as HTMLSpanElement | null;
 const frameSelect = document.getElementById('frameSelect') as HTMLSelectElement | null;
 const framePreview = document.getElementById('framePreview') as HTMLImageElement | null;
+const frameSynthetic = document.getElementById('frameSynthetic') as HTMLSpanElement | null;
 const discoverBtn = document.getElementById('btnDiscover') as HTMLButtonElement | null;
 const toggleTilesBtn = document.getElementById('btnToggleTiles') as HTMLButtonElement | null;
 const toggleDdsOverlayBtn = document.getElementById('btnToggleDdsOverlay') as HTMLButtonElement | null;
@@ -593,7 +594,8 @@ async function localizeOnce() {
 }
 
 /**
- * Localize using a real photograph from the scan a VPS map was built from.
+ * Localize using a query frame: a photograph from the scan a VPS map was built
+ * from, or, with no real bundle installed, the synthetic card (query_frames.ts).
  *
  * The prior comes from the installed bundle's map anchor rather than the demo's
  * start position. That is not cosmetic: discovery is a geohash search around
@@ -604,7 +606,7 @@ async function localizeOnce() {
 /** Show what is about to be sent — a filename is not a photograph. */
 function showFramePreview() {
   if (!framePreview || !frameSelect) return;
-  framePreview.src = queryFrameUrl(frameSelect.value);
+  framePreview.src = queryFrameUrl(frameSelect.value, queryFrames);
 }
 
 async function handleLocalizeWithImage() {
@@ -619,7 +621,7 @@ async function handleLocalizeWithImage() {
 
     let queryImage: string;
     try {
-      queryImage = await loadQueryFrame(file);
+      queryImage = await loadQueryFrame(file, queryFrames!);
     } catch (error) {
       appLog(`frame: load failed (${String(error)})`);
       return;
@@ -2151,16 +2153,20 @@ async function initBridgeMode() {
   try {
     queryFrames = await loadQueryFrameManifest();
     if (queryFrames) {
-      appLog(`frames: ${queryFrames.frames.length} installed` +
+      appLog(`frames: ${queryFrames.frames.length} ${queryFrames.synthetic ? 'synthetic' : 'installed'}` +
              (queryFrames.label ? ` (${queryFrames.label})` : ''));
       if (frameSelect && framePick) {
         for (const name of queryFrames.frames) {
           const option = document.createElement('option');
           option.value = name;
-          option.textContent = name.replace(/\.jpg$/i, '');
+          option.textContent = name.replace(/\.jpg$/i, '')
+            + (queryFrames.synthetic ? ' (SYNTHETIC)' : '');
           frameSelect.append(option);
         }
         framePick.hidden = false;
+        // Said where the frame is shown, not only in its pixels: a reader
+        // looking at the panel must not take a drawn card for a photograph.
+        if (frameSynthetic) frameSynthetic.hidden = !queryFrames.synthetic;
         showFramePreview();
         frameSelect.addEventListener('change', showFramePreview);
       }
@@ -2179,10 +2185,15 @@ async function initBridgeMode() {
     // "Localize with Image".
     if (localizeBtn) localizeBtn.textContent = 'Localize (Mock)';
     if (discoverBtn) discoverBtn.textContent = 'Discover Content (DDS)';
-    // Enabled only with a bundle installed: without one there is no real
-    // photograph to send, and no anchor to search for a VPS around.
+    // Enabled only with a bundle: without one there is no frame to send and no
+    // anchor to search for a VPS around. A fresh clone has the synthetic one,
+    // so this is disabled only when even that is missing or malformed.
     if (localizeImageBtn) {
       localizeImageBtn.disabled = queryFrames === null;
+      if (queryFrames?.synthetic) {
+        localizeImageBtn.title = 'Sends a SYNTHETIC card, not a photograph; '
+          + 'install a real bundle to send one (see ar_demo/README.md)';
+      }
       if (!queryFrames) {
         localizeImageBtn.title = 'No query-frame bundle installed (see ar_demo/README.md)';
       }

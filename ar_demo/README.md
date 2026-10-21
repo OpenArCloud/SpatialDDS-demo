@@ -182,15 +182,25 @@ Logs land under `../bridges/web_bridge/logs/`.
 
 ### Localize with Image
 
-**Localize** sends the rendered Cesium view. That exercises the blob lane with
-real bytes, but no VPS could match a screenshot against a map. **Localize with
-Image** sends the other kind of query: an actual photograph from the scan a VPS
-map was built from.
+**Localize (Mock)** sends nothing; it once sent the rendered Cesium view, which
+no VPS could match against a map (`bc54229`). **Localize with Image** sends a
+query frame on the real path: discovery search, the frame on the blob lane,
+`vps_query`, `vps_response`, and the returned pose applied to the camera.
 
-Nothing ships in the repository. Query frames are pictures of a real place and
-the manifest carries that place's coordinates, so a bundle is installed locally
-into `../web/public/query-frames/`, which is git-ignored. With no bundle present
-the button stays disabled and says so.
+**A fresh clone sends a synthetic frame.** `../web/public/query-frames-synthetic/`
+is committed: one drawn card, not a photograph, labelled SYNTHETIC in its
+pixels, its file name, its JPEG comment, the caption under the preview and the
+button's tooltip. Its manifest's anchor is copied from the venue's anchor
+config (`../bridges/web_bridge/tests/frame_anchors_fountain.json`) by
+`../scripts/make_synthetic_query_frame.py` and claims no other location;
+`../tests/test_synthetic_query_frame.py` holds the two together. Against the
+bundled stand-in it localizes at that anchor. No VPS could match it against a
+map.
+
+**The real-dataset path.** No photograph ships in the repository. Query frames
+are pictures of a real place and the manifest carries that place's coordinates,
+so a bundle is installed locally into `../web/public/query-frames/`, which is
+git-ignored. When one is installed it replaces the synthetic frame.
 
 Install one from any OpenVPS dataset directory — the one holding `status.json`
 and `hlocMaps/<map-id>/`:
@@ -241,6 +251,9 @@ bundle's map.
 
 `web/tests/localize-image.spec.ts` covers the path and skips when no bundle is
 installed or no VPS covers it.
+`web/tests/synthetic-frame.spec.ts` walks the fresh-clone path with the real
+bundle hidden: both REST calls, the five bus messages, `VPS_SUCCESS` at the
+venue anchor, the pose applied, and the SYNTHETIC label shown.
 
 ## HTTP binding (spec-compliance wrapper, no DDS)
 

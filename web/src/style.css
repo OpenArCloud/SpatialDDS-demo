@@ -196,5 +196,7 @@ body {
 #framePreviewBox { position: relative; width: 152px; height: 114px;
   flex: 0 0 auto; align-self: center; border: 1px solid #2b3648; border-radius: 3px;
   background: #0b0e14; overflow: hidden; }
+#frameSynthetic { align-self: center; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em; color: #0b0e14; background: #fad600; padding: 1px 6px; border-radius: 3px; }
 #framePreview { position: absolute; top: 50%; left: 50%; height: 152px; width: auto;
   transform: translate(-50%, -50%) rotate(-90deg); display: block; }

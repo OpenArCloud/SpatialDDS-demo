@@ -17,19 +17,25 @@ cd web && npm install && npm run dev   # → http://localhost:5173/
 ```
 
 Turn on **REST Messages** and **DDS Messages**, then click **Localize with
-Image**. It needs a query-frame bundle, which is git-ignored: the frames are
-photographs of a real place. Install one from any OpenVPS dataset first — see
-[`ar_demo/README.md`](../ar_demo/README.md#localize-with-image). Without one
-the button is disabled and says so, and **Localize (Mock)** is the only way in:
-it puts the camera at the venue on the page and sends nothing, so neither
-panel moves.
+Image**. On a fresh clone it sends the **synthetic** query frame: a drawn card,
+labelled SYNTHETIC under its preview, in its file name and in the button's
+tooltip, whose manifest anchors it at the venue's declared anchor
+(`bridges/web_bridge/tests/frame_anchors_fountain.json`) and nowhere else. The
+request path is identical to a photograph's. **Localize (Mock)** puts the
+camera at the venue on the page and sends nothing, so neither panel moves.
+
+**The real-dataset path, beside it.** Install a query-frame bundle from any
+OpenVPS dataset — real photographs from the scan a map was built from,
+git-ignored because they are pictures of a real place — and it replaces the
+synthetic frame: see
+[`ar_demo/README.md`](../ar_demo/README.md#localize-with-image).
 
 That pairing is the point. A browser using the spec's HTTP binding, with DDS
 behind it the whole way — and the two panels side by side show that one click
 on the left is a conversation on the right.
 
-Measured on a live stack on 2026-10-21, one **Localize with Image** produces
-two REST calls:
+Measured on a live stack on 2026-10-21, with the synthetic frame and with a
+real bundle alike, one **Localize with Image** produces two REST calls:
 
 ```
 GET  /.well-known/spatialdds/search?geohash=9v6kr&kind=VPS   ->  200
@@ -67,10 +73,12 @@ items are placed.
 the click.
 
 **What is real here and what is not.** The whole request path is real — the
-photograph chunked onto `spatialdds/blob/chunk/v1`, reassembled and
-checksum-verified at the service discovery found. The *pose* is not: the
-stand-in returns the prior plus a few metres of jitter and never looks at a
-pixel. Sending a different frame changes nothing.
+frame chunked onto `spatialdds/blob/chunk/v1`, reassembled and
+checksum-verified at the service discovery found, and the pose the service
+computes applied to the camera. The *pose* is not computed from pixels: the
+stand-in returns the prior (the frame's anchor) plus a few metres of jitter and
+never looks at one. That is why a synthetic card localizes here and would not
+against a real VPS. Sending a different frame changes nothing.
 
 Stop with `./stop_bridge_server_docker.sh`.
 
@@ -146,8 +154,11 @@ explicit mock in `bc54229` for that reason. *Localize with Image* sends an
 actual photograph from the scan the map was built from, and is the only button
 that produces a pose from pixels.
 
-It needs the query-frame bundle, and it is disabled without one. The bundle is
-gitignored, so:
+It needs the real query-frame bundle. Without one the page sends the synthetic
+card, which has nothing in it a real localizer could match; that pairing has
+not been run. Whatever status comes back is read, not assumed: anything but
+`VPS_SUCCESS` is reported as a failure and the prior is held (`bc54229`). The
+bundle is gitignored, so:
 
 - **the deployed demo has it** if whoever ran `deploy.sh` had it installed —
   the image carries `web/public/query-frames/` deliberately, see `.dockerignore`;

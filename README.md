@@ -41,15 +41,19 @@ cd web && npm install && npm run dev   # → http://localhost:5173/
 
 Turn on **REST Messages** and **DDS Messages**, then:
 
-- **Localize with Image** sends a photograph from a VPS map's own scan. The
+- **Localize with Image** sends a query frame to the VPS discovery found. The
   REST panel shows the two calls the browser makes — discovery search,
-  localize — and the DDS panel the five bus messages they cause. It needs a
-  query-frame bundle, which is git-ignored because the frames are pictures of
-  a real place; without one the button is disabled and says so. Install one
-  from any OpenVPS dataset:
+  localize — and the DDS panel the five bus messages they cause; the camera
+  moves to the pose the service returns. A fresh clone sends a **synthetic**
+  frame: a drawn card, labelled SYNTHETIC under its preview and in its name,
+  anchored at the venue's declared anchor. Same path end to end, but no VPS
+  could match it against a map.
+  For real photographs from a VPS map's own scan, install a query-frame bundle
+  from an OpenVPS dataset (git-ignored: pictures of a real place); it replaces
+  the synthetic frame:
   [`ar_demo/README.md`](ar_demo/README.md#localize-with-image).
-- **Localize (Mock)** is the way in without a bundle: it puts the camera at
-  the venue on the page and sends nothing, so both panels stay quiet.
+- **Localize (Mock)** puts the camera at the venue on the page and sends
+  nothing, so both panels stay quiet.
 - **Discover Content (DDS)** then finds the catalogue the same way, reads its
   latched content announces and resolves each item's manifest, and places
   what it finds.

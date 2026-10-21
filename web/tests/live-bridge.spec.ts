@@ -73,12 +73,12 @@ test('live bridge: localize + discover against real DDS', async ({ page, request
             | null)?.disabled);
   // The plain button is an explicit mock now, so it is not a fallback for
   // this spec: pressing it would localize without touching DDS and this would
-  // pass having proved nothing. With no bundle there is no real localize path
-  // from the UI, which is a skip and not a pass.
+  // pass having proved nothing. A fresh clone has the synthetic frame, so
+  // this skips only when even that bundle is missing or malformed.
   test.skip(!imageButtonUsable,
-            'no query-frame bundle installed, so there is no photograph to '
-            + 'send and the only real localize path is unavailable');
-  console.log('  localizing via btnLocalizeImage (real photograph)');
+            'no query-frame bundle, real or synthetic, so the only real '
+            + 'localize path is unavailable');
+  console.log('  localizing via btnLocalizeImage');
   await page.evaluate(
     () => document.getElementById('btnLocalizeImage')?.click());
   // Poll rather than assert once: the readout already shows an Austin lat/lon
