@@ -59,7 +59,7 @@ sequenceDiagram
     UI->>Bridge: GET /v1/content/resolve?uri=spatialdds://…/content/<rid>
     Bridge->>Cat: relayed to the catalogue's resolver (loopback)
     Cat-->>UI: spatial.manifest/1.8, rtype content — assets[] with hashes, ETag
-    Note over UI,Bridge: A pose is placeable only if its frame resolves —<br/>the announce carries the anchor, and /v1/frames is only for one it does not
+    Note over UI,Bridge: A pose is placeable only if its frame resolves —<br/>the announce carries the anchor, and the scene's frames lane the rest
 
     Note over UI,Bridge: WebSocket — observability
     UI->>Bridge: WS /ws, subscribe to topic patterns
@@ -67,8 +67,8 @@ sequenceDiagram
 ```
 
 `/health`, `/.well-known/spatialdds/search`, `/v1/localize`,
-`/v1/content/query`, `/.well-known/spatialdds/resolver` with
-`/v1/content/resolve`, and `/v1/frames` are the whole REST surface the UI uses;
+`/v1/content/query`, and `/.well-known/spatialdds/resolver` with
+`/v1/content/resolve` are the whole REST surface the UI uses on the bridge;
 `/ws` carries the DDS message window. Each REST route is a hand-written
 translation, which is why the bridge exposes these rather than the whole type
 registry — the WebSocket needs no such translation and carries anything on the
@@ -85,8 +85,11 @@ frozen capture of what the retired 1.7 catalogue query returned
 Placement is a pose inside a frame, which means nothing to a client that has
 never heard of that frame. A placed item's announce carries both the
 placement and the frame's anchor into earth-fixed, so it is placeable on its
-own; `/v1/frames` — the union of the transforms in cached service announces —
-is asked only for a frame no content announce anchored.
+own. A frame no content announce anchored is placed through the scene's own
+frames lane on the binding, which the page already holds. The bridge's
+`/v1/frames` served the same anchor from the catalogue's service announce and
+was retired once both were shown to serve the same transform
+(`tests/test_frames_route_retired.py`, against a live capture of the route).
 
 ### Headless client → bus
 

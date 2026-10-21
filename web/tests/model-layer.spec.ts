@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   BASIS_VALUES, TYPE_LABELS, catalogEntryToItem, catalogRefId, displayName,
   hasUnknownType, matchesBasis, modelEntityToItem, parseBasisFilter,
@@ -16,18 +19,15 @@ import {
 
 const VENUE = 'map/ut-littlefield-fountain';
 
-// The frame transform the catalogue's service announces, as measured.
-const FRAMES = {
-  [VENUE]: {
-    from: { fqn: VENUE },
-    to: { fqn: 'earth-fixed' },
-    pose: {
-      t: [-742398.4920798013, -5462355.283318999, 3197669.647851296],
-      q: [0.49671722355450676, -0.033600407060018246,
-          -0.058532108356669665, 0.8652843448856144]
-    }
-  }
-};
+// The frame transform the catalogue's service announced, as `/v1/frames`
+// served it before that route was retired: read from the frozen capture, not
+// retyped. A hand copy stood here from a41e6de whose `w` differed in the
+// ninth digit; that commit's own projection, rerun on its own anchor, gives
+// the captured value, so the copy never matched what any version produced.
+const FRAMES = JSON.parse(readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)),
+          '../../tests/fixtures/frames-route-baseline.json'), 'utf-8')).route.frames as
+  Record<string, Record<string, any>>;
 
 const DUCK_CONTENT_ID = '89f2d953-076d-5c7d-9b74-1193f71685a6';
 const POSE = { t: [11.708, -14.273, -1.423], q: [0, 0, -0.7071067811865475, 0.7071067811865476] };

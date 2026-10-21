@@ -309,9 +309,15 @@ one; see the gaps note in `directions/`.
 means nothing to a client that has never heard of that frame. The service
 publishing the content announces the frame's transform in
 `Announce.transforms` — a `disco::Transform` from the local frame into
-earth-fixed, i.e. ECEF metres — and the web bridge serves the union of those at
-`GET /v1/frames`. No new topic and no new reader: a frame stops resolving when
-its service's announce expires, which is the correct lifetime. Frame identity
+earth-fixed, i.e. ECEF metres — and, since the 1.8 catalogue migration, puts
+the same anchor in each placed item's `ContentAnnounce.transforms`, so a
+client holding the item holds its frame. No new topic and no new reader: a
+frame stops resolving when the announce carrying it expires, which is the
+correct lifetime. The venue's own frame is also declared by the scene on the
+binding's frames lane, as a `core::FrameTransform`. The web bridge's
+`GET /v1/frames`, a view over cached service announces, was retired once the
+two were shown to serve what it served (`tests/test_frames_route_retired.py`).
+Frame identity
 is the `FrameRef.uuid`, a UUIDv5 of the fqn, so the row and the transform
 cannot drift apart.
 

@@ -66,7 +66,6 @@ async function pageOnAStubbedBridge(page: any, localizeBody: unknown) {
   // fixture, while the success case failed for the same reason.
   await page.route(`${BRIDGE}/**`, (route: any) => {
     const url = route.request().url();
-    if (url.includes('/v1/frames')) return route.fulfill({ json: { frames: {} } });
     if (url.includes('/search')) return route.fulfill({ json: { results: [] } });
     return route.fulfill({ json: {} });
   });

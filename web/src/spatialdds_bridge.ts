@@ -379,7 +379,9 @@ async function resolveEntries(
   return rows.filter((row): row is Record<string, any> => row !== null);
 }
 
-export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse> {
+export async function bridgeDiscover(
+  geopose: GeoPose, heldFrames: FrameMap = {}
+): Promise<DiscoverResponse> {
   const payload = await fetchJson('/v1/content/query', {
     method: 'POST',
     body: JSON.stringify({ geopose })
@@ -388,20 +390,16 @@ export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse
   const entries = await resolveEntries(announces);
   // Frames ride with the content: a placed item's announce carries the
   // anchor of the frame it is placed in, so a client holding the announce
-  // can place it with nothing else. `/v1/frames` is asked only for a frame
-  // no announce anchored -- and a failure there is not fatal: content falls
-  // back to its coverage centre rather than disappearing.
+  // can place it with nothing else. A frame no announce anchored is placed
+  // through what the caller already holds -- the scene's own frames lane --
+  // and failing that falls back to its coverage centre rather than
+  // disappearing. The bridge's `/v1/frames` used to be asked here; it served
+  // the catalogue's service announce, whose anchors are the ones the content
+  // announces now carry, so it could not answer a frame they left out.
   const placed = entries.filter((entry) => entry.has_pose && entry.frame_ref?.fqn);
-  let frames: FrameMap = placed.length ? framesFromContent(announces) : {};
-  if (placed.some((entry) => !frames[entry.frame_ref.fqn])) {
-    try {
-      frames = { ...((await fetchJson('/v1/frames')) as { frames?: FrameMap }).frames,
-                 ...frames };
-    } catch {
-      // keep what the announces carried
-    }
-  }
-  const items = entries.map((entry) => catalogEntryToItem(entry, frames));
+  const frames: FrameMap = placed.length ? framesFromContent(announces) : {};
+  const items = entries.map((entry) =>
+    catalogEntryToItem(entry, { ...heldFrames, ...frames }));
 
   // The rows themselves, keyed by content_id. The model layer resolves
   // `catalog:<content_id>` against these first; on a miss it asks by id --
@@ -421,24 +419,6 @@ export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse
     assets,
     frames
   };
-}
-
-/**
- * The frame transforms the bus is announcing.
- *
- * Pulled out of `bridgeDiscover` because the model bootstrap needs them too
- * and no longer runs behind a catalogue query: an entity's pose is
- * meaningless until the frame it names resolves, whoever asked first.
- *
- * A failure is not fatal and not silent-by-accident: the caller falls back to
- * placing nothing rather than placing things at the centre of the earth.
- */
-export async function bridgeFrames(): Promise<FrameMap> {
-  try {
-    return ((await fetchJson('/v1/frames')) as { frames?: FrameMap }).frames || {};
-  } catch {
-    return {};
-  }
 }
 
 /**
@@ -486,7 +466,7 @@ export async function resolveContentIds(
   return resolved;
 }
 
-/** A `spatial::disco::Transform` as the bridge serves it from `/v1/frames`. */
+/** A `spatial::disco::Transform`, as a content announce carries a frame's anchor. */
 export type FrameTransform = {
   from?: { fqn?: string };
   to?: { fqn?: string };
@@ -1009,8 +989,8 @@ export function catalogEntryToItem(
   // Coverage answers "would I find this here?" — it is a search key, not a
   // position, and the bbox centre above is only a stand-in for content that
   // does not say where it sits. A row that carries `pose` says exactly where,
-  // inside the frame it names, and the frame resolves through the transform
-  // its service announced (see /v1/frames). That chain is what makes altitude
+  // inside the frame it names, and the frame resolves through the anchor its
+  // announce carries (see bridgeDiscover). That chain is what makes altitude
   // and orientation real data rather than renderer defaults.
   //
   // An earlier attempt put the altitude in the coverage `aabb`, which is a

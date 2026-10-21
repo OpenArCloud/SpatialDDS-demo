@@ -911,28 +911,6 @@ async def stream(websocket: WebSocket) -> None:
 # ─── Generic protocol (new) ──────────────────────────────────────────────────
 
 
-@app.get("/v1/frames")
-def frames() -> Dict[str, Any]:
-    """
-    Every local frame the bus has announced a transform for.
-
-    A catalogue row places content as a pose inside a frame, which is only
-    resolvable if the frame is. `Announce.transforms` is where the spec puts
-    that, so this is a view over announces the bridge already caches -- no new
-    topic, no new reader, and a frame stops being resolvable at the same moment
-    its service's announce expires, which is the correct lifetime.
-
-    Keyed by the frame's fqn, latest announce wins.
-    """
-    out: Dict[str, Any] = {}
-    for record in bridge.announce_records():
-        for transform in (record.payload.get("transforms") or []):
-            fqn = ((transform.get("from") or {}).get("fqn")) or ""
-            if fqn:
-                out[fqn] = transform
-    return {"frames": out}
-
-
 @app.get("/api/topics")
 def api_topics(stale_threshold_s: float = 30.0) -> Dict[str, Any]:
     """Topics seen on the bus within ``stale_threshold_s`` seconds."""

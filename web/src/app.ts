@@ -10,7 +10,7 @@ import { LOOKING_NORTH_UPRIGHT, mockDiscover, mockLocalize }
   from './mock_spatialdds';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
-  BASIS_VALUES, bridgeFrames, catalogRefId,
+  BASIS_VALUES, catalogRefId,
   disambiguate, displayName, localInFrame, matchesBasis, modelEntityToItem, observeRest, parseBasisFilter,
   planModelRender, resolveContentIds, resolveInFrame, typeLabel
 } from './spatialdds_bridge';
@@ -742,51 +742,48 @@ async function ensureContentService(position: GeoPose): Promise<string | null> {
  * knows where it is; *what content is published for this area* is the
  * catalogue, and that is still Discover.
  *
- * Everything it needs it fetches itself. Frames come from `/v1/frames`, and
- * `catalog:` references resolve by id -- which is why P2.5's `content_id_in`
+ * Everything it needs it fetches itself. Frames come from the scene's own
+ * frames lane, and `catalog:` references resolve by id -- which is why P2.5's `content_id_in`
  * is load-bearing here rather than only under a test flag: without it this
  * function could not resolve an asset without first running a coverage query.
  */
 /**
- * Both frame sources, with the precedence stated rather than implied.
+ * Say so when the catalogue places a frame somewhere the scene does not.
  *
  * Two services describe where `map/ut-littlefield-fountain` is: the scene
- * itself, over the binding's own frames lane, and the 1.7 catalogue server,
- * whose announce the bridge serves at `/v1/frames`. They are different claims
- * --- the scene's is about the venue, the catalogue's about its map --- and
- * both are kept. See docs/venue-georeference-census.md.
+ * itself, over the binding's own frames lane, and the catalogue, whose
+ * content announces carry the anchor of the frame they are placed in. They
+ * are different claims --- the scene's is about the venue, the catalogue's
+ * about its map --- and both are kept. See docs/venue-georeference-census.md.
  *
- * **The rule: for the scene's entities, the scene's own lane wins.** The
- * party that declares a frame is the authority on where it sits. The
- * catalogue's announce is a fallback, which is what keeps the view working
- * against a stack whose venue is not publishing a georeference yet.
+ * **The rule: the scene's own lane wins.** The party that declares a frame
+ * is the authority on where it sits; `handleDiscover` merges the catalogue's
+ * anchors *under* what is held. A disagreement is reported once, with the
+ * number: a page that quietly prefers one looks identical to a page that only
+ * ever had one, and silence here is the blend the design forbids wearing
+ * different clothes.
  *
- * The spread order below *is* that rule, not an accident of which object was
- * typed second: binding last means binding wins. Said explicitly because a
- * reader cannot tell a deliberate spread from a careless one, and reversing
- * these two lines would silently invert the policy.
+ * Until 2026-10-21 the catalogue's claim reached the page through the
+ * bridge's `/v1/frames` and was merged into the model bootstrap as a fallback
+ * for a venue not yet publishing its georeference. Retired: the binding that
+ * serves the entities serves the frames lane beside them, so a stack with the
+ * one and not the other no longer exists. See
+ * tests/test_frames_route_retired.py.
  */
-async function mergedFrames(): Promise<Record<string, any>> {
-  const [bridge, scene] = await Promise.all([bridgeFrames(), bindingFrames()]);
-  for (const fqn of Object.keys(scene)) {
-    if (!bridge[fqn]) {
+function reportFrameDisagreements(scene: Record<string, any>,
+                                  catalogue: Record<string, any>): void {
+  for (const fqn of Object.keys(catalogue)) {
+    const a = scene[fqn]?.pose?.t;
+    const b = catalogue[fqn]?.pose?.t;
+    if (!Array.isArray(a) || !Array.isArray(b)) {
       continue;
     }
-    // Both sources named this frame. Report a real disagreement once, with
-    // the number: a page that quietly prefers one looks identical to a page
-    // that only ever had one, and silence here is the blend the design
-    // forbids wearing different clothes.
-    const a = scene[fqn]?.pose?.t;
-    const b = bridge[fqn]?.pose?.t;
-    if (Array.isArray(a) && Array.isArray(b)) {
-      const apart = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-      if (apart > FRAME_AGREEMENT_M) {
-        appLog(`frames:disagree ${fqn} — the scene and the catalogue are `
-             + `${apart.toFixed(2)} m apart; using the scene's`);
-      }
+    const apart = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    if (apart > FRAME_AGREEMENT_M) {
+      appLog(`frames:disagree ${fqn} — the scene and the catalogue are `
+           + `${apart.toFixed(2)} m apart; using the scene's`);
     }
   }
-  return { ...bridge, ...scene };
 }
 
 /**
@@ -868,7 +865,7 @@ async function bootstrapModelOnce(): Promise<void> {
   }
 
   const frames = model.entities.some((e) => e.has_pose)
-    ? await mergedFrames() : {};
+    ? await bindingFrames() : {};
   const assets: Record<string, { uri?: string; hash?: string }> = {};
 
   // References the model carries. There is no coverage query in front of this
@@ -971,7 +968,8 @@ async function handleDiscover() {
   if (bridgeActive) {
     await ensureContentService(currentPose);
   }
-  const response = bridgeActive ? await bridgeDiscover(currentPose) : await mockDiscover(currentPose);
+  const response = bridgeActive
+    ? await bridgeDiscover(currentPose, lastFrames) : await mockDiscover(currentPose);
 
   // If the model never loaded -- bootstrap raced the bridge coming up, or the
   // page was opened before localization -- take the chance now rather than
@@ -990,11 +988,11 @@ async function handleDiscover() {
   // Frames and rows the model layer may not have needed. Merged rather than
   // replaced: the by-id lookups the bootstrap already did are still valid.
   //
-  // This is also the third source joining the precedence `mergedFrames()`
-  // sets, and the order holds because what is already held wins here. Highest
-  // first: the scene's own frames lane, then whatever is held, then the
-  // coverage response's frames. Reversing this spread would let a coverage
+  // What is already held wins here, which is the precedence rule in
+  // `reportFrameDisagreements`: the scene's own frames lane, then the anchors
+  // the content announces carried. Reversing this spread would let a content
   // query overwrite the scene's claim about its own frame.
+  reportFrameDisagreements(lastFrames, response.frames || {});
   lastFrames = { ...(response.frames || {}), ...lastFrames };
   lastAssets = { ...(response.assets || {}), ...lastAssets };
 

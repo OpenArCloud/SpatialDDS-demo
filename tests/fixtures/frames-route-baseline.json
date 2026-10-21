@@ -1,0 +1,289 @@
+{
+ "$comment": "What GET /v1/frames served before it was retired, captured live on 2026-10-21 against bcea0c4 with the full stack up (SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_POND_WATCH=1 ./run_bridge_server_docker.sh, plus scripts/run_robot_tier.sh), beside the two sources that replace it, read in the same minute: the binding's frames lane (what the scene says about its own frame) and every ContentAnnounce that carries a frame anchor (what the catalogue says, now on the content itself). tests/test_frames_route_retired.py asserts the replacements serve the same transforms. Frozen; never regenerated.",
+ "anchoring_announces": [
+  {
+   "available_from": {
+    "nanosec": 0,
+    "sec": 0
+   },
+   "available_until": {
+    "nanosec": 0,
+    "sec": 0
+   },
+   "class_id": "model",
+   "content_id": "89f2d953-076d-5c7d-9b74-1193f71685a6",
+   "coverage": [
+    {
+     "aabb": {
+      "max_xyz": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "min_xyz": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "bbox": [
+      -97.7396465,
+      30.283820351994255,
+      -97.7396065,
+      30.283860351994253
+     ],
+     "circle_center": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "circle_radius_m": 0.0,
+     "coverage_window_end": {
+      "nanosec": 0,
+      "sec": 0
+     },
+     "coverage_window_start": {
+      "nanosec": 0,
+      "sec": 0
+     },
+     "crs": "EPSG:4979",
+     "frame_ref": {
+      "coord_convention": "ENU",
+      "display_unit": "m",
+      "fqn": "",
+      "has_coord_convention": false,
+      "has_scale": false,
+      "meters_per_unit": 1.0,
+      "scale_status": "SCALE_UNKNOWN",
+      "uuid": ""
+     },
+     "global": false,
+     "has_aabb": false,
+     "has_bbox": true,
+     "has_circle": false,
+     "has_coverage_window": false,
+     "has_crs": true,
+     "has_frame_ref": false
+    }
+   ],
+   "coverage_eval_time": {
+    "nanosec": 0,
+    "sec": 0
+   },
+   "coverage_frame_ref": {
+    "coord_convention": "ENU",
+    "display_unit": "m",
+    "fqn": "earth-fixed",
+    "has_coord_convention": false,
+    "has_scale": false,
+    "meters_per_unit": 1.0,
+    "scale_status": "SCALE_UNKNOWN",
+    "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31"
+   },
+   "has_coverage_eval_time": false,
+   "manifest_uri": "spatialdds://catalog.example.com/demo/content/89f2d953-076d-5c7d-9b74-1193f71685a6",
+   "provider_id": "svc:content:demo/catalog",
+   "stamp": {
+    "nanosec": 16155481,
+    "sec": 1792610000
+   },
+   "summary": "",
+   "tags": [],
+   "title": "Rubber duck",
+   "transforms": [
+    {
+     "from": {
+      "coord_convention": "ENU",
+      "display_unit": "m",
+      "fqn": "map/ut-littlefield-fountain/content/89f2d953-076d-5c7d-9b74-1193f71685a6",
+      "has_coord_convention": true,
+      "has_scale": false,
+      "meters_per_unit": 1.0,
+      "scale_status": "SCALE_UNKNOWN",
+      "uuid": "2275fac8-e2a9-522b-a839-c170de4f3f56"
+     },
+     "has_validity": false,
+     "pose": {
+      "q": [
+       0.0,
+       0.0,
+       -0.7071067811865475,
+       0.7071067811865476
+      ],
+      "t": [
+       11.708,
+       -14.273,
+       -1.423
+      ]
+     },
+     "stamp": {
+      "nanosec": 0,
+      "sec": 1769057000
+     },
+     "to": {
+      "coord_convention": "ENU",
+      "display_unit": "m",
+      "fqn": "map/ut-littlefield-fountain",
+      "has_coord_convention": true,
+      "has_scale": false,
+      "meters_per_unit": 1.0,
+      "scale_status": "SCALE_UNKNOWN",
+      "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0"
+     },
+     "validity": {
+      "from": {
+       "nanosec": 0,
+       "sec": 0
+      },
+      "seconds": 0
+     }
+    },
+    {
+     "from": {
+      "coord_convention": "ENU",
+      "display_unit": "m",
+      "fqn": "map/ut-littlefield-fountain",
+      "has_coord_convention": true,
+      "has_scale": false,
+      "meters_per_unit": 1.0,
+      "scale_status": "SCALE_UNKNOWN",
+      "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0"
+     },
+     "has_validity": false,
+     "pose": {
+      "q": [
+       0.49671722355450676,
+       -0.033600407060018246,
+       -0.058532108356669665,
+       0.8652843490789754
+      ],
+      "t": [
+       -742398.4920798013,
+       -5462355.283318999,
+       3197669.647851296
+      ]
+     },
+     "stamp": {
+      "nanosec": 10802030,
+      "sec": 1792610000
+     },
+     "to": {
+      "coord_convention": "ENU",
+      "display_unit": "m",
+      "fqn": "earth-fixed",
+      "has_coord_convention": false,
+      "has_scale": false,
+      "meters_per_unit": 1.0,
+      "scale_status": "SCALE_UNKNOWN",
+      "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31"
+     },
+     "validity": {
+      "from": {
+       "nanosec": 0,
+       "sec": 0
+      },
+      "seconds": 0
+     }
+    }
+   ],
+   "ttl_sec": 300
+  }
+ ],
+ "binding_lane": [
+  {
+   "T_parent_child": {
+    "q": [
+     0.49671722355450676,
+     -0.033600407060018246,
+     -0.058532108356669665,
+     0.8652843490789754
+    ],
+    "t": [
+     -742398.4920798013,
+     -5462355.283318999,
+     3197669.647851296
+    ]
+   },
+   "child_ref": {
+    "coord_convention": "ENU",
+    "display_unit": "m",
+    "fqn": "map/ut-littlefield-fountain",
+    "has_coord_convention": true,
+    "has_scale": true,
+    "meters_per_unit": 1.0,
+    "scale_status": "SCALE_DECLARED",
+    "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0"
+   },
+   "cov": {
+    "type": "COV_NONE"
+   },
+   "parent_ref": {
+    "coord_convention": "ENU",
+    "display_unit": "m",
+    "fqn": "earth-fixed",
+    "has_coord_convention": false,
+    "has_scale": false,
+    "meters_per_unit": 1.0,
+    "scale_status": "SCALE_UNKNOWN",
+    "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31"
+   },
+   "stamp": {
+    "nanosec": 973558187,
+    "sec": "1792609999"
+   },
+   "transform_id": "earth-fixed->map/ut-littlefield-fountain"
+  }
+ ],
+ "captured_from": "bcea0c4",
+ "route": {
+  "frames": {
+   "map/ut-littlefield-fountain": {
+    "from": {
+     "coord_convention": "ENU",
+     "display_unit": "m",
+     "fqn": "map/ut-littlefield-fountain",
+     "has_coord_convention": true,
+     "has_scale": false,
+     "meters_per_unit": 1.0,
+     "scale_status": "SCALE_UNKNOWN",
+     "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0"
+    },
+    "has_validity": false,
+    "pose": {
+     "q": [
+      0.49671722355450676,
+      -0.033600407060018246,
+      -0.058532108356669665,
+      0.8652843490789754
+     ],
+     "t": [
+      -742398.4920798013,
+      -5462355.283318999,
+      3197669.647851296
+     ]
+    },
+    "stamp": {
+     "nanosec": 996413946,
+     "sec": 1792609999
+    },
+    "to": {
+     "coord_convention": "ENU",
+     "display_unit": "m",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "has_scale": false,
+     "meters_per_unit": 1.0,
+     "scale_status": "SCALE_UNKNOWN",
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31"
+    },
+    "validity": {
+     "from": {
+      "nanosec": 0,
+      "sec": 0
+     },
+     "seconds": 0
+    }
+   }
+  }
+ }
+}

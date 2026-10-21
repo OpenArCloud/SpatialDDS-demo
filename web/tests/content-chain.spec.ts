@@ -29,6 +29,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const baseline = JSON.parse(readFileSync(
   resolve(here, '../../tests/fixtures/catalogue-1.7-baseline.json'), 'utf-8')).seeds as
   Record<string, Array<Record<string, any>>>;
+// What `GET /v1/frames` served before it was retired, captured live; see
+// tests/test_frames_route_retired.py.
+const routeFrames = JSON.parse(readFileSync(
+  resolve(here, '../../tests/fixtures/frames-route-baseline.json'), 'utf-8')).route.frames as
+  Record<string, Record<string, any>>;
 const chain = JSON.parse(readFileSync(
   resolve(here, 'fixtures/content_chain.json'), 'utf-8')) as
   Record<string, Array<{ announce: Record<string, any>; manifest: Record<string, any> }>>;
@@ -81,15 +86,18 @@ test.describe('catalogue chain, page side', () => {
   test('a placed row lands where the 1.7 row and /v1/frames put it', () => {
     // The old page resolved a row's pose through `/v1/frames`, which served
     // the catalogue service's announced frame transforms. The announce for a
-    // placed item now carries that same anchor; placing through it must give
-    // the same position and orientation.
+    // placed item now carries that same anchor; placing the 1.7 row through
+    // the route's captured answer and the 1.8 documents through the announce
+    // alone must give the same position and orientation.
     let checked = 0;
     for (const [seed, docs] of Object.entries(chain)) {
       const frames = framesFromContent(docs.map((d) => d.announce));
       docs.forEach(({ announce, manifest }, i) => {
         const old = baseline[seed][i];
-        if (!old.has_pose || !frames[old.frame_ref.fqn]) return;
-        const was = catalogEntryToItem(old, { [old.frame_ref.fqn]: frames[old.frame_ref.fqn] });
+        if (!old.has_pose) return;
+        expect(routeFrames[old.frame_ref.fqn],
+               `the route never served ${old.frame_ref.fqn}`).toBeTruthy();
+        const was = catalogEntryToItem(old, { [old.frame_ref.fqn]: routeFrames[old.frame_ref.fqn] });
         const now = catalogEntryToItem(contentToCatalogEntry(announce, manifest), frames);
         expect(now.geopose.lat_deg).toBeCloseTo(was.geopose.lat_deg, 9);
         expect(now.geopose.lon_deg).toBeCloseTo(was.geopose.lon_deg, 9);

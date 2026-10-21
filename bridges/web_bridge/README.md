@@ -14,7 +14,7 @@ clients. Two generations of endpoints live in the same process:
 
 | Surface | What it is | Who uses it |
 |---|---|---|
-| **Legacy** (`/v1/...`) | One-shot REST wrappers around localize + catalog, frames and health, plus a fire-hose WebSocket. | The Cesium web demo under [`web/`](../../web/), for the AR demo only — its model lanes go to `binding.py`. Stable. |
+| **Legacy** (`/v1/...`) | One-shot REST wrappers around localize, content and health, plus a fire-hose WebSocket. | The Cesium web demo under [`web/`](../../web/), for the AR demo only — its model lanes go to `binding.py`. Stable. |
 | **Generic** (`/ws`, `/api/...`) | Subscribe-based protocol with topic patterns, optional `msg_type` filtering, server-side rate limiting, and browser-to-DDS publishing. | Any browser app that wants to listen to or talk to the SpatialDDS bus without hard-coded topics. |
 
 Both are fed by one discovery-driven subscriber: it reads announces, resolves

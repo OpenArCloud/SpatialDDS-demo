@@ -3,14 +3,14 @@
 The venue's own georeference, and the one check that catches an inverted frame.
 
 `model_service` publishes where `map/ut-littlefield-fountain` sits on the earth
---- the scene's claim about its own frame. The 1.7 catalogue server announces a
-transform for the same frame, which is a *different* claim about where its map
-sits, and keeps doing so. Neither is crowned; see
+--- the scene's claim about its own frame. The catalogue anchors the same
+frame in the content announces it places there, which is a *different* claim
+about where its map sits, and keeps doing so. Neither is crowned; see
 `docs/venue-georeference-census.md`.
 
 **Why a same-answer check and not just a numbers check.** The dangerous way
 this goes wrong is silent. `core::FrameTransform` names the global frame
-`parent_ref` and the local one `child_ref`; the 1.7 announce says `from` = the
+`parent_ref` and the local one `child_ref`; the announce's anchor says `from` = the
 *local* frame and `to` = earth-fixed. Map those by name instead of by role and
 the transform inverts --- and an inverted transform still produces a
 well-formed pose with plausible-looking numbers, placing the venue near the
@@ -109,7 +109,7 @@ class TheVenueDeclaresWhereItIs(unittest.TestCase):
         The direction, asserted at the record.
 
         `parent_ref` is the global frame and `child_ref` the local one. This is
-        the assertion that fails if someone follows the 1.7 announce's `from`
+        the assertion that fails if someone follows the announce anchor's `from`
         and `to` names instead of their roles.
         """
         ft = venue_georeference()
@@ -128,9 +128,11 @@ class TheVenueDeclaresWhereItIs(unittest.TestCase):
                            "transform was inverted")
 
     def test_the_child_frame_carries_the_scale_declaration(self):
-        """The one thing the scene's voice can say that the 1.7 route cannot.
+        """The one thing the scene's voice says that the catalogue's does not.
 
-        The announce's `FrameRef` has four members and no room for scale.
+        1.8's `FrameRef` has room for scale; the catalogue's anchor leaves it
+        `SCALE_UNKNOWN`. Measured when `/v1/frames` was retired --- see
+        tests/test_frames_route_retired.py.
         """
         child = venue_georeference().child_ref
         self.assertTrue(child.has_scale)
@@ -170,9 +172,24 @@ class TheVenueDeclaresWhereItIs(unittest.TestCase):
         self.assertEqual(announced["pose"]["q"], mine_q)
 
 
+def _post(url: str, body: dict):
+    request = urllib.request.Request(
+        url, data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=6) as response:
+            return json.load(response)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
 class BothRoutesLandTheDuckOnTheSameSpot(unittest.TestCase):
     """
     The composed check, against a running stack.
+
+    The two routes are the scene's frames lane and the anchor the catalogue's
+    content announces carry. The second was the bridge's `/v1/frames` until
+    2026-10-21, when that route was retired for serving the same transform.
 
     Skips with its reason when either surface is absent, so it starts running
     again on its own once both are up rather than waiting to be re-enabled.
@@ -182,12 +199,14 @@ class BothRoutesLandTheDuckOnTheSameSpot(unittest.TestCase):
         self.entities = _get(f"{BINDING}/{SCENE}/world/entity/v1")
         self.scene_frames = _get(
             f"{BINDING}/{SCENE}/frames/frame_transform/v1")
-        self.bridge_frames = _get(f"{BRIDGE}/v1/frames")
         if self.entities is None or self.scene_frames is None:
             self.skipTest(f"no binding at {BINDING} — run the stack with "
                           "SPATIALDDS_MODEL_LAYER=1")
-        if self.bridge_frames is None:
-            self.skipTest(f"no 1.7 bridge at {BRIDGE}; this check needs both "
+        self.inventory = _post(f"{BRIDGE}/v1/content/query", {"geopose": {
+            "lat_deg": VENUE_ANCHOR_LAT_DEG, "lon_deg": VENUE_ANCHOR_LON_DEG,
+            "alt_m": VENUE_ANCHOR_HEIGHT_M}})
+        if self.inventory is None:
+            self.skipTest(f"no bridge at {BRIDGE}; this check needs both "
                           "routes alive to compare them")
 
     def test_both_frame_routes_place_one_entity_identically(self):
@@ -201,10 +220,14 @@ class BothRoutesLandTheDuckOnTheSameSpot(unittest.TestCase):
                       if ft["child_ref"]["fqn"] == fqn), None)
         self.assertIsNotNone(
             scene, f"the scene must publish a transform for {fqn}")
-        announced = (self.bridge_frames.get("frames") or {}).get(fqn)
+        announced = next(
+            (t for item in self.inventory.get("results") or []
+             for t in item.get("transforms") or []
+             if (t.get("from") or {}).get("fqn") == fqn
+             and (t.get("to") or {}).get("fqn") == EARTH_FIXED_FQN), None)
         self.assertIsNotNone(
-            announced, f"the catalogue must still announce {fqn} — nothing "
-                       "retired on the 1.7 side")
+            announced, f"the catalogue must still anchor {fqn} in the content "
+                       "it places there")
 
         via_scene = _place(
             {"t": scene["T_parent_child"]["t"], "q": scene["T_parent_child"]["q"]},
@@ -213,7 +236,7 @@ class BothRoutesLandTheDuckOnTheSameSpot(unittest.TestCase):
         apart = _metres_apart(via_scene, via_announce)
         print(f"\n  {subject['entity_id']} via the scene's lane : "
               f"{via_scene[0]:.9f}, {via_scene[1]:.9f}, {via_scene[2]:.3f}")
-        print(f"  {subject['entity_id']} via /v1/frames       : "
+        print(f"  {subject['entity_id']} via a content anchor : "
               f"{via_announce[0]:.9f}, {via_announce[1]:.9f}, "
               f"{via_announce[2]:.3f}")
         print(f"  apart: {apart:.6f} m (tolerance {TOLERANCE_M})")

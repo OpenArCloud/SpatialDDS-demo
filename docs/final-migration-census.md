@@ -156,16 +156,53 @@ frame it sits in, plus that frame's anchor. So no demo wire type was added.
   announce and manifest alone and compares every key;
   `web/tests/content-chain.spec.ts` asserts the page's reconstruction against
   the same capture, including that the placed row lands where `/v1/frames`
-  put it. Both shown failable with planted faults.
+  put it (since the route's retirement, its frozen capture). Both shown failable with planted faults.
 
 ### The RPC routes, individually
 
 | route | verdict | basis |
 |---|---|---|
 | `/v1/localize` | **MIGRATE** (stays a shim) | per brief; successor is 1.9 entry 5. Speaks 1.8 argeo underneath |
-| `/v1/frames` | **RETIRE**, pending check | the page already reads the binding's `frames/frame_transform/v1`; both must be shown to serve the same transforms first |
+| `/v1/frames` | **RETIRED** | shown equivalent first; see "The frames route" below |
 | `/v1/stream` | census pending | websocket, not catalogue; not named in the brief |
 | `/v1/catalog/query` | **RETIRED** (Finding 1, Option 1) | replaced by `POST /v1/content/query` (the inventory, filtered) and the §7.5 resolver; see "What landed" below |
+
+### The frames route — what was measured before it went
+
+`GET /v1/frames` was a view over cached service announces: the union of their
+`transforms`, keyed by local frame. Its only source was the catalogue
+server's announce, whose transforms come from `SPATIALDDS_FRAME_ANCHORS` — so
+the anchors files the repository ships are the whole of what it could serve:
+one frame, `map/ut-littlefield-fountain`.
+
+- **Captured** live on 2026-10-21 against `bcea0c4`, full stack plus the
+  robot tier, beside its two replacements read in the same minute:
+  `tests/fixtures/frames-route-baseline.json`. Frozen.
+- **Compared** by role, not by name (`from` is `child_ref`, `to` is
+  `parent_ref`): the binding's frames lane and the placed item's
+  `ContentAnnounce` anchor serve the route's frame with the same identity
+  (UUIDv5 of the fqn, both ends) and a bit-identical pose.
+- **One difference, measured and pinned, not a disagreement:** the scene's
+  `child_ref` declares its scale (`SCALE_DECLARED`, 1 m/unit); the
+  catalogue's says `SCALE_UNKNOWN`. Nothing that read the route read scale.
+- **Asserted** by `tests/test_frames_route_retired.py`: the capture covers
+  every shipped anchor; the code that publishes each replacement produces the
+  captured transform; against a running stack the lane and the inventory
+  serve it and the route answers 404. `web/tests/content-chain.spec.ts` now
+  places the 1.7 row through the captured route answer and the 1.8 documents
+  through the announce alone. Failable: an inverted, moved, missing or
+  renamed lane, an unanchored inventory and a rotated anchor are each caught;
+  moving the captured frame 100 m fails both the Python and the page halves;
+  planting a second anchored frame fails the coverage check.
+- **The page** reads the scene's lane for the model, and merges the content
+  anchors under it on Discover, where the scene-vs-catalogue disagreement log
+  now lives. The bootstrap's fallback to the catalogue's claim is gone: the
+  binding that serves the entities serves the lane beside them, so a stack
+  with one and not the other no longer exists. `bridgeDiscover`'s fallback to
+  the route could not have answered a frame the announces left out — both
+  came from the same anchors — and now uses the frames the page holds.
+- `tests/test_georeference.py`'s two-route check compares the scene's lane
+  with the content anchor instead of the route.
 
 ---
 
@@ -302,3 +339,4 @@ it or filed with its measurement.
 | SPEC_COMPLIANCE's extensions table listed seven `oarc.*` names and said five; the registry held three | table brought to the registry; `tests/test_topic_discovery.py` now holds both |
 | The first `ContentAnnounce` builder stamped each item with its content's update time, so under §3.3's `2 × ttl_sec` rule a January edit announced itself expired | stamp is publication time; update time is the manifest's; pinned by `test_the_announce_stamp_is_its_publication_time` |
 | `bench_coverage_query.py` timed the retired catalogue query, against its own mock server | now times a late-joining reader receiving the whole inventory; pre- and post-migration results are not comparable, and the plotter refuses the old column |
+| `web/tests/model-layer.spec.ts` placed every model entity through a hand-typed venue frame labelled "as measured"; its quaternion `w` differed from the announced one in the ninth digit (`…3448856` vs `…3490789`) | **measured, not inferred:** `a41e6de`'s own projection rerun on its own anchor gives the announced value, so the copy was a transcription slip, never a measurement. The spec now reads the frozen `/v1/frames` capture. Harmless at venue scale (~1e-7 m over 20 m), and exactly the retyped-number class |

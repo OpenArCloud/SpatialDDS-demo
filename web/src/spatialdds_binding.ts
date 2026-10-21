@@ -206,19 +206,19 @@ export async function bindingCommand(
  * The scene's own georeference, as N.3 serves it.
  *
  * **This is the scene's claim about where its frame sits**, published by
- * `model_service` --- the party that declares the frame. The 1.7 catalogue
- * server announces a transform for the same frame too, reachable through the
- * bridge's `/v1/frames`, and that is a *different* claim: where its map sits.
- * They coincide today. Neither is crowned, and `app.ts` states which it
- * prefers rather than blending them.
+ * `model_service` --- the party that declares the frame. The catalogue
+ * anchors the same frame too, in the content announces it places there, and
+ * that is a *different* claim: where its map sits. They coincide today.
+ * Neither is crowned, and `app.ts` states which it prefers rather than
+ * blending them.
  *
  * The returned map is keyed by the **child** frame's fqn, which is the local
  * frame a pose is expressed in and so the thing a caller looks up.
  *
  * **The shape is adapted, and the direction is the part to get right.**
  * `core::FrameTransform` names the global frame `parent_ref` and the local one
- * `child_ref`, with `T_parent_child` mapping parent into child. The bridge's
- * `/v1/frames` serves a `disco::Transform`, whose `from` is the *local* frame
+ * `child_ref`, with `T_parent_child` mapping parent into child. A content
+ * announce's anchor is a `disco::Transform`, whose `from` is the *local* frame
  * and `to` earth-fixed, carrying the same numbers. So `child_ref` is what
  * `from` was. Mapping by name instead --- `from` to `parent_ref` --- inverts
  * the transform and places the venue at the centre of the earth with every
