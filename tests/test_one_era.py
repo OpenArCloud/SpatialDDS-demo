@@ -26,6 +26,15 @@ anything versioned below it is pre-era. Four properties:
    on the path, the 1.7 package does not import -- which also catches one
    installed in the environment, which no static check can see.
 
+**What it cannot reach.** A present-tense claim in prose -- "this repo stays
+on 1.7", "the button is disabled without a bundle" -- names no retired path
+and imports nothing, so none of the four properties sees it, and exempting
+history (property 3) is exactly what lets it through. One outlived the
+migration this gate was written for: the README's SceneScape row said the
+repository "stays on stamped 1.7" until an external review at `384e766`
+found it. Such claims are caught by reading the docs as a reader would, not
+by this file.
+
 The exhibit is exempt as a directory, and this file is exempt because it has
 to name what it forbids. Nothing else is: `tests/test_cross_era_fixture.py`
 takes the 1.7 package's name from the exhibit's directory instead of spelling

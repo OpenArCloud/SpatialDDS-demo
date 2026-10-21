@@ -558,8 +558,9 @@ async function withLocalizeLock(work: () => Promise<void>) {
   } finally {
     localizeInFlight = false;
     if (localizeBtn) localizeBtn.disabled = false;
-    // Restored to what the mode decided, not unconditionally: without a
-    // query-frame bundle this button was disabled for a reason.
+    // Restored to what the mode decided, not unconditionally: it is disabled
+    // without the bridge, or with no query-frame bundle at all -- neither a
+    // real one nor the synthetic stand-in (query_frames.ts).
     if (localizeImageBtn) localizeImageBtn.disabled = !bridgeActive || queryFrames === null;
   }
 }

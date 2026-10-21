@@ -119,7 +119,7 @@ are not interchangeable: [which one do I want?](docs/servers-and-uis.md)
 
 | Adapter | Repo | What it does |
 |---|---|---|
-| Intel SceneScape sidecar | [spatialdds-scenescape](https://github.com/OpenArCloud/spatialdds-scenescape) | Publishes a stock SceneScape deployment's scene analytics as typed SpatialDDS samples: tracks, detections, polygon zones, crossing lines, events, and a georeference. Lives in its own repo because it tracks the whole 1.8 draft, while this repo stays on stamped 1.7 outside the world-model lane. |
+| Intel SceneScape sidecar | [spatialdds-scenescape](https://github.com/OpenArCloud/spatialdds-scenescape) | Publishes a stock SceneScape deployment's scene analytics as typed SpatialDDS samples: tracks, detections, polygon zones, crossing lines, events, and a georeference. Lives in its own repo with its own pins: it vendors SpatialDDS 1.8 at spec commit `424a8b3` beside a pinned SceneScape release, while this repo is at `9c3e1f2`, 21 spec commits later (the 1.8 revision that added `TopicMeta.durability`). Each moves its pin on its own evidence. |
 
 ## Conformance, in one line
 
