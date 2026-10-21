@@ -71,7 +71,7 @@ test('REST overlay records the exchanges the app makes', async ({ page, request 
 
   await page.evaluate(() => document.getElementById('btnDiscover')?.click());
   await expect(page.locator('#restOverlayBody')).toContainText(
-    'POST /v1/catalog/query -> 200', { timeout: 20_000 });
+    'POST /v1/content/query -> 200', { timeout: 20_000 });
 
   // Both windows open together — the point of having two.
   await page.getByRole('button', { name: /DDS Messages: Off/ }).click();

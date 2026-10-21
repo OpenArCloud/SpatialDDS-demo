@@ -3,9 +3,12 @@ from typing import List, Optional, Tuple
 TOPIC_DISCOVERY_ANNOUNCE_V1 = "spatialdds/discovery/announce/v1"
 TOPIC_DISCOVERY_DEPART_V1 = "spatialdds/discovery/depart/v1"
 TOPIC_DISCOVERY_QUERY_V1 = "spatialdds/discovery/query/v1"
+# ContentAnnounce, the catalogue's inventory (spec §3.3, well-known topics).
+# Latched and keyed on content_id: a reader that joins late gets the whole
+# inventory, which is how a headless DDS client lists content with no HTTP.
+TOPIC_DISCOVERY_CONTENT_V1 = "spatialdds/discovery/content/v1"
 TOPIC_VPS_QUERY_V1 = "spatialdds/vps/query/v1"
 TOPIC_VPS_RESULT_V1 = "spatialdds/vps/result/v1"
-TOPIC_CATALOG_QUERY_V1 = "spatialdds/catalog/query/v1"
 TOPIC_BOOTSTRAP_QUERY_V1 = "spatialdds/bootstrap/query/v1"
 TOPIC_BOOTSTRAP_RESPONSE_V1 = "spatialdds/bootstrap/response/v1"
 TOPIC_DDS_ENVELOPE_V1 = "spatialdds/envelope/v1"
@@ -42,10 +45,6 @@ TOPIC_FRAME_TRANSFORM_V1 = f"spatialdds/{SCENE}/frames/frame_transform/v1"
 
 def TOPIC_ANCHORS_DELTA(zone: str) -> str:
     return f"spatialdds/anchors/{zone}/delta/v1"
-
-
-def TOPIC_CATALOG_REPLIES(client_id: str) -> str:
-    return f"spatialdds/catalog/replies/{client_id}/v1"
 
 
 def TOPIC_DISCOVERY_RESPONSE(query_id: str) -> str:

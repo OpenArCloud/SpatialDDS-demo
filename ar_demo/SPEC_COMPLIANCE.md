@@ -286,8 +286,10 @@ carry a connection block.
 
 ## Placing content, and what coverage is not
 
-The catalogue row (`oarc_demo::CatalogEntry`) separates two jobs that an
-earlier version of the fountain seed ran together.
+A catalogue row separates two jobs that an earlier version of the fountain
+seed ran together. (The row was the 1.7 `oarc_demo::CatalogEntry`; since 1.8
+it is rebuilt from an announce and a manifest — next section — and the two
+jobs land in different documents, which is the separation made structural.)
 
 - **Coverage answers "would I find this here?"** It is a search key. The row's
   `coverage` is an earth-fixed bbox in degrees, and that is all it is for.
@@ -341,6 +343,68 @@ drifted is worse than no hash — it claims the bytes were checked.
 `href` and `formats` remain for consumers that already read them, and MUST
 agree with `asset` when both are present.
 
+## The catalogue, on 1.8's own chain
+
+Until the 1.8 migration the catalogue was the demo's own request/reply
+protocol: `oarc_demo::CatalogQuery` on `spatialdds/catalog/query/v1`,
+`CatalogResponse` of `CatalogEntry` rows on a client-named reply topic. 1.8
+does the job with its own pieces, so the protocol retired:
+
+- **Inventory, on the bus.** One `disco::ContentAnnounce` per item on
+  `spatialdds/discovery/content/v1`, reliable and latched, keyed on
+  `content_id`. A late joiner is handed every live item — which is how a
+  headless DDS client enumerates content with no HTTP at all. Placement rides
+  `transforms[]`: one from the item's own frame into the frame it sits in,
+  plus that frame's anchor into earth-fixed, so the announce alone places it.
+- **Assets, behind the resolver.** Each announce's `manifest_uri` names a
+  `spatial.manifest/1.8` manifest of `rtype: content` (§8.1, §8.2.4) —
+  `assets[]` as `AssetRef`s with hashes. The catalogue serves its own
+  resolver (§7.5.2: metadata at `/.well-known/spatialdds/resolver`,
+  `GET {https_base}?uri=`, strong `ETag`, §7.5.3's 400/404), and the bridge
+  fronts it for browsers.
+- **Asserted, not assumed.** `tests/fixtures/catalogue-1.7-baseline.json` is a
+  frozen capture of every row the 1.7 query returned over all three seeds,
+  taken from the pre-migration code. `tests/test_catalogue_chain.py` rebuilds
+  each row from the announce and manifest alone and compares every key;
+  `web/tests/content-chain.spec.ts` does the same for the page's
+  reconstruction, over documents a drift gate keeps equal to the builders'.
+
+What 1.8 has no conformant carrier for goes in one labelled top-level manifest
+extension, `"oarc.catalog"`, which §8.1 permits because unknown top-level
+fields MUST be ignored. Over the 34 seed rows:
+<!-- catalogue-gaps: rows=34 unhashed=32 formats=32 frame_ref=33 placed=1 -->
+
+| Gap | Rows | Carried as |
+|---|---|---|
+| `AssetRef.hash` is required, and placeholder content has no bytes to hash | 32 | `oarc.catalog.href` instead of `assets[]` |
+| `formats` that are not media types (`"gltf"`, `"3dtiles"`) | 32 | `oarc.catalog.formats` |
+| A row names a frame without being placed in it — no transform can say that without asserting a pose | 33 | `oarc.catalog.frame_ref` |
+
+One row is placed, and its placement is a native transform.
+`tests/test_catalogue_chain.py` holds these counts to the seeds.
+
+Further gaps, filed in `docs/owm-1.8-spec-queue.md` with their origins:
+
+- **No content query, and no HTTP content enumeration.** `CoverageQuery`
+  answers with services, and §3.3.0's HTTP search returns service manifests
+  only. On the bus the latch makes enumeration free; over HTTP a client can
+  resolve a URI it already has but cannot ask what exists. So filtering is
+  reader-side (`content_catalogue.filter_inventory`, shared by every
+  consumer), and `limit` / `page_token` / `content_id_in` are the bridge's
+  `/v1/content/query`'s, not the spec's. A 1.9 entry on query ergonomics.
+- **No content-update time on the announce.** `ContentAnnounce.stamp` pairs
+  with `ttl_sec` and so must be the publication time; the content's own update
+  time is the manifest's `stamp`. The 1.7 query sorted newest-first; the
+  inventory read sorts by `content_id`, because ordering by update time
+  would mean resolving every manifest first.
+- **Resolution is plain HTTP on loopback.** §7.5.5 requires HTTPS. The
+  catalogue's resolver listens on 127.0.0.1 only, and a deployment's public
+  face is the bridge, behind TLS where the deployment terminates it; the local
+  development stack is HTTP end to end.
+- **`content_refs` still say `catalog:<id>`.** The OWM's canonical form is the
+  manifest URI; the robot and the duck's model service keep the demo's short form,
+  which the page resolves by id through the same chain.
+
 ## Time & quaternions
 
 - Timestamps are `builtin::Time { sec, nanosec }` with `sec` now int64. JSON
@@ -388,15 +452,16 @@ protocol — flows this demo needs and the spec does not describe.
 | Extension | Type | Why it exists |
 |---|---|---|
 | `oarc.fusion_coverage` | `oarc_demo::FusionCoverage` | No type for fusion coverage metrics — a per-operator "no single source could build this" scoreboard, an aggregate diagnostic rather than track content |
-| `oarc.catalog_query` | `oarc_demo::CatalogQuery` | No catalogue query/response pair. `ContentAnnounce` advertises content; nothing asks a catalogue what is in an area |
-| `oarc.catalog_response` | `oarc_demo::CatalogResponse` | as above |
 | `oarc.bootstrap_query` | `oarc_demo::BootstrapQuery` | No bootstrap exchange. A participant is assumed to know its domain id and QoS profile already, which is exactly what a fresh device does not |
 | `oarc.bootstrap_response` | `oarc_demo::BootstrapResponse` | as above |
-| `oarc.model_entity` | `oarc_model::Entity` | **Demo-local, non-normative.** No world-model layer. The catalogue says what content exists; nothing says what is *there* — entities with identity, type, extent and relationships, pointing at catalogue content when they have an asset |
-| `oarc.model_relationship` | `oarc_model::Relationship` | as above — a keyed edge, so it can retire independently of the things it joins |
-
-Five, down from twelve — plus two carrying the world-model prototype, which
-is a different kind of entry and is marked as such.
+<!-- extension-count: 3 -->
+Three, down from twelve. The catalogue's pair (`oarc.catalog_query` /
+`oarc.catalog_response`) retired in the 1.8 migration, when the catalogue moved
+onto `ContentAnnounce` → content manifest — see "The catalogue, on 1.8's own
+chain" below. The world-model rows that stood here went earlier, when the
+model lanes moved onto 1.8's registered `model_entity` (§3.3.2).
+`tests/test_topic_discovery.py` holds this table and that count to
+`topic_types.EXTENSIONS`.
 
 ### `oarc_model` — demo-local, candidate for `spatial.model`
 
@@ -754,7 +819,9 @@ subscriber) is unchanged: it is a discovery race, not a durability one, and
 both operator tools now wait for `publication_matched` before writing rather
 than publishing into a lane with nobody on it.
 
-**A gap this exposed.** `content_refs` uses `catalog:<content_id>` to point at
+**A gap this exposed.** (Recorded against the 1.7 catalogue protocol; since
+1.8 lookup by id is `content_id_in` on `/v1/content/query`, a reader-side
+filter over the inventory.) `content_refs` uses `catalog:<content_id>` to point at
 a catalogue row, and the demo's catalogue has no way to answer it: `CatalogQuery`
 filters on coverage and `kind_in` only, so **reference-by-id exists and
 lookup-by-id does not**. A client can resolve the reference only if it has
@@ -777,7 +844,7 @@ ran before any coverage query there was no cache left to hit, and every
 reference resolves by id on every page load. The path is now load-bearing
 rather than demonstrable -- the ducks cannot render without it.
 
-Five, down from twelve. The seven that went away, and what replaced them:
+Three, down from twelve. What went away, and what replaced it:
 
 | Was | Now | Added by |
 |---|---|---|
@@ -788,6 +855,7 @@ Five, down from twelve. The seven that went away, and what replaced them:
 | `oarc.blob_chunk` (demo-local `BlobChunk` at a 65535 bound) | `spatial::core::BlobChunk` — the spec's bound is 65535 now | 1.7 findings batch 2 |
 | VPS request/response (`oarc.vps_response`, and demo `VpsRequest`/`QualityRequirements`/`LocalizeQuality`) | `vps_query` / `vps_response` — `argeo::VpsRequest` / `VpsResponse` / `QualityRequirements` / `VpsStatus`. Query imagery rides `query_blobs` (`BlobRef`); result rides `NodeGeo` | 1.7 batch 3 |
 | `oarc.fused_track` (`oarc_demo::FusedTrackSet`) | `fused_track` — `semantics::FusedTrackSet` on `DET_RT` | 1.7 batch 3 |
+| `oarc.catalog_query` / `oarc.catalog_response` (`oarc_demo::CatalogQuery` / `CatalogResponse` / `CatalogEntry`) | `spatialdds/discovery/content/v1` — a latched `disco::ContentAnnounce` per item, naming a `spatial.manifest/1.8` content manifest resolved per §7.5 | 1.8 migration |
 
 The VPS and fusion flows are now on spec types end-to-end — request/response,
 publisher, bridges and the interop probe all name the registered types. The

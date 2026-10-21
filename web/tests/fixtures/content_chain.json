@@ -1,0 +1,6315 @@
+{
+ "ar_demo/catalog_seed.json": [
+  {
+   "announce": {
+    "content_id": "mesh/sf-downtown/item-000",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Mesh 000",
+    "summary": "",
+    "tags": [],
+    "class_id": "mesh",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-63bdfc5b6ba75b7f8af7f1007f3a7601",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4259,
+       37.7704,
+       -122.4249,
+       37.7714
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-63bdfc5b6ba75b7f8af7f1007f3a7601",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "mesh/sf-downtown/item-000",
+     "title": "SF Downtown Mesh 000",
+     "class_id": "mesh"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4259,
+        37.7704,
+        -122.4249,
+        37.7714
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057000",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-000",
+     "formats": [
+      "gltf",
+      "3dtiles"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "poi/sf-downtown/item-001",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Poi 001",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-e3361ead2f565b7aaa2848ad4a647d36",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4239,
+       37.7707,
+       -122.4229,
+       37.7717
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-e3361ead2f565b7aaa2848ad4a647d36",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "poi/sf-downtown/item-001",
+     "title": "SF Downtown Poi 001",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4239,
+        37.7707,
+        -122.4229,
+        37.7717
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057060",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-001",
+     "formats": [
+      "json"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "anchor_set/sf-downtown/item-002",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Anchor Set 002",
+    "summary": "",
+    "tags": [],
+    "class_id": "anchor_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-5b1c8e80c7b65ad2877679a538a424d3",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4219,
+       37.771,
+       -122.4209,
+       37.772
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-5b1c8e80c7b65ad2877679a538a424d3",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "anchor_set/sf-downtown/item-002",
+     "title": "SF Downtown Anchor Set 002",
+     "class_id": "anchor_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4219,
+        37.771,
+        -122.4209,
+        37.772
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057120",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-002",
+     "formats": [
+      "anchors"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "image_set/sf-downtown/item-003",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Image Set 003",
+    "summary": "",
+    "tags": [],
+    "class_id": "image_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-e656d6268ca451968dfaf833b14e703a",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4199,
+       37.7713,
+       -122.4189,
+       37.7723
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-e656d6268ca451968dfaf833b14e703a",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "image_set/sf-downtown/item-003",
+     "title": "SF Downtown Image Set 003",
+     "class_id": "image_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4199,
+        37.7713,
+        -122.4189,
+        37.7723
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057180",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-003",
+     "formats": [
+      "jpeg",
+      "png"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "mesh/sf-downtown/item-004",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Mesh 004",
+    "summary": "",
+    "tags": [],
+    "class_id": "mesh",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-e9cc043989a85a0aa9bb786149d8f11a",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4179,
+       37.7716,
+       -122.4169,
+       37.7726
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-e9cc043989a85a0aa9bb786149d8f11a",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "mesh/sf-downtown/item-004",
+     "title": "SF Downtown Mesh 004",
+     "class_id": "mesh"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4179,
+        37.7716,
+        -122.4169,
+        37.7726
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057240",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-004",
+     "formats": [
+      "gltf",
+      "3dtiles"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "poi/sf-downtown/item-005",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Poi 005",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-df1012e9c1b65304a2c8b7b50a172557",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4159,
+       37.7719,
+       -122.4149,
+       37.7729
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-df1012e9c1b65304a2c8b7b50a172557",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "poi/sf-downtown/item-005",
+     "title": "SF Downtown Poi 005",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4159,
+        37.7719,
+        -122.4149,
+        37.7729
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057300",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-005",
+     "formats": [
+      "json"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "anchor_set/sf-downtown/item-006",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Anchor Set 006",
+    "summary": "",
+    "tags": [],
+    "class_id": "anchor_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-05d2bf84574d585dbbd9ce947616f4e6",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4257,
+       37.7724,
+       -122.4247,
+       37.7734
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-05d2bf84574d585dbbd9ce947616f4e6",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "anchor_set/sf-downtown/item-006",
+     "title": "SF Downtown Anchor Set 006",
+     "class_id": "anchor_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4257,
+        37.7724,
+        -122.4247,
+        37.7734
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057360",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-006",
+     "formats": [
+      "anchors"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "image_set/sf-downtown/item-007",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Image Set 007",
+    "summary": "",
+    "tags": [],
+    "class_id": "image_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-9d6aaf8868db5c5b916c5d4204133d51",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4237,
+       37.7727,
+       -122.4227,
+       37.7737
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-9d6aaf8868db5c5b916c5d4204133d51",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "image_set/sf-downtown/item-007",
+     "title": "SF Downtown Image Set 007",
+     "class_id": "image_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4237,
+        37.7727,
+        -122.4227,
+        37.7737
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057420",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-007",
+     "formats": [
+      "jpeg",
+      "png"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "mesh/sf-downtown/item-008",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Mesh 008",
+    "summary": "",
+    "tags": [],
+    "class_id": "mesh",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-cee7f2e3535554589eca9e9a764992dd",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4217,
+       37.773,
+       -122.4207,
+       37.774
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-cee7f2e3535554589eca9e9a764992dd",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "mesh/sf-downtown/item-008",
+     "title": "SF Downtown Mesh 008",
+     "class_id": "mesh"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4217,
+        37.773,
+        -122.4207,
+        37.774
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057480",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-008",
+     "formats": [
+      "gltf",
+      "3dtiles"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "poi/sf-downtown/item-009",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Poi 009",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-210e64268751536798e06e4fe2273ef1",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4197,
+       37.7733,
+       -122.4187,
+       37.7743
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-210e64268751536798e06e4fe2273ef1",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "poi/sf-downtown/item-009",
+     "title": "SF Downtown Poi 009",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4197,
+        37.7733,
+        -122.4187,
+        37.7743
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057540",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-009",
+     "formats": [
+      "json"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "anchor_set/sf-downtown/item-010",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Anchor Set 010",
+    "summary": "",
+    "tags": [],
+    "class_id": "anchor_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-97b3edf7dc1a5eb0b285bd852dadb938",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4177,
+       37.7736,
+       -122.4167,
+       37.7746
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-97b3edf7dc1a5eb0b285bd852dadb938",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "anchor_set/sf-downtown/item-010",
+     "title": "SF Downtown Anchor Set 010",
+     "class_id": "anchor_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4177,
+        37.7736,
+        -122.4167,
+        37.7746
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057600",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-010",
+     "formats": [
+      "anchors"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "image_set/sf-downtown/item-011",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Image Set 011",
+    "summary": "",
+    "tags": [],
+    "class_id": "image_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-1e7fbf3b816f5536ad2be7429a33c67d",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4157,
+       37.7739,
+       -122.4147,
+       37.7749
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-1e7fbf3b816f5536ad2be7429a33c67d",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "image_set/sf-downtown/item-011",
+     "title": "SF Downtown Image Set 011",
+     "class_id": "image_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4157,
+        37.7739,
+        -122.4147,
+        37.7749
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057660",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-011",
+     "formats": [
+      "jpeg",
+      "png"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "mesh/sf-downtown/item-012",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Mesh 012",
+    "summary": "",
+    "tags": [],
+    "class_id": "mesh",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-b0004104656f50898578641102503957",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4255,
+       37.7744,
+       -122.4245,
+       37.7754
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-b0004104656f50898578641102503957",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "mesh/sf-downtown/item-012",
+     "title": "SF Downtown Mesh 012",
+     "class_id": "mesh"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4255,
+        37.7744,
+        -122.4245,
+        37.7754
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057720",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-012",
+     "formats": [
+      "gltf",
+      "3dtiles"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "poi/sf-downtown/item-013",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Poi 013",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-16d0a953e5b15611b507ed5412be5617",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4235,
+       37.7747,
+       -122.4225,
+       37.7757
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-16d0a953e5b15611b507ed5412be5617",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "poi/sf-downtown/item-013",
+     "title": "SF Downtown Poi 013",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4235,
+        37.7747,
+        -122.4225,
+        37.7757
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057780",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-013",
+     "formats": [
+      "json"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "anchor_set/sf-downtown/item-014",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Anchor Set 014",
+    "summary": "",
+    "tags": [],
+    "class_id": "anchor_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-ad2a21a96e0d5bfba68475f5bec8299a",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4215,
+       37.775,
+       -122.4205,
+       37.776
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-ad2a21a96e0d5bfba68475f5bec8299a",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "anchor_set/sf-downtown/item-014",
+     "title": "SF Downtown Anchor Set 014",
+     "class_id": "anchor_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4215,
+        37.775,
+        -122.4205,
+        37.776
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057840",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-014",
+     "formats": [
+      "anchors"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "image_set/sf-downtown/item-015",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Image Set 015",
+    "summary": "",
+    "tags": [],
+    "class_id": "image_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-b86d1d5c15045512a2988f726cb0d027",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4195,
+       37.7753,
+       -122.4185,
+       37.7763
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-b86d1d5c15045512a2988f726cb0d027",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "image_set/sf-downtown/item-015",
+     "title": "SF Downtown Image Set 015",
+     "class_id": "image_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4195,
+        37.7753,
+        -122.4185,
+        37.7763
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057900",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-015",
+     "formats": [
+      "jpeg",
+      "png"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "mesh/sf-downtown/item-016",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Mesh 016",
+    "summary": "",
+    "tags": [],
+    "class_id": "mesh",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-94d46572943b5709bc40b5bc51a9f0cc",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4175,
+       37.7756,
+       -122.4165,
+       37.7766
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-94d46572943b5709bc40b5bc51a9f0cc",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "mesh/sf-downtown/item-016",
+     "title": "SF Downtown Mesh 016",
+     "class_id": "mesh"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4175,
+        37.7756,
+        -122.4165,
+        37.7766
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057960",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-016",
+     "formats": [
+      "gltf",
+      "3dtiles"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "poi/sf-downtown/item-017",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Poi 017",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-6872f5fa30a8583f91f327879d7b164c",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4155,
+       37.7759,
+       -122.4145,
+       37.7769
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-6872f5fa30a8583f91f327879d7b164c",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "poi/sf-downtown/item-017",
+     "title": "SF Downtown Poi 017",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4155,
+        37.7759,
+        -122.4145,
+        37.7769
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058020",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-017",
+     "formats": [
+      "json"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "anchor_set/sf-downtown/item-018",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Anchor Set 018",
+    "summary": "",
+    "tags": [],
+    "class_id": "anchor_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-5f5feba9546b50df9c87c48f0f22101d",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4253,
+       37.7764,
+       -122.4243,
+       37.7774
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-5f5feba9546b50df9c87c48f0f22101d",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "anchor_set/sf-downtown/item-018",
+     "title": "SF Downtown Anchor Set 018",
+     "class_id": "anchor_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4253,
+        37.7764,
+        -122.4243,
+        37.7774
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058080",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-018",
+     "formats": [
+      "anchors"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "image_set/sf-downtown/item-019",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Image Set 019",
+    "summary": "",
+    "tags": [],
+    "class_id": "image_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-1e2bc817bfed587bae158365f431a84a",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4233,
+       37.7767,
+       -122.4223,
+       37.7777
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-1e2bc817bfed587bae158365f431a84a",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "image_set/sf-downtown/item-019",
+     "title": "SF Downtown Image Set 019",
+     "class_id": "image_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4233,
+        37.7767,
+        -122.4223,
+        37.7777
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058140",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-019",
+     "formats": [
+      "jpeg",
+      "png"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "mesh/sf-downtown/item-020",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Mesh 020",
+    "summary": "",
+    "tags": [],
+    "class_id": "mesh",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-91bb6b1f928a502eb5c5d9daf323e4e3",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4213,
+       37.777,
+       -122.4203,
+       37.778
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-91bb6b1f928a502eb5c5d9daf323e4e3",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "mesh/sf-downtown/item-020",
+     "title": "SF Downtown Mesh 020",
+     "class_id": "mesh"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4213,
+        37.777,
+        -122.4203,
+        37.778
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058200",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-020",
+     "formats": [
+      "gltf",
+      "3dtiles"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "poi/sf-downtown/item-021",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Poi 021",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-7101e5e681565d34af2e52d323f99f29",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4193,
+       37.7773,
+       -122.4183,
+       37.7783
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-7101e5e681565d34af2e52d323f99f29",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "poi/sf-downtown/item-021",
+     "title": "SF Downtown Poi 021",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4193,
+        37.7773,
+        -122.4183,
+        37.7783
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058260",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-021",
+     "formats": [
+      "json"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "anchor_set/sf-downtown/item-022",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Anchor Set 022",
+    "summary": "",
+    "tags": [],
+    "class_id": "anchor_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-60097fb17ffe59149f4fa36b5dca7a21",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4173,
+       37.7776,
+       -122.4163,
+       37.7786
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-60097fb17ffe59149f4fa36b5dca7a21",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "anchor_set/sf-downtown/item-022",
+     "title": "SF Downtown Anchor Set 022",
+     "class_id": "anchor_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4173,
+        37.7776,
+        -122.4163,
+        37.7786
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058320",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-022",
+     "formats": [
+      "anchors"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "image_set/sf-downtown/item-023",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Image Set 023",
+    "summary": "",
+    "tags": [],
+    "class_id": "image_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-3984288b8eda5bcc92bbf0f9904c3c0e",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4153,
+       37.7779,
+       -122.4143,
+       37.7789
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-3984288b8eda5bcc92bbf0f9904c3c0e",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "image_set/sf-downtown/item-023",
+     "title": "SF Downtown Image Set 023",
+     "class_id": "image_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4153,
+        37.7779,
+        -122.4143,
+        37.7789
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058380",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-023",
+     "formats": [
+      "jpeg",
+      "png"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "mesh/sf-downtown/item-024",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Mesh 024",
+    "summary": "",
+    "tags": [],
+    "class_id": "mesh",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-9a1ad7b4392e5f0c868d16c526e5ef15",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4251,
+       37.7784,
+       -122.4241,
+       37.7794
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-9a1ad7b4392e5f0c868d16c526e5ef15",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "mesh/sf-downtown/item-024",
+     "title": "SF Downtown Mesh 024",
+     "class_id": "mesh"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4251,
+        37.7784,
+        -122.4241,
+        37.7794
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058440",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-024",
+     "formats": [
+      "gltf",
+      "3dtiles"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "poi/sf-downtown/item-025",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Poi 025",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-6570c2bfb812541fb31b24386127ba7e",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4231,
+       37.7787,
+       -122.4221,
+       37.7797
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-6570c2bfb812541fb31b24386127ba7e",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "poi/sf-downtown/item-025",
+     "title": "SF Downtown Poi 025",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4231,
+        37.7787,
+        -122.4221,
+        37.7797
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058500",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-025",
+     "formats": [
+      "json"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "anchor_set/sf-downtown/item-026",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Anchor Set 026",
+    "summary": "",
+    "tags": [],
+    "class_id": "anchor_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-b256509b7e0e5f03a4d431eed1c85776",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4211,
+       37.779,
+       -122.4201,
+       37.78
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-b256509b7e0e5f03a4d431eed1c85776",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "anchor_set/sf-downtown/item-026",
+     "title": "SF Downtown Anchor Set 026",
+     "class_id": "anchor_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4211,
+        37.779,
+        -122.4201,
+        37.78
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058560",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/anchor_set/sf-downtown/item-026",
+     "formats": [
+      "anchors"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "image_set/sf-downtown/item-027",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Image Set 027",
+    "summary": "",
+    "tags": [],
+    "class_id": "image_set",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-008d7779e0b4547a828fab59975aaa16",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4191,
+       37.7793,
+       -122.4181,
+       37.7803
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-008d7779e0b4547a828fab59975aaa16",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "image_set/sf-downtown/item-027",
+     "title": "SF Downtown Image Set 027",
+     "class_id": "image_set"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4191,
+        37.7793,
+        -122.4181,
+        37.7803
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058620",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/image_set/sf-downtown/item-027",
+     "formats": [
+      "jpeg",
+      "png"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "mesh/sf-downtown/item-028",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Mesh 028",
+    "summary": "",
+    "tags": [],
+    "class_id": "mesh",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-3fad1c3e969e5d5f9bf86bb9534f890f",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4171,
+       37.7796,
+       -122.4161,
+       37.7806
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-3fad1c3e969e5d5f9bf86bb9534f890f",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "mesh/sf-downtown/item-028",
+     "title": "SF Downtown Mesh 028",
+     "class_id": "mesh"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4171,
+        37.7796,
+        -122.4161,
+        37.7806
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058680",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/mesh/sf-downtown/item-028",
+     "formats": [
+      "gltf",
+      "3dtiles"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "poi/sf-downtown/item-029",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "SF Downtown Poi 029",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/u-ff7e09008d4558789aabad7ffdbb4a23",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -122.4151,
+       37.7799,
+       -122.4141,
+       37.7809
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/u-ff7e09008d4558789aabad7ffdbb4a23",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "poi/sf-downtown/item-029",
+     "title": "SF Downtown Poi 029",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -122.4151,
+        37.7799,
+        -122.4141,
+        37.7809
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769058740",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi/sf-downtown/item-029",
+     "formats": [
+      "json"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3",
+      "fqn": "map/sf-downtown",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  }
+ ],
+ "bridges/web_bridge/tests/catalog_seed_austin.json": [
+  {
+   "announce": {
+    "content_id": "5f8b2f2a-7c2b-4f15-9b68-8a9a7c5f7e01",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "POI-001",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/5f8b2f2a-7c2b-4f15-9b68-8a9a7c5f7e01",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -97.73944,
+       30.285151,
+       -97.73934,
+       30.285251
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/5f8b2f2a-7c2b-4f15-9b68-8a9a7c5f7e01",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "5f8b2f2a-7c2b-4f15-9b68-8a9a7c5f7e01",
+     "title": "POI-001",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -97.73944,
+        30.285151,
+        -97.73934,
+        30.285251
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057000",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi-001",
+     "formats": [
+      "poi"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "austin-map-001",
+      "fqn": "map/austin",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  },
+  {
+   "announce": {
+    "content_id": "3c1a0fd2-2e4b-4c0e-9b12-6d2c3c1b7e02",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "POI-002",
+    "summary": "",
+    "tags": [],
+    "class_id": "poi",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/3c1a0fd2-2e4b-4c0e-9b12-6d2c3c1b7e02",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -97.739592,
+       30.285173,
+       -97.739492,
+       30.285273
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/3c1a0fd2-2e4b-4c0e-9b12-6d2c3c1b7e02",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "3c1a0fd2-2e4b-4c0e-9b12-6d2c3c1b7e02",
+     "title": "POI-002",
+     "class_id": "poi"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -97.739592,
+        30.285173,
+        -97.739492,
+        30.285273
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+        "fqn": "earth-fixed",
+        "has_coord_convention": true,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [],
+    "stamp": {
+     "sec": "1769057001",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "href": "spatialdds+http://content.example.com/poi-002",
+     "formats": [
+      "poi"
+     ],
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "austin-map-001",
+      "fqn": "map/austin",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  }
+ ],
+ "bridges/web_bridge/tests/catalog_seed_fountain.json": [
+  {
+   "announce": {
+    "content_id": "89f2d953-076d-5c7d-9b74-1193f71685a6",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "Rubber duck",
+    "summary": "",
+    "tags": [],
+    "class_id": "model",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/89f2d953-076d-5c7d-9b74-1193f71685a6",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -97.7396465,
+       30.283820351994255,
+       -97.7396065,
+       30.283860351994253
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "",
+       "fqn": "",
+       "has_coord_convention": false,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [
+     {
+      "from": {
+       "uuid": "2275fac8-e2a9-522b-a839-c170de4f3f56",
+       "fqn": "map/ut-littlefield-fountain/content/89f2d953-076d-5c7d-9b74-1193f71685a6",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "to": {
+       "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0",
+       "fqn": "map/ut-littlefield-fountain",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "pose": {
+       "t": [
+        11.708,
+        -14.273,
+        -1.423
+       ],
+       "q": [
+        0.0,
+        0.0,
+        -0.7071067811865475,
+        0.7071067811865476
+       ]
+      },
+      "stamp": {
+       "sec": 1769057000,
+       "nanosec": 0
+      },
+      "has_validity": false,
+      "validity": {
+       "from": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "seconds": 0
+      }
+     },
+     {
+      "from": {
+       "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0",
+       "fqn": "map/ut-littlefield-fountain",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "to": {
+       "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+       "fqn": "earth-fixed",
+       "has_coord_convention": false,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "pose": {
+       "t": [
+        -742398.4920798013,
+        -5462355.283318999,
+        3197669.647851296
+       ],
+       "q": [
+        0.49671722355450676,
+        -0.033600407060018246,
+        -0.058532108356669665,
+        0.8652843490789754
+       ]
+      },
+      "stamp": {
+       "sec": 1700000000,
+       "nanosec": 0
+      },
+      "has_validity": false,
+      "validity": {
+       "from": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "seconds": 0
+      }
+     }
+    ],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/89f2d953-076d-5c7d-9b74-1193f71685a6",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "89f2d953-076d-5c7d-9b74-1193f71685a6",
+     "title": "Rubber duck",
+     "class_id": "model"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -97.7396465,
+        30.283820351994255,
+        -97.7396065,
+        30.283860351994253
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "",
+        "fqn": "",
+        "has_coord_convention": false,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [
+     {
+      "uri": "models/duck.glb",
+      "media_type": "model/gltf-binary",
+      "hash": "sha256:4f29c95860fee8da2ed2f844f90914e24ec1ca27e420b8d13def9950f5dcf8f6",
+      "meta": []
+     }
+    ],
+    "stamp": {
+     "sec": "1769057000",
+     "nanosec": 0
+    },
+    "transforms": [
+     {
+      "from": {
+       "uuid": "2275fac8-e2a9-522b-a839-c170de4f3f56",
+       "fqn": "map/ut-littlefield-fountain/content/89f2d953-076d-5c7d-9b74-1193f71685a6",
+       "has_coord_convention": true,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "to": {
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m",
+       "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0",
+       "fqn": "map/ut-littlefield-fountain",
+       "has_coord_convention": true,
+       "coord_convention": "ENU"
+      },
+      "pose": {
+       "t": [
+        11.708,
+        -14.273,
+        -1.423
+       ],
+       "q": [
+        0.0,
+        0.0,
+        -0.7071067811865475,
+        0.7071067811865476
+       ]
+      },
+      "stamp": {
+       "sec": 1769057000,
+       "nanosec": 0
+      },
+      "has_validity": false,
+      "validity": {
+       "from": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "seconds": 0
+      }
+     }
+    ]
+   }
+  },
+  {
+   "announce": {
+    "content_id": "dcef7c31-1d5f-54aa-9344-899912f9d34a",
+    "provider_id": "svc:content:demo/catalog",
+    "title": "Mobile robot",
+    "summary": "",
+    "tags": [],
+    "class_id": "model",
+    "manifest_uri": "spatialdds://catalog.example.com/demo/content/dcef7c31-1d5f-54aa-9344-899912f9d34a",
+    "coverage": [
+     {
+      "has_crs": true,
+      "crs": "EPSG:4979",
+      "has_bbox": true,
+      "bbox": [
+       -97.7396465,
+       30.283820351994255,
+       -97.7396065,
+       30.283860351994253
+      ],
+      "has_aabb": false,
+      "aabb": {
+       "min_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "max_xyz": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "global": false,
+      "has_frame_ref": false,
+      "frame_ref": {
+       "uuid": "",
+       "fqn": "",
+       "has_coord_convention": false,
+       "coord_convention": "ENU",
+       "has_scale": false,
+       "scale_status": "SCALE_UNKNOWN",
+       "meters_per_unit": 1.0,
+       "display_unit": "m"
+      },
+      "has_coverage_window": false,
+      "coverage_window_start": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "coverage_window_end": {
+       "sec": 0,
+       "nanosec": 0
+      },
+      "has_circle": false,
+      "circle_center": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "circle_radius_m": 0.0
+     }
+    ],
+    "coverage_frame_ref": {
+     "uuid": "00cc62ae-c21e-5d3b-b5f9-2587a084ba31",
+     "fqn": "earth-fixed",
+     "has_coord_convention": false,
+     "coord_convention": "ENU",
+     "has_scale": false,
+     "scale_status": "SCALE_UNKNOWN",
+     "meters_per_unit": 1.0,
+     "display_unit": "m"
+    },
+    "has_coverage_eval_time": false,
+    "coverage_eval_time": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "transforms": [],
+    "available_from": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "available_until": {
+     "sec": 0,
+     "nanosec": 0
+    },
+    "stamp": {
+     "sec": 1700000000,
+     "nanosec": 0
+    },
+    "ttl_sec": 300
+   },
+   "manifest": {
+    "id": "spatialdds://catalog.example.com/demo/content/dcef7c31-1d5f-54aa-9344-899912f9d34a",
+    "profile": "spatial.manifest/1.8",
+    "rtype": "content",
+    "content": {
+     "content_id": "dcef7c31-1d5f-54aa-9344-899912f9d34a",
+     "title": "Mobile robot",
+     "class_id": "model"
+    },
+    "coverage": {
+     "elements": [
+      {
+       "has_crs": true,
+       "crs": "EPSG:4979",
+       "has_bbox": true,
+       "bbox": [
+        -97.7396465,
+        30.283820351994255,
+        -97.7396065,
+        30.283860351994253
+       ],
+       "has_aabb": false,
+       "aabb": {
+        "min_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ],
+        "max_xyz": [
+         0.0,
+         0.0,
+         0.0
+        ]
+       },
+       "global": false,
+       "has_frame_ref": false,
+       "frame_ref": {
+        "has_scale": false,
+        "scale_status": "SCALE_UNKNOWN",
+        "meters_per_unit": 1.0,
+        "display_unit": "m",
+        "uuid": "",
+        "fqn": "",
+        "has_coord_convention": false,
+        "coord_convention": "ENU"
+       },
+       "has_coverage_window": false,
+       "coverage_window_start": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "coverage_window_end": {
+        "sec": 0,
+        "nanosec": 0
+       },
+       "has_circle": false,
+       "circle_center": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "circle_radius_m": 0.0
+      }
+     ]
+    },
+    "assets": [
+     {
+      "uri": "models/tb3.glb",
+      "media_type": "model/gltf-binary",
+      "hash": "sha256:59ae3e144f771c3c96db9bee8efbf2129b5bc76f625f9525240282729826de5c",
+      "meta": []
+     }
+    ],
+    "stamp": {
+     "sec": "1769057000",
+     "nanosec": 0
+    },
+    "oarc.catalog": {
+     "frame_ref": {
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m",
+      "uuid": "faab95ac-b317-5b3b-8c72-2a1191a7f7e0",
+      "fqn": "map/ut-littlefield-fountain",
+      "has_coord_convention": true,
+      "coord_convention": "ENU"
+     }
+    }
+   }
+  }
+ ]
+}

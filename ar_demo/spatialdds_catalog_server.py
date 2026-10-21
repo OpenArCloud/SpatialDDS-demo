@@ -10,25 +10,20 @@ from typing import Any, Dict, List
 
 from cyclonedds.domain import DomainParticipant
 
-from spatialdds_demo.catalog_semantics import matches_catalog_filter
 from spatialdds_demo.plaza import enu_to_ecef_pose
 from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.discovery_bus import AnnouncePublisher
+from spatialdds_demo import content_catalogue as cc
+from spatialdds_demo.discovery_bus import AnnouncePublisher, ContentAnnouncePublisher
 from spatialdds_demo.json_mapping import from_json, to_json
-from spatialdds_demo.service_bus import CatalogService, CoverageService
-# The catalogue *protocol* stays on its 1.7 types until it moves onto
-# ContentAnnounce -> manifest (docs/final-migration-census.md §1). Its
-# *discovery* cannot wait: the announce goes through the shared 1.8
-# discovery_bus, and a 1.7 Announce handed to a 1.8-typed writer is a
-# TypeError at startup -- measured, which is how this boundary was found.
-from spatialdds_idl.oarc_demo import CatalogResponse
+from spatialdds_demo.service_bus import CoverageService
 from spatialdds_idl18.spatial.disco import (
     Announce as TypedAnnounce,
+    ContentAnnounce as TypedContentAnnounce,
     CoverageResponse as TypedCoverageResponse,
 )
 from spatialdds_demo.topics import (
-    TOPIC_CATALOG_QUERY_V1,
     TOPIC_DISCOVERY_ANNOUNCE_V1,
+    TOPIC_DISCOVERY_CONTENT_V1,
     TOPIC_DISCOVERY_QUERY_V1,
     TOPIC_SOURCE_ANNOUNCE_PREVIEW,
     TOPIC_SOURCE_REQUEST,
@@ -41,70 +36,6 @@ from spatialdds_validation import (
     create_coverage_bbox_earth_fixed,
 )
 from spatialdds_demo.payloads import ABSENT_SCALE
-from spatialdds_demo.topics import topic_meta
-
-
-def _complete_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Fill the presence-flagged members a hand-authored row omits.
-
-    Same bargain as `complete_coverage_element`: the seed carries what a human
-    cares about, and the builder supplies the rest so a row that predates a
-    field still types. `pose` and `asset` were appended after the 1.7 review of
-    this response, and the tower seed does not carry either.
-    """
-    entry.setdefault("has_pose", False)
-    entry.setdefault("pose", {"t": [0.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]})
-    entry.setdefault("has_asset", False)
-    entry.setdefault("asset", {"uri": "", "media_type": "", "hash": "", "meta": []})
-    return entry
-
-
-def _absolutise(entry: Dict[str, Any], base: str) -> Dict[str, Any]:
-    """
-    Resolve the authored asset URI against the publisher's configured base.
-
-    `href` is relative and names no base, so it means one thing to a client
-    that reached the catalogue through the web bridge and another to one
-    talking to this service -- the ambiguity the spec's manifests avoid by
-    being absolute. The seed stays relative because that is what is portable
-    between deployments; the base is deployment configuration
-    (`SPATIALDDS_ASSET_BASE`), and what goes on the wire is absolute.
-
-    With no base configured the URI is left as authored, which is what the
-    local demo wants: there the page and the asset share an origin.
-    """
-    asset = entry.get("asset") or {}
-    uri = asset.get("uri", "")
-    if base and uri and not uri.startswith(("http://", "https://", "spatialdds://")):
-        asset["uri"] = f"{base.rstrip('/')}/{uri.lstrip('/')}"
-    return entry
-
-
-def _load_seed(path: str) -> List[Dict[str, Any]]:
-    """
-    Load the authored catalogue and complete its coverage elements.
-
-    `catalog_seed.json` is hand-authored: it carries the fields a human cares
-    about and omits the presence-flagged ones that are always on the wire.
-    That is the right shape for authored data — it should not have to track
-    every field the IDL gains. `complete_coverage_element` fills the rest in,
-    so the seed does not silently stop building when the spec adds one, which
-    is exactly what happened when 1.7 added `has_circle`/`circle_center`/
-    `circle_radius_m` and this file was three revisions older than the IDL.
-    """
-    with open(path, "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, list):
-        raise ValueError("catalog_seed.json must be a list")
-    base = os.getenv("SPATIALDDS_ASSET_BASE", "")
-    for entry in payload:
-        entry["coverage"] = [
-            complete_coverage_element(**element)
-            for element in (entry.get("coverage") or [])
-        ]
-        _absolutise(_complete_entry(entry), base)
-    return payload
 
 
 def _seed_coverage(dataset: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -224,9 +155,11 @@ def _catalog_announce(dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
         },
         # The query lane only. Responses go to the `reply_topic` each query
         # names, which is chosen by the client and so cannot be advertised.
-        # Advisory hints are zero (= unspecified): a request/reply lane has no
-        # steady rate and no chunking.
-        "topics": [topic_meta(TOPIC_CATALOG_QUERY_V1, "oarc.catalog_query", "VPS_REQ")],
+        # None. The inventory rides `spatialdds/discovery/content/v1`, a
+        # well-known topic, so -- like the announce topic itself -- it is not
+        # listed; and there is no query lane any more. Until the 1.8 migration
+        # this advertised the demo's own `oarc.catalog_query`.
+        "topics": [],
         "coverage": _seed_coverage(dataset),
         "coverage_frame_ref": frame_ref,
         "has_coverage_eval_time": False,
@@ -265,33 +198,60 @@ def _service_summary(announce: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _parse_page_token(token: str) -> int:
-    if not token:
-        return 0
-    if token.startswith("o="):
-        try:
-            return max(0, int(token.split("=", 1)[1]))
-        except ValueError:
-            return 0
-    return 0
+def _start_resolver(dataset: List[Dict[str, Any]]):
+    """
+    The authority's resolver (§7.5.2), serving this catalogue's manifests.
 
+    Here rather than in the bridge because this process holds the content:
+    a second reader of the seed could serve a manifest that disagrees with
+    the announce it is meant to back. Bound to loopback by default -- the
+    bridge fronts it for browsers and rewrites ``https_base`` to its own
+    public path, so nothing outside the host or task needs to reach it.
 
-# The matcher lives in spatialdds_demo.catalog_semantics so this server and
-# the conformance harness cannot drift apart. Kept under the old name because
-# it is the name this file's callers use.
-_matches_filter = matches_catalog_filter
+    Plain HTTP on loopback. §7.5.5 requires HTTPS for resolution; the
+    public face of a deployment is the bridge, behind TLS where the
+    deployment has it. Recorded in ar_demo/SPEC_COMPLIANCE.md.
+    """
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import parse_qs, urlparse
 
+    host = os.getenv("SPATIALDDS_CONTENT_RESOLVER_HOST", "127.0.0.1")
+    port = int(os.getenv("SPATIALDDS_CONTENT_RESOLVER_PORT", "8097"))
 
-def _ttl_ok(stamp: Dict[str, Any], ttl_sec: int) -> bool:
-    if not stamp or ttl_sec <= 0:
-        return True
-    now = time.time()
-    sec = stamp.get("sec")
-    nanosec = stamp.get("nanosec", 0)
-    if sec is None:
-        return True
-    stamp_time = float(sec) + float(nanosec) / 1_000_000_000.0
-    return (now - stamp_time) <= float(ttl_sec)
+    class Handler(BaseHTTPRequestHandler):
+        def _json(self, status: int, body: Any, etag: str = "") -> None:
+            raw = json.dumps(body).encode() if body is not None else b""
+            self.send_response(status)
+            if body is not None:
+                self.send_header("Content-Type", "application/json")
+            if etag:
+                self.send_header("ETag", etag)
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self) -> None:  # noqa: N802
+            url = urlparse(self.path)
+            if url.path == "/.well-known/spatialdds/resolver":
+                base = f"http://{host}:{self.server.server_address[1]}/resolve"
+                return self._json(200, cc.resolver_metadata(base))
+            if url.path == "/resolve":
+                uri = (parse_qs(url.query).get("uri") or [""])[0]
+                status, manifest, etag = cc.resolve(uri, dataset)
+                if status == 200 and self.headers.get("If-None-Match") == etag:
+                    return self._json(304, None, etag)
+                return self._json(status, manifest if status == 200
+                                  else {"error": "not found" if status == 404
+                                        else "invalid SpatialDDS URI"}, etag)
+            return self._json(404, {"error": "not found"})
+
+        def log_message(self, *_args) -> None:
+            pass
+
+    server = ThreadingHTTPServer((host, port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 def run_server(seed_path: str, show_message_content: bool, detailed_content: bool) -> int:
@@ -300,76 +260,24 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
     logger.detailed_content = detailed_content
 
     try:
-        dataset = _load_seed(seed_path)
+        dataset = cc.load_seed(seed_path)
     except Exception as exc:
         print(f"Failed to load catalog seed: {exc}")
         return 1
 
     print("📚 MockCatalog Server (v1) starting...")
-    print(f"- subscribe: {TOPIC_CATALOG_QUERY_V1}")
+    print(f"- inventory: {TOPIC_DISCOVERY_CONTENT_V1} (latched, keyed on content_id)")
+    print(f"- manifests: spatialdds://{cc.authority()}/{cc.zone()}/content/<rid>, "
+          "served by the resolver")
     print(f"- dataset: {seed_path} ({len(dataset)} entries)\n")
-
-    def serve(catalog: CatalogService) -> None:
-        for query in catalog.take_queries():
-            data = to_json(query)
-            if not _ttl_ok(data.get("stamp", {}), data.get("ttl_sec", 0)):
-                continue
-            reply_topic = data.get("reply_topic", "")
-            if not reply_topic:
-                continue
-
-            logger.log_message(
-                "CATALOG_QUERY", "RECV", "Client", "Catalog:MockCatalog-v1",
-                data, TOPIC_CATALOG_QUERY_V1, TOPIC_SOURCE_SPEC, show_message_content,
-            )
-
-            query_coverage = data.get("coverage", [])
-            results = []
-            for entry in dataset:
-                if not _matches_filter(entry, data):
-                    continue
-                entry_coverage = entry.get("coverage", [])
-                if query_coverage and entry_coverage:
-                    if not SpatialDDSValidator.check_coverage_intersection(
-                        query_coverage, entry_coverage
-                    ):
-                        continue
-                results.append(entry)
-
-            results.sort(
-                key=lambda item: (
-                    -(item.get("updated_sec") or 0),
-                    item.get("content_id") or "",
-                )
-            )
-
-            limit = int(data.get("limit", 20) or 20)
-            offset = _parse_page_token(data.get("page_token", ""))
-            page = results[offset: offset + limit]
-            next_token = ""
-            if offset + limit < len(results):
-                next_token = f"o={offset + limit}"
-
-            response = {
-                "query_id": data.get("query_id", ""),
-                "results": page,
-                "next_page_token": next_token,
-                "stamp": SpatialDDSValidator.now_time(),
-            }
-            catalog.reply(reply_topic, from_json(CatalogResponse, response))
-            logger.log_message(
-                "CATALOG_RESPONSE", "SEND", "Catalog:MockCatalog-v1", "Client",
-                response, reply_topic, TOPIC_SOURCE_REQUEST, show_message_content,
-            )
-            print(f"catalog: results={len(page)} next_page_token={next_token or 'none'}")
 
     def serve_coverage(coverage: CoverageService, announce: Dict[str, Any]) -> None:
         """
         Typed CoverageQuery -> CoverageResponse, replying where the query asks.
 
         The DDS half of discovery. The catalogue answered nothing here until
-        now, so an on-bus CoverageQuery found the VPS and never the content
-        service — the same invisibility as having no announce, one layer up.
+        it learned to, so an on-bus CoverageQuery found the VPS and never the
+        content service -- the same invisibility as having no announce.
         """
         for query in coverage.take_queries():
             data = to_json(query)
@@ -398,10 +306,9 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
             )
 
     participant = DomainParticipant(domain_id)
-    catalog = CatalogService(participant)
     coverage = CoverageService(participant)
 
-    # Keyed, latched Announce, disposed on the way out — so a consumer learns
+    # Keyed, latched Announce, disposed on the way out -- so a consumer learns
     # this catalogue left rather than waiting for its TTL to lapse.
     announcer = AnnouncePublisher(participant)
     announce = _catalog_announce(dataset)
@@ -414,12 +321,32 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
         show_message_content,
     )
 
+    # The inventory: one ContentAnnounce per item. A placed item's frame anchor
+    # rides with it, so a client holding only this sample can place it.
+    anchors = {t["from"]["fqn"]: t for t in _frame_transforms(dataset)}
+    content = ContentAnnouncePublisher(participant)
+
+    def publish_inventory() -> None:
+        for row in dataset:
+            frame = (row.get("frame_ref") or {}).get("fqn", "")
+            item = cc.content_announce(
+                row, provider_id=announce["service_id"],
+                frame_anchor=anchors.get(frame) if row.get("has_pose") else None,
+                ttl_sec=int(announce.get("ttl_sec", 300)))
+            content.publish(from_json(TypedContentAnnounce, item))
+
+    publish_inventory()
+    print(f"content: {len(dataset)} item(s) announced on {TOPIC_DISCOVERY_CONTENT_V1}")
+    resolver = _start_resolver(dataset)
+    print("resolver: http://%s:%d/.well-known/spatialdds/resolver" % resolver.server_address)
+
     # An Announce is a lease, not a birth certificate: `ttl_sec` says how long
     # it stays good, and a consumer honouring it drops the service when that
     # lapses. Publishing once at startup and never again means a service that
-    # is running perfectly disappears from every cache after its TTL — which
+    # is running perfectly disappears from every cache after its TTL -- which
     # is what happened here, silently, once the demo had been up ten minutes.
-    # Re-publish well inside the window.
+    # Re-publish well inside the window; the inventory carries the same TTL
+    # and is refreshed with it.
     refresh_every = max(10.0, float(announce.get("ttl_sec", 300)) / 3.0)
     next_refresh = time.time() + refresh_every
 
@@ -428,13 +355,15 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
             if time.time() >= next_refresh:
                 announce["stamp"] = SpatialDDSValidator.now_time()
                 announcer.publish(from_json(TypedAnnounce, announce))
+                publish_inventory()
                 next_refresh = time.time() + refresh_every
-            serve(catalog)
             serve_coverage(coverage, announce)
             time.sleep(0.05)
     except KeyboardInterrupt:
         pass
     finally:
+        resolver.shutdown()
+        content.close()
         announcer.close()
 
     return 0

@@ -50,14 +50,16 @@ sequenceDiagram
     Bus-->>Bridge: matched on query_id and service_id
     Bridge-->>UI: pose as JSON
 
-    Note over UI,Cat: REST — content
-    UI->>Bridge: POST /v1/catalog/query
-    Bridge->>Bus: CatalogQuery — spatialdds/catalog/query/v1
-    Cat-->>Bus: CatalogResponse — a row may carry a pose and an AssetRef
-    Bridge-->>UI: items[]
-    Note over UI,Bridge: A pose is placeable only if its frame resolves
-    UI->>Bridge: GET /v1/frames — only when a row carries a pose
-    Bridge-->>UI: Transform per frame, local ENU into earth-fixed,<br/>read from the transforms in cached announces
+    Note over UI,Cat: REST — content: inventory, then manifests
+    Cat->>Bus: ContentAnnounce per item — spatialdds/discovery/content/v1<br/>latched, with placement and frame anchor in transforms[]
+    UI->>Bridge: POST /v1/content/query — geopose, or content_id_in
+    Bridge-->>UI: the announces in range, read off the bus
+    UI->>Bridge: GET /.well-known/spatialdds/resolver (once)
+    Bridge-->>UI: authority, https_base, cache_ttl_sec
+    UI->>Bridge: GET /v1/content/resolve?uri=spatialdds://…/content/<rid>
+    Bridge->>Cat: relayed to the catalogue's resolver (loopback)
+    Cat-->>UI: spatial.manifest/1.8, rtype content — assets[] with hashes, ETag
+    Note over UI,Bridge: A pose is placeable only if its frame resolves —<br/>the announce carries the anchor, and /v1/frames is only for one it does not
 
     Note over UI,Bridge: WebSocket — observability
     UI->>Bridge: WS /ws, subscribe to topic patterns
@@ -65,18 +67,26 @@ sequenceDiagram
 ```
 
 `/health`, `/.well-known/spatialdds/search`, `/v1/localize`,
-`/v1/catalog/query` and `/v1/frames` are the whole REST surface the UI uses;
+`/v1/content/query`, `/.well-known/spatialdds/resolver` with
+`/v1/content/resolve`, and `/v1/frames` are the whole REST surface the UI uses;
 `/ws` carries the DDS message window. Each REST route is a hand-written
-translation, which is why the bridge exposes five of them rather than the whole
-type registry — the WebSocket needs no such translation and carries anything on
-the bus.
+translation, which is why the bridge exposes these rather than the whole type
+registry — the WebSocket needs no such translation and carries anything on the
+bus.
 
-`/v1/frames` is the newest and the least obvious. A catalogue row says where
-content sits as a pose inside a frame it names, which means nothing to a client
-that has never heard of that frame. Services announce the transform out of
-their local frame in `Announce.transforms`, and this route serves the union of
-those — so a frame stops resolving exactly when its service's announce expires,
-and no new topic or reader is involved.
+Content is the spec's own chain since the 1.8 migration: the catalogue
+publishes one latched `ContentAnnounce` per item, each naming a content
+manifest by `manifest_uri`, and the manifest — resolved per §7.5 — carries the
+assets and their hashes. The page rebuilds the row it always read from those
+two documents (`contentToCatalogEntry`), asserted field by field against a
+frozen capture of what the retired 1.7 catalogue query returned
+(`tests/test_catalogue_chain.py`, `web/tests/content-chain.spec.ts`).
+
+Placement is a pose inside a frame, which means nothing to a client that has
+never heard of that frame. A placed item's announce carries both the
+placement and the frame's anchor into earth-fixed, so it is placeable on its
+own; `/v1/frames` — the union of the transforms in cached service announces —
+is asked only for a frame no content announce anchored.
 
 ### Headless client → bus
 
@@ -110,10 +120,10 @@ sequenceDiagram
     VPS-->>Bus: VpsResponse — VpsStatus, node_geo (FramedPose + GeoPose),<br/>confidence, rmse_m
     Bus-->>Client: reply correlated by query_id
 
-    Note over Client,Cat: Phase 4 — content discovery
-    Client->>Bus: CatalogQuery
-    Cat-->>Bus: CatalogResponse
-    Bus-->>Client: items
+    Note over Client,Cat: Phase 4 — content discovery, no request
+    Cat->>Bus: ContentAnnounce per item — latched, keyed on content_id
+    Bus-->>Client: a late-joining reader is handed every live item
+    Note over Client: filtered to where it was localized,<br/>and each item names its manifest_uri
 
     Note over Client,Bus: Phase 5 — anchor publication
     Client->>Bus: AnchorDelta — op ADD, GeoPose + checksum

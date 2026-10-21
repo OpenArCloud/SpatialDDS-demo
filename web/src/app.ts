@@ -56,6 +56,9 @@ const itemUrl = `data:image/svg+xml,${itemSvg}`;
 
 let viewer: Cesium.Viewer | null = null;
 let currentPose: GeoPose | null = null;
+// Whether a localization has actually placed us. `currentPose` alone cannot
+// say: a failed localize holds the prior there, deliberately.
+let localizedOnce = false;
 const entityIds = new Set<string>();
 const appLogs: string[] = [];
 let frameCursor = 0;
@@ -68,10 +71,10 @@ let bridgeActive = false;
 // localize, and null again if discovery found nothing — in which case the
 // bridge chooses, exactly as it did before discovery existed.
 let vpsServiceId: string | null = null;
-// Likewise for the content catalogue. Informational rather than routing:
-// `CatalogQuery` names a reply topic, not a target service, so a client that
-// has discovered a catalogue still asks on the well-known query topic. What
-// discovery buys here is knowing a catalogue covers this position at all.
+// Likewise for the content catalogue. Informational rather than routing: its
+// inventory rides a well-known topic and each item names its own provider and
+// manifest, so nothing is addressed to the service. What discovery buys here
+// is knowing a catalogue covers this position at all.
 let contentServiceId: string | null = null;
 let photorealisticTileset: Cesium.Cesium3DTileset | null = null;
 let photorealisticEnabled = false;
@@ -492,6 +495,9 @@ function clearEntities() {
   }
   entityIds.forEach((id) => viewer?.entities.removeById(id));
   entityIds.clear();
+  // A model bootstrap already in flight drew onto the map just cleared; the
+  // next request must not be collapsed onto it. See `bootstrapModel`.
+  clearGeneration += 1;
 }
 
 /**
@@ -665,6 +671,7 @@ async function localizeWith(prior: GeoPose, queryImage: string | null,
   // on screen, which is a poor substitute for reading the field.
   const located = response.quality.success;
   currentPose = response.geopose;
+  localizedOnce = localizedOnce || located;
   clearEntities();
   addMarker('user-location', 'You are here', response.geopose, markerUrl);
 
@@ -792,16 +799,33 @@ async function mergedFrames(): Promise<Record<string, any>> {
  * spec caught as soon as the viewer-ready call was added. Overlapping runs
  * are collapsed onto the one already in flight, which is what "the second
  * run is idempotent" needs in order to be true.
+ *
+ * **But only onto a run that began after the last `clearEntities()`.** A
+ * localize clears the map and then asks for the model; if a bootstrap that
+ * started before the clear was still in flight, the request joined it, and
+ * whatever that run had already drawn was wiped and never redrawn -- the
+ * venue's ducks seen on the map, then gone. It also left `lastModel` null, so
+ * Discover ran a whole second bootstrap. The window was narrow while the
+ * model's asset lookup was one catalogue query and widened to seconds when
+ * it became inventory, resolver and manifests, which is when
+ * `model-stack.spec.ts` started catching it. So a request after a clear gets
+ * a run of its own, queued behind the stale one rather than overlapping it.
  */
-let modelBootstrap: Promise<void> | null = null;
+let clearGeneration = 0;
+let modelBootstrap: { generation: number; run: Promise<void> } | null = null;
 
 function bootstrapModel(): Promise<void> {
-  if (!modelBootstrap) {
-    modelBootstrap = bootstrapModelOnce().finally(() => {
-      modelBootstrap = null;
-    });
+  if (modelBootstrap && modelBootstrap.generation === clearGeneration) {
+    return modelBootstrap.run;
   }
-  return modelBootstrap;
+  const stale = modelBootstrap ? modelBootstrap.run.catch(() => undefined) : Promise.resolve();
+  const run: Promise<void> = stale.then(() => bootstrapModelOnce()).finally(() => {
+    if (modelBootstrap?.run === run) {
+      modelBootstrap = null;
+    }
+  });
+  modelBootstrap = { generation: clearGeneration, run };
+  return run;
 }
 
 async function bootstrapModelOnce(): Promise<void> {
@@ -869,7 +893,7 @@ async function bootstrapModelOnce(): Promise<void> {
     // The entities place regardless: an asset is what a thing *looks* like,
     // not where it is. Said out loud because a venue of unadorned markers
     // otherwise looks like a failure rather than a catalogue being absent.
-    appLog(`catalog:by-id skipped — no 1.7 bridge; ${wanted.length} asset `
+    appLog(`catalog:by-id skipped — no bridge; ${wanted.length} asset `
          + `reference(s) unresolved, entities still placed`);
   }
 
@@ -2260,6 +2284,23 @@ async function autoLocalizeIfThisIsTheDemosOwnVps() {
       appLog(`autostart: held — ${serviceId || 'no VPS announced'} is not the ` +
              `demo's own; press Localize with Image to send it a real ` +
              `photograph, or Localize (Mock) to just stand in the venue`);
+      return;
+    }
+    // Asked again, because the question at the top was asked before two
+    // awaits: finding the VPS takes a discovery search, and a Localize press
+    // that landed in the meantime has already answered "where am I". Going
+    // ahead anyway localized a second time, and a localize clears the map --
+    // so the whole venue vanished for the seconds its redraw took, after the
+    // page had looked ready. Measured on 2026-10-21 as the cause of
+    // `model-stack.spec.ts`'s "seen, then gone" failures.
+    //
+    // *Succeeded*, not merely happened. A failed localize holds the prior in
+    // `currentPose`, and the first cut of this check read that as done -- so a
+    // mock VPS declining once left the page unplaced, where the second
+    // localization used to rescue it.
+    if (localizedOnce) {
+      appLog(`autostart: ${serviceId} is the demo's mock, but a localization `
+           + `already happened — not asking again`);
       return;
     }
     appLog(`autostart: ${serviceId} is the demo's mock — localizing without a click`);

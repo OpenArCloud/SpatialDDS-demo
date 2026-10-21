@@ -460,6 +460,11 @@ def complete_coverage_element(**fields: Any) -> Dict[str, Any]:
         "circle_radius_m": 0.0,
     }
     element.update(fields)
+    # An authored frame_ref replaces the default wholesale, so it is completed
+    # in turn: a seed written before 1.8 names a frame without the scale
+    # members 1.8 appended, and the same bargain applies one level down --
+    # the author says what they care about and the builder supplies the rest.
+    element["frame_ref"] = {**_payloads.ABSENT_SCALE, **element["frame_ref"]}
     return element
 
 

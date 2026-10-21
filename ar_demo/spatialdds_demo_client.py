@@ -16,15 +16,15 @@ from spatialdds_demo_idl18.oarc_demo import BootstrapQuery as TypedBootstrapQuer
 from spatialdds_idl18.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.discovery_bus import AnnounceSubscriber
 from spatialdds_demo.json_mapping import from_json, to_json
-from spatialdds_demo.service_bus import CatalogClient, VpsClient
-from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
+from spatialdds_demo.content_catalogue import filter_inventory
+from spatialdds_demo.discovery_bus import ContentInventory
+from spatialdds_demo.service_bus import VpsClient
 from spatialdds_idl18.spatial.argeo import VpsRequest as TypedVpsRequest
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
     TOPIC_BOOTSTRAP_QUERY_V1,
     TOPIC_BOOTSTRAP_RESPONSE_V1,
-    TOPIC_CATALOG_QUERY_V1,
-    TOPIC_CATALOG_REPLIES,
+    TOPIC_DISCOVERY_CONTENT_V1,
     TOPIC_DISCOVERY_ANNOUNCE_V1,
     TOPIC_DISCOVERY_QUERY_V1,
     TOPIC_SOURCE_ANNOUNCE_PREVIEW,
@@ -271,52 +271,37 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     )
 
     if loc_response.get("status") != "VPS_FAILED":
-        print("🔎 Phase 5: Content Discovery (catalog.CatalogQuery → CatalogResponse)")
+        print("🔎 Phase 5: Content Discovery (disco.ContentAnnounce, on the bus)")
         print("-" * 40)
-        client_id = f"client-{uuid.uuid4().hex[:6]}"
-        reply_topic = TOPIC_CATALOG_REPLIES(client_id)
+        # The headless path. No HTTP and no request: the inventory is latched,
+        # so a reader that joins now is handed every live item, and this
+        # client filters it to where it was just localized. It used to send
+        # the demo's own CatalogQuery and wait for a reply; 1.8 has no content
+        # query, and does not need one at this scale.
         geopose = loc_response.get("node_geo", {}).get("geopose", {})
-        catalog_query = client.create_catalog_query(
-            geopose.get("lat_deg", 37.7749),
-            geopose.get("lon_deg", -122.4194),
-            reply_topic,
-            limit=20,
+        inventory = ContentInventory(announce_participant)
+        deadline = time.time() + 5.0
+        items = inventory.items()
+        while not items and time.time() < deadline:
+            time.sleep(0.1)
+            items = inventory.items()
+        found = filter_inventory(
+            items,
+            geopose={"lat_deg": geopose.get("lat_deg", 37.7749),
+                     "lon_deg": geopose.get("lon_deg", -122.4194)},
             kind_in=["mesh", "poi"],
         )
-        catalog_client = CatalogClient(announce_participant, reply_topic)
-        logger.log_message(
-            "CATALOG_QUERY",
-            "SEND",
-            "Client",
-            "DDS_NETWORK",
-            catalog_query,
-            TOPIC_CATALOG_QUERY_V1,
-            TOPIC_SOURCE_SPEC,
-            show_message_content,
-        )
-        typed_catalog = catalog_client.query(
-            from_json(TypedCatalogQuery, catalog_query), timeout=5
-        )
-        if typed_catalog is None:
-            print("⚠️  catalog timeout (no CATALOG_RESPONSE)")
-        else:
-            catalog_response = to_json(typed_catalog)
+        for item in found[:1]:
             logger.log_message(
-                "CATALOG_RESPONSE",
-                "RECV",
-                "Catalog:MockCatalog-v1",
-                "Client",
-                catalog_response,
-                reply_topic,
-                TOPIC_SOURCE_REQUEST,
+                "CONTENT_ANNOUNCE", "RECV", "Catalog:MockCatalog-v1", "Client",
+                item, TOPIC_DISCOVERY_CONTENT_V1, TOPIC_SOURCE_SPEC,
                 show_message_content,
             )
-            count = len(catalog_response.get("results", []))
-            next_token = catalog_response.get("next_page_token", "")
-            print(
-                f"✅ Content discovery: {count} results"
-                f"{' (next_page_token=' + next_token + ')' if next_token else ''}"
-            )
+        if not items:
+            print("⚠️  no content announced (is the catalogue running?)")
+        else:
+            print(f"✅ Content discovery: {len(found)} of {len(items)} announced "
+                  f"items in range; each names its manifest by manifest_uri")
 
     anchor_delta = client.create_anchor_delta(
         loc_response["node_geo"], loc_response["confidence"]

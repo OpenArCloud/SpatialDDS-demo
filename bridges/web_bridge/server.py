@@ -7,7 +7,10 @@ Two generations of endpoints live in this server:
   ─────────────────────────────────────
     GET  /health                   — service announcement + DDS domain
     POST /v1/localize              — Phase 3 localize one-shot
-    POST /v1/catalog/query         — Phase 4 catalog one-shot
+    POST /v1/content/query         — the content inventory, filtered (Phase 4)
+    GET  /v1/content/resolve?uri=  — content manifests, fronting the catalogue's
+                                     resolver (advertised at
+                                     /.well-known/spatialdds/resolver)
     WS   /v1/stream                — every received envelope, no filtering
 
   Generic protocol (new, for arbitrary browser consumers)
@@ -35,13 +38,14 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.discovery_bus import AnnounceSubscriber
+from spatialdds_demo import content_catalogue
+from spatialdds_demo.discovery_bus import AnnounceSubscriber, ContentInventory
 from spatialdds_demo.discovery_http import (
     normalize_search_request,
     record_from_announce,
@@ -52,13 +56,12 @@ from spatialdds_demo.discovery_http import (
 from spatialdds_demo.json_mapping import from_json, to_json
 from spatialdds_demo import blob
 from spatialdds_demo.blob import BlobPublisher
-from spatialdds_demo.service_bus import CatalogClient, CoverageClient, VpsClient
-from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
+from spatialdds_demo.service_bus import CoverageClient, VpsClient
 from spatialdds_idl18.spatial.argeo import VpsRequest as TypedVpsRequest
 from spatialdds_idl18.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
-    TOPIC_CATALOG_REPLIES,
+    TOPIC_DISCOVERY_CONTENT_V1,
     TOPIC_DISCOVERY_QUERY_V1,
 )
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
@@ -78,13 +81,16 @@ DEFAULT_LAT = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LAT", "30.284996"))
 DEFAULT_LON = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LON", "-97.739494"))
 DEFAULT_ALT = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_ALT", "18"))
 ANNOUNCE_TTL_SEC = int(os.getenv("SPATIALDDS_BRIDGE_ANNOUNCE_TTL", "300"))
-# Demo-local catalog filter default (the catalog protocol is not a spec
-# surface). Replaces the old expr string now that CoverageQuery.expr is gone.
-# The kinds a browser client understands, which is what this default is for.
+# The content kinds a browser client understands, which is what this default
+# is for: an announce's `class_id` outside it is not returned unless asked for.
 # "model" was missing while web/src/types.ts already declared it, so a glTF
 # item was filtered out by this bridge before the catalogue ever saw the
 # query — the catalogue logged results=0 and nothing anywhere logged why.
 DEFAULT_CATALOG_KINDS = ["overlay", "poi", "mesh", "model"]
+# The catalogue's resolver, which this bridge fronts for browsers. Loopback in
+# both deployments: the same container locally, the same task on AWS.
+CONTENT_RESOLVER_URL = os.getenv("SPATIALDDS_CONTENT_RESOLVER_URL",
+                                 "http://127.0.0.1:8097")
 
 
 class SpatialDDSBridge:
@@ -96,7 +102,7 @@ class SpatialDDSBridge:
         self._coverage = None
         self._blobs = None
         self._vps: Optional[VpsClient] = None
-        self._catalog: Optional[CatalogClient] = None
+        self._content: Optional[ContentInventory] = None
         # Kept, not created per request: the command lane is VOLATILE, so a
         # fresh writer would drop its own first sample while discovery caught
         # up -- and that sample is somebody's tap on the map.
@@ -118,14 +124,16 @@ class SpatialDDSBridge:
 
     def _start_transport(self, domain_id: int) -> None:
         # One participant for everything this bridge reads and writes:
-        # announces, the VPS and catalogue request/reply pairs, and the
-        # streaming fanout. The envelope transport that used to sit here
-        # existed to correlate replies; VpsClient and CatalogClient do that
-        # on their own typed topics now, correlating on the request_id and
-        # query_id the reply mirrors rather than on an envelope field.
+        # announces, the content inventory, the VPS request/reply pair, and
+        # the streaming fanout. The envelope transport that used to sit here
+        # existed to correlate replies; VpsClient does that on its own typed
+        # topics now, correlating on the query_id the reply mirrors.
         from cyclonedds.domain import DomainParticipant
         self._announce_participant = DomainParticipant(domain_id)
         self._announce_sub = AnnounceSubscriber(self._announce_participant)
+        # Opened with the transport, not on first query: the topic is latched,
+        # so the inventory is already here by the time a browser asks.
+        self._content = ContentInventory(self._announce_participant)
 
     def _announce_fresh(self, announce: Dict[str, Any]) -> bool:
         ttl_sec = announce.get("ttl_sec")
@@ -299,51 +307,57 @@ class SpatialDDSBridge:
         finally:
             _unlock(self._request_lock)
 
-    def catalog_query(
+    def content_query(
         self,
-        geopose: Dict[str, Any],
+        geopose: Optional[Dict[str, Any]],
         kind_in: Optional[List[str]] = None,
-        limit: int = 20,
         content_id_in: Optional[List[str]] = None,
+        limit: int = 20,
+        page_token: str = "",
     ) -> Dict[str, Any]:
-        _lock(self._request_lock)
-        try:
-            self.ensure_transport()
-            if self._catalog is None:
-                client_id = f"bridge-{uuid.uuid4().hex[:6]}"
-                self._catalog = CatalogClient(
-                    self._announce_participant, TOPIC_CATALOG_REPLIES(client_id))
-            reply_topic = self._catalog.reply_topic
-            query = self._create_catalog_query(
-                geopose, reply_topic, limit=limit, kind_in=kind_in,
-                content_id_in=content_id_in
-            )
+        """
+        The content inventory, filtered -- no request goes on the bus.
 
-            typed = self._catalog.query(from_json(TypedCatalogQuery, query), timeout=6)
-            if typed is None:
-                raise RuntimeError("CATALOG_RESPONSE timeout")
-            response = to_json(typed)
-            # Relay the reply, because it really did land on the bus and this
-            # participant really did read it — the announce-driven relay
-            # cannot, since a CatalogQuery names a client-chosen reply topic
-            # that by definition is never announced. Without this the
-            # catalogue half of the demo is invisible on the stream while the
-            # VPS half is not, purely because the VPS reply topic happens to
-            # be announced.
-            _emit_dds_event(
-                {
-                    "ts": time.time(),
-                    "dir": "rx",
-                    "domain": self._domain_id,
-                    "msg_type": "oarc.catalog_response",
-                    "logical_topic": reply_topic,
-                    "request_id": response.get("query_id", ""),
-                    "payload": response,
-                }
-            )
-            return response
-        finally:
-            _unlock(self._request_lock)
+        1.8 has no content query: the catalogue's inventory is a latched
+        topic, read here as it is read by any headless client, and filtered
+        by the one matcher they share (`content_catalogue.filter_inventory`).
+        Paging is this route's, over a stable order -- the 1.9 entry on query
+        ergonomics is the spec-side question.
+        """
+        self.ensure_transport()
+        items = self._content.items()
+        # A bridge that has just started may not have been handed the latched
+        # samples yet; a short wait is the difference between "nothing here"
+        # and "not yet".
+        deadline = time.time() + 2.0
+        while not items and time.time() < deadline:
+            time.sleep(0.05)
+            items = self._content.items()
+        found = content_catalogue.filter_inventory(
+            items, geopose=geopose,
+            kind_in=list(kind_in if kind_in is not None else DEFAULT_CATALOG_KINDS),
+            content_id_in=content_id_in)
+        try:
+            offset = max(0, int(page_token.split("=", 1)[1])) if page_token.startswith("o=") else 0
+        except ValueError:
+            offset = 0
+        page = found[offset: offset + limit]
+        # Relay what was read. The inventory topic is well-known, so it is
+        # never in an announce's topic list and the announce-driven relay
+        # never sees it; without this the content half of the demo would be
+        # invisible on the stream while the VPS half is not.
+        for item in page:
+            _emit_dds_event({
+                "ts": time.time(), "dir": "rx", "domain": self._domain_id,
+                "msg_type": "content_announce",
+                "logical_topic": TOPIC_DISCOVERY_CONTENT_V1,
+                "request_id": item.get("content_id", ""),
+                "payload": item,
+            })
+        return {
+            "results": page,
+            "next_page_token": f"o={offset + limit}" if offset + limit < len(found) else "",
+        }
 
     def _create_localize_request(
         self, service_id: str, prior_geopose: Optional[Dict[str, Any]],
@@ -413,52 +427,6 @@ class SpatialDDSBridge:
                 "health": "OK",
                 "note": "synthetic frame",
             },
-        }
-
-    def _create_catalog_query(
-        self,
-        geopose: Dict[str, Any],
-        reply_topic: str,
-        limit: int = 20,
-        page_token: str = "",
-        kind_in: Optional[List[str]] = None,
-        content_id_in: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Build a demo-local catalog query.
-
-        The catalog protocol is demo-specific, not a spec surface, but it used
-        to carry an `expr` string mirroring the (now deleted)
-        CoverageQuery.expr. It now carries a structured filter in the same
-        has_filter + `*_in` style discovery uses.
-        """
-        query_id = str(uuid.uuid4())
-        padding = 0.005
-        coverage_frame_ref, coverage_elem = create_coverage_bbox_earth_fixed(
-            geopose.get("lon_deg", DEFAULT_LON) - padding,
-            geopose.get("lat_deg", DEFAULT_LAT) - padding,
-            geopose.get("lon_deg", DEFAULT_LON) + padding,
-            geopose.get("lat_deg", DEFAULT_LAT) + padding,
-        )
-        kinds = list(kind_in if kind_in is not None else DEFAULT_CATALOG_KINDS)
-        ids = list(content_id_in or [])
-        # A lookup by id is not a lookup by place. The coverage box is still
-        # sent because the query type requires one, but the server does not
-        # narrow on it when ids are named -- a client resolving a
-        # `catalog:<id>` reference knows the id and may know nothing about
-        # where the thing is, which was the whole gap.
-        return {
-            "query_id": query_id,
-            "reply_topic": reply_topic,
-            "coverage": [coverage_elem],
-            "coverage_frame_ref": coverage_frame_ref,
-            "has_coverage_eval_time": False,
-            "has_filter": bool(kinds or ids),
-            "filter": {"kind_in": kinds, "content_id_in": ids},
-            "limit": limit,
-            "page_token": page_token,
-            "stamp": SpatialDDSValidator.now_time(),
-            "ttl_sec": 30,
         }
 
 
@@ -677,8 +645,6 @@ class _BrowserPublisher:
         "framed_pose": "POSE_RT",
         "fused_track": "DET_RT",
         "oarc.fusion_coverage": "MAP_META",
-        "oarc.catalog_query": "VPS_REQ",
-        "oarc.catalog_response": "VPS_RESP",
     }
     DEFAULT_PROFILE = "EVENT_RT"
 
@@ -835,17 +801,24 @@ def localize(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc))
 
 
-@app.post("/v1/catalog/query")
-def catalog_query(payload: Dict[str, Any]) -> Dict[str, Any]:
-    geopose = payload.get("geopose") if isinstance(payload, dict) else None
-    # A query by id needs no place. Requiring one would re-create the gap this
-    # closes: a client that holds `catalog:<id>` and nothing else could not
-    # ask. It falls back to the demo's default position purely because the
-    # query type carries a coverage box it cannot leave out.
-    if not geopose and not (isinstance(payload, dict) and payload.get("content_id_in")):
-        raise HTTPException(status_code=400, detail="geopose required")
-    if not geopose:
-        geopose = {"lat_deg": DEFAULT_LAT, "lon_deg": DEFAULT_LON, "alt_m": DEFAULT_ALT}
+@app.post("/v1/content/query")
+def content_query(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    What content the catalogue announces here, as `ContentAnnounce` JSON.
+
+    Each result names its manifest by `manifest_uri`; the page resolves it
+    through the resolver below. A lookup by id needs no place: a client that
+    holds `catalog:<id>` and nothing else may know nothing about where it is.
+
+    Replaces `POST /v1/catalog/query`, which relayed the demo's own 1.7
+    `CatalogQuery`. Same request body.
+    """
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="a JSON object is required")
+    geopose = payload.get("geopose")
+    content_id_in = payload.get("content_id_in")
+    if not geopose and not content_id_in:
+        raise HTTPException(status_code=400, detail="geopose or content_id_in required")
     if "expr" in payload:
         raise HTTPException(
             status_code=400,
@@ -854,25 +827,73 @@ def catalog_query(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "[\"overlay\", \"poi\", \"mesh\"] instead"
             ),
         )
-    kind_in = payload.get("kind_in")
-    content_id_in = payload.get("content_id_in")
     if content_id_in is not None:
         if not isinstance(content_id_in, list) or not all(
                 isinstance(i, str) for i in content_id_in):
             raise HTTPException(status_code=400,
                                 detail="content_id_in must be a list of strings")
-        # Bounded here as well as in the IDL, so a caller gets a 400 rather
-        # than a truncated answer that looks like "not found".
+        # The bound the 1.7 query type carried, kept so a page written
+        # against it pages the same way rather than meeting a new limit.
         if len(content_id_in) > 16:
             raise HTTPException(
                 status_code=400,
                 detail="content_id_in is bounded at 16 ids per query")
     limit = int(payload.get("limit", 20) or 20)
     try:
-        return bridge.catalog_query(geopose, kind_in=kind_in, limit=limit,
-                                    content_id_in=content_id_in)
+        return bridge.content_query(
+            geopose, kind_in=payload.get("kind_in"), content_id_in=content_id_in,
+            limit=limit, page_token=str(payload.get("page_token") or ""))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+
+def _upstream_resolver(path: str, headers: Optional[Dict[str, str]] = None):
+    """One GET to the catalogue's resolver: (status, body bytes, headers)."""
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+    req = Request(CONTENT_RESOLVER_URL + path, headers=headers or {})
+    try:
+        with urlopen(req, timeout=5) as resp:
+            return resp.status, resp.read(), dict(resp.headers)
+    except HTTPError as exc:
+        return exc.code, exc.read(), dict(exc.headers or {})
+
+
+@app.get("/.well-known/spatialdds/resolver")
+def wellknown_resolver(request: Request) -> Dict[str, Any]:
+    """
+    §7.5.2 resolver metadata for the content authority this bridge fronts.
+
+    The catalogue's own answer, with `https_base` pointed here: the catalogue
+    listens on loopback, and this is the address the page can reach.
+    """
+    try:
+        status, body, _ = _upstream_resolver("/.well-known/spatialdds/resolver")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"content resolver unreachable: {exc}")
+    if status != 200:
+        raise HTTPException(status_code=502, detail=f"content resolver answered {status}")
+    meta = json.loads(body)
+    meta["https_base"] = str(request.base_url).rstrip("/") + "/v1/content/resolve"
+    return meta
+
+
+@app.get("/v1/content/resolve")
+def content_resolve(uri: str, request: Request) -> Response:
+    """`GET {https_base}?uri=` (§7.5.2), relayed with its status and ETag."""
+    from urllib.parse import quote
+    headers = {}
+    if request.headers.get("if-none-match"):
+        headers["If-None-Match"] = request.headers["if-none-match"]
+    try:
+        status, body, up = _upstream_resolver(
+            "/resolve?uri=" + quote(uri, safe=""), headers)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"content resolver unreachable: {exc}")
+    out = {k: v for k, v in up.items() if k.lower() == "etag"}
+    return Response(content=body if status != 304 else b"", status_code=status,
+                    media_type="application/json" if status != 304 else None,
+                    headers=out)
 
 
 @app.websocket("/v1/stream")

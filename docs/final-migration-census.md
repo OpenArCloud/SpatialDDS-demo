@@ -123,6 +123,41 @@ path, which is exactly what the brief forbids.
 3. **CURATE the catalogue** as part of the frozen 1.7 exhibit and give the
    page a 1.8-native path. Largest change to the audience path.
 
+**What landed (Option 1, sharpened).** The manifest was checked first, as
+ruled, and it carries more than the table above credits: `assets[]` holds a
+hashed `AssetRef`, and placement rides `ContentAnnounce.transforms` natively
+— one transform from the item's own frame (`<frame>/content/<rid>`) into the
+frame it sits in, plus that frame's anchor. So no demo wire type was added.
+
+- **Bus:** the catalogue publishes one latched `ContentAnnounce` per row on
+  `spatialdds/discovery/content/v1` (`discovery_bus.ContentAnnouncePublisher`;
+  readers use `ContentInventory`, which honours disposal and §3.3 staleness).
+  The headless AR client reads it directly — no HTTP.
+- **Manifests:** each announce's `manifest_uri`
+  (Appendix F, `rtype` `content` — e.g.
+  `spatialdds://catalog.example.com/demo/content/dcef7c31-1d5f-54aa-9344-899912f9d34a`) names a
+  `spatial.manifest/1.8` content manifest the catalogue serves from its own
+  §7.5.2 resolver; the bridge fronts it at `/.well-known/spatialdds/resolver`
+  and `/v1/content/resolve`.
+- **Extension, only where the manifest cannot carry it:** `"oarc.catalog"`
+  (top-level, which §8.1 permits) holds an unhashed `href`, non-media-type
+  `formats`, and the frame of an unplaced row. Counts and reasons in
+  `ar_demo/SPEC_COMPLIANCE.md`; filed as `owm-1.8-spec-queue.md` §7–8.
+- **Query ergonomics** (`limit`, `page_token`, `content_id_in`) and HTTP's
+  lack of content enumeration: filed as §6, a 1.9 entry. The demo keeps them
+  as a reader-side filter behind `POST /v1/content/query`.
+- **Retired:** `oarc_demo::CatalogQuery` / `CatalogResponse` / `CatalogEntry`
+  (dropped from the 1.8 demo IDL), `service_bus.CatalogService` /
+  `CatalogClient`, the `oarc.catalog_*` registry extensions, and
+  `/v1/catalog/query`.
+- **Asserted:** `tests/fixtures/catalogue-1.7-baseline.json` freezes what the
+  1.7 query returned for all 34 rows, captured from `a18bd99` before anything
+  changed. `tests/test_catalogue_chain.py` rebuilds every row from the
+  announce and manifest alone and compares every key;
+  `web/tests/content-chain.spec.ts` asserts the page's reconstruction against
+  the same capture, including that the placed row lands where `/v1/frames`
+  put it. Both shown failable with planted faults.
+
 ### The RPC routes, individually
 
 | route | verdict | basis |
@@ -130,7 +165,7 @@ path, which is exactly what the brief forbids.
 | `/v1/localize` | **MIGRATE** (stays a shim) | per brief; successor is 1.9 entry 5. Speaks 1.8 argeo underneath |
 | `/v1/frames` | **RETIRE**, pending check | the page already reads the binding's `frames/frame_transform/v1`; both must be shown to serve the same transforms first |
 | `/v1/stream` | census pending | websocket, not catalogue; not named in the brief |
-| `/v1/catalog/query` | blocked on Finding 1 | |
+| `/v1/catalog/query` | **RETIRED** (Finding 1, Option 1) | replaced by `POST /v1/content/query` (the inventory, filtered) and the §7.5 resolver; see "What landed" below |
 
 ---
 
@@ -259,7 +294,11 @@ it or filed with its measurement.
 | `spatialdds_idl18/__init__.py` says "Generated SpatialDDS **1.7** types" — the generator hard-codes the phrase | filed: fixing it changes the tree's bytes, and trees-agree requires them identical to `spatialdds_ros`'s (read-only here) |
 | `web/tests/venue-distance.spec.ts` chose its subject by insertion order | fixed: every venue entity is probed |
 | …and its orbit assertion has never been able to fail (drill-pick finds nothing at orbital range even with scoping removed) | filed in the spec itself; the near half is genuine |
-| `model-stack.spec.ts` "a retired entity…": the duck was seen, then absent milliseconds later, once in three full runs | observed once, mechanism unconfirmed; not changed |
+| `model-stack.spec.ts` "a retired entity…": the duck was seen, then absent milliseconds later, once in three full runs | **measured and fixed** (two mechanisms, both pre-existing, both made likelier by the catalogue migration's longer asset lookup): (1) the page's autostart checked "already localized?" *before* a two-second VPS discovery, so a Localize press landing meanwhile was followed by a second localize, whose `clearEntities()` blanked the venue for its redraw — after the page looked ready; it now asks again after the await — whether a localization *succeeded*, since a failed one holds the prior in `currentPose` and the second attempt is what rescues a mock-VPS decline (a first cut that checked `currentPose` stranded the page that way, caught by the next full run). (2) a bootstrap requested after a clear was collapsed onto one that began before it, so what the clear removed was never redrawn; requests after a clear now get a run of their own. A/B against `a18bd99` on the same stack: the mover test went 5/5 at baseline, 2/5 migrated, 5/5 migrated with the fix. Full Playwright suite after both: 83 passed, 6 skipped, in three consecutive runs. A first A/B was confounded — the baseline worktree lacked the ignored `web/.env.local`, so only one side streamed photorealistic tiles, which alone took the file from 2.6 to 4.4 min |
 | The generated drift gate had only ever checked the 1.7 tree | now checks all three |
 | **No `spatialdds://` URI in the repository was valid** under either era's Appendix F: 42 occurrences, all `.../zone:<z>/<manifest\|service>:<id>`, matching a validator that enforced the same invented shape | rewritten to `<authority>/<zone>/service/<id>`; the validator follows the ABNF; `tests/test_spatial_uris.py` checks the corpus, not just the validator |
-| 1.8 says the canonical form of an entity's `content_refs` is a `spatialdds://` manifest URI; the demo uses a private `catalog:<id>` scheme | addressed in the catalogue migration: the page resolves both |
+| 1.8 says the canonical form of an entity's `content_refs` is a `spatialdds://` manifest URI; the demo uses a private `catalog:<id>` scheme | **not changed**: the catalogue migration gave every item a manifest URI, but the robot and the duck's model service still publish `catalog:<id>`, which the page resolves by id through the migrated chain. Recorded in `ar_demo/SPEC_COMPLIANCE.md` |
+| The spec's own v1.8 example content manifest claimed `spatial.core/1.7` | **already fixed upstream** (`7b558f3`); measured at origin `5ff8027` before filing, so not filed |
+| SPEC_COMPLIANCE's extensions table listed seven `oarc.*` names and said five; the registry held three | table brought to the registry; `tests/test_topic_discovery.py` now holds both |
+| The first `ContentAnnounce` builder stamped each item with its content's update time, so under §3.3's `2 × ttl_sec` rule a January edit announced itself expired | stamp is publication time; update time is the manifest's; pinned by `test_the_announce_stamp_is_its_publication_time` |
+| `bench_coverage_query.py` timed the retired catalogue query, against its own mock server | now times a late-joining reader receiving the whole inventory; pre- and post-migration results are not comparable, and the plotter refuses the old column |

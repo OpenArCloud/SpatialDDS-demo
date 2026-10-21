@@ -21,12 +21,6 @@ from spatialdds_demo_idl18.oarc_demo import (
     BootstrapResponse,
     FusionCoverage,
 )
-# The catalogue stays on its 1.7 types until it moves to
-# ContentAnnounce -> manifest (docs/final-migration-census.md §1).
-from spatialdds_idl.oarc_demo import (
-    CatalogQuery,
-    CatalogResponse,
-)
 from spatialdds_idl18.spatial.anchors import AnchorDelta
 from spatialdds_idl18.spatial.argeo import VpsRequest, VpsResponse
 from spatialdds_idl18.spatial.semantics import (
@@ -40,7 +34,9 @@ from spatialdds_idl18.spatial.core import (
     NavSatStatus,
     PlannedTrajectory,
 )
-from spatialdds_idl18.spatial.disco import Announce, CoverageQuery, CoverageResponse, Depart
+from spatialdds_idl18.spatial.disco import (
+    Announce, ContentAnnounce, CoverageQuery, CoverageResponse, Depart,
+)
 from spatialdds_idl18.spatial.events import CrossingLine, SpatialEvent
 from spatialdds_idl18.spatial.owm import Entity as ModelEntity
 from spatialdds_idl18.spatial.vio import ImuSample
@@ -97,10 +93,6 @@ EXTENSIONS: Dict[str, Type] = {
     # track content (the fused tracks themselves are now the registered
     # `fused_track` -> semantics::FusedTrackSet).
     "oarc.fusion_coverage": FusionCoverage,
-    # No catalogue query/response pair in 1.7; ContentAnnounce advertises
-    # content but nothing asks a catalogue what is in an area.
-    "oarc.catalog_query": CatalogQuery,
-    "oarc.catalog_response": CatalogResponse,
     # No bootstrap exchange: a participant is assumed to already know its
     # domain id and QoS profile, which is what a fresh device does not.
     "oarc.bootstrap_query": BootstrapQuery,
@@ -114,6 +106,10 @@ WELL_KNOWN: Dict[str, Type] = {
     "spatialdds/discovery/announce/v1": Announce,
     "spatialdds/discovery/depart/v1": Depart,
     "spatialdds/discovery/query/v1": CoverageQuery,
+    # The catalogue's inventory. Its 1.7 request/reply pair (the two
+    # `oarc.catalog_*` extensions that stood here) retired when the catalogue
+    # moved onto ContentAnnounce -> manifest: 1.8 does the job itself.
+    "spatialdds/discovery/content/v1": ContentAnnounce,
 }
 
 

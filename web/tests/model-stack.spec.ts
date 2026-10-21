@@ -236,10 +236,15 @@ test('a model entity moved on the bus moves in an open browser', async ({ page }
   });
 
   await readyPage(page);
-  await page.waitForFunction(() => {
+  // Wait for the entity this reads, not for any duck. The label arrives with
+  // the model lane; the `-model` sibling only once the duck's asset resolves,
+  // which since the 1.8 catalogue migration is a resolver round trip later
+  // (manifest, not an inline catalogue row). Waiting on "any duck" then
+  // reading this one raced that gap and failed one full run in two.
+  await page.waitForFunction((id) => {
     const v = (window as any).__viewer;
-    return v && v.entities.values.some((e: any) => String(e.id).startsWith('ent:duck'));
-  }, null, { timeout: 40_000 });
+    return v && v.entities.values.some((e: any) => String(e.id) === `${id}-model`);
+  }, target, { timeout: 40_000 });
 
   const read = () => page.evaluate((id) => {
     const v = (window as any).__viewer;
@@ -341,8 +346,16 @@ test('a retired entity states its reason, then leaves the map', async ({ page })
       .filter((x: string) => x === id || x.startsWith(`${id}-`));
   }, target);
 
-  expect((await drawn()).length,
-         'the duck should be on the map before it is retired').toBeGreaterThan(0);
+  // Seen above and gone here was an intermittent until 2026-10-21, when it
+  // was measured as a late second localize clearing the map, and fixed
+  // (docs/final-migration-census.md). If it comes back, the page's own log is
+  // the evidence, so it goes in the output.
+  const present = (await drawn()).length;
+  if (present === 0) {
+    const logs: string[] = await page.evaluate(() => (window as any).__appLogs || []);
+    console.log('[retire-precondition] page log tail:\n' + logs.slice(-40).join('\n'));
+  }
+  expect(present, 'the duck should be on the map before it is retired').toBeGreaterThan(0);
 
   inContainer(name,
     `python3 scripts/retire_entity.py ${target} ${JSON.stringify(reason)}`);

@@ -17,7 +17,7 @@ bootstrap_pid=""
 summarize_messages() {
   local label="$1"
   local log_path="$2"
-  local pattern="\\[[[:space:]]*[0-9.]+s\\][[:space:]]+[←→][[:space:]]+(BOOTSTRAP_QUERY|BOOTSTRAP_RESPONSE|ANNOUNCE|COVERAGE_QUERY|COVERAGE_RESPONSE|LOCALIZE_REQUEST|LOCALIZE_RESPONSE|CATALOG_QUERY|CATALOG_RESPONSE|ANCHOR_DELTA)\\b"
+  local pattern="\\[[[:space:]]*[0-9.]+s\\][[:space:]]+[←→][[:space:]]+(BOOTSTRAP_QUERY|BOOTSTRAP_RESPONSE|ANNOUNCE|COVERAGE_QUERY|COVERAGE_RESPONSE|LOCALIZE_REQUEST|LOCALIZE_RESPONSE|CONTENT_ANNOUNCE|ANCHOR_DELTA)\\b"
 
   echo "High-level messages (${label}):"
   if command -v rg >/dev/null 2>&1; then

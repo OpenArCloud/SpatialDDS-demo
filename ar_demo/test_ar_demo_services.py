@@ -37,10 +37,11 @@ import spatialdds_demo_server as vps  # noqa: E402
 from spatialdds_demo.discovery_bus import validate_announce  # noqa: E402
 from spatialdds_demo.json_mapping import from_json  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
-    TOPIC_CATALOG_QUERY_V1, TOPIC_VPS_QUERY_V1,
+    TOPIC_DISCOVERY_CONTENT_V1, TOPIC_VPS_QUERY_V1,
 )
 from spatialdds_idl18.spatial.disco import Announce  # noqa: E402
 from spatialdds_validation import SpatialDDSValidator  # noqa: E402
+from spatialdds_demo import content_catalogue as cc  # noqa: E402
 
 SEED = _HERE / "catalog_seed.json"
 
@@ -64,7 +65,7 @@ class PlacedContent(unittest.TestCase):
     """
 
     def test_coverage_carries_no_volume(self):
-        for entry in catalog._load_seed(str(FOUNTAIN_SEED)):
+        for entry in cc.load_seed(str(FOUNTAIN_SEED)):
             for element in entry["coverage"]:
                 self.assertFalse(
                     element["has_aabb"],
@@ -76,7 +77,7 @@ class PlacedContent(unittest.TestCase):
         # A flagged-off member still rides the wire. Filling it in stamped
         # `coord_convention: ENU` on an `earth-fixed` fqn, which is the
         # conflation 1.7 deleted `frame_kind` to kill.
-        for entry in catalog._load_seed(str(FOUNTAIN_SEED)):
+        for entry in cc.load_seed(str(FOUNTAIN_SEED)):
             for element in entry["coverage"]:
                 if not element["has_frame_ref"]:
                     self.assertEqual(element["frame_ref"]["fqn"], "")
@@ -85,7 +86,7 @@ class PlacedContent(unittest.TestCase):
     def test_the_pose_resolves_to_the_water(self):
         os.environ["SPATIALDDS_FRAME_ANCHORS"] = str(FOUNTAIN_ANCHORS)
         try:
-            dataset = catalog._load_seed(str(FOUNTAIN_SEED))
+            dataset = cc.load_seed(str(FOUNTAIN_SEED))
             transforms = catalog._frame_transforms(dataset)
         finally:
             os.environ.pop("SPATIALDDS_FRAME_ANCHORS", None)
@@ -124,7 +125,7 @@ class PlacedContent(unittest.TestCase):
     def test_the_declared_hash_is_the_shipped_asset(self):
         # An integrity hash that does not match is worse than none: it says
         # the bytes were checked.
-        entry = catalog._load_seed(str(FOUNTAIN_SEED))[0]
+        entry = cc.load_seed(str(FOUNTAIN_SEED))[0]
         digest = hashlib.sha256(DUCK.read_bytes()).hexdigest()
         self.assertEqual(entry["asset"]["hash"], f"sha256:{digest}")
         self.assertEqual(entry["asset"]["media_type"], "model/gltf-binary")
@@ -132,7 +133,7 @@ class PlacedContent(unittest.TestCase):
     def test_the_wire_uri_is_absolute(self):
         os.environ["SPATIALDDS_ASSET_BASE"] = "https://example.test/ar"
         try:
-            entry = catalog._load_seed(str(FOUNTAIN_SEED))[0]
+            entry = cc.load_seed(str(FOUNTAIN_SEED))[0]
         finally:
             os.environ.pop("SPATIALDDS_ASSET_BASE", None)
         self.assertEqual(entry["asset"]["uri"],
@@ -240,7 +241,7 @@ class TopicProvenance(unittest.TestCase):
         for module in (client, vps):
             with self.subTest(module=module.__name__):
                 self.assertEqual(
-                    module._topic_source_for({}, "catalog", TOPIC_CATALOG_QUERY_V1),
+                    module._topic_source_for({}, "content", TOPIC_DISCOVERY_CONTENT_V1),
                     "spec")
 
 
@@ -249,14 +250,14 @@ class CatalogueSeed(unittest.TestCase):
     The authored catalogue, and the announce derived from it.
 
     The seed omits presence-flagged fields a human does not care about, so it
-    stopped building into a `CatalogResponse` when 1.7 added the circle members
-    and nobody noticed for three revisions. Completing at load is what keeps
+    stopped building into a `CatalogResponse` (the 1.7 catalogue's reply) when
+    1.7 added the circle members, and nobody noticed for three revisions. Completing at load is what keeps
     the seed a description of coverage rather than a transcription of the
     current struct layout.
     """
 
     def test_the_seed_loads_and_its_coverage_is_complete(self):
-        dataset = catalog._load_seed(str(SEED))
+        dataset = cc.load_seed(str(SEED))
         self.assertTrue(dataset)
         for entry in dataset:
             for element in entry["coverage"]:
@@ -266,7 +267,7 @@ class CatalogueSeed(unittest.TestCase):
                     self.assertIn(flag, element, entry["content_id"])
 
     def test_coverage_is_derived_from_the_data_not_configured_beside_it(self):
-        dataset = catalog._load_seed(str(SEED))
+        dataset = cc.load_seed(str(SEED))
         coverage = catalog._seed_coverage(dataset)
         self.assertEqual(len(coverage), 1)
         west, south, east, north = coverage[0]["bbox"]
@@ -288,20 +289,22 @@ class CatalogueSeed(unittest.TestCase):
         self.assertTrue(coverage[0]["global"])
 
     def test_the_announce_is_a_real_one(self):
-        announce = catalog._catalog_announce(catalog._load_seed(str(SEED)))
+        announce = catalog._catalog_announce(cc.load_seed(str(SEED)))
         # Builds into the type and passes the rules this repo enforces at the
         # writer — the check that used to exist only in tests.
         validate_announce(from_json(Announce, announce))
         self.assertEqual(announce["kind"], "CONTENT")
 
-    def test_it_advertises_the_query_lane_only(self):
+    def test_it_advertises_no_topics_because_its_lane_is_well_known(self):
         """
-        Responses go to the `reply_topic` each query names, chosen by the
-        client, so no announcement can advertise them.
+        The inventory rides `spatialdds/discovery/content/v1`, a well-known
+        topic, which -- like the announce topic itself -- is not listed in an
+        announce. Until 1.8 this advertised the demo's own query lane.
         """
-        announce = catalog._catalog_announce(catalog._load_seed(str(SEED)))
-        self.assertEqual([t["name"] for t in announce["topics"]],
-                         [TOPIC_CATALOG_QUERY_V1])
+        from spatialdds_demo import topic_types as tt
+        announce = catalog._catalog_announce(cc.load_seed(str(SEED)))
+        self.assertEqual(announce["topics"], [])
+        self.assertIn(TOPIC_DISCOVERY_CONTENT_V1, tt.WELL_KNOWN)
 
 
 class ServiceSummaryShape(unittest.TestCase):
@@ -312,12 +315,12 @@ class ServiceSummaryShape(unittest.TestCase):
     """
 
     def test_the_summary_passes_the_1_7_rules(self):
-        announce = catalog._catalog_announce(catalog._load_seed(str(SEED)))
+        announce = catalog._catalog_announce(cc.load_seed(str(SEED)))
         summary = catalog._service_summary(announce)
         SpatialDDSValidator.validate_service_summary(summary)
 
     def test_it_carries_no_topics_or_caps(self):
-        announce = catalog._catalog_announce(catalog._load_seed(str(SEED)))
+        announce = catalog._catalog_announce(cc.load_seed(str(SEED)))
         summary = catalog._service_summary(announce)
         for absent in ("topics", "caps", "transforms"):
             self.assertNotIn(absent, summary)

@@ -72,6 +72,30 @@ class Registry(unittest.TestCase):
         self.assertEqual(unknown, set(), f"not in the 3.3.2 registry: {unknown}")
 
 
+class TheExtensionsAreDocumentedAsRegistered(unittest.TestCase):
+    """
+    §3.3.2 asks that deployment-specific type names be documented, and
+    SPEC_COMPLIANCE's extensions table is that documentation. It had drifted:
+    it listed the world-model and catalogue extensions long after the
+    registry stopped carrying them, and its count said five against three.
+    """
+
+    def test_the_table_lists_exactly_the_registry(self):
+        import re
+        text = (REPO / "ar_demo" / "SPEC_COMPLIANCE.md").read_text()
+        section = text[text.index("## Extensions: what 1.8 still has no type for"):]
+        section = section[:section.index("<!-- extension-count:")]
+        listed = set(re.findall(r"^\| `(oarc\.[a-z_]+)` \|", section, re.M))
+        self.assertEqual(listed, set(topic_types.EXTENSIONS))
+
+    def test_the_stated_count_is_the_registry_size(self):
+        import re
+        text = (REPO / "ar_demo" / "SPEC_COMPLIANCE.md").read_text()
+        stated = re.search(r"<!-- extension-count: (\d+) -->", text)
+        self.assertIsNotNone(stated, "the extension-count marker is gone")
+        self.assertEqual(int(stated.group(1)), len(topic_types.EXTENSIONS))
+
+
 class TopicMetaParsing(unittest.TestCase):
     """subscribe_from_topic_meta must tolerate what the bus really carries."""
 

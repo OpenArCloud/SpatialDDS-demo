@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Dict, Optional, List
 
@@ -45,6 +46,10 @@ def _env_for_dds() -> Dict[str, str]:
     env["SPATIALDDS_VPS_MAP_FQN"] = "map/austin"
     env["SPATIALDDS_VPS_MAP_ID"] = "austin-map"
     env["SPATIALDDS_CATALOG_SEED"] = os.path.join(ROOT, "bridges", "web_bridge", "tests", "catalog_seed_austin.json")
+    # The catalogue's resolver, on a port of the suite's own so a running
+    # stack's resolver is never the one answering.
+    env["SPATIALDDS_CONTENT_RESOLVER_PORT"] = "18097"
+    env["SPATIALDDS_CONTENT_RESOLVER_URL"] = "http://127.0.0.1:18097"
     return env
 
 
@@ -123,6 +128,11 @@ def _coverage_query(domain_id: int = 1) -> Dict[str, object]:
     if response is None:
         raise RuntimeError("COVERAGE_RESPONSE timeout")
     return to_json(response)
+
+
+def _get_json(path: str) -> Dict[str, object]:
+    with urllib.request.urlopen(f"{BRIDGE_URL}{path}", timeout=10) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 def _post_json(path: str, payload: Dict[str, object]) -> Dict[str, object]:
@@ -211,7 +221,7 @@ def main() -> int:
         print("localize ok")
 
         catalog_response = _post_json(
-            "/v1/catalog/query",
+            "/v1/content/query",
             {"geopose": geopose, "kind_in": ["overlay", "poi"]},
         )
         results = catalog_response.get("results", []) if isinstance(catalog_response, dict) else []
@@ -219,7 +229,21 @@ def main() -> int:
         missing = EXPECTED_CONTENT.difference(ids)
         if missing:
             raise AssertionError(f"catalog missing expected content: {sorted(missing)}")
-        print("catalog ok")
+        print("content inventory ok")
+
+        # The rest of the chain: each announce names its manifest, resolved
+        # through the resolver the bridge advertises (§7.5.2).
+        meta = _get_json("/.well-known/spatialdds/resolver")
+        if not meta.get("https_base"):
+            raise AssertionError(f"resolver metadata has no https_base: {meta}")
+        base = urllib.parse.urlparse(meta["https_base"]).path
+        for announce in results:
+            uri = announce["manifest_uri"]
+            manifest = _get_json(f"{base}?uri={urllib.parse.quote(uri, safe='')}")
+            if manifest.get("id") != uri or manifest.get("rtype") != "content" \
+                    or manifest.get("content", {}).get("content_id") != announce["content_id"]:
+                raise AssertionError(f"{uri} resolved to {manifest.get('id')!r}")
+        print(f"content manifests ok: {len(results)} resolved")
 
         print("bridge HTTP tests passed")
         return 0

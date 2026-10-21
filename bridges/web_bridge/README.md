@@ -193,16 +193,34 @@ One thing in that transcript is worth knowing about:
 ```
 GET  /health                  → bridge status + last seen ANNOUNCE
 POST /v1/localize             → Phase 3 LOCALIZE_REQUEST one-shot
-POST /v1/catalog/query        → Phase 4 CATALOG_QUERY one-shot
+POST /v1/content/query        → Phase 4: the ContentAnnounce inventory, filtered
+GET  /.well-known/spatialdds/resolver → §7.5.2 metadata for the content authority
+GET  /v1/content/resolve?uri= → content manifest, relayed from the catalogue's resolver
 WS   /v1/stream               → every received sample, no filtering
 ```
 
 `/v1/localize` accepts `{ "prior_geopose": ..., "service_id": ...,
 "query_image": ... }` and returns `spatial::argeo::VpsResponse` as JSON — `status` (a `VpsStatus` identifier),
 `node_geo` behind `has_node_geo`, `confidence`, and `rmse_m` behind
-`has_rmse_m`. `/v1/catalog/query` accepts a `geopose`, an optional `kind_in`
-array and an optional `limit`; `expr` is refused with a 400, since 1.7 removed
-it.
+`has_rmse_m`.
+
+`/v1/content/query` accepts a `geopose` or a `content_id_in` list (at most 16),
+an optional `kind_in` (default: the kinds the page draws) and optional `limit`
+/ `page_token`, and returns `spatial::disco::ContentAnnounce` JSON. Nothing goes
+on the bus: the inventory is a latched topic this bridge reads like any other
+client, filtered by the shared `content_catalogue.filter_inventory`. A lookup by
+id ignores the area. `expr` is refused with a 400, since 1.7 removed it. It
+replaces `/v1/catalog/query`, which relayed the demo's own 1.7 catalogue query;
+the request body is unchanged.
+
+Each announce names its manifest by `manifest_uri`. The bridge advertises the
+content authority's resolver at `/.well-known/spatialdds/resolver`, with
+`https_base` pointed at its own `/v1/content/resolve`, and relays each
+`?uri=` to the catalogue's resolver on loopback
+(`SPATIALDDS_CONTENT_RESOLVER_URL`, default `http://127.0.0.1:8097`) — status,
+body and `ETag` as given, `If-None-Match` honoured. The catalogue serves its
+own manifests because it holds the content; a second reader of the seed could
+serve one that disagrees with the announce it backs.
 
 `query_image` is a base64 JPEG — the one place inline bytes are reasonable,
 since HTTP has no side channel. The bridge chunks it onto

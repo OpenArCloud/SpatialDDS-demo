@@ -55,8 +55,7 @@ def test_demo_output() -> bool:
         "topic=spatialdds/vps/result/v1",
         "topic=spatialdds/discovery/response/",
         "topic=spatialdds/anchors/",
-        "topic=spatialdds/catalog/query/v1",
-        "topic=spatialdds/catalog/replies/",
+        "topic=spatialdds/discovery/content/v1",
         "topic_source=manifest",
     ]
     return result.returncode == 0 and all(item in output for item in required)

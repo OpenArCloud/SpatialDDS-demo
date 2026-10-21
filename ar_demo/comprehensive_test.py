@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive Cyclone DDS + SpatialDDS Test Suite (v1.7)
+Comprehensive Cyclone DDS + SpatialDDS Test Suite (v1.8)
 Tests both basic DDS functionality and SpatialDDS protocol implementation
 """
 
@@ -44,7 +44,7 @@ def run_spatialdds_tests():
 def test_idl_compilation():
     """Test IDL compilation with idlc"""
     print("\n" + "=" * 80)
-    print("📝 IDL COMPILATION TEST (v1.7)")
+    print("📝 IDL COMPILATION TEST (v1.8)")
     print("=" * 80)
 
     try:

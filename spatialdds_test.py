@@ -22,14 +22,12 @@ from spatialdds_validation import (
     create_coverage_bbox_earth_fixed,
     demo_geo_pose,
 )
-from spatialdds_demo.catalog_semantics import matches_catalog_filter
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
     TOPIC_BOOTSTRAP_QUERY_V1,
     TOPIC_BOOTSTRAP_RESPONSE_V1,
-    TOPIC_CATALOG_QUERY_V1,
-    TOPIC_CATALOG_REPLIES,
+    TOPIC_DISCOVERY_CONTENT_V1,
     TOPIC_DISCOVERY_ANNOUNCE_V1,
     TOPIC_DISCOVERY_QUERY_V1,
     TOPIC_DISCOVERY_RESPONSE,
@@ -44,6 +42,7 @@ from spatialdds_demo.topics import (
 )
 from spatialdds_demo.discovery_http import BOOTSTRAP_SCHEMA  # noqa: E402
 from spatialdds_demo.topics import topic_meta  # noqa: E402
+from spatialdds_demo import content_catalogue  # noqa: E402
 
 
 def _time_to_iso(t: Dict[str, int]) -> str:
@@ -590,48 +589,6 @@ class SpatialDDSClientV15:
         }
         return delta
 
-    def create_catalog_query(
-        self,
-        lat_deg: float,
-        lon_deg: float,
-        reply_topic: str,
-        limit: int = 20,
-        page_token: str = "",
-        kind_in: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Build a demo-local catalog query.
-
-        The catalog protocol is demo-specific, not a spec surface, but it
-        used to carry an `expr` string mirroring the (now deleted)
-        CoverageQuery.expr. It now carries a structured `filter` in the same
-        has_filter + `*_in` style discovery uses, so the two query surfaces
-        share one vocabulary.
-        """
-        query_id = str(uuid.uuid4())
-        padding = 0.005
-        coverage_frame_ref, coverage_elem = create_coverage_bbox_earth_fixed(
-            lon_deg - padding,
-            lat_deg - padding,
-            lon_deg + padding,
-            lat_deg + padding,
-        )
-        kinds = list(kind_in or [])
-        query = {
-            "query_id": query_id,
-            "reply_topic": reply_topic,
-            "coverage": [coverage_elem],
-            "coverage_frame_ref": coverage_frame_ref,
-            "has_coverage_eval_time": False,
-            "has_filter": bool(kinds),
-            "filter": {"kind_in": kinds},
-            "limit": limit,
-            "page_token": page_token,
-            "stamp": SpatialDDSValidator.now_time(),
-            "ttl_sec": 30,
-        }
-        return query
-
 
 def simulate_dds_communication(logger: SpatialDDSLogger):
     """Simulate the DDS communication layer"""
@@ -709,68 +666,10 @@ def _load_manifest(announce: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], 
     return manifest, status
 
 
-def _load_catalog_seed(seed_path: str) -> List[Dict[str, Any]]:
-    with open(seed_path, "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, list):
-        raise ValueError("catalog_seed.json must be a list")
-    return payload
-
-
-def _parse_page_token(token: str) -> int:
-    if not token:
-        return 0
-    if token.startswith("o="):
-        try:
-            return max(0, int(token.split("=", 1)[1]))
-        except ValueError:
-            return 0
-    return 0
-
-
 def _manifest_list(raw: str) -> List[str]:
     if not raw:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
-
-
-def _catalog_response(
-    dataset: List[Dict[str, Any]],
-    query: Dict[str, Any],
-) -> Dict[str, Any]:
-    query_coverage = query.get("coverage", [])
-    results = []
-    for entry in dataset:
-        if not matches_catalog_filter(entry, query):
-            continue
-        entry_coverage = entry.get("coverage", [])
-        if query_coverage and entry_coverage:
-            if not SpatialDDSValidator.check_coverage_intersection(
-                query_coverage, entry_coverage
-            ):
-                continue
-        results.append(entry)
-
-    results.sort(
-        key=lambda item: (
-            -(item.get("updated_sec") or 0),
-            item.get("content_id") or "",
-        )
-    )
-
-    limit = int(query.get("limit", 20) or 20)
-    offset = _parse_page_token(query.get("page_token", ""))
-    page = results[offset : offset + limit]
-    next_token = ""
-    if offset + limit < len(results):
-        next_token = f"o={offset + limit}"
-
-    return {
-        "query_id": query.get("query_id", ""),
-        "results": page,
-        "next_page_token": next_token,
-        "stamp": SpatialDDSValidator.now_time(),
-    }
 
 
 def run_spatialdds_test(show_message_content: bool = True, detailed_content: bool = False):
@@ -991,55 +890,42 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
 
     time.sleep(0.2)
 
-    print("🔎 Phase 5: Content Discovery (catalog.CatalogQuery → CatalogResponse)")
+    print("🔎 Phase 5: Content Discovery (disco.ContentAnnounce → manifest)")
     print("-" * 40)
-    seed_path = os.getenv("SPATIALDDS_CATALOG_SEED", "catalog_seed.json")
+    # The 1.8 chain, simulated end to end with the same builder and filter the
+    # catalogue service and the bridge use: the latched inventory a reader
+    # holds, filtered to the localized area, each item's manifest resolved.
+    # Resolved against this file, not the working directory. A bare
+    # "catalog_seed.json" found the seed only when run from ar_demo/, so the
+    # IDL lane -- which runs from the repo root -- skipped this phase with a
+    # warning and passed for as long as the lane has existed.
+    seed_path = os.getenv(
+        "SPATIALDDS_CATALOG_SEED",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "ar_demo", "catalog_seed.json"))
     try:
-        dataset = _load_catalog_seed(seed_path)
+        dataset = content_catalogue.load_seed(seed_path)
     except Exception as exc:
         print(f"⚠️  catalog seed load failed: {exc}")
         dataset = []
-
-    client_id = f"client-{uuid.uuid4().hex[:6]}"
-    reply_topic = TOPIC_CATALOG_REPLIES(client_id)
-    geopose = loc_response["node_geo"]["geopose"]
-    catalog_query = client.create_catalog_query(
-        geopose["lat_deg"],
-        geopose["lon_deg"],
-        reply_topic,
-        limit=20,
-        kind_in=["mesh", "poi"],
-    )
-    logger.log_message(
-        "CATALOG_QUERY",
-        "SEND",
-        "Client",
-        "DDS_NETWORK",
-        catalog_query,
-        TOPIC_CATALOG_QUERY_V1,
-        TOPIC_SOURCE_SPEC,
-        show_message_content,
-    )
-    catalog_response = _catalog_response(dataset, catalog_query) if dataset else None
-    if catalog_response:
+    inventory = [content_catalogue.content_announce(
+        row, provider_id="svc:content:demo/catalog") for row in dataset]
+    for item in inventory[:1]:
         logger.log_message(
-            "CATALOG_RESPONSE",
-            "RECV",
-            "Catalog:MockCatalog-v1",
-            "Client",
-            catalog_response,
-            reply_topic,
-            TOPIC_SOURCE_REQUEST,
+            "CONTENT_ANNOUNCE", "RECV", "Catalog:MockCatalog-v1", "Client",
+            item, TOPIC_DISCOVERY_CONTENT_V1, TOPIC_SOURCE_SPEC,
             show_message_content,
         )
-        count = len(catalog_response.get("results", []))
-        next_token = catalog_response.get("next_page_token", "")
-        print(
-            f"✅ Content discovery: {count} results"
-            f"{' (next_page_token=' + next_token + ')' if next_token else ''}"
-        )
+    geopose = loc_response["node_geo"]["geopose"]
+    found = content_catalogue.filter_inventory(
+        inventory, geopose=geopose, kind_in=["mesh", "poi"])
+    rows = {r["content_id"]: r for r in dataset}
+    manifests = [content_catalogue.content_manifest(rows[a["content_id"]])
+                 for a in found]
+    if dataset:
+        print(f"✅ Content discovery: {len(found)} of {len(inventory)} announced "
+              f"items in range; {len(manifests)} manifest(s) resolved")
     else:
-        print("⚠️  catalog timeout (no CATALOG_RESPONSE)")
+        print("⚠️  no inventory (no catalogue seed)")
 
     time.sleep(0.2)
 

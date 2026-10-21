@@ -1,19 +1,21 @@
 """
-Catalogue query semantics, in one place.
+Catalogue filter semantics, in one place.
 
-**Demo-local, not a spec surface.** The catalogue protocol (`oarc_demo`) is
-specific to this repo; `CatalogFilter` is not `spatial::disco`'s
-`CoverageFilter`, which filters on `type_in` / `qos_profile_in` /
-`module_id_in`. The two are written in the same `has_filter` + `*_in` style so
-one vocabulary covers both query surfaces, and that is the whole relationship.
+**Demo-local, not a spec surface.** 1.8 has no content query -- the inventory
+is a latched `ContentAnnounce` topic and a reader filters what it holds -- so
+the `kind_in` / `content_id_in` filter here is the demo's reader-side rule,
+applied by `content_catalogue.filter_inventory` for every consumer: the
+bridge's `/v1/content/query`, the headless AR client, the walkthrough. It is
+not `spatial::disco`'s `CoverageFilter` (`type_in` / `qos_profile_in` /
+`module_id_in`); the two share the `has_filter` + `*_in` style and nothing
+else.
 
-This module exists because the matcher was implemented twice -- once in the AR
-demo's catalogue server, once in the conformance harness -- in the same
-language, with no reason for the copies beyond how they grew. Two servers that
-answer the same query differently is a worse failure than one that answers it
-wrongly, because only one of those gets noticed. Both now call this.
+It began as the 1.7 catalogue protocol's matcher, implemented twice -- in the
+catalogue server and in the conformance harness -- with no reason for the
+copies beyond how they grew. Two answers to the same query is a worse failure
+than one wrong answer, because only one of those gets noticed. The protocol
+retired in the 1.8 migration; the one-copy rule did not.
 """
-
 from typing import Any, Dict
 
 

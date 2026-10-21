@@ -4,6 +4,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Dict, Optional, List
@@ -40,6 +41,10 @@ def _env_for_dds() -> Dict[str, str]:
     env["SPATIALDDS_VPS_MAP_FQN"] = "map/austin"
     env["SPATIALDDS_VPS_MAP_ID"] = "austin-map"
     env["SPATIALDDS_CATALOG_SEED"] = os.path.join(ROOT, "bridges", "web_bridge", "tests", "catalog_seed_austin.json")
+    # The catalogue's resolver, on a port of the suite's own so a running
+    # stack's resolver is never the one answering.
+    env["SPATIALDDS_CONTENT_RESOLVER_PORT"] = "18097"
+    env["SPATIALDDS_CONTENT_RESOLVER_URL"] = "http://127.0.0.1:18097"
     env["PYTHONPATH"] = ROOT
     return env
 
@@ -120,6 +125,11 @@ def _coverage_query(domain_id: int = 1) -> Dict[str, object]:
     if response is None:
         raise RuntimeError("COVERAGE_RESPONSE timeout")
     return to_json(response)
+
+
+def _get_json(path: str) -> Dict[str, object]:
+    with urllib.request.urlopen(f"{BRIDGE_URL}{path}", timeout=10) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 def _post_json(path: str, payload: Dict[str, object]) -> Dict[str, object]:
@@ -214,10 +224,22 @@ def test_bridge_http_flow(bridge_stack):
     _assert_close(geopose.get("lon_deg", 0.0), AUSTIN_LON, 0.01, "lon_deg")
 
     catalog_response = _post_json(
-        "/v1/catalog/query",
+        "/v1/content/query",
         {"geopose": geopose, "kind_in": ["overlay", "poi"]},
     )
     results = catalog_response.get("results", []) if isinstance(catalog_response, dict) else []
     ids = {entry.get("content_id") for entry in results}
     missing = EXPECTED_CONTENT.difference(ids)
     assert not missing, f"catalog missing expected content: {sorted(missing)}"
+
+    # The rest of the chain: each announce names a manifest, resolved through
+    # the resolver the bridge advertises (§7.5.2), which says what it is.
+    meta = _get_json("/.well-known/spatialdds/resolver")
+    assert meta.get("https_base"), f"resolver metadata has no https_base: {meta}"
+    base = urllib.parse.urlparse(meta["https_base"]).path
+    for announce in results:
+        uri = announce["manifest_uri"]
+        manifest = _get_json(f"{base}?uri={urllib.parse.quote(uri, safe='')}")
+        assert manifest.get("id") == uri, f"resolved {uri} to {manifest.get('id')}"
+        assert manifest.get("rtype") == "content"
+        assert manifest["content"]["content_id"] == announce["content_id"]

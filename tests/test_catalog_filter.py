@@ -1,25 +1,19 @@
 """
-The demo-local catalogue filter, in both places it is implemented.
+The catalogue filter, at the one place it is applied.
 
-There used to be two copies of this matcher -- the AR demo's catalogue server
-and the conformance harness -- in the same language, differing only in how
-they grew. A parameterised suite policing their agreement was the immediate
-guard; the actual fix was to delete one, so both now import
-`spatialdds_demo.catalog_semantics`.
+There used to be two copies of this matcher -- the 1.7 catalogue server and
+the conformance harness -- differing only in how they grew; then one shared
+module both imported. Since the 1.8 migration there is one caller as well:
+`content_catalogue.filter_inventory`, which every consumer of the inventory
+goes through. The suite runs its cases through that call site and keeps the
+check that matters after consolidation: that it has not quietly grown a local
+copy. `is` rather than `==`, because a re-implementation that happens to agree
+today is exactly what drifts tomorrow.
 
-The suite still runs every case through both call sites, and adds the check
-that matters after consolidation: that neither has quietly grown a local copy
-again. `is` rather than `==`, because a re-implementation that happens to
-agree today is exactly what drifts tomorrow.
-
-`content_id_in` is lookup-by-id, added in Part 2. Before it, the catalogue
-could answer "what is near here" and not "what is this id", so a
-`catalog:<content_id>` reference was resolvable only by a client that had
-already queried the right area -- reference-by-id existed and lookup-by-id did
-not. See SPEC_COMPLIANCE.
+`content_id_in` is lookup-by-id. Before it, a `catalog:<content_id>` reference
+was resolvable only by a client that had already queried the right area --
+reference-by-id existed and lookup-by-id did not. See SPEC_COMPLIANCE.
 """
-
-import importlib.util
 import sys
 import unittest
 from pathlib import Path
@@ -37,24 +31,11 @@ ENTRIES = [
 ]
 
 
-def _load(path, name):
-    spec = importlib.util.spec_from_file_location(name, REPO / path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _matchers():
-    """Both implementations, by whatever name each gives it."""
-    try:
-        server = _load("ar_demo/spatialdds_catalog_server.py", "catalog_server")
-        harness = _load("spatialdds_test.py", "spatialdds_test")
-    except Exception as exc:  # pragma: no cover - import-time environment
-        raise unittest.SkipTest(f"could not load a matcher: {exc}")
-    return {
-        "ar_demo/spatialdds_catalog_server.py": server._matches_filter,
-        "spatialdds_test.py": harness.matches_catalog_filter,
-    }
+    """Every call site's matcher, by whatever name each gives it."""
+    from spatialdds_demo import content_catalogue
+    return {"spatialdds_demo/content_catalogue.py":
+            content_catalogue.matches_catalog_filter}
 
 
 def _query(**filters):
@@ -123,6 +104,39 @@ class CatalogFilter(unittest.TestCase):
         self.assertTrue(self._each(ENTRIES[0], _query(kind_in=["model"])))
         self.assertFalse(self._each(ENTRIES[0], _query(kind_in=["poi"])))
 
+
+class TheInventoryIsFilteredByTheSameRule(unittest.TestCase):
+    """An announce's kind is its `class_id`; the adaptation is the only seam."""
+
+    def setUp(self):
+        from spatialdds_validation import create_coverage_bbox_earth_fixed
+        # Real coverage at the fountain, so "ignores the area" is a claim
+        # about an area that would otherwise exclude it.
+        _, austin = create_coverage_bbox_earth_fixed(-97.7397, 30.2838, -97.7396, 30.2839)
+        self.items = [
+            {"content_id": DUCK, "class_id": "model", "coverage": [austin]},
+            {"content_id": FOUNTAIN, "class_id": "poi", "coverage": [austin]},
+        ]
+
+    def _ids(self, **kw):
+        from spatialdds_demo.content_catalogue import filter_inventory
+        return [i["content_id"] for i in filter_inventory(self.items, **kw)]
+
+    def test_an_area_elsewhere_excludes_it(self):
+        self.assertEqual(self._ids(geopose={"lat_deg": -33.86, "lon_deg": 151.21}), [])
+
+    def test_the_area_it_is_in_includes_it(self):
+        self.assertEqual(len(self._ids(geopose={"lat_deg": 30.28385, "lon_deg": -97.73965})), 2)
+
+    def test_kind_filters_on_class_id(self):
+        self.assertEqual(self._ids(kind_in=["poi"]), [FOUNTAIN])
+
+    def test_lookup_by_id_ignores_the_area(self):
+        far = {"lat_deg": -33.86, "lon_deg": 151.21}
+        self.assertEqual(self._ids(content_id_in=[DUCK], geopose=far), [DUCK])
+
+    def test_no_filter_returns_everything(self):
+        self.assertEqual(sorted(self._ids()), sorted([DUCK, FOUNTAIN]))
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,8 @@
 """
-Typed request/reply for the demo's service flows: VPS localization and catalogue.
+Typed request/reply for the demo's service flows: VPS localization, bootstrap
+and discovery coverage.
 
-Both are request/reply over DDS, correlated by the `query_id` the request
+Each is request/reply over DDS, correlated by the `query_id` the request
 carries and the response mirrors, rather than by the envelope's old
 `request_id` string. Server, client and web bridge all go through here, so the
 three cannot drift in topic name, QoS profile or correlation rule.
@@ -12,10 +13,11 @@ Type ownership:
   (registered as `vps_query` / `vps_response`, §3.3.2) carry the query imagery
   by `BlobRef` reference and the result in `argeo::NodeGeo`. The `oarc_demo`
   VPS copies are retired.
-* **Catalogue** — still demo-owned: 1.7 has `ContentAnnounce` for advertising
-  content but no query/response pair for asking a catalogue what is in an area.
-
-The catalogue gap is catalogued in ar_demo/SPEC_COMPLIANCE.md.
+* **Catalogue** — no longer request/reply, and no longer here. It moved onto
+  1.8's own shape: a latched `ContentAnnounce` per item
+  (`discovery_bus.ContentAnnouncePublisher` / `ContentInventory`) naming a
+  content manifest behind the resolver. Its demo-owned query pair retired;
+  what 1.8 has no field for is in docs/final-migration-census.md §1.
 """
 
 from __future__ import annotations
@@ -29,7 +31,6 @@ from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.topics import (
     TOPIC_BOOTSTRAP_QUERY_V1,
     TOPIC_BOOTSTRAP_RESPONSE_V1,
-    TOPIC_CATALOG_QUERY_V1,
     TOPIC_DISCOVERY_QUERY_V1,
     TOPIC_VPS_QUERY_V1,
     TOPIC_VPS_RESULT_V1,
@@ -37,12 +38,6 @@ from spatialdds_demo.topics import (
 from spatialdds_demo_idl18.oarc_demo import (
     BootstrapQuery,
     BootstrapResponse,
-)
-# The catalogue stays on its 1.7 types until it moves to
-# ContentAnnounce -> manifest (docs/final-migration-census.md §1).
-from spatialdds_idl.oarc_demo import (
-    CatalogQuery,
-    CatalogResponse,
 )
 from spatialdds_idl18.spatial.argeo import VpsRequest, VpsResponse
 from spatialdds_idl18.spatial.disco import CoverageQuery, CoverageResponse
@@ -57,10 +52,6 @@ DEFAULT_POLL_INTERVAL = 0.02
 # Registered QoS profiles for these lanes (3.3.3).
 VPS_REQ_PROFILE = "VPS_REQ"
 VPS_RESP_PROFILE = "VPS_RESP"
-# The catalogue is a demo protocol; it borrows the VPS request/reply profiles,
-# which are the reliable ordered lanes its semantics call for.
-CATALOG_REQ_PROFILE = "VPS_REQ"
-CATALOG_RESP_PROFILE = "VPS_RESP"
 
 
 def service_id_base(service_id: str) -> str:
@@ -164,56 +155,8 @@ class VpsClient:
         return None
 
 
-class CatalogService:
-    """Server side of the catalogue exchange. Replies on the query's reply_topic."""
-
-    def __init__(self, participant: DomainParticipant):
-        self._participant = participant
-        self._reader = tt.make_reader(
-            participant, TOPIC_CATALOG_QUERY_V1, CatalogQuery, CATALOG_REQ_PROFILE)
-        self._reply_writers: Dict[str, object] = {}
-
-    def take_queries(self) -> List[CatalogQuery]:
-        return tt.take_samples(self._reader)
-
-    def reply(self, reply_topic: str, response: CatalogResponse) -> None:
-        writer = self._reply_writers.get(reply_topic)
-        if writer is None:
-            writer = tt.make_writer(
-                self._participant, reply_topic, CatalogResponse, CATALOG_RESP_PROFILE)
-            self._reply_writers[reply_topic] = writer
-        writer.write(response)
-
-
-class CatalogClient:
-    """Client side: ask on the well-known topic, listen on a private reply topic."""
-
-    def __init__(self, participant: DomainParticipant, reply_topic: str):
-        self._reply_topic = reply_topic
-        self._writer = tt.make_writer(
-            participant, TOPIC_CATALOG_QUERY_V1, CatalogQuery, CATALOG_REQ_PROFILE)
-        self._reader = tt.make_reader(
-            participant, reply_topic, CatalogResponse, CATALOG_RESP_PROFILE)
-
-    @property
-    def reply_topic(self) -> str:
-        return self._reply_topic
-
-    def query(self, query: CatalogQuery, timeout: float = 6.0,
-              poll_interval: float = DEFAULT_POLL_INTERVAL
-              ) -> Optional[CatalogResponse]:
-        self._writer.write(query)
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            for response in tt.take_samples(self._reader):
-                if response.query_id == query.query_id:
-                    return response
-            time.sleep(poll_interval)
-        return None
-
-
 # --- Coverage query: "who covers this area?" --------------------------------
-# A spec flow, unlike VPS and catalogue: `CoverageQuery` and `CoverageResponse`
+# A spec flow, unlike VPS: `CoverageQuery` and `CoverageResponse`
 # are disco types, and C.5 puts the query on a well-known topic with the reply
 # going to a topic the query names. Results are compact `ServiceSummary` rows —
 # a consumer selects on the summary and takes detail from the retained

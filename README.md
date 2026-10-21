@@ -11,7 +11,7 @@ examples in [`manifests/v1.8`](manifests/v1.8), and ships five runnable demos.
 | --- | --- | --- | --- |
 | `spatialdds_idl18` | **1.8**, including provisional `spatial.owm/0.1` | [`idl/v1.8`](idl/v1.8) | every demo: the AR demo and its mock VPS, discovery, the Open World Model, the MCAP / MQTT / ROS 2 bridges, fusion, and both web surfaces |
 | `spatialdds_demo_idl18` | **1.8** | [`idl/demo18`](idl/demo18) | the demo-owned types the spec has no struct for — bootstrap and fusion-coverage diagnostics — bound to `spatialdds_idl18` for every spec type |
-| `spatialdds_idl` | 1.7, stamped | [`idl/v1.7`](idl/v1.7) | **transitional**: the content catalogue until it moves onto `ContentAnnounce` → manifest, and the interop probe. See [`docs/final-migration-census.md`](docs/final-migration-census.md) |
+| `spatialdds_idl` | 1.7, stamped | [`idl/v1.7`](idl/v1.7) | **transitional**: only the interop probe, until it is frozen as the cross-era fixture. The content catalogue moved onto `ContentAnnounce` → manifest. See [`docs/final-migration-census.md`](docs/final-migration-census.md) |
 
 The 1.7 → 1.8 move is appendable evolution as the spec describes it, and it
 was measured rather than assumed: of 146 definitions the two trees share, 138

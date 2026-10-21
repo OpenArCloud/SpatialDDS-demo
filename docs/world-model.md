@@ -120,10 +120,11 @@ volumes over the same water, and what a viewer needs to see is not *which
 entity is which* but *what kind of claim each one is* — a palette keyed to
 entity ids would say nothing the moment a second opinion arrived.
 
-A `catalog:<content_id>` reference is resolved against the rows the coverage
-query already returned, and by a direct `content_id_in` query when it is not
-among them — which, since the model loads before any coverage query runs, is
-**every** reference on every page load. Lookup-by-id is not a fallback here;
+A `catalog:<content_id>` reference is resolved against the rows an area read
+of the content inventory already returned, and by a direct `content_id_in`
+read when it is not among them — each through the item's `ContentAnnounce` and
+the content manifest it names. Since the model loads before any area read
+runs, that is **every** reference on every page load. Lookup-by-id is not a fallback here;
 it is the only way an entity's asset is found. The switches that exist to
 exercise a path deliberately are in
 [CONTRIBUTING](../CONTRIBUTING.md#switches-for-exercising-a-path-deliberately).

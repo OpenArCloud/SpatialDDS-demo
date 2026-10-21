@@ -68,9 +68,10 @@ type DdsLocalizeResponse = {
   rmse_m?: number;
 };
 
-type DdsCatalogResponse = {
-  query_id?: string;
+/** `POST /v1/content/query`: `spatial::disco::ContentAnnounce` JSON, filtered. */
+type ContentQueryResponse = {
   results?: Array<Record<string, any>>;
+  next_page_token?: string;
 };
 
 /** One HTTP exchange with the bridge, for the REST overlay. */
@@ -246,47 +247,176 @@ export function parseLocalizeResponse(
   };
 }
 
-export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse> {
-  const payload = await fetchJson('/v1/catalog/query', {
-    method: 'POST',
-    body: JSON.stringify({ geopose })
-  });
-  const dds = payload as DdsCatalogResponse;
-  // Frames come from the same bus: a row's pose is meaningless until the frame
-  // it names resolves. Only asked for when something in the results actually
-  // carries a pose — a catalogue of unplaced content needs no frames, and a
-  // bridge older than `/v1/frames` should not be sent a request it will 404,
-  // which the browser logs as a console error whatever the client does with
-  // the rejection. A failure here is not fatal: content falls back to its
-  // coverage centre rather than disappearing.
-  const needsFrames = (dds.results || []).some(
-    (entry: Record<string, any>) => entry?.has_pose && entry?.frame_ref?.fqn);
-  let frames: FrameMap = {};
-  if (needsFrames) {
-    try {
-      frames = ((await fetchJson('/v1/frames')) as { frames?: FrameMap }).frames || {};
-    } catch {
-      frames = {};
+/**
+ * The demo extension a content manifest uses for what 1.8 has no field for:
+ * an unhashed `href`, `formats` that are not media types, and the frame of a
+ * row that is not placed in it (spatialdds_demo/content_catalogue.py).
+ */
+export const CONTENT_EXTENSION_KEY = 'oarc.catalog';
+
+/**
+ * A catalogue row, rebuilt from the two 1.8 documents that now carry it: the
+ * `ContentAnnounce` (inventory, placement) and the content manifest it names
+ * (assets). The same reconstruction `tests/test_catalogue_chain.py` asserts
+ * against a frozen capture of the 1.7 catalogue's answers, field by field --
+ * and `tests/content-chain.spec.ts` asserts this one against the same capture
+ * -- so everything downstream (`catalogEntryToItem`, the model layer's
+ * `catalog:<id>` lookups) reads exactly the row it always read.
+ */
+export function contentToCatalogEntry(
+  announce: Record<string, any>,
+  manifest: Record<string, any>
+): Record<string, any> {
+  const placement = contentPlacement(announce);
+  const ext = manifest?.[CONTENT_EXTENSION_KEY] || {};
+  const assets: Array<Record<string, any>> = Array.isArray(manifest?.assets)
+    ? manifest.assets : [];
+  return {
+    content_id: announce.content_id,
+    kind: announce.class_id,
+    name: announce.title,
+    coverage: announce.coverage,
+    frame_ref: placement ? placement.to : ext.frame_ref,
+    formats: assets.length ? assets.map((a) => a.media_type) : (ext.formats || []),
+    // The content's update time is the manifest's; the announce's own stamp
+    // is when it was published, paired with its TTL.
+    updated_sec: Number(manifest?.stamp?.sec ?? 0),
+    href: assets.length ? assets[0].uri : (ext.href || ''),
+    has_pose: placement !== null,
+    pose: placement ? placement.pose : null,
+    has_asset: assets.length > 0,
+    asset: assets.length ? assets[0] : null
+  };
+}
+
+/**
+ * The transform placing the content itself: from its own frame, which is
+ * named `.../content/<rid>` after the last segment of its manifest URI
+ * (Appendix F). Any other transform on the announce is a frame anchor.
+ */
+function contentPlacement(announce: Record<string, any>): FrameTransform | null {
+  const rid = String(announce.manifest_uri || '').split('/').pop() || '';
+  return (announce.transforms || []).find(
+    (t: FrameTransform) => rid && (t?.from?.fqn || '').endsWith(`/content/${rid}`)) || null;
+}
+
+/** The frame anchors the announces carry, keyed by the frame they anchor. */
+export function framesFromContent(announces: Array<Record<string, any>>): FrameMap {
+  const frames: FrameMap = {};
+  for (const announce of announces) {
+    const placement = contentPlacement(announce);
+    for (const t of (announce.transforms || []) as FrameTransform[]) {
+      const from = t?.from?.fqn;
+      if (from && t !== placement && !frames[from]) {
+        frames[from] = t;
+      }
     }
   }
-  const items = (dds.results || []).map((entry) => catalogEntryToItem(entry, frames));
+  return frames;
+}
 
-  // The catalogue rows themselves, keyed by content_id. The model layer
-  // resolves `catalog:<content_id>` against these first; on a miss it asks
-  // the catalogue directly -- see resolveContentIds.
+/**
+ * Where this authority's resolver answers, from its §7.5.2 metadata.
+ *
+ * Only the path is kept: the page's one route to any authority is the bridge
+ * it was served by, which fronts the catalogue's resolver. Reaching the
+ * advertised host directly would be the spec's general case and is not one
+ * this deployment has. Cached for the session; a failure is retried next time.
+ */
+let resolverPath: Promise<{ path: string; ttlMs: number }> | null = null;
+
+function contentResolver(): Promise<{ path: string; ttlMs: number }> {
+  if (!resolverPath) {
+    resolverPath = (fetchJson('/.well-known/spatialdds/resolver') as
+      Promise<{ https_base?: string; cache_ttl_sec?: number }>).then((meta) => {
+      if (!meta?.https_base) {
+        throw new Error('resolver metadata has no https_base');
+      }
+      return { path: new URL(meta.https_base, 'http://resolver.invalid').pathname,
+               ttlMs: Math.max(0, Number(meta.cache_ttl_sec ?? 0)) * 1000 };
+    });
+    resolverPath.catch(() => { resolverPath = null; });
+  }
+  return resolverPath;
+}
+
+/**
+ * Manifests already fetched, kept for the resolver's `cache_ttl_sec` -- the
+ * §7.5.2 default for a manifest that carries no TTL of its own, which these do
+ * not. Without it every area read and every by-id lookup fetched every
+ * manifest again.
+ */
+const manifestCache = new Map<string, { at: number; manifest: Record<string, any> }>();
+
+/** `GET {https_base}?uri=` -- one content manifest (§7.5.2). */
+export async function resolveContentManifest(uri: string): Promise<Record<string, any>> {
+  const { path, ttlMs } = await contentResolver();
+  const hit = manifestCache.get(uri);
+  if (hit && Date.now() - hit.at < ttlMs) {
+    return hit.manifest;
+  }
+  const manifest = await fetchJson(`${path}?uri=${encodeURIComponent(uri)}`) as Record<string, any>;
+  manifestCache.set(uri, { at: Date.now(), manifest });
+  return manifest;
+}
+
+/**
+ * Announces to rows, each through its manifest. One that does not resolve is
+ * unavailable (§7.5.6: never guessed from what else is known), so it is
+ * dropped, not drawn from the announce alone.
+ */
+async function resolveEntries(
+  announces: Array<Record<string, any>>
+): Promise<Array<Record<string, any>>> {
+  const rows = await Promise.all(announces.map(async (announce) => {
+    try {
+      return contentToCatalogEntry(announce,
+        await resolveContentManifest(announce.manifest_uri));
+    } catch {
+      return null;
+    }
+  }));
+  return rows.filter((row): row is Record<string, any> => row !== null);
+}
+
+export async function bridgeDiscover(geopose: GeoPose): Promise<DiscoverResponse> {
+  const payload = await fetchJson('/v1/content/query', {
+    method: 'POST',
+    body: JSON.stringify({ geopose })
+  }) as ContentQueryResponse;
+  const announces = payload.results || [];
+  const entries = await resolveEntries(announces);
+  // Frames ride with the content: a placed item's announce carries the
+  // anchor of the frame it is placed in, so a client holding the announce
+  // can place it with nothing else. `/v1/frames` is asked only for a frame
+  // no announce anchored -- and a failure there is not fatal: content falls
+  // back to its coverage centre rather than disappearing.
+  const placed = entries.filter((entry) => entry.has_pose && entry.frame_ref?.fqn);
+  let frames: FrameMap = placed.length ? framesFromContent(announces) : {};
+  if (placed.some((entry) => !frames[entry.frame_ref.fqn])) {
+    try {
+      frames = { ...((await fetchJson('/v1/frames')) as { frames?: FrameMap }).frames,
+                 ...frames };
+    } catch {
+      // keep what the announces carried
+    }
+  }
+  const items = entries.map((entry) => catalogEntryToItem(entry, frames));
+
+  // The rows themselves, keyed by content_id. The model layer resolves
+  // `catalog:<content_id>` against these first; on a miss it asks by id --
+  // see resolveContentIds.
   const assets: Record<string, { uri?: string; hash?: string }> = {};
-  for (const entry of dds.results || []) {
-    const id = (entry as Record<string, any>).content_id;
-    const asset = (entry as Record<string, any>).has_asset
-      ? (entry as Record<string, any>).asset : null;
-    if (id) {
-      assets[id] = { uri: asset?.uri || (entry as Record<string, any>).href,
-                     hash: asset?.hash };
+  for (const entry of entries) {
+    if (entry.content_id) {
+      assets[entry.content_id] = { uri: entry.asset?.uri || entry.href,
+                                   hash: entry.asset?.hash };
     }
   }
 
   return {
-    query_id: dds.query_id || 'query-unknown',
+    // No query, so no query id: this is a read of the latched inventory.
+    query_id: 'content-inventory',
     items,
     assets,
     frames
@@ -312,11 +442,12 @@ export async function bridgeFrames(): Promise<FrameMap> {
 }
 
 /**
- * Resolve `catalog:<content_id>` references the coverage query did not return.
+ * Resolve `catalog:<content_id>` references the area read did not return.
  *
- * Until the catalogue gained `content_id_in`, this was impossible: a client
- * could resolve a reference only if it had already queried the right area and
- * happened to have the row cached. The demo worked because the duck's row and
+ * By id, through the inventory and then the manifest -- the same chain as an
+ * area read, without the area. Until the 1.7 catalogue gained
+ * `content_id_in` this was impossible: a client could resolve a reference
+ * only if it had already queried the right area and had the row cached. The demo worked because the duck's row and
  * the duck's entity were in the same plaza -- a coincidence, and one that
  * would not survive a model referencing content from anywhere else.
  *
@@ -336,12 +467,11 @@ export async function resolveContentIds(
   for (let i = 0; i < wanted.length; i += 16) {
     const page = wanted.slice(i, i + 16);
     try {
-      const payload = await fetchJson('/v1/catalog/query', {
+      const payload = await fetchJson('/v1/content/query', {
         method: 'POST',
         body: JSON.stringify({ content_id_in: page, limit: page.length })
-      }) as DdsCatalogResponse;
-      for (const entry of payload.results || []) {
-        const row = entry as Record<string, any>;
+      }) as ContentQueryResponse;
+      for (const row of await resolveEntries(payload.results || [])) {
         if (row.content_id) {
           resolved[row.content_id] = {
             uri: row.has_asset ? row.asset?.uri : row.href,
@@ -350,8 +480,7 @@ export async function resolveContentIds(
         }
       }
     } catch {
-      // A bridge that predates `content_id_in` answers 400 or 502. That is a
-      // miss, not a failure: the caller already handles unresolved refs.
+      // A miss, not a failure: the caller already handles unresolved refs.
     }
   }
   return resolved;

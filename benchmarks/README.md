@@ -50,7 +50,7 @@ sensor streams live in.
 - `bench_latency.py`: Round-trip latency across all three arms and payload sizes.
 - `bench_discovery.py`: Time from new participant join to first `ANNOUNCE` as service count scales.
 - `bench_multioperator.py`: Per-message latency and aggregate throughput as concurrent operator publishers scale.
-- `bench_coverage_query.py`: Catalog query RTT as number of registered spatial entries scales.
+- `bench_coverage_query.py`: Time for a late-joining reader to receive and filter the whole latched `ContentAnnounce` inventory, as catalogue size scales. (Before the 1.8 migration it timed the demo's retired 1.7 catalogue query; results from the two are not comparable.)
 
 ## Output Files
 
@@ -59,7 +59,7 @@ CSV outputs are written to `benchmarks/results/` by default:
 - `latency.csv`: `path,payload_bytes,iteration,latency_ns`
 - `discovery.csv`: `num_services,iteration,discovery_time_ns`
 - `multioperator.csv`: `num_operators,iteration,msg_latency_ns,total_msgs_per_sec`
-- `coverage_query.csv`: `num_entries,iteration,query_time_ns`
+- `coverage_query.csv`: `num_entries,iteration,inventory_time_ns`
 
 Each CSV starts with metadata comments containing machine specs (CPU, RAM, OS, Python, timestamp).
 

@@ -133,7 +133,7 @@ test('the venue places every entity with the AR stack down', async ({
   // with no catalogue, and an entity's appearance is not its position.
   const skipped = logs.find((l) => l.startsWith('catalog:by-id skipped'));
   console.log(`  ${count} entities placed from the scene's own georeference, `
-            + `no 1.7 bridge`);
+            + `no bridge`);
   if (skipped) {
     console.log(`  ${skipped}`);
   }

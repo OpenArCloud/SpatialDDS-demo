@@ -218,3 +218,92 @@ row could name `MAP_META`, or §3.3.3 could register a model profile. This
 repo's type registry now defaults `model_entity` to `MAP_META`, because a
 default should validate; what the model layer announces is unchanged pending
 the spec's answer.
+
+---
+
+The catalogue's move onto 1.8 (`docs/final-migration-census.md`, Finding 1)
+produced the next three. The demo's own 1.7 catalogue protocol retired in
+favour of `ContentAnnounce` → content manifest, and a field-by-field
+comparison against a frozen capture of what the old protocol returned
+(`tests/test_catalogue_chain.py`) is what turned up what 1.8 cannot carry.
+Spec text read at `5ff8027`.
+
+## 6. Content has no query, and HTTP cannot enumerate it — a 1.9 entry
+
+1.8 can say what content exists and how to fetch it, and cannot be asked
+what content is *here*:
+
+- `CoverageQuery` / `CoverageResponse` answer with `ServiceSummary` rows —
+  services, not content.
+- The HTTP search binding returns "Array of service manifests" (§3.3.0 and
+  the well-known path table). A content manifest is resolvable by URI
+  (§7.5) but not discoverable over HTTP.
+- On the bus the gap mostly closes itself: `spatialdds/discovery/content/v1`
+  is latched, so a late joiner is handed the whole inventory and filters it.
+  That is how this demo now works, at 2 to 30 items per seed.
+
+What the retired demo query had that nothing in 1.8 has: an area predicate
+evaluated by the holder of the content, `kind_in` and `content_id_in`
+filters, `limit`, and `page_token`. The demo keeps them as its bridge's
+`POST /v1/content/query`, a reader-side filter over the inventory — fine for
+a demo, and the thing that does not scale. `content_id_in` matters most: an
+OWM entity's `content_refs` names content by id, and a client holding a
+reference and no position must be able to look it up.
+
+The spec already holds this open. Its roadmap item "On-bus content catalog
+query" (§6, Future Directions) reads, in part: "`ContentAnnounce` plus manifests and HTTP search cover
+content discovery today", and leaves an area-scoped query to "evidence from
+federation prototypes". Two things for that item:
+
+- **The premise does not hold for HTTP.** Search returns service manifests,
+  so over HTTP a content manifest is reachable only by a client that already
+  has its URI. "Cover content discovery" is true on the bus and not off it.
+- **This is evidence of the kind it asks for.** One working catalogue moved
+  onto exactly the pieces the item names, with a frozen capture of what its
+  query used to answer, and the residue is the list above.
+
+**Ask for 1.9:** either a content-scoped query (a `CoverageQuery` filter lane
+for content, or a `ContentQuery` with its own reply), or an HTTP
+content-search path beside `/search`. Either way, `limit` / `page_token` and
+lookup by id.
+
+**Origin:** measured — the 1.7 protocol's request fields, read off the
+retired `oarc_demo::CatalogQuery` (`idl/demo/oarc_demo.idl` at `a18bd99`), set against
+§3.3.0's response table and the `disco` IDL.
+
+## 7. `AssetRef.hash` is required, and placeholder content cannot have one
+
+§8.1: each `assets[]` entry "MUST include `uri`, `media_type`, and `hash`".
+32 of the demo's 34 catalogue rows advertise content that has no bytes yet —
+a URI that is a promise, not a file — and 32 carry `formats` such as `gltf` or
+`3dtiles` that are format names, not media types. Neither can be a
+conformant `AssetRef`, so both ride a labelled top-level manifest extension
+(`"oarc.catalog"`: `href`, `formats`), which §8.1 permits.
+
+Whether a manifest may name an asset it cannot hash yet is the spec's call. If
+not, the honest answer is that such a row has no asset, which is what the
+demo now says; if so, `hash` wants to be OPTIONAL with a rule for when it
+becomes REQUIRED (e.g. before an `available_from` passes).
+
+**Origin:** measured — counted by `tests/test_catalogue_chain.py` over all
+three seeds; the counts are held to the prose in `ar_demo/SPEC_COMPLIANCE.md`.
+
+## 8. An unplaced item cannot name its frame, and an announce has no content-update time
+
+Two smaller observations from the same comparison.
+
+- **Frame without pose.** 33 rows name the frame they belong to without being
+  placed in it. 1.8's carrier for frames is `Transform`, which states a pose;
+  writing one would assert a placement the row does not have. So the frame
+  rides the extension as well.
+- **Update time.** `ContentAnnounce.stamp` pairs with `ttl_sec`: §3.3 has
+  consumers discard an announce once `now - stamp > 2 * ttl_sec`, so the stamp
+  is its publication time and must advance on every refresh. The content's own
+  update time therefore has a home only in the manifest's `stamp`, which a
+  reader of the inventory does not hold. The retired query sorted newest
+  content first; the inventory cannot, without resolving every manifest.
+
+**Origin:** measured during the migration, as above. The first cut of the
+announce builder stamped it with the content's update time, which made a row
+last edited in January announce itself as expired since January — the
+reading of §3.3 above is what the fix rests on.

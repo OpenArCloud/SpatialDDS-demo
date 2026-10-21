@@ -98,7 +98,10 @@ def figure_multioperator(multi_rows: List[Dict[str, str]], out_path: str) -> Non
 def figure_coverage_scaling(coverage_rows: List[Dict[str, str]], out_path: str) -> None:
     grouped: Dict[int, List[float]] = defaultdict(list)
     for row in coverage_rows:
-        grouped[int(row["num_entries"])].append(float(row["query_time_ns"]) / 1_000_000.0)
+        # `inventory_time_ns` since the 1.8 migration; a pre-migration CSV
+        # timed a different protocol and is refused rather than plotted as
+        # if it were the same thing.
+        grouped[int(row["num_entries"])].append(float(row["inventory_time_ns"]) / 1_000_000.0)
 
     counts = sorted(grouped.keys())
     medians = []
@@ -113,8 +116,8 @@ def figure_coverage_scaling(coverage_rows: List[Dict[str, str]], out_path: str) 
     fig, ax = plt.subplots(figsize=(3.5, 2.4), constrained_layout=True)
     ax.errorbar(counts, medians, yerr=[yerr_low, yerr_high], marker="o", capsize=2)
     ax.set_xlabel("Catalog entries")
-    ax.set_ylabel("Median query time (ms)")
-    ax.set_title("Coverage query scaling")
+    ax.set_ylabel("Median time to inventory (ms)")
+    ax.set_title("Content discovery scaling")
     fig.savefig(out_path)
 
 

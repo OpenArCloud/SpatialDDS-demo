@@ -31,7 +31,7 @@ stood on the old numbers; better evidence wins.
 | `WS /ws` | 2 | yes | **OWM live** (and generic) | kept (generic) |
 | `GET /health` | 1 | yes | AR demo | kept |
 | `POST /v1/localize` | 1 | yes | AR demo — VPS | kept |
-| `POST /v1/catalog/query` | 2 | yes | AR demo — catalogue | kept |
+| `POST /v1/catalog/query` | 2 | yes | AR demo — catalogue | kept; **since retired** — the final migration moved the catalogue onto `ContentAnnounce` → manifest (`POST /v1/content/query` + the §7.5 resolver; `final-migration-census.md` §1) |
 | `GET /v1/frames` | 2 | yes | AR demo | kept |
 | `GET /v1/keepout` | **0** | 1 | robot tier view | **retired** |
 | `GET /.well-known/spatialdds/search` (GET+POST) | 1 | yes | discovery | kept |
@@ -70,7 +70,9 @@ flagged, not touched; deleting them is not this batch's business.
 ### Those six routes are 1.9 entry 5's concrete input
 
 The AR demo's six are not homeless, they are early. `localize`,
-`catalog/query` and `frames` are request/response over a spatial service,
+`catalog/query` and `frames` are request/response over a spatial service
+(`catalog/query` has since dissolved into 1.8's own content chain; the paste
+below is as it was filed),
 which is exactly the shape 1.9 candidate entry 5 — the GeoPose Protocol
 successor as a service profile — exists to specify. This bridge is the
 standing implementation of that shape, so the routes are evidence rather than
