@@ -57,6 +57,16 @@ COPY requirements.txt /app/
 COPY bridges/requirements.txt /app/bridges/
 COPY bridges/mqtt_bridge/requirements.txt /app/bridges/mqtt_bridge/
 COPY bridges/web_bridge/requirements.txt /app/bridges/web_bridge/
+# **certifi first, before any package is fetched.**
+# GHSA-6q48-6c7w-9gw2 (Critical): certifi before 2026.10.18 still trusts the
+# emSign root CA that was removed from the bundle, and pip verifies TLS using
+# certifi's bundle — so every install below would otherwise be fetched against
+# the old trust store. Replacing it first is the only ordering that helps.
+#
+# **An already-built image does not get this.** Layers are immutable: an
+# existing tag keeps the certifi it was built with, so this reaches anything
+# running only on a rebuild and re-push. See docs/certifi-emsign-advisory.md.
+RUN python3 -m pip install --no-cache-dir -U pip certifi
 RUN python3 -m pip install --no-cache-dir \
     -r /app/requirements.txt \
     -r /app/bridges/requirements.txt \

@@ -140,7 +140,8 @@ docker run --rm --network host \
   -e SPATIALDDS_DDS_DOMAIN="${DOMAIN}" \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   cyclonedds-python bash -lc "
-    python3 -m pip install -r /app/multi_operator_fusion/requirements.txt >/tmp/multi_op_pip.log 2>&1 &&
+    python3 -m pip install -U pip certifi >>/tmp/multi_op_pip.log 2>&1 &&
+    python3 -m pip install -r /app/multi_operator_fusion/requirements.txt >>/tmp/multi_op_pip.log 2>&1 &&
     python3 /app/multi_operator_fusion/run_demo.py \
       --nuscenes-dataroot ${CONTAINER_NUSCENES} \
       --nuscenes-scene ${SCENE} \

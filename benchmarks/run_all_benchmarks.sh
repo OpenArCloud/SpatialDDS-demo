@@ -100,6 +100,7 @@ start_stack() {
 cd "${SCRIPT_DIR}"
 start_stack
 
+run_python_in_container "python3 -m pip install -U pip certifi"
 run_python_in_container "python3 -m pip install -r /app/requirements.txt -r /app/benchmarks/requirements.txt"
 run_python_in_container "python3 bench_latency.py --iterations 1000 --output results/latency.csv"
 run_python_in_container "python3 bench_discovery.py --services 1,5,10,25,50,100 --iterations 50 --output results/discovery.csv"

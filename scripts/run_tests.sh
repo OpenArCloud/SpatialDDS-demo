@@ -108,7 +108,7 @@ else
     run "head-of-line isolation"  in_image python3 -m unittest tests.test_head_of_line
     run "ROS 2 DDS round-trip"    in_image python3 -m unittest bridges.ros2_bridge.test_dds_roundtrip
     run "MCAP live record→replay" in_image bash -lc \
-      'python3 -m pip install -q mcap zstandard 2>/dev/null; python3 bridges/mcap_bridge/test_live.py'
+      'python3 -m pip install -U pip certifi -q 2>/dev/null; python3 -m pip install -q mcap zstandard 2>/dev/null; python3 bridges/mcap_bridge/test_live.py'
     run "web bridge HTTP"         bash scripts/run_bridge_http_tests_docker.sh
 
     if [ "$TIER" = "full" ]; then

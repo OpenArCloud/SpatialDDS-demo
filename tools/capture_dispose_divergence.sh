@@ -27,7 +27,12 @@ cd /app
 
 say () { echo "divergence: $*"; }
 
-python3 -c "import mcap" 2>/dev/null || python3 -m pip install --quiet "mcap>=1.1.0"
+# Guarded: this only upgrades when it is about to fetch something, so a
+# capture run does not rewrite the host environment every time. certifi
+# first regardless -- GHSA-6q48-6c7w-9gw2, see docs/certifi-emsign-advisory.md.
+python3 -c "import mcap" 2>/dev/null || {
+  python3 -m pip install -U pip certifi --quiet
+  python3 -m pip install --quiet "mcap>=1.1.0"; }
 
 say "domain $DOMAIN, window ${WINDOW}s, out $OUT"
 python3 -m spatialdds_demo.model_service > $LOG/model.log 2>&1 &  MODEL=$!

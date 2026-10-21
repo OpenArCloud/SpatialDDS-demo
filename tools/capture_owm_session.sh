@@ -47,6 +47,9 @@ say () { echo "capture: $*"; }
 # which is the only place in the tree that declares it.
 python3 -c "import mcap" 2>/dev/null || {
   say "installing mcap (absent from the demo image)"
+  # certifi first, and only on the path that actually fetches:
+  # GHSA-6q48-6c7w-9gw2. See docs/certifi-emsign-advisory.md.
+  python3 -m pip install -U pip certifi --quiet
   python3 -m pip install --quiet "mcap>=1.1.0" || {
     say "could not install mcap; the recorder cannot run"; exit 1; }
 }

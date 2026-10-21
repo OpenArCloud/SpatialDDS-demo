@@ -50,6 +50,11 @@ echo "  Stack:     $STACK_NAME"
 echo "  Config:    $CONFIG_FILE"
 echo ""
 
+# certifi before anything is fetched: GHSA-6q48-6c7w-9gw2 (Critical).
+# pip verifies TLS with certifi's bundle, so a stale one is used by the
+# very install that would replace it. See docs/certifi-emsign-advisory.md.
+echo "[deploy] refreshing pip and certifi before any fetch..."
+python3 -m pip install -U pip certifi --quiet
 echo "[deploy] installing CDK Python deps..."
 python3 -m pip install --quiet -r cdk/requirements.txt
 

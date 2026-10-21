@@ -46,6 +46,16 @@ RUN mkdir build && cd build &&     cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local -D
 RUN ldconfig
 ENV CYCLONEDDS_HOME=/usr/local
 ENV PATH=/usr/local/bin:$PATH
+# **certifi first, before any package is fetched.**
+# GHSA-6q48-6c7w-9gw2 (Critical): certifi before 2026.10.18 still trusts the
+# emSign root CA that was removed from the bundle, and pip verifies TLS using
+# certifi's bundle — so every install below would otherwise be fetched against
+# the old trust store. Replacing it first is the only ordering that helps.
+#
+# **An already-built image does not get this.** Layers are immutable: an
+# existing tag keeps the certifi it was built with, so this reaches anything
+# running only on a rebuild and re-push. See docs/certifi-emsign-advisory.md.
+RUN python3 -m pip install --no-cache-dir -U pip certifi
 RUN python3 -m pip install --no-cache-dir cyclonedds==11.0.1
 RUN python3 -c "import importlib.metadata as m; print('cyclonedds', m.version('cyclonedds'))"     && idlc -h >/dev/null
 

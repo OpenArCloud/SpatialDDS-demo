@@ -106,6 +106,7 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
     model_log=\"\$BRIDGE_LOG_DIR/model_server_\$BRIDGE_LOG_BTS.log\"; \
     binding_log=\"\$BRIDGE_LOG_DIR/binding_\$BRIDGE_LOG_BTS.log\"; \
     bridge_log=\"\$BRIDGE_LOG_DIR/bridge_server_\$BRIDGE_LOG_BTS.log\"; \
+    python3 -m pip install -U pip certifi; \
     python3 -m pip install -r /app/requirements.txt -r /app/bridges/web_bridge/requirements.txt; \
     if [ \"\$SPATIALDDS_MOCK_VPS\" = \"1\" ]; then \
       python3 ar_demo/spatialdds_demo_server.py --detailed >\"\$vps_log\" 2>&1 &\

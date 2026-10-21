@@ -37,7 +37,11 @@ cd /app
 
 say () { echo "session: $*"; }
 
-python3 -c "import mcap" 2>/dev/null || python3 -m pip install --quiet "mcap>=1.1.0"
+# Guarded: only when it is about to fetch. certifi first --
+# GHSA-6q48-6c7w-9gw2, see docs/certifi-emsign-advisory.md.
+python3 -c "import mcap" 2>/dev/null || {
+  python3 -m pip install -U pip certifi --quiet
+  python3 -m pip install --quiet "mcap>=1.1.0"; }
 # Exact rather than >=, and the reasons accumulate rather than replace.
 # On 0.5.0 `make_app` discarded a command registry that was empty when passed
 # -- the only order an embedder can use -- so the upstream lane advertised
