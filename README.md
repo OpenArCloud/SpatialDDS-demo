@@ -18,7 +18,9 @@ was measured rather than assumed: of 146 definitions the two trees share, 138
 are byte-identical and the other 8 only *append* members. The interop probe —
 a 1.7 participant, kept frozen as the one deliberate exhibit of the earlier
 era — discovers and reads the 1.8 demo, and is read by it, in both
-directions.
+directions. Everywhere else the repository is one era, and
+[`tests/test_one_era.py`](tests/test_one_era.py) fails if that stops being
+true.
 
 The spec lives at [spatialdds.org](https://spatialdds.org); its source is
 [OpenArCloud/SpatialDDS-spec](https://github.com/OpenArCloud/SpatialDDS-spec).

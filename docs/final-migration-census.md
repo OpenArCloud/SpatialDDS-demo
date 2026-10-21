@@ -272,6 +272,53 @@ and it must survive. `tests/test_single_source_of_truth.py` is also unrelated
 No gate currently asserts "one era". Acceptance item 2 therefore needs a
 **new** gate, not a reduced one.
 
+**Built: `tests/test_one_era.py`.** The era is the one bundle under `idl/`,
+and anything versioned below it is pre-era. Outside `tests/cross_era/` (and
+the gate itself, which has to name what it forbids):
+
+1. no Python file imports the 1.7 package, statically or by string;
+2. one `idl/v*` bundle and one `manifests/v*` set, both the era, and every
+   generated `MODULE_ID` the era (or a provisional `0.x`);
+3. no **live** pre-era reference: Python string literals other than
+   docstrings, non-comment lines of shell, Dockerfile, YAML, JSON,
+   TypeScript and IDL, and Markdown link targets. A comment, a docstring or a
+   census that says what happened is history and stays; a command, a `COPY`,
+   an import or a link that points at what is gone is a defect;
+4. the 1.7 package does not import from the repository root at all, which
+   also catches one installed in the environment, where no static check can
+   see.
+
+`tests/test_cross_era_fixture.py` is not exempt: it takes the package name
+from the exhibit's directory instead of spelling it.
+
+**Shown failable before it counted**, each plant in a real file, each removed
+and the gate green again after:
+
+| planted | result |
+|---|---|
+| `from spatialdds_idl.spatial.core import GeoPose` at `spatialdds_demo/model_service.py:32` | `test_no_pre_era_import` fails: `spatialdds_demo/model_service.py:32: imports spatialdds_idl.spatial.core` |
+| `COPY spatialdds_idl ./spatialdds_idl` appended to `Dockerfile` | `test_no_live_pre_era_reference` fails at `Dockerfile:45` |
+| a link `[the old IDL](idl/v1.7/core.idl)` appended to `README.md` | `test_no_live_pre_era_reference` fails: `README.md: links to idl/v1.7/core.idl` |
+| an empty `spatialdds_idl/__init__.py` at the root | `test_the_old_package_does_not_import` fails |
+
+The first two attempts at the import plant changed nothing: BSD `sed` has no
+`0,/re/` address, and the replacement anchor the second attempt used was not
+in the file. The gate's green on those runs proved only that. The third
+attempt checked that the line was there before running.
+
+And against `bcea0c4`, the tree before any of this: every check errors at
+"expected one spec bundle under idl/, found v1.4, v1.6, v1.7, v1.8". Scanning
+with the era forced to 1.8 finds 67 pre-era imports (the tree itself plus
+exactly the census's last two consumers, `tests/interop_probe.py` and
+`tests/test_generated_types.py`) and 581 live references.
+
+**And it caught this entry.** The table above quotes the planted link in a
+code span, and the gate's first cut matched link syntax anywhere, so it
+failed on its own census. Rendered, a code span is text, not a link: the
+gate now strips code spans and fenced blocks first, pinned by a case that
+holds one quoted link, one fenced and one real, and catches only the real
+one. The README plant was re-run after the change and still fails.
+
 ---
 
 ## 4. The cross-era fixture — **CURATED**: `tests/cross_era/`
