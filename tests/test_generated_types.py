@@ -164,6 +164,21 @@ class KeysAndNames(unittest.TestCase):
 
 
 class GeneratorDrift(unittest.TestCase):
+    #: Every checked-in generated tree, with the command line that makes it.
+    #: This checked only the default (1.7) tree until 2026-10-20, so
+    #: `spatialdds_idl18` -- the tree the whole model layer runs on -- had no
+    #: drift gate here at all; it was clean when first checked, which is luck
+    #: rather than coverage.
+    TREES = {
+        "spatialdds_idl": [],
+        "spatialdds_idl18": ["--spec-idl", "idl/v1.8",
+                             "--out", "spatialdds_idl18", "--no-demo"],
+        "spatialdds_demo_idl18": ["--spec-idl", "idl/v1.8",
+                                  "--demo-idl", "idl/demo18",
+                                  "--bind-to", "spatialdds_idl18",
+                                  "--out", "spatialdds_demo_idl18"],
+    }
+
     def test_checked_in_output_matches_a_fresh_run(self):
         idlc = _idlc()
         if not idlc:
@@ -173,17 +188,21 @@ class GeneratorDrift(unittest.TestCase):
                 '-v "$PWD:/repo" -w /repo cyclonedds-python '
                 "python3 -m pytest tests/test_generated_types.py"
             )
-        result = subprocess.run(
-            [sys.executable, str(REPO / "scripts" / "generate_types.py"), "--check"],
-            capture_output=True, text=True, cwd=REPO,
-        )
-        if result.returncode == 2:
-            raise unittest.SkipTest(
-                "IDLC-VERSION-MISMATCH: local idlc is not the canonical "
-                f"toolchain, so drift is unverified here.\n{result.stdout.strip()}"
-            )
-        self.assertEqual(result.returncode, 0,
-                         f"generated types are stale:\n{result.stdout}\n{result.stderr}")
+        for tree, argv in self.TREES.items():
+            with self.subTest(tree=tree):
+                result = subprocess.run(
+                    [sys.executable, str(REPO / "scripts" / "generate_types.py"),
+                     *argv, "--check"],
+                    capture_output=True, text=True, cwd=REPO,
+                )
+                if result.returncode == 2:
+                    raise unittest.SkipTest(
+                        "IDLC-VERSION-MISMATCH: local idlc is not the canonical "
+                        f"toolchain, so drift is unverified here.\n"
+                        f"{result.stdout.strip()}")
+                self.assertEqual(
+                    result.returncode, 0,
+                    f"{tree} is stale:\n{result.stdout}\n{result.stderr}")
 
 
 if __name__ == "__main__":

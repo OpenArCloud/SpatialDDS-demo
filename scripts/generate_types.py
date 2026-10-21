@@ -35,6 +35,21 @@ World Model demo has migrated::
     python3 scripts/generate_types.py --spec-idl idl/v1.8 \
         --out spatialdds_idl18 --no-demo
 
+The demo-owned types for 1.8 (``idl/demo18``) are generated into their own
+package, ``spatialdds_demo_idl18``, which binds to ``spatialdds_idl18`` for
+every spec type instead of carrying a copy::
+
+    python3 scripts/generate_types.py --spec-idl idl/v1.8 \
+        --demo-idl idl/demo18 --bind-to spatialdds_idl18 \
+        --out spatialdds_demo_idl18
+
+They cannot go inside ``spatialdds_idl18``: that tree must stay
+byte-identical to the copy ``spatialdds_ros`` vendors, which
+``tests/test_idl_trees_agree.py`` enforces file by file. ``--bind-to`` also
+checks that the spec half it compiled matches the checked-in tree before
+keeping anything, so the demo types cannot be bound to different spec bytes
+than the ones they meet at import time.
+
 The 1.7 pin is the **tag**, not a commit hash: ``v1.7`` is a stamped release and
 will not move, so it says what this demo conforms to in a way a hash does
 not.
@@ -412,6 +427,84 @@ def generate(out_dir: Path, package: str) -> list[str]:
     return fixed
 
 
+def generate_bound(out_dir: Path, package: str, bind_to: str) -> list[str]:
+    """Demo modules only, binding every spec type to an existing tree.
+
+    Compiles spec + demo IDL as `bind_to` in staging -- so every dotted
+    annotation already names `bind_to` -- then keeps only the modules the
+    demo IDL added, and points their own-package imports at `package`.
+
+    **The spec half is checked, not trusted.** Before anything is kept, the
+    staged spec subtree has to be byte-identical to the checked-in `bind_to`
+    tree. Otherwise the demo types would be bound to spec classes that were
+    compiled from different bytes than the ones they will meet at import
+    time, which is two type systems presenting as one.
+    """
+    reference = REPO / bind_to
+    if not reference.is_dir():
+        raise SystemExit(f"--bind-to {bind_to}: no checked-in tree at {reference}")
+    with tempfile.TemporaryDirectory() as tmp:
+        staged = Path(tmp) / bind_to
+        fixed = generate(staged, bind_to)
+        spec_roots = sorted(p.name for p in reference.iterdir()
+                            if p.is_dir() and p.name != "__pycache__")
+        drift = []
+        for root in spec_roots:
+            drift += _tree_diff(reference / root, staged / root)
+        if drift:
+            raise SystemExit(
+                f"the spec half compiled here differs from the checked-in "
+                f"{bind_to}; refusing to bind demo types to it:\n  "
+                + "\n  ".join(drift))
+        demo_roots = sorted(p.name for p in staged.iterdir()
+                            if p.is_dir() and p.name not in spec_roots
+                            and p.name != "__pycache__")
+        if not demo_roots:
+            raise SystemExit(f"no demo modules under {DEMO_IDL}")
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+        out_dir.mkdir(parents=True)
+        own = re.compile(r"^from %s import (%s)$"
+                         % (re.escape(bind_to), "|".join(demo_roots)), re.M)
+        for root in demo_roots:
+            shutil.copytree(staged / root, out_dir / root,
+                            ignore=shutil.ignore_patterns("__pycache__"))
+            for path in sorted((out_dir / root).rglob("*.py")):
+                text = own.sub(rf"from {package} import \1", path.read_text())
+                # The demo module's references to its *own* types still name
+                # `bind_to` -- `'spatialdds_idl18.oarc_demo.OperatorTrackCount'`
+                # -- a path that stops existing the moment the module is lifted
+                # out. CycloneDDS never evaluates these, so nothing on the wire
+                # notices; `typing.get_type_hints` raises AttributeError. The
+                # root-binding class this generator already fixes once, met
+                # again from the other side.
+                text = text.replace(f"'{bind_to}.{root}.", f"'{package}.{root}.")
+                # ...and the root they now name has to be bound for them to
+                # resolve, exactly as bind_root_package does for the spec tree.
+                text = text.replace(f"import {bind_to}\n",
+                                    f"import {bind_to}\nimport {package}\n", 1)
+                path.write_text(text)
+        # The demo modules' own keyword renames, so a JSON mapper can find
+        # them without importing the spec tree's alias table for them.
+        aliases = {}
+        alias_src = (staged / "_field_aliases.py").read_text()
+        namespace: dict = {}
+        exec(compile(alias_src, "_field_aliases.py", "exec"), namespace)
+        for typename, fields in namespace["FIELD_ALIASES"].items():
+            if typename.split(".")[0] in demo_roots:
+                aliases[typename] = fields
+        write_field_aliases(out_dir, aliases)
+        (out_dir / "__init__.py").write_text(
+            HEADER
+            + f'"""Demo-owned types, compiled against {SPEC_IDL.relative_to(REPO)} '
+            f'and bound to `{bind_to}` for every spec type. See '
+            f'scripts/generate_types.py."""\n\n'
+            f"import {bind_to}  # noqa: F401  -- the root the annotations name\n"
+            + "".join(f"from . import {r}\n" for r in demo_roots)
+            + "\n__all__ = [%s]\n" % ", ".join(f'"{r}"' for r in demo_roots))
+    return fixed
+
+
 def main() -> int:
     global SPEC_IDL, DEMO_IDL
     parser = argparse.ArgumentParser(description=__doc__)
@@ -426,6 +519,15 @@ def main() -> int:
                              "census's reference artifact and is still "
                              "compiled into the 1.7 package, which the "
                              "unmigrated web bridge imports.")
+    parser.add_argument("--demo-idl", type=Path, default=DEMO_IDL,
+                        help="the demo-owned IDL to compile (default "
+                             "idl/demo, the 1.7 module; idl/demo18 is 1.8's)")
+    parser.add_argument("--bind-to", metavar="PACKAGE",
+                        help="write only the demo modules, binding every spec "
+                             "type to this checked-in tree instead of "
+                             "carrying a copy. How spatialdds_demo_idl18 is "
+                             "made, so spatialdds_idl18 stays byte-identical "
+                             "to the copy spatialdds_ros vendors")
     parser.add_argument("--check", action="store_true",
                         help="fail if the checked-in output differs from a fresh run")
     args = parser.parse_args()
@@ -437,13 +539,17 @@ def main() -> int:
         else (REPO / args.spec_idl)
     if not SPEC_IDL.is_dir():
         raise SystemExit(f"no spec bundle at {SPEC_IDL}")
+    DEMO_IDL = args.demo_idl if args.demo_idl.is_absolute() \
+        else (REPO / args.demo_idl)
     if args.no_demo:
         DEMO_IDL = SPEC_IDL / "__no_demo__"   # a path that does not exist
     print(f"bundle   {SPEC_IDL.relative_to(REPO)}"
           f"{'' if not args.no_demo else '  (spec only)'}")
 
+    make = (lambda out, pkg: generate_bound(out, pkg, args.bind_to)) \
+        if args.bind_to else generate
     if not args.check:
-        fixed = generate(args.out, package)
+        fixed = make(args.out, package)
         print(f"generated {args.out.relative_to(REPO)}")
         for line in fixed:
             print(f"  patched discriminator: {line}")
@@ -451,7 +557,7 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         fresh = Path(tmp) / package
-        generate(fresh, package)
+        make(fresh, package)
 
         # Comparing output from two different idlc versions says nothing about
         # whether the checked-in tree is stale — they differ in header and

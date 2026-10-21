@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: MIT
+// Demo-owned types for flows SpatialDDS 1.8 has no struct for.
+//
+// Everything here is a gap in the spec as far as this demo is concerned; each
+// struct is WG input. Spec types are used wherever a spec type exists — this
+// module exists so that no opaque JSON has to ride the bus.
+//
+// Compiled against idl/v1.8 into `spatialdds_demo_idl18`, a package that
+// binds to `spatialdds_idl18` for every spec type rather than carrying its own
+// copy. It cannot live inside `spatialdds_idl18`: that tree must stay
+// byte-identical to the one spatialdds_ros vendors, and
+// tests/test_idl_trees_agree.py fails on any file present in only one of them.
+//
+// What did not come forward from the 1.7 module (idl/demo/oarc_demo.idl):
+//
+// * CatalogFilter / CatalogQuery / CatalogEntry / CatalogResponse. The
+//   catalogue moves onto the 1.8-native chain: ContentAnnounce (latched,
+//   thin) -> manifest_uri -> resolver -> manifest -> asset refs. See
+//   docs/final-migration-census.md §1. The query ergonomics with no 1.8 home
+//   (limit, page_token, lookup by content id) are filed as a 1.9 entry
+//   rather than kept as a demo wire type.
+// * VpsRequest / VpsResponse were retired here already in 1.7 batch 3; the
+//   demo publishes spatial::argeo's.
+//
+// The module ID moves to 1.8 with the types. The struct shapes are unchanged
+// from 1.7 -- what changed is the spec they are compiled against, and every
+// spec type they embed (FrameRef above all, 4 fields -> 8) is now 1.8's.
+
+#ifndef OARC_DEMO_INCLUDED
+#define OARC_DEMO_INCLUDED
+
+#ifndef SPATIAL_CORE_INCLUDED
+#define SPATIAL_CORE_INCLUDED
+#include "core.idl"
+#endif
+
+#ifndef SPATIAL_SENSING_COMMON_INCLUDED
+#define SPATIAL_SENSING_COMMON_INCLUDED
+#include "common.idl"
+#endif
+
+#include "discovery.idl"
+
+module oarc_demo {
+
+  const string MODULE_ID = "oarc.demo/1.8";
+
+  typedef builtin::Time Time;
+
+  // --- Bootstrap query/response ------------------------------------------
+  // The spec defines the bootstrap *manifest* and its well-known HTTPS path,
+  // but no on-bus query/response pair. The demo needs one to show cold start
+  // without HTTP. Still true at 1.8: idl/v1.8 carries no bootstrap type.
+  @extensibility(APPENDABLE) struct BootstrapQuery {
+    @key string client_id;
+    string client_kind;
+    sequence<string, 16> capabilities;
+    string location_hint;
+    Time stamp;
+  };
+
+  @extensibility(APPENDABLE) struct BootstrapResponse {
+    @key string client_id;
+    string spatialdds_bootstrap;
+    int32  dds_domain;
+    string cyclonedds_profile;
+    sequence<string, 16> manifest_uris;
+    uint32 ttl_sec;
+    Time   stamp;
+  };
+
+  // --- Multi-operator fusion ----------------------------------------------
+  // Aggregate coverage *diagnostics* — a per-operator "no single source could
+  // build this" scoreboard, not track content. Track content is
+  // spatial::semantics::FusedTrack / FusedTrackSet, which the demo publishes
+  // directly. Still demo-local at 1.8: idl/v1.8 has no aggregate equivalent.
+
+  @extensibility(APPENDABLE) struct OperatorTrackCount {
+    string operator_id;
+    uint32 track_count;
+  };
+
+  @extensibility(APPENDABLE) struct FusionCoverage {
+    @key string source_operator;                 // always "platform"
+    uint32 track_count;
+    uint32 multi_source_count;
+    double multi_source_pct;
+    uint32 best_single_operator_count;
+    double coverage_improvement;
+    uint32 best_av_operator_count;
+    double coverage_improvement_excl_infra;
+    sequence<OperatorTrackCount, 16> per_operator_track_count;
+    Time   stamp;
+  };
+
+};
+
+#endif // OARC_DEMO_INCLUDED
