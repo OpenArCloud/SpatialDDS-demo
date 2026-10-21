@@ -1,8 +1,8 @@
 """
-`oarc_model` — the demo-local world model layer, at the type level.
+The world model layer, at the type level.
 
-Demo-local and non-normative: this is not SpatialDDS 1.7 and has no registry
-row. See idl/demo/oarc_model.idl for the guard rails.
+`spatial.owm/0.1`, 1.8's provisional module (idl/v1.8/provisional/owm.idl).
+Prototyped here first as the demo-local `oarc_model`, retired 2026-10-21.
 
 What these cover is the seam the rest of the layer is built on: an Entity or
 An Entity has to survive both hops without losing anything — CDR onto the

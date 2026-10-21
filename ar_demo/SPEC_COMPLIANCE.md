@@ -469,18 +469,25 @@ model lanes moved onto 1.8's registered `model_entity` (§3.3.2).
 `tests/test_topic_discovery.py` holds this table and that count to
 `topic_types.EXTENSIONS`.
 
-### `oarc_model` — demo-local, candidate for `spatial.model`
+### `oarc_model` — the prototype that became `spatial.owm/0.1`
 
-`idl/demo/oarc_model.idl` prototypes the Open World Model layer: `Entity` and
+`idl/demo/oarc_model.idl` prototyped the Open World Model layer: `Entity` and
 `Relationship` on `spatialdds/model/entity/v1` and
 `spatialdds/model/relationship/v1`, latched TRANSIENT_LOCAL so a late joiner
-gets the whole model without asking. It exists to be argued against a running
-demo before anything is proposed for the spec.
+got the whole model without asking. It existed to be argued against a running
+demo before anything was proposed for the spec, and it was: 1.8 carries the
+layer as the provisional `spatial.owm/0.1`, the demo's model lanes moved onto
+it, and the prototype's IDL and generated package were deleted on 2026-10-21
+with nothing importing them. `docs/world-model.md` is the current account;
+`docs/owm-1.8-census.md` records what the move cost, member by member.
 
-**Guard rails, deliberately.** Demo-local module, header comment pointing at
+**Guard rails, as they were.** Demo-local module, header comment pointing at
 the OWM proposal sketch, no registry row, no `/1.7` identifiers, and no change
-to any spec type. Graduation is earned by evidence: informative example first,
-provisional only on deployment experience.
+to any spec type. Graduation was to be earned by evidence: informative
+example first, provisional only on deployment experience.
+
+The findings below were raised against the prototype and kept because they
+travel with the layer; each row's status is as of the prototype.
 
 **What the two parts surfaced.** One place to cite for all of it. Part 1
 recorded; Part 2 either closed or sharpened.

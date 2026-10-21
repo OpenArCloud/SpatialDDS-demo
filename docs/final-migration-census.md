@@ -232,12 +232,16 @@ runnable again against a 1.8 mock.
 Retireable only after §1, §2 and §5 land: 41 consumers today. Two parts are
 already dead and can go independently:
 
-* **`oarc_model`** — **RETIRE now.** Zero imports remain; the six files that
-  mention it do so in prose only (`model_service.py:5`, `robot_bridge.py:24`,
-  four test docstrings). This is the four-step edit `docs/bridge-1.8-census.md`
-  recorded at line 317 and left for James: delete `idl/demo/oarc_model.idl`,
-  drop it from `spatialdds_idl/__init__.py` and `__all__`, regenerate, correct
-  seven prose references.
+* **`oarc_model`** — **RETIRED.** Zero imports remained; the six files that
+  mentioned it did so in prose only (`model_service.py:5`, `robot_bridge.py:24`,
+  four test docstrings). Done as `docs/bridge-1.8-census.md` recorded at line
+  317: `idl/demo/oarc_model.idl` and `spatialdds_idl/oarc_model/` deleted, the
+  tree regenerated in the demo image (the only other change it made was
+  `spatialdds_idl/__init__.py` losing the import and its `__all__` entry), the
+  drift check green. Prose that described the prototype as present now
+  describes it as the history of `spatial.owm/0.1`; prose that already did
+  (`model_service.py`, `world-model.md`, the evidence file, the censuses) is
+  unchanged.
 
 ### FINDING 2 — the trees-agree gate is not about the two eras
 

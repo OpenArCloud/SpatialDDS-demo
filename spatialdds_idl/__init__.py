@@ -5,7 +5,6 @@
 
 from . import builtin
 from . import oarc_demo
-from . import oarc_model
 from . import spatial
 
-__all__ = ["builtin", "oarc_demo", "oarc_model", "spatial"]
+__all__ = ["builtin", "oarc_demo", "spatial"]

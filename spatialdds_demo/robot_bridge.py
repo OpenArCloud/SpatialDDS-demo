@@ -21,7 +21,7 @@ commit.
 
 **This is a ROS node that speaks SpatialDDS, not a protocol converter.** It
 subscribes to what a navigating robot already publishes and publishes
-`oarc_model` directly.
+`spatial.owm/0.1` directly.
 
 **What it actually subscribes to, since this said `/amcl_pose` for a while and
 meant it as a description of the design rather than of the code.** The ROS

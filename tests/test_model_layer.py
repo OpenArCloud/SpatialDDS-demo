@@ -1,7 +1,8 @@
 """
-`oarc_model` on a bus — late join, asset-vs-instance, and the mover.
+The world model on a bus — late join, asset-vs-instance, and the mover.
 
-Demo-local and non-normative; see idl/demo/oarc_model.idl.
+`spatial.owm/0.1`, 1.8's provisional module (idl/v1.8/provisional/owm.idl).
+Prototyped here first as the demo-local `oarc_model`, retired 2026-10-21.
 
 These need a DDS domain and skip loudly without one. What they pin is the
 claim the layer is being prototyped to make: that a client which arrives after

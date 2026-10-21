@@ -9,7 +9,7 @@ import {
 } from '../src/spatialdds_bridge';
 
 /**
- * The world model layer on the client — demo-local `oarc_model`.
+ * The world model layer on the client — `spatial.owm/0.1`.
  *
  * Two things are pinned here that the running demo demonstrates but does not
  * prove: that the catalogue path and the model path resolve a pose to the
