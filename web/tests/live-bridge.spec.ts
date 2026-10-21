@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * SpatialDDS 1.7 live smoke: drives the Cesium app against a real
+ * SpatialDDS live smoke: drives the Cesium app against a real
  * HTTP-to-DDS bridge rather than the in-page mocks.
  *
  * Requires the demo stack to be up (VPS + catalog + web bridge on a DDS
@@ -10,7 +10,7 @@ import { expect, test } from '@playwright/test';
  */
 const BRIDGE_URL = process.env.VITE_SPATIALDDS_BRIDGE_URL || 'http://localhost:8088';
 
-test('live 1.7 bridge: localize + discover against real DDS', async ({ page, request }) => {
+test('live bridge: localize + discover against real DDS', async ({ page, request }) => {
   // Headless Cesium needs a real canvas size, else WebGL raises
   // "Expected width to be greater than 0".
   await page.setViewportSize({ width: 1280, height: 900 });

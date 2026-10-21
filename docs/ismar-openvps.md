@@ -16,18 +16,24 @@ Two ways to run it. The first needs only Docker and Node; the second needs AWS.
 cd web && npm install && npm run dev   # → http://localhost:5173/
 ```
 
-Turn on **REST Messages** and **DDS Messages**, then click **Localize**.
+Turn on **REST Messages** and **DDS Messages**, then click **Localize with
+Image**. It needs a query-frame bundle, which is git-ignored: the frames are
+photographs of a real place. Install one from any OpenVPS dataset first — see
+[`ar_demo/README.md`](../ar_demo/README.md#localize-with-image). Without one
+the button is disabled and says so, and **Localize (Mock)** is the only way in:
+it puts the camera at the venue on the page and sends nothing, so neither
+panel moves.
 
 That pairing is the point. A browser using the spec's HTTP binding, with DDS
 behind it the whole way — and the two panels side by side show that one click
 on the left is a conversation on the right.
 
-Measured on a live stack, one **Localize** produces three REST calls:
+Measured on a live stack on 2026-10-21, one **Localize with Image** produces
+two REST calls:
 
 ```
 GET  /.well-known/spatialdds/search?geohash=9v6kr&kind=VPS   ->  200
 POST /v1/localize                                            ->  200
-GET  /v1/model                                               ->  200
 ```
 
 and five bus messages:
@@ -46,11 +52,22 @@ browser never holds an endpoint. And two services answer the coverage query;
 only one of them is a localizer, which is why the filter is there rather than
 the browser taking whatever came back first.
 
+A third REST call, `GET /v1/model`, used to follow; the model moved to
+`binding.py` (`:8089`), which this launch does not start. The Open World Model
+demo in [`ismar-owm.md`](ismar-owm.md) does.
+
+Then **Discover Content (DDS)**: the same search with `&kind=CONTENT`,
+`POST /v1/content/query` for the catalogue's latched announces, the resolver's
+`/.well-known/spatialdds/resolver` once, and one `GET /v1/content/resolve` per
+item for its manifest. On the bus: a coverage query, its two responses, and
+one `content_announce` per item on `spatialdds/discovery/content/v1`. Two
+items are placed.
+
 `GET /health` also appears in the REST panel, from page load rather than from
 the click.
 
-**What is real here and what is not.** The whole request path is real — a
-full-size JPEG chunked onto `spatialdds/blob/chunk/v1`, reassembled and
+**What is real here and what is not.** The whole request path is real — the
+photograph chunked onto `spatialdds/blob/chunk/v1`, reassembled and
 checksum-verified at the service discovery found. The *pose* is not: the
 stand-in returns the prior plus a few metres of jitter and never looks at a
 pixel. Sending a different frame changes nothing.
@@ -112,8 +129,9 @@ new task ~30 s after `/health` returns 200 and query again.
 
 ### Two things that surprise people
 
-**The page will not auto-localize.** Against the demo's own mock it localizes
-on load; against a real VPS it deliberately holds and waits for a click. The
+**The page will not auto-localize.** Against the demo's own mock it searches
+for the VPS on load and places the camera without sending it a localize; against a real VPS it deliberately
+holds and waits for a click. The
 discriminator is the announced id — anything that is not `svc:vps:demo/…` is
 treated as somebody else's service, and a real localizer should not receive a
 request per page refresh. The app log says so:
@@ -122,11 +140,11 @@ request per page refresh. The app log says so:
 autostart: held — svc:vps:oarc/… is not the demo's own; press Localize to send a real request
 ```
 
-**Use "Localize with Image", not "Localize".** Plain *Localize* sends the
-rendered Cesium view, which no VPS can match against a map — it exercises the
-blob lane with real bytes and gets a correct `VPS_FAILED` back. *Localize with
-Image* sends an actual photograph from the scan the map was built from, and is
-the only button that produces a pose from pixels.
+**Use "Localize with Image".** *Localize (Mock)* sends nothing — it once sent
+the rendered Cesium view, which no VPS can match against a map, and was made an
+explicit mock in `bc54229` for that reason. *Localize with Image* sends an
+actual photograph from the scan the map was built from, and is the only button
+that produces a pose from pixels.
 
 It needs the query-frame bundle, and it is disabled without one. The bundle is
 gitignored, so:

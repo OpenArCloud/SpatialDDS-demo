@@ -39,9 +39,20 @@ the bus — no configured endpoint, no per-service client code.
 cd web && npm install && npm run dev   # → http://localhost:5173/
 ```
 
-Turn on **REST Messages** and **DDS Messages**, then click **Localize**. The
-REST panel shows the three calls the browser makes — discovery search, localize,
-model snapshot — and the DDS panel the five bus messages they cause.
+Turn on **REST Messages** and **DDS Messages**, then:
+
+- **Localize with Image** sends a photograph from a VPS map's own scan. The
+  REST panel shows the two calls the browser makes — discovery search,
+  localize — and the DDS panel the five bus messages they cause. It needs a
+  query-frame bundle, which is git-ignored because the frames are pictures of
+  a real place; without one the button is disabled and says so. Install one
+  from any OpenVPS dataset:
+  [`ar_demo/README.md`](ar_demo/README.md#localize-with-image).
+- **Localize (Mock)** is the way in without a bundle: it puts the camera at
+  the venue on the page and sends nothing, so both panels stay quiet.
+- **Discover Content (DDS)** then finds the catalogue the same way, reads its
+  latched content announces and resolves each item's manifest, and places
+  what it finds.
 
 The bundled localizer returns the prior plus jitter. For poses computed from
 pixels, put a real [OpenVPS](https://github.com/OpenArCloud/openvps) on the bus
