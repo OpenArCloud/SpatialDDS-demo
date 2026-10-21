@@ -234,7 +234,7 @@ def _catalog_announce(dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
         "transforms": _frame_transforms(dataset),
         "manifest_uri": os.getenv(
             "SPATIALDDS_CATALOG_MANIFEST_URI",
-            "spatialdds://catalog.example.com/zone:demo/manifest:catalog",
+            "spatialdds://catalog.example.com/demo/service/catalog",
         ),
         "auth_hint": "",
         "stamp": SpatialDDSValidator.now_time(),

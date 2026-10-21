@@ -51,7 +51,7 @@ ANNOUNCE = Announce(
                       durability="VOLATILE")],
     coverage=[COVERAGE], coverage_frame_ref=FRAME, has_coverage_eval_time=False,
     coverage_eval_time=STAMP, transforms=[],
-    manifest_uri="spatialdds://x/zone:z/manifest:m", auth_hint="", stamp=STAMP, ttl_sec=300,
+    manifest_uri="spatialdds://x/z/service/m", auth_hint="", stamp=STAMP, ttl_sec=300,
     coverage_source_ids=[],
 )
 
@@ -63,7 +63,7 @@ CASES = {
     "Announce": ANNOUNCE,
     "ServiceSummary": ServiceSummary(
         service_id="svc:a", kind=ServiceKind.VPS, name="MockVPS",
-        manifest_uri="spatialdds://x/zone:z/manifest:m", coverage=[COVERAGE],
+        manifest_uri="spatialdds://x/z/service/m", coverage=[COVERAGE],
         coverage_frame_ref=FRAME, stamp=STAMP, ttl_sec=300),
     "CoverageQuery": CoverageQuery(
         query_id="q1", coverage=[COVERAGE], coverage_frame_ref=FRAME,

@@ -261,3 +261,5 @@ it or filed with its measurement.
 | …and its orbit assertion has never been able to fail (drill-pick finds nothing at orbital range even with scoping removed) | filed in the spec itself; the near half is genuine |
 | `model-stack.spec.ts` "a retired entity…": the duck was seen, then absent milliseconds later, once in three full runs | observed once, mechanism unconfirmed; not changed |
 | The generated drift gate had only ever checked the 1.7 tree | now checks all three |
+| **No `spatialdds://` URI in the repository was valid** under either era's Appendix F: 42 occurrences, all `.../zone:<z>/<manifest\|service>:<id>`, matching a validator that enforced the same invented shape | rewritten to `<authority>/<zone>/service/<id>`; the validator follows the ABNF; `tests/test_spatial_uris.py` checks the corpus, not just the validator |
+| 1.8 says the canonical form of an entity's `content_refs` is a `spatialdds://` manifest URI; the demo uses a private `catalog:<id>` scheme | addressed in the catalogue migration: the page resolves both |

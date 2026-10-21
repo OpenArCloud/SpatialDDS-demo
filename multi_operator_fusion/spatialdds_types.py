@@ -262,7 +262,7 @@ def make_announce(
         "transforms": [],
         "manifest_uri": (
             manifest_uri
-            or f"spatialdds://oarc.demo/zone:intersection/service:{operator}"
+            or f"spatialdds://oarc.demo/intersection/service/{operator}"
         ),
         "auth_hint": "",
         "stamp": _stamp(timestamp_s),

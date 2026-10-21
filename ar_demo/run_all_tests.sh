@@ -76,7 +76,7 @@ announce = {
     'kind': 'VPS',
     'coverage': [cov_elem],
     'coverage_frame_ref': frame_ref,
-    'manifest_uri': 'spatialdds://test.com/zone:test/manifest:svc',
+    'manifest_uri': 'spatialdds://test.com/test/service/svc',
     'caps': {},
     'topics': [],
     'stamp': SpatialDDSValidator.now_time(),

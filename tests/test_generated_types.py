@@ -71,7 +71,7 @@ ANNOUNCE = Announce(
     version="1.7", org="ExampleOrg", hints=[], caps=CAPS, topics=[TOPIC],
     coverage=[COVERAGE], coverage_frame_ref=FRAME, has_coverage_eval_time=False,
     coverage_eval_time=STAMP, transforms=[],
-    manifest_uri="spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+    manifest_uri="spatialdds://vps.example.com/sf-downtown/service/vps",
     auth_hint="", stamp=STAMP, ttl_sec=300,
     # Empty = self-asserted coverage. Added in 1.7's findings-batch-2
     # revision so a fusion service can name the services its coverage is
@@ -80,7 +80,7 @@ ANNOUNCE = Announce(
 )
 SUMMARY = ServiceSummary(
     service_id="svc:vps:demo/sf-downtown", kind=ServiceKind.VPS, name="MockVPS",
-    manifest_uri="spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+    manifest_uri="spatialdds://vps.example.com/sf-downtown/service/vps",
     coverage=[COVERAGE], coverage_frame_ref=FRAME, stamp=STAMP, ttl_sec=300,
 )
 
@@ -108,7 +108,7 @@ ROUND_TRIP_CASES = {
                                      location_hint="sf-downtown", stamp=STAMP),
     "BootstrapResponse": BootstrapResponse(
         client_id="c1", spatialdds_bootstrap="1.7", dds_domain=1,
-        cyclonedds_profile="", manifest_uris=["spatialdds://x/zone:z/manifest:m"],
+        cyclonedds_profile="", manifest_uris=["spatialdds://x/z/service/m"],
         ttl_sec=300, stamp=STAMP),
 }
 

@@ -680,7 +680,7 @@ def bootstrap_manifest() -> Dict[str, Any]:
         item.strip()
         for item in os.getenv(
             "SPATIALDDS_BOOTSTRAP_MANIFESTS",
-            "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+            "spatialdds://vps.example.com/sf-downtown/service/vps",
         ).split(",")
         if item.strip()
     ]

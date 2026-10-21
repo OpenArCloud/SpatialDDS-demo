@@ -22,11 +22,23 @@ class ValidationError(Exception):
 
 
 class SpatialDDSValidator:
-    """Validator for SpatialDDS v1.7 structures"""
+    """Validator for SpatialDDS 1.8 structures"""
 
-    # spatialdds://<authority>/zone:<zone_id>/<rtype>:<rid>
+    # Appendix F: spatialdds://<authority>/<zone>/<rtype>/<rid>[;param]...
+    # The same grammar in 1.7 and 1.8. This pattern enforced
+    # `.../zone:<zone>/<rtype>:<rid>` instead until 2026-10-21 -- a shape
+    # neither era's ABNF admits -- and every URI in the repository followed
+    # it, so the validator and its corpus agreed with each other and with
+    # nothing else. The reference gateway uses the ABNF form throughout.
     SPATIAL_URI_PATTERN = (
-        r"^spatialdds://([^/]+)/zone:([^/]+)/([^:]+):(.+)$"
+        r"^spatialdds://"
+        r"([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+        r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*)"   # authority
+        r"/([A-Za-z0-9_:-]+)"                                  # zone
+        r"/(anchor_set|anchor|content|tileset|service|stream)" # rtype
+        r"/([A-Za-z0-9_-]+)"                                   # rid
+        r"((?:;[A-Za-z0-9_-]+(?:=[A-Za-z0-9._~:@%-]+)?)*)"     # ;params
+        r"(?:\?[^#]*)?(?:#.*)?$"
     )
 
     VALID_CRS = {"EPSG:4979", "EPSG:4326"}
@@ -130,7 +142,7 @@ class SpatialDDSValidator:
     @classmethod
     def validate_spatial_uri(cls, uri: str) -> Dict[str, str]:
         """
-        Validate SpatialDDS URI format (used for manifests in 1.7)
+        Validate a SpatialDDS URI against Appendix F's ABNF.
         """
         import re
 
@@ -140,14 +152,17 @@ class SpatialDDSValidator:
         if not match:
             raise ValidationError(
                 f"Invalid SpatialDDS URI: {uri}\n"
-                "Expected spatialdds://<authority>/zone:<zone_id>/<rtype>:<rid>"
+                "Expected spatialdds://<authority>/<zone>/<rtype>/<rid> "
+                "(Appendix F), rtype one of anchor, anchor_set, content, "
+                "tileset, service, stream"
             )
-        authority, zone_id, rtype, rid = match.groups()
+        authority, zone_id, rtype, rid, params = match.groups()
         return {
             "authority": authority,
             "zone_id": zone_id,
             "rtype": rtype,
             "rid": rid,
+            "params": params.lstrip(";").split(";") if params else [],
         }
 
     @classmethod
@@ -539,7 +554,7 @@ if __name__ == "__main__":
         "service_id": "svc:vps:demo/sf-downtown",
         "kind": "VPS",
         "name": "MockVPS-v1.8",
-        "manifest_uri": "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+        "manifest_uri": "spatialdds://vps.example.com/sf-downtown/service/vps",
         "coverage": [elem],
         "coverage_frame_ref": frame_ref,
         "stamp": SpatialDDSValidator.now_time(),

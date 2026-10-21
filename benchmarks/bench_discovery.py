@@ -113,7 +113,7 @@ class ServiceAnnouncer:
             "service_id": f"svc:vps:bench/{index}",
             "name": f"BenchService-{index}",
             "kind": "VPS",
-            "manifest_uri": f"spatialdds://bench.local/zone:austin-{index}/manifest:vps",
+            "manifest_uri": f"spatialdds://bench.local/austin-{index}/service/vps",
             "coverage": [coverage],
             "coverage_frame_ref": coverage_frame_ref,
             # 1.7 registered type / QoS names (spec 3.3.2, 3.3.3).

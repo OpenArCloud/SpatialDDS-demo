@@ -167,9 +167,12 @@ test.describe('suppression is per content_id', () => {
 
   test('an entity with no catalog ref claims nothing', () => {
     expect(claimedBy([{ entity_id: 'ent:fountain', content_refs: [] }]).size).toBe(0);
-    // A scheme this client does not understand must not be read as a claim.
+    // A reference that is not to catalogue content must not be read as a
+    // claim. A *service* URI, and a conformant one (Appendix F): this used a
+    // `manifest:` segment the ABNF does not have, so it was not a SpatialDDS
+    // URI at all and tested the parser's rejection rather than the rule.
     expect(claimedBy([{ entity_id: 'ent:x',
-                        content_refs: ['spatialdds://elsewhere/manifest:1'] }]).size)
+                        content_refs: ['spatialdds://elsewhere.example/z/service/x'] }]).size)
       .toBe(0);
   });
 });

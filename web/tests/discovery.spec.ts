@@ -95,7 +95,7 @@ test.describe('service discovery', () => {
 
   test('returns the service_id out of a §8.2.3 manifest', async () => {
     const stub = stubFetch({
-      results: [{ id: 'spatialdds://demo/zone:austin/manifest:vps',
+      results: [{ id: 'spatialdds://demo/austin/service/vps',
                   service: { service_id: 'svc:vps:demo/austin-downtown', kind: 'VPS' } }],
       next_page_token: ''
     });

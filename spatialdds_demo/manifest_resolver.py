@@ -25,12 +25,12 @@ def _cache_put(manifest_uri: str, data: Optional[Dict], status: Dict[str, str], 
 
 
 def _resolve_local(manifest_uri: str) -> Tuple[Optional[Dict], Dict[str, str]]:
-    # Mapping: spatialdds://vps.example.com/zone:sf-downtown/manifest:vps
+    # Mapping: spatialdds://vps.example.com/sf-downtown/service/vps
     # -> manifests/v1.8/vps_sf_downtown.json (resolved relative to repo root,
     # not cwd, so callers can run from any directory)
     repo_root = Path(__file__).resolve().parent.parent
     mapping = {
-        "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps": (
+        "spatialdds://vps.example.com/sf-downtown/service/vps": (
             repo_root / "manifests/v1.8/vps_sf_downtown.json"
         )
     }

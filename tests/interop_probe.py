@@ -314,7 +314,7 @@ def _probe_announce() -> Announce:
         coverage_frame_ref=frame,
         has_coverage_eval_time=False, coverage_eval_time=_now(),
         transforms=[],
-        manifest_uri="spatialdds://interop-probe/zone:test/manifest:probe",
+        manifest_uri="spatialdds://interop-probe/test/service/probe",
         auth_hint="",
         stamp=_now(),
         ttl_sec=300,

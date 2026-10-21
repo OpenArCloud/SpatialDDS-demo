@@ -89,7 +89,7 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
   -e SPATIALDDS_MOCK_VPS="${SPATIALDDS_MOCK_VPS:-1}" \
   -e SPATIALDDS_VPS_SERVICE_ID="${SPATIALDDS_VPS_SERVICE_ID:-svc:vps:demo/austin-downtown}" \
   -e SPATIALDDS_VPS_SERVICE_NAME="${SPATIALDDS_VPS_SERVICE_NAME:-MockVPS-Austin}" \
-  -e SPATIALDDS_DEMO_MANIFEST_URI="spatialdds://vps.example.com/zone:austin-downtown/manifest:vps" \
+  -e SPATIALDDS_DEMO_MANIFEST_URI="spatialdds://vps.example.com/austin-downtown/service/vps" \
   -e SPATIALDDS_CATALOG_SEED="${SPATIALDDS_CATALOG_SEED:-/app/bridges/web_bridge/tests/catalog_seed_fountain.json}" \
   -e SPATIALDDS_FRAME_ANCHORS="${SPATIALDDS_FRAME_ANCHORS:-/app/bridges/web_bridge/tests/frame_anchors_fountain.json}" \
   -e SPATIALDDS_MODEL_LAYER="${SPATIALDDS_MODEL_LAYER:-0}" \

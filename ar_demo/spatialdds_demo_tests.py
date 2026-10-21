@@ -16,7 +16,7 @@ from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_eart
 
 
 def test_manifest_resolver() -> bool:
-    manifest, status = resolve_manifest("spatialdds://vps.example.com/zone:sf-downtown/manifest:vps")
+    manifest, status = resolve_manifest("spatialdds://vps.example.com/sf-downtown/service/vps")
     service = manifest.get("service", {}) if isinstance(manifest, dict) else {}
     return (
         manifest is not None
@@ -74,7 +74,7 @@ def test_manifest_fallback() -> bool:
     env = os.environ.copy()
     env["SLIDE_MODE"] = "1"
     env["SPATIALDDS_DEMO_MANIFEST_URI"] = (
-        "spatialdds://vps.example.com/zone:not-mapped/manifest:vps"
+        "spatialdds://vps.example.com/not-mapped/service/vps"
     )
     result = subprocess.run(
         [sys.executable, "-m", "spatialdds_test", "--summary-only"],
@@ -149,7 +149,7 @@ def test_http_search_returns_service_manifests() -> bool:
         "org": "ExampleOrg",
         "coverage": [cov_elem],
         "coverage_frame_ref": frame_ref,
-        "manifest_uri": "spatialdds://test.com/zone:test/manifest:svc",
+        "manifest_uri": "spatialdds://test.com/test/service/svc",
         "caps": caps,
         "topics": topics,
         "stamp": SpatialDDSValidator.now_time(),
@@ -175,7 +175,7 @@ def test_http_search_returns_service_manifests() -> bool:
     except Exception:
         return False
     return (
-        row.get("id") == "spatialdds://test.com/zone:test/manifest:svc"
+        row.get("id") == "spatialdds://test.com/test/service/svc"
         and row.get("rtype") == "service"
         and row.get("service", {}).get("service_id") == "svc:vps:test/summary"
         and row.get("service", {}).get("topics") == topics
@@ -266,7 +266,7 @@ def test_at_form_profile_rejected() -> bool:
 
 def test_manifest_topics_are_registered() -> bool:
     """Bundled 1.7 manifest topics use registered (or documented) type/QoS names."""
-    manifest, _ = resolve_manifest("spatialdds://vps.example.com/zone:sf-downtown/manifest:vps")
+    manifest, _ = resolve_manifest("spatialdds://vps.example.com/sf-downtown/service/vps")
     topics = manifest.get("service", {}).get("topics", []) if manifest else []
     if not topics:
         return False

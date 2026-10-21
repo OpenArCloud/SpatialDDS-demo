@@ -52,7 +52,7 @@ def announce(service_id: str) -> Announce:
         caps=Capabilities(supported_profiles=[], preferred_profiles=[], features=[]),
         topics=[], coverage=[COVERAGE], coverage_frame_ref=FRAME,
         has_coverage_eval_time=False, coverage_eval_time=STAMP, transforms=[],
-        manifest_uri="spatialdds://x/zone:z/manifest:m", auth_hint="",
+        manifest_uri="spatialdds://x/z/service/m", auth_hint="",
         stamp=STAMP, ttl_sec=300,
         # Empty = self-asserted coverage. Added in 1.7's findings-batch-2
         # revision so a fusion service can name the services its coverage is

@@ -52,7 +52,7 @@ services:
       - SPATIALDDS_VPS_COVERAGE_BBOX=-12,-12,12,12
       - SPATIALDDS_VPS_MAP_FQN=map/synthetic
       - SPATIALDDS_VPS_MAP_ID=synthetic-map
-      - SPATIALDDS_DEMO_MANIFEST_URI=spatialdds://vps.example.com/zone:sf-downtown/manifest:vps
+      - SPATIALDDS_DEMO_MANIFEST_URI=spatialdds://vps.example.com/sf-downtown/service/vps
     command: ["python3", "-m", "bridges.web_bridge", "--port", "8088", "--domain", "0"]
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8088/api/stats >/dev/null || exit 1"]

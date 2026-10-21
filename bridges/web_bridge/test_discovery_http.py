@@ -84,7 +84,7 @@ def _announce(service_id, bbox=None, *, kind="VPS", name="Svc", topics=None, cap
         "org": "ExampleOrg",
         "coverage": list(coverage),
         "coverage_frame_ref": frame_ref,
-        "manifest_uri": manifest_uri or f"spatialdds://demo.example/zone:z/manifest:{service_id[-4:]}",
+        "manifest_uri": manifest_uri or f"spatialdds://demo.example/z/service/{service_id[-4:]}",
         "caps": caps or {
             "supported_profiles": [
                 {"name": "spatial.core", "major": 1, "min_minor": 8, "max_minor": 8}
@@ -444,7 +444,7 @@ class CacheLifecycle(unittest.TestCase):
 
 class ServeOrSynthesize(unittest.TestCase):
     def test_authored_manifest_is_served_verbatim(self):
-        authored = {"id": "spatialdds://x/zone:z/manifest:m", "profile": "spatial.manifest/1.8",
+        authored = {"id": "spatialdds://x/z/service/m", "profile": "spatial.manifest/1.8",
                     "rtype": "service", "service": {"service_id": "svc:a", "kind": "VPS"},
                     "marker": "authored"}
         records = RegistryBackend([_announce("svc:a", SF)]).records()

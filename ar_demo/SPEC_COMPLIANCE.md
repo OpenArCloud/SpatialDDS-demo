@@ -369,6 +369,9 @@ agree with `asset` when both are present.
 
 - `spatialdds_validation.py` enforces FrameRef, Time, coverage presence flags,
   CRS rules, unit quaternions, GeoPose shape, and ServiceSummary shape.
+- `validate_spatial_uri()` follows Appendix F: `spatialdds://<authority>/<zone>/<rtype>/<rid>`. Until the 1.8 migration it enforced a
+  `zone:<z>/<type>:<id>` shape neither era's ABNF admits, and every URI in the repo matched it;
+  `tests/test_spatial_uris.py` now reads the corpus as well as the validator.
 - `validate_module_version()` and `validate_manifest_profile()` are hard-cutover
   checks: `/1.5`, `/1.6` and every `@` form are rejected.
 - `spatialdds_demo/topics.py::validate_topic_meta()` checks TopicMeta rows

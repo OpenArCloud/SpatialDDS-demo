@@ -249,7 +249,7 @@ class VPSServiceV15:
         self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.8")
         self.manifest_uri = os.getenv(
             "SPATIALDDS_DEMO_MANIFEST_URI",
-            "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+            "spatialdds://vps.example.com/sf-downtown/service/vps",
         )
         bbox_env = os.getenv("SPATIALDDS_VPS_COVERAGE_BBOX", "")
         if bbox_env:
@@ -851,7 +851,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         "manifest_uris": _manifest_list(
             os.getenv(
                 "SPATIALDDS_BOOTSTRAP_MANIFESTS",
-                "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+                "spatialdds://vps.example.com/sf-downtown/service/vps",
             )
         ),
         "ttl_sec": int(os.getenv("SPATIALDDS_BOOTSTRAP_TTL", "300")),

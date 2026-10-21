@@ -175,7 +175,7 @@ class SpatialDDSStack(Stack):
                 "SPATIALDDS_VPS_MAP_FQN": "map/synthetic",
                 "SPATIALDDS_VPS_MAP_ID": "synthetic-map",
                 "SPATIALDDS_DEMO_MANIFEST_URI":
-                    "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
+                    "spatialdds://vps.example.com/sf-downtown/service/vps",
             },
             logging=ecs.LogDriver.aws_logs(
                 stream_prefix="web-bridge",
@@ -238,7 +238,7 @@ class SpatialDDSStack(Stack):
                 "SPATIALDDS_VPS_MAP_ID": ar.get("map_id", "austin-map"),
                 "SPATIALDDS_DEMO_MANIFEST_URI": ar.get(
                     "manifest_uri",
-                    "spatialdds://vps.example.com/zone:austin-downtown/manifest:vps"),
+                    "spatialdds://vps.example.com/austin-downtown/service/vps"),
             }
             # The stand-in VPS is skipped when a real one is on the bus. Both
             # answer the same well-known topic, and discovery results are

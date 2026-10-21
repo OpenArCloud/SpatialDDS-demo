@@ -154,11 +154,11 @@ $ scripts/cold_start.sh                  # BRIDGE=… GEOHASH=… to point it el
 == 1. Bootstrap — which bus, and where
 {"spatialdds_bootstrap":"1.8","domain_id":1,"initial_peers":["udpv4://127.0.0.1:7400"],
  "discovery_topic":"spatialdds/discovery/announce/v1","site":"sf-downtown",
- "manifest_uri":"spatialdds://vps.example.com/zone:sf-downtown/manifest:vps"}
+ "manifest_uri":"spatialdds://vps.example.com/sf-downtown/service/vps"}
 
 == 2. Search — who covers geohash 9v6kr
 1 service manifest(s), next_page_token=''
-  svc:vps:demo/austin-downtown     VPS        spatialdds://vps.example.com/zone:austin-downtown/manifest:vps
+  svc:vps:demo/austin-downtown     VPS        spatialdds://vps.example.com/austin-downtown/service/vps
       spatialdds/vps/query/v1          vps_query    VPS_REQ
       spatialdds/vps/result/v1         vps_response VPS_RESP
 

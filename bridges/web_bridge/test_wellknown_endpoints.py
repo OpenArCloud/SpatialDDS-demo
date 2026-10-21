@@ -44,7 +44,7 @@ STAMP = SpatialDDSValidator.now_time()
 
 
 def announce(service_id="svc:vps:demo/sf", kind="VPS",
-             manifest_uri="spatialdds://demo.example/zone:sf/manifest:vps"):
+             manifest_uri="spatialdds://demo.example/sf/service/vps"):
     frame_ref, element = create_coverage_bbox_earth_fixed(*SF)
     return {
         "service_id": service_id,
@@ -271,7 +271,7 @@ class BridgeEndpoints(unittest.TestCase):
 
         answered = [record_from_announce(
             announce(service_id="svc:vps:demo/answers",
-                     manifest_uri="spatialdds://demo.example/zone:sf/manifest:b"))]
+                     manifest_uri="spatialdds://demo.example/sf/service/b"))]
         self.addCleanup(setattr, self.server.bridge, "coverage_records",
                         self.server.bridge.coverage_records)
         self.server.bridge.coverage_records = lambda *a, **k: answered
@@ -286,7 +286,7 @@ class BridgeEndpoints(unittest.TestCase):
         from spatialdds_demo.discovery_http import record_from_announce
 
         answered = [record_from_announce(
-            announce(manifest_uri="spatialdds://demo.example/zone:sf/manifest:fresh"))]
+            announce(manifest_uri="spatialdds://demo.example/sf/service/fresh"))]
         self.addCleanup(setattr, self.server.bridge, "coverage_records",
                         self.server.bridge.coverage_records)
         self.server.bridge.coverage_records = lambda *a, **k: answered
@@ -321,7 +321,7 @@ class BridgeEndpoints(unittest.TestCase):
         hosts, so the authored document is returned rather than one rebuilt
         from the announce's summary of itself.
         """
-        authored = {"id": "spatialdds://demo.example/zone:sf/manifest:vps",
+        authored = {"id": "spatialdds://demo.example/sf/service/vps",
                     "profile": "spatial.manifest/1.8", "rtype": "service",
                     "service": {"service_id": "svc:vps:demo/sf", "kind": "VPS"},
                     "marker": "authored"}
@@ -345,7 +345,7 @@ class BridgeEndpoints(unittest.TestCase):
         service announcing `svc:vps:demo/austin-downtown`.
         """
         record = self.cache.records()[0]
-        other = {"id": "spatialdds://demo.example/zone:sf/manifest:vps",
+        other = {"id": "spatialdds://demo.example/sf/service/vps",
                  "profile": "spatial.manifest/1.8", "rtype": "service",
                  "service": {"service_id": "svc:vps:someone/else", "kind": "VPS"}}
         mine = {**other, "service": {"service_id": record.service_id, "kind": "VPS"}}
