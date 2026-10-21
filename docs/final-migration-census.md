@@ -236,3 +236,28 @@ migration and are correct about the era they record.
    as ARCHIVE rather than delete.
 3. **Finding 3's fixture contents** — the subset listed in §4, or the whole
    1.7 tree frozen.
+
+---
+
+## Found during the migration, not in the census
+
+The census was taken against the code; running every lane against the
+migrated tree found these, and each is either fixed in the commit that found
+it or filed with its measurement.
+
+| finding | status |
+|---|---|
+| `ar_demo/spatialdds.idl` — an aggregator `#include`-ing every `idl/v1.7` file, which the census missed | migrated to `idl/v1.8`; idlc exits 0 |
+| `manifests/v1.7` — two demo-authored manifests (not vendored copies) with no verdict | moved to `manifests/v1.8`, their era claims with them |
+| **Era claims carried as data**: 65 literals in 16 files (`schema_version`, `preferred_profiles`, `ProfileSupport` minors, manifest `profile`, bootstrap schema) | moved; derived from generated `MODULE_ID`s or gated against them by `tests/test_era_claims.py` |
+| 1.8's §3.3.2 registered `crossing_line` and `model_entity`; the validator knew neither | registered |
+| `model_entity`'s row names `spatialdds/<scene>/model/entity/v0`; the reference gateway at the same pin serves `world/entity/v1` | filed, `owm-1.8-spec-queue.md` §4 |
+| `model_entity` has no named QoS profile; implementations announce `MODEL_LATCHED`, which no §3.3.3 table contains | filed, §5 |
+| The "IDL compile + protocol" lane ran the image's baked copies; the image was built 2026-08-23 | lane now bind-mounts the working tree |
+| `Dockerfile`'s COPY set never included a generated tree | fixed; the guide's commands verified against a fresh build |
+| The local base image is amd64-only, so `cyclonedds-python:latest` (arm64) cannot be rebuilt from this `Dockerfile` on this machine | filed here; not fixed in this batch |
+| `spatialdds_idl18/__init__.py` says "Generated SpatialDDS **1.7** types" — the generator hard-codes the phrase | filed: fixing it changes the tree's bytes, and trees-agree requires them identical to `spatialdds_ros`'s (read-only here) |
+| `web/tests/venue-distance.spec.ts` chose its subject by insertion order | fixed: every venue entity is probed |
+| …and its orbit assertion has never been able to fail (drill-pick finds nothing at orbital range even with scoping removed) | filed in the spec itself; the near half is genuine |
+| `model-stack.spec.ts` "a retired entity…": the duck was seen, then absent milliseconds later, once in three full runs | observed once, mechanism unconfirmed; not changed |
+| The generated drift gate had only ever checked the 1.7 tree | now checks all three |

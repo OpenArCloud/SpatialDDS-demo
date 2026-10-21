@@ -76,8 +76,8 @@ def _congested_qos():
 
 
 def _geo(i: int):
-    from spatialdds_idl.builtin import Time
-    from spatialdds_idl.spatial.core import CovMatrix, GeoPose
+    from spatialdds_idl18.builtin import Time
+    from spatialdds_idl18.spatial.core import CovMatrix, GeoPose
 
     return GeoPose(lat_deg=float(i), lon_deg=0.0, alt_m=0.0,
                    q=[0.0, 0.0, 0.0, 1.0],
@@ -107,7 +107,7 @@ class HeadOfLine(unittest.TestCase):
         from cyclonedds.topic import Topic
 
         from cyclonedds.domain import DomainParticipant
-        from spatialdds_idl.spatial.core import GeoPose
+        from spatialdds_idl18.spatial.core import GeoPose
 
         pub, sub = DomainParticipant(DOMAIN), DomainParticipant(DOMAIN)
         wt, rt = Topic(pub, topic, GeoPose), Topic(sub, topic, GeoPose)

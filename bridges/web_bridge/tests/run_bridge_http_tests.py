@@ -96,7 +96,7 @@ def _coverage_query(domain_id: int = 1) -> Dict[str, object]:
 
     from spatialdds_demo.json_mapping import from_json, to_json
     from spatialdds_demo.service_bus import CoverageClient
-    from spatialdds_idl.spatial.disco import CoverageQuery
+    from spatialdds_idl18.spatial.disco import CoverageQuery
 
     query_id = "bridge-test-coverage"
     reply_topic = TOPIC_DISCOVERY_RESPONSE(query_id)

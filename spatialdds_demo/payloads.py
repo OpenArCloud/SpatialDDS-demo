@@ -25,10 +25,10 @@ from __future__ import annotations
 import uuid as _uuid
 from typing import Dict, List, Sequence
 
-SCHEMA_CORE = "spatial.core/1.7"
-SCHEMA_SEMANTICS = "spatial.semantics/1.7"
-SCHEMA_EVENTS = "spatial.events/1.7"
-SCHEMA_DISCOVERY = "spatial.discovery/1.7"
+SCHEMA_CORE = "spatial.core/1.8"
+SCHEMA_SEMANTICS = "spatial.semantics/1.8"
+SCHEMA_EVENTS = "spatial.events/1.8"
+SCHEMA_DISCOVERY = "spatial.discovery/1.8"
 
 COV_NONE = {"discriminator": "COV_NONE", "none": 0}
 
@@ -60,20 +60,99 @@ def vec(value, keys: Sequence[str] = ("x", "y", "z"),
     return [float(v) for v in value]
 
 
+#: FrameRef's four 1.8 members, as plain data, saying *no scale claim*.
+#:
+#: ``has_scale=False`` means metric -- the spec defines every pre-1.8
+#: publisher as correct by construction -- so this restates exactly what a
+#: 1.7 FrameRef said. The one source for it: ``spatialdds_demo.absent``
+#: derives the typed form from this, and every dict builder splats it, so
+#: there is no second copy of the claim to drift. Kept here, in a stdlib-only
+#: module, rather than in ``absent`` so that building a dict never has to
+#: import CycloneDDS.
+ABSENT_SCALE = {
+    "has_scale": False,
+    "scale_status": "SCALE_UNKNOWN",
+    "meters_per_unit": 1.0,
+    "display_unit": "m",
+}
+
+
+def absent_detection3d() -> Dict:
+    """
+    Detection3D's 1.8 Batch 2 members, as plain data, saying *no observer and
+    no keypoints*. A function, not a constant: two members are lists, and a
+    shared mutable default is a bug waiting for its first ``append``.
+
+    ``observer_cov`` is COV_NONE -- the spec's "absent" for a covariance --
+    in the explicit form ``to_json`` emits. The bare ``"COV_NONE"`` shorthand
+    is accepted by ``from_json`` at the edge but never emitted, so a producer
+    using it cannot survive a record/replay round trip: the MCAP live lane
+    caught exactly that. An absent scope means COV_SCOPE_LOCAL per CovScope.
+    """
+    return {
+        "has_observer": False,
+        "observer_position": [0.0, 0.0, 0.0],
+        "observer_cov": dict(COV_NONE),
+        "has_observer_cov_scope": False,
+        "observer_cov_scope": "COV_SCOPE_LOCAL",
+        "has_keypoints": False,
+        "keypoints": [],
+        "topology_id": "",
+        "keypoint_links": [],
+    }
+
+
+def absent_fused_track_observer() -> Dict:
+    """
+    FusedTrack's 1.8 Batch 2 observer-covariance members, absent. A function
+    for the same reason as ``absent_detection3d``: ``observer_cov`` is a
+    nested dict, and a constant would hand every track the same object.
+    """
+    return {
+        "has_observer_cov": False,
+        "observer_cov": dict(COV_NONE),
+        "has_observer_cov_scope": False,
+        "observer_cov_scope": "COV_SCOPE_LOCAL",
+    }
+
+
+#: SpatialEvent's 1.8 crossing members, absent. ``CROSSING_UNKNOWN`` is the
+#: enum's zero, and ``has_crossing=False`` is what says not to read it.
+ABSENT_CROSSING = {
+    "has_crossing_line_id": False,
+    "crossing_line_id": "",
+    "has_crossing": False,
+    "crossing_direction": "CROSSING_UNKNOWN",
+}
+
+
 def frame_ref(fqn: str, uuid: str = "",
               coord_convention: str = "ENU") -> Dict[str, object]:
     """
-    A complete ``FrameRef``.
+    A complete 1.8 ``FrameRef``.
 
     The UUID is a deterministic UUIDv5 of the FQN when none is given, so the
-    same frame gets the same id across processes and runs. ENU is 1.7's
+    same frame gets the same id across processes and runs. ENU is the spec's
     default convention and REP-103's, and stating it beats leaving it unsaid.
+
+    **The four scale fields are 1.8's, and ``has_scale`` is false on
+    purpose.** 1.8 appended ``has_scale`` / ``scale_status`` /
+    ``meters_per_unit`` / ``display_unit`` to FrameRef, and the spec defines
+    an absent scale as metric: every pre-1.8 publisher is correct by
+    construction. So ``has_scale=False`` is exactly what this builder said at
+    1.7, restated in 1.8's shape -- no claim added, none lost. The model
+    layer's frames *declare* their scale (``SCALE_DECLARED``) because a venue
+    capture is metric by survey; nothing built here has that standing.
+
+    Without the four fields ``from_json`` refuses the dict outright, by
+    design: a partially-populated struct is worse than a clear failure.
     """
     return {
         "uuid": uuid or str(_uuid.uuid5(_uuid.NAMESPACE_URL, fqn)),
         "fqn": fqn,
         "has_coord_convention": True,
         "coord_convention": coord_convention,
+        **ABSENT_SCALE,
     }
 
 
@@ -147,6 +226,9 @@ def detection3d(det_id: str, class_id: str, score: float,
         # purely to add these two fields.
         "has_velocity": velocity is not None,
         "velocity": vec(velocity if velocity is not None else (0.0, 0.0, 0.0)),
+        # Appended in 1.8 Batch 2; this source has neither an observer pose
+        # nor keypoints to report.
+        **absent_detection3d(),
     }
 
 

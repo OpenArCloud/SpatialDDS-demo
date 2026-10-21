@@ -16,8 +16,13 @@ from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.discovery_bus import AnnouncePublisher
 from spatialdds_demo.json_mapping import from_json, to_json
 from spatialdds_demo.service_bus import CatalogService, CoverageService
+# The catalogue *protocol* stays on its 1.7 types until it moves onto
+# ContentAnnounce -> manifest (docs/final-migration-census.md §1). Its
+# *discovery* cannot wait: the announce goes through the shared 1.8
+# discovery_bus, and a 1.7 Announce handed to a 1.8-typed writer is a
+# TypeError at startup -- measured, which is how this boundary was found.
 from spatialdds_idl.oarc_demo import CatalogResponse
-from spatialdds_idl.spatial.disco import (
+from spatialdds_idl18.spatial.disco import (
     Announce as TypedAnnounce,
     CoverageResponse as TypedCoverageResponse,
 )
@@ -35,6 +40,8 @@ from spatialdds_validation import (
     complete_coverage_element,
     create_coverage_bbox_earth_fixed,
 )
+from spatialdds_demo.payloads import ABSENT_SCALE
+from spatialdds_demo.topics import topic_meta
 
 
 def _complete_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
@@ -160,7 +167,7 @@ def _enu_to_ecef_transform(fqn: str, anchor: Dict[str, Any]) -> Dict[str, Any]:
         # be ENU -- see the note in `complete_coverage_element`.
         "to": {"uuid": str(uuid.uuid5(uuid.NAMESPACE_URL, "earth-fixed")),
                "fqn": "earth-fixed", "has_coord_convention": False,
-               "coord_convention": "ENU"},
+               "coord_convention": "ENU", **ABSENT_SCALE},
         "pose": {"t": t, "q": q},
         "stamp": now,
         # The site is not going anywhere; an unbounded transform is the honest
@@ -204,31 +211,22 @@ def _catalog_announce(dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
         "service_id": service_id,
         "name": os.getenv("SPATIALDDS_CATALOG_SERVICE_NAME", "MockCatalog-v1"),
         "kind": "CONTENT",
-        "version": "1.7",
+        "version": "1.8",
         "org": os.getenv("SPATIALDDS_CATALOG_ORG", "ExampleOrg"),
         "hints": [],
         "caps": {
             "supported_profiles": [
-                {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7},
-                {"name": "spatial.discovery", "major": 1, "min_minor": 7, "max_minor": 7},
+                {"name": "spatial.core", "major": 1, "min_minor": 8, "max_minor": 8},
+                {"name": "spatial.discovery", "major": 1, "min_minor": 8, "max_minor": 8},
             ],
             "preferred_profiles": [],
             "features": [],
         },
         # The query lane only. Responses go to the `reply_topic` each query
         # names, which is chosen by the client and so cannot be advertised.
-        "topics": [
-            {
-                "name": TOPIC_CATALOG_QUERY_V1,
-                "type": "oarc.catalog_query",
-                "version": "v1",
-                "qos_profile": "VPS_REQ",
-                # Advisory hints; a request/reply lane has no steady rate and
-                # no chunking, so both are zero (= unspecified).
-                "target_rate_hz": 0.0,
-                "max_chunk_bytes": 0,
-            },
-        ],
+        # Advisory hints are zero (= unspecified): a request/reply lane has no
+        # steady rate and no chunking.
+        "topics": [topic_meta(TOPIC_CATALOG_QUERY_V1, "oarc.catalog_query", "VPS_REQ")],
         "coverage": _seed_coverage(dataset),
         "coverage_frame_ref": frame_ref,
         "has_coverage_eval_time": False,

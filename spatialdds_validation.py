@@ -13,6 +13,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from spatialdds_demo import payloads as _payloads
+
 
 class ValidationError(Exception):
     """Custom exception for validation errors"""
@@ -30,9 +32,9 @@ class SpatialDDSValidator:
     VALID_CRS = {"EPSG:4979", "EPSG:4326"}
     # 1.7 unifies every module on /1.7 and retires the `name@MAJOR.MINOR`
     # form; `spatial.<profile>/MAJOR.MINOR` is the only identifier syntax.
-    MODULE_VERSION_PATTERN = r"^spatial\.[a-z_][a-z0-9_.]*/1\.7$"
+    MODULE_VERSION_PATTERN = r"^spatial\.[a-z_][a-z0-9_.]*/1\.8$"
     MANIFEST_PROFILE_PATTERN = r"^spatial\.manifest/1\.(\d+)$"
-    MANIFEST_MIN_MINOR = 7
+    MANIFEST_MIN_MINOR = 8
     VALID_SERVICE_KINDS = {
         "VPS",
         "MAPPING",
@@ -72,12 +74,10 @@ class SpatialDDSValidator:
         ENU-anchored; callers can override for body-frame or camera-frame
         references.
         """
-        return {
-            "uuid": str(uuid.uuid5(uuid.NAMESPACE_URL, fqn)),
-            "fqn": fqn,
-            "has_coord_convention": True,
-            "coord_convention": coord_convention,
-        }
+        # One builder for FrameRef dicts: this was a third copy of
+        # payloads.frame_ref, identical in every byte until 1.8 appended four
+        # members and only one copy was updated.
+        return _payloads.frame_ref(fqn, coord_convention=coord_convention)
 
     @classmethod
     def validate_time(cls, t: Dict[str, Any]) -> None:
@@ -433,7 +433,7 @@ def complete_coverage_element(**fields: Any) -> Dict[str, Any]:
         # consumers to assume ENU when the flag is false anyway. That residue
         # is in the type, not in this builder.
         "frame_ref": {"uuid": "", "fqn": "", "has_coord_convention": False,
-                      "coord_convention": "ENU"},
+                      "coord_convention": "ENU", **_payloads.ABSENT_SCALE},
         "has_coverage_window": False,
         "coverage_window_start": {"sec": 0, "nanosec": 0},
         "coverage_window_end": {"sec": 0, "nanosec": 0},
@@ -523,8 +523,8 @@ if __name__ == "__main__":
     print(f"✓ GeoPose sample: {pose}")
 
     # Version strings — 1.7 only, slash form only
-    SpatialDDSValidator.validate_module_version("spatial.core/1.7")
-    SpatialDDSValidator.validate_manifest_profile("spatial.manifest/1.7")
+    SpatialDDSValidator.validate_module_version("spatial.core/1.8")
+    SpatialDDSValidator.validate_manifest_profile("spatial.manifest/1.8")
     for rejected in ("spatial.core/1.6", "core@1.6"):
         try:
             SpatialDDSValidator.validate_module_version(rejected)
@@ -538,7 +538,7 @@ if __name__ == "__main__":
     summary = {
         "service_id": "svc:vps:demo/sf-downtown",
         "kind": "VPS",
-        "name": "MockVPS-v1.7",
+        "name": "MockVPS-v1.8",
         "manifest_uri": "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
         "coverage": [elem],
         "coverage_frame_ref": frame_ref,

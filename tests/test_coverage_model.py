@@ -21,6 +21,7 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+from spatialdds_demo.payloads import ABSENT_SCALE  # noqa: E402
 from spatialdds_demo.discovery_http import (  # noqa: E402
     coverage_extents, coverage_intersects,
 )
@@ -33,7 +34,7 @@ SF = (-122.4194, 37.7749)
 
 def frame(fqn):
     return {"uuid": "u", "fqn": fqn, "has_coord_convention": False,
-            "coord_convention": "ENU"}
+            "coord_convention": "ENU", **ABSENT_SCALE}
 
 
 def bbox(west, south, east, north, **rest):

@@ -29,7 +29,11 @@ from sensor_types import (
     VisionFrame,
     VisionMeta,
 )
-from spatialdds_idl.spatial.core import CovMatrix, TileKey  # noqa: E402
+from spatialdds_idl18.spatial.core import CovMatrix, TileKey  # noqa: E402
+from spatialdds_idl18.spatial.sensing.common import MODULE_ID as COMMON_MODULE_ID  # noqa: E402
+from spatialdds_idl18.spatial.sensing.lidar import MODULE_ID as LIDAR_MODULE_ID  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import MODULE_ID as VISION_MODULE_ID  # noqa: E402
+from spatialdds_demo.absent import ABSENT_SCALE, absent_detection3d  # noqa: E402
 
 
 def ns_time_to_time(ns_timestamp: int) -> Time:
@@ -95,7 +99,7 @@ def ego_pose_to_spatialdds(ego_pose: Dict[str, Any]) -> Tuple[PoseSE3, GeoPose]:
 
 def _sensor_frame_ref(calibrated_sensor: Dict[str, Any], channel: str) -> FrameRef:
     return FrameRef(uuid=calibrated_sensor["token"], fqn=f"ego/{channel}",
-                    has_coord_convention=True, coord_convention="ENU")
+                    has_coord_convention=True, coord_convention="ENU", **ABSENT_SCALE)
 
 
 def _stream_meta(sample_data: Dict[str, Any], calibrated_sensor: Dict[str, Any], rate_hz: float) -> StreamMeta:
@@ -107,7 +111,7 @@ def _stream_meta(sample_data: Dict[str, Any], calibrated_sensor: Dict[str, Any],
             calibrated_sensor["translation"], calibrated_sensor["rotation"]
         ),
         nominal_rate_hz=float(rate_hz),
-        schema_version="spatial.sensing.common/1.7",
+        schema_version=COMMON_MODULE_ID,
     )
 
 
@@ -144,7 +148,7 @@ def camera_to_vision_meta(sample_data: Dict[str, Any], calibrated_sensor: Dict[s
         codec="JPEG",
         pix="RGB8",
         color="SRGB",
-        schema_version="spatial.sensing.vision/1.7",
+        schema_version=VISION_MODULE_ID,
     )
 
 
@@ -193,7 +197,7 @@ def lidar_to_meta_and_frame(
         encoding="BIN_INTERLEAVED",
         codec="CODEC_NONE",
         layout="XYZ_I_R",
-        schema_version="spatial.sensing.lidar/1.7",
+        schema_version=LIDAR_MODULE_ID,
     )
     frame = LidarFrame(
         stream_id=channel,
@@ -256,7 +260,7 @@ def radar_to_detection_set(
         stream_id=channel,
         frame_seq=frame_seq,
         frame_ref=FrameRef(uuid="", fqn=f"ego/{channel}",
-                           has_coord_convention=True, coord_convention="ENU"),
+                           has_coord_convention=True, coord_convention="ENU", **ABSENT_SCALE),
         # `dets`, not `detections` — the sequence field is named the same way
         # in every *Set type in the spec.
         dets=detections,
@@ -311,7 +315,7 @@ def annotation_to_detection3d(nusc: NuScenes, ann_token: str) -> Detection3D:
     return Detection3D(
         det_id=ann["token"],
         frame_ref=FrameRef(uuid="", fqn="nuscenes/map",
-                           has_coord_convention=True, coord_convention="ENU"),
+                           has_coord_convention=True, coord_convention="ENU", **ABSENT_SCALE),
         has_tile=False,
         tile_key=TileKey(x=0, y=0, z=0, level=0),
         class_id=str(ann["category_name"]),
@@ -338,8 +342,7 @@ def annotation_to_detection3d(nusc: NuScenes, ann_token: str) -> Detection3D:
         num_lidar_pts=int(ann.get("num_lidar_pts", 0)),
         num_radar_pts=int(ann.get("num_radar_pts", 0)),
         has_velocity=has_velocity,
-        velocity=[vx, vy, vz],
-    )
+        velocity=[vx, vy, vz], **absent_detection3d())
 
 
 def sample_annotations_to_set(nusc: NuScenes, sample: Dict[str, Any], frame_seq: int) -> Detection3DSet:
@@ -348,7 +351,7 @@ def sample_annotations_to_set(nusc: NuScenes, sample: Dict[str, Any], frame_seq:
     return Detection3DSet(
         set_id=f"nuscenes-{frame_seq}",
         frame_ref=FrameRef(uuid="", fqn="nuscenes/map",
-                           has_coord_convention=True, coord_convention="ENU"),
+                           has_coord_convention=True, coord_convention="ENU", **ABSENT_SCALE),
         has_tile=False,
         tile_key=TileKey(x=0, y=0, z=0, level=0),
         dets=dets,

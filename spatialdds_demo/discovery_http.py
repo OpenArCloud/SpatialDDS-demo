@@ -26,7 +26,12 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from spatialdds_validation import SpatialDDSValidator
 
-MANIFEST_PROFILE = "spatial.manifest/1.7"
+MANIFEST_PROFILE = "spatial.manifest/1.8"
+# The bootstrap manifest's schema version (spec §5, `spatialdds_bootstrap`).
+# One constant, gated against the generated MODULE_IDs by
+# tests/test_era_claims.py, because it was four literals and the 1.8
+# migration found every one of them still saying "1.7".
+BOOTSTRAP_SCHEMA = "1.8"
 
 # Source of a record. Not the service *kind* (VPS / MAPPING / ...), which
 # lives in the payload.
@@ -402,7 +407,7 @@ def matches_filter(filter_obj: Dict[str, Any], record: ServiceRecord) -> bool:
                 continue
             # 1.7: ProfileSupport.name already carries the module family
             # ("spatial.core"), so it is not re-prefixed here — doing so would
-            # produce "spatial.spatial.core/1.7".
+            # produce "spatial.spatial.core/1.8".
             if f"{name}/{int(major)}.{int(max_minor)}" in module_id_in:
                 module_match = True
                 break
@@ -665,7 +670,7 @@ def bootstrap_manifest() -> Dict[str, Any]:
         if peer.strip()
     ]
     manifest: Dict[str, Any] = {
-        "spatialdds_bootstrap": "1.7",
+        "spatialdds_bootstrap": BOOTSTRAP_SCHEMA,
         "domain_id": int(os.getenv("SPATIALDDS_BOOTSTRAP_DOMAIN", "1")),
         "initial_peers": peers,
         "discovery_topic": "spatialdds/discovery/announce/v1",

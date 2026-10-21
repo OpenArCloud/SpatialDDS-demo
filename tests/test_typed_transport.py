@@ -22,17 +22,18 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from spatialdds_demo import qos_profiles  # noqa: E402
-from spatialdds_idl.builtin import Time  # noqa: E402
-from spatialdds_idl.spatial.common import CoordConvention, FrameRef  # noqa: E402
-from spatialdds_idl.spatial.core import Aabb3  # noqa: E402
-from spatialdds_idl.spatial.disco import (  # noqa: E402
+from spatialdds_idl18.builtin import Time  # noqa: E402
+from spatialdds_idl18.spatial.common import CoordConvention, FrameRef  # noqa: E402
+from spatialdds_idl18.spatial.core import Aabb3  # noqa: E402
+from spatialdds_idl18.spatial.disco import (  # noqa: E402
     Announce, Capabilities, CoverageElement, ServiceKind,
 )
+from spatialdds_demo.absent import ABSENT_SCALE  # noqa: E402
 
 ANNOUNCE_TOPIC = "spatialdds/discovery/announce/v1"
 STAMP = Time(sec=1700000000, nanosec=0)
 FRAME = FrameRef(uuid="u", fqn="earth-fixed", has_coord_convention=True,
-                 coord_convention=CoordConvention.ENU)
+                 coord_convention=CoordConvention.ENU, **ABSENT_SCALE)
 ZERO = Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0])
 COVERAGE = CoverageElement(
     has_crs=True, crs="EPSG:4979", has_bbox=True, bbox=[-1.0, -1.0, 1.0, 1.0],
@@ -46,7 +47,7 @@ COVERAGE = CoverageElement(
 
 def announce(service_id: str) -> Announce:
     return Announce(
-        service_id=service_id, name=service_id, kind=ServiceKind.VPS, version="1.7",
+        service_id=service_id, name=service_id, kind=ServiceKind.VPS, version="1.8",
         org="ExampleOrg", hints=[],
         caps=Capabilities(supported_profiles=[], preferred_profiles=[], features=[]),
         topics=[], coverage=[COVERAGE], coverage_frame_ref=FRAME,

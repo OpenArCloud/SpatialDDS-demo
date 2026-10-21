@@ -185,7 +185,7 @@ class TypedRoundTrip:
         publishes.
         """
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.spatial.argeo import VpsRequest
+        from spatialdds_idl18.spatial.argeo import VpsRequest
 
         request = self._builder.create_localize_request("bench-vps")
         request["query_id"] = req_id
@@ -204,7 +204,7 @@ class TypedRoundTrip:
 
     def _server_loop(self) -> None:
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.spatial.argeo import VpsResponse
+        from spatialdds_idl18.spatial.argeo import VpsResponse
 
         while not self._stop.is_set():
             for request in self._service.take_requests():

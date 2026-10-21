@@ -49,10 +49,10 @@ def _wire(cls, payload):
 
 def _samples():
     """``[(type_name, topic, payload, stamp_ns)]`` — real payloads."""
-    from spatialdds_idl.spatial.semantics import FusedTrackSet
-    from spatialdds_idl.spatial.semantics import Detection3DSet
-    from spatialdds_idl.spatial.core import FramedPose
-    from spatialdds_idl.spatial.disco import Announce
+    from spatialdds_idl18.spatial.semantics import FusedTrackSet
+    from spatialdds_idl18.spatial.semantics import Detection3DSet
+    from spatialdds_idl18.spatial.core import FramedPose
+    from spatialdds_idl18.spatial.disco import Announce
     from fusion import FusedTrack, Position, Velocity
     from spatialdds_types import (
         circle_coverage, make_announce, make_detection, make_detection_set,

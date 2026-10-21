@@ -14,8 +14,8 @@ from spatialdds_demo import blob
 from spatialdds_demo.discovery_bus import AnnouncePublisher
 from spatialdds_demo.json_mapping import from_json, to_json
 from spatialdds_demo.service_bus import CoverageService, VpsService
-from spatialdds_idl.spatial.argeo import VpsRequest, VpsResponse
-from spatialdds_idl.spatial.disco import (
+from spatialdds_idl18.spatial.argeo import VpsRequest, VpsResponse
+from spatialdds_idl18.spatial.disco import (
     Announce as TypedAnnounce,
     CoverageResponse as TypedCoverageResponse,
 )

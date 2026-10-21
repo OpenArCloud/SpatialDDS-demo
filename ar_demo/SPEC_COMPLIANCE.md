@@ -1,17 +1,18 @@
-# SpatialDDS v1.7 Compliance Notes
+# SpatialDDS 1.8 Compliance Notes
 
-**Conformant to:** SpatialDDS 1.7 (2026-08-23, tag `v1.7`) — the stamped
-release, not a draft revision. `idl/v1.7/` is vendored verbatim from that tag
-and `docs/SpatialDDS-1.7-full.md` is its assembled text.
+**Conformant to:** SpatialDDS 1.8 at spec commit `9c3e1f2` — the revision the
+validating gateway in `spatialdds-web` pins, so the demo's types and the
+validator's come from the same bytes. `idl/v1.8/` is vendored verbatim from
+that commit. The spec carries no `v1.8` tag, which is why the pin is a commit;
+see `scripts/generate_types.py` for the reasoning and the resync command.
 
-**Not tracking `main`.** The spec repo's main branch is now the 1.8 draft. This
-demo moves to 1.8 under a deliberate migration brief; see
-`scripts/generate_types.py` for the pin and the resync command.
+**Not tracking `main`.** The demo moves eras only under a deliberate migration
+brief, as it did from 1.7 (`docs/final-migration-census.md`).
 
 ## The wire
 
 **Types on the bus, JSON only at the edges.** Every demo flow publishes a
-generated `idl/v1.7` type on a spec-named topic with its §3.3.3 QoS profile.
+generated `idl/v1.8` type on a spec-named topic with its §3.3.3 QoS profile.
 Nothing serialises a payload into a string any more; the JSON envelope that
 used to carry everything on one unkeyed topic is deleted.
 
@@ -28,6 +29,11 @@ used to carry everything on one unkeyed topic is deleted.
 types generated from `idl/v1.7`, the spec's topic names, and the §3.3.3
 profile table — and from **no demo transport code at all**. If it can talk
 to the demo, the spec is what the two have in common.
+
+Since the 1.8 migration it is also a **cross-era** proof: the probe is still a
+1.7 participant, the demo is 1.8, and they discover and read each other in
+both directions. That is appendable evolution as the spec describes it,
+measured on a real bus rather than asserted.
 
 Both directions pass (`tests/test_interop.py`):
 
@@ -55,7 +61,41 @@ merely absent:
   verified moving 200 KiB in 4 chunks with per-chunk CRC, but nothing has
   pushed a real point cloud through it at rate.
 
+## What changed from v1.7
+
+The 1.7 → 1.8 move, for this demo. Unlike the 1.6 → 1.7 cutover below, 1.8
+is appendable on the wire, and that was measured: of 146 definitions the two
+generated trees share, 138 are byte-identical and the remaining 8 only
+**append** members — `FrameRef` (scale: `has_scale`, `scale_status`,
+`meters_per_unit`, `display_unit`), `GeoAnchor`, `TopicMeta` (`durability`),
+`SpatialEvent` (crossings), `SpatialZone`, `MapAlignment`, `Detection3D` and
+`FusedTrack` (observer covariance, keypoints).
+
+What that cost in this repository was not on the wire:
+
+- **Construction.** Generated dataclasses give no member a default, so code
+  written for 1.7 raises `TypeError` against a 1.8 class. Each appended group
+  is stated once, as the spec's own "absent", in
+  `spatialdds_demo/payloads.py` (plain data) and derived typed in
+  `spatialdds_demo/absent.py`. `has_scale=False` means metric: every pre-1.8
+  publisher is correct by construction, so it restates 1.7 exactly.
+- **Era claims carried as data.** 65 literals in 16 files still said 1.7 —
+  `schema_version`, `preferred_profiles`, `ProfileSupport` minors, the manifest
+  `profile`, the bootstrap schema. They now come from the generated
+  `MODULE_ID`s or from constants gated against them
+  (`tests/test_era_claims.py`).
+- **Registry.** 1.8 registered `crossing_line` and `model_entity` in §3.3.2;
+  both are now known to the validator and the type registry.
+- **Demo-owned types** moved to `spatialdds_demo_idl18`, bound to
+  `spatialdds_idl18` for every spec type.
+
+Module versioning stays unified (`spatial.<profile>/1.8`), and the
+hard-cutover posture of the validators stays: the module-version pattern and
+the manifest-profile floor both moved to 8.
+
 ## What changed from v1.6
+
+*History: the 1.6 → 1.7 cutover, kept as a record.*
 
 1.7 is a hard cutover, not a compatible bump. The pre-adoption instability
 clause (§3.1) lets a MINOR revision break the wire format, and 1.7 does. There
@@ -65,7 +105,7 @@ shapes conflict, only the 1.7 shape is accepted.
 ### Unified module versioning
 
 1.6's selective per-profile minor bumps are gone. All modules version together
-with the spec, so every `MODULE_ID` and `schema_version` here is
+with the spec, so every `MODULE_ID` and `schema_version` was, at 1.7,
 `spatial.<profile>/1.7`. The per-profile version table that used to live in this
 document is obsolete; there is nothing left to track per profile.
 
@@ -97,9 +137,9 @@ depends on.
 
 - `Announce` + `CoverageQuery` → `CoverageResponse`, with capabilities
   (`ProfileSupport` ranges) and typed topics (`TopicMeta` carrying
-  `type` / `version` / `qos_profile`, all mandatory in 1.7).
-- Capability advertisements declare `spatial.core/1.7`,
-  `spatial.discovery/1.7`, `spatial.sensing.vision/1.7`, `spatial.anchors/1.7`.
+  `type` / `version` / `qos_profile`, all mandatory since 1.7).
+- Capability advertisements declare `spatial.core/1.8`,
+  `spatial.discovery/1.8`, `spatial.sensing.vision/1.8`, `spatial.anchors/1.8`.
 - The demo-local `register` / `list` endpoints still traffic in full
   announces: they are registration *inputs*, not `CoverageResponse`.
 
@@ -153,7 +193,7 @@ topics from the application-topic pattern, and reply topics are consumer-chosen.
 `/.well-known/spatialdds/{bootstrap,resolver,search}`:
 
 - `search` — the HTTP discovery binding (`ar_demo/http_binding.py`).
-- `bootstrap` — new here. Serves a 1.7 bootstrap manifest built from the same
+- `bootstrap` — new here. Serves a 1.8 bootstrap manifest built from the same
   site table `spatialdds_bootstrap_server.py` uses on the bus, so the HTTPS and
   DDS paths agree. Auth is the optional `auth_hint` string; the `auth` object
   and its `method` enum are gone. `auth_hint` is omitted unless configured,
@@ -242,7 +282,7 @@ carry a connection block.
 - `Aabb3` keeps `min_xyz` / `max_xyz` — only `TileMeta`'s loose pair was
   removed. The demo publishes no tilesets, so nothing needed folding.
 - The `coverage_window_*` fields are still not emitted; see
-  `idl/v1.7/discovery.idl`.
+  `idl/v1.8/discovery.idl`.
 
 ## Placing content, and what coverage is not
 
@@ -312,15 +352,16 @@ agree with `asset` when both are present.
 
 - Mock localization responses use `argeo.NodeGeo` with `poses[]` and an
   optional `geopose`.
-- Sensor payloads (FrameRefs, BlobRefs, KeyframeFeatures) now carry `/1.7`
-  schema versions along with everything else.
+- Sensor payloads (FrameRefs, BlobRefs, KeyframeFeatures) carry `/1.8`
+  schema versions, taken from the generated `MODULE_ID` of the module each
+  type comes from rather than written as literals.
 
 ## Manifests
 
-- Bundled manifests under `manifests/v1.7/` are demo-flavored
-  (`spatial.manifest/1.7`) and are what the demo's parser reads. Upstream
-  `vps_manifest.json` examples use the `schema_version: spatial.core/1.7`
-  envelope instead; see the SpatialDDS-spec repo for those.
+- Bundled manifests under `manifests/v1.8/` are demo-flavored
+  (`spatial.manifest/1.8`) and are what the demo's parser reads. Upstream's
+  `manifests/v1.8/` examples (at `9c3e1f2`) are content-identical to its v1.7
+  ones; see the SpatialDDS-spec repo for those.
 - `manifests/v1.4/` and `manifests/v1.6/`, like `idl/v1.4/` and `idl/v1.6/`, are
   kept for reference only. Nothing loads them.
 
@@ -331,9 +372,9 @@ agree with `asset` when both are present.
 - `validate_module_version()` and `validate_manifest_profile()` are hard-cutover
   checks: `/1.5`, `/1.6` and every `@` form are rejected.
 - `spatialdds_demo/topics.py::validate_topic_meta()` checks TopicMeta rows
-  against the 1.7 registries plus the documented extensions above.
+  against the 1.8 registries plus the documented extensions above.
 
-## Extensions: what 1.7 still has no type for
+## Extensions: what 1.8 still has no type for
 
 §3.3.2 allows deployment-specific type names and asks that they be
 documented. This is that documentation, and it is deliberately short:
@@ -429,7 +470,7 @@ diverge, minting locally and saying why is the honest move -- and the
 divergence is itself a finding, because a registry that has no profile for
 "cheap, unreliable, and slow" is telling you something about the profiles.
 
-### Why guarded members are declined rather than defaulted### Why guarded members are declined rather than defaulted
+### Why guarded members are declined rather than defaulted
 
 **Declining is the only reading that cannot be mistaken for obedience.**
 
@@ -491,7 +532,7 @@ seconds, a ratio of 5.0 against a cadence target of 5; convergence 1.69 s
 after motion stopped, against a derived threshold of 1.5 s plus the service
 tick.
 
-### Declaring bounds judges what is already there### Declaring bounds judges what is already there
+### Declaring bounds judges what is already there
 
 **Every entity that declares an extent is implicitly an audit of everything
 already in the model.** Nothing about the existing state changes; what changes

@@ -135,7 +135,7 @@ class MessageRouting(unittest.TestCase):
 
     def test_publish_tracks_emits_a_real_fused_track_set(self):
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.spatial.semantics import FusedTrackSet
+        from spatialdds_idl18.spatial.semantics import FusedTrackSet
 
         svc, transport = self._make_service()
         svc.on_message(DET3D_TYPE,
@@ -149,7 +149,7 @@ class MessageRouting(unittest.TestCase):
         track_set = from_json(FusedTrackSet, payload)
         # Spec FusedTrackSet is keyed by the fusion stream, not a source operator.
         self.assertEqual(track_set.stream_id, "platform-fusion")
-        self.assertEqual(track_set.schema_version, "spatial.semantics/1.7")
+        self.assertEqual(track_set.schema_version, "spatial.semantics/1.8")
         self.assertEqual(len(track_set.tracks), 1)
         self.assertEqual(track_set.tracks[0].source_operators, ["operator_a"])
 
@@ -160,7 +160,7 @@ class MessageRouting(unittest.TestCase):
         JSON object keyed by operator — become a typed sequence.
         """
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.oarc_demo import FusionCoverage
+        from spatialdds_demo_idl18.oarc_demo import FusionCoverage
 
         svc, transport = self._make_service()
         svc.on_message(DET3D_TYPE,
@@ -178,7 +178,7 @@ class MessageRouting(unittest.TestCase):
 
     def test_conflict_event_builds_into_a_spatial_event(self):
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.spatial.events import SpatialEvent
+        from spatialdds_idl18.spatial.events import SpatialEvent
 
         svc, transport = self._make_service()
         for agent, y in (("op_a_ego", 0.0), ("op_b_ego", 0.5)):

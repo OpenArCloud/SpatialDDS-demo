@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-// SpatialDDS Convenience Aggregator (v1.7)
+// SpatialDDS Convenience Aggregator (v1.8)
 //
-// The official v1.7 IDL lives under idl/v1.7/*.idl in this repository and is a
+// The official v1.8 IDL lives under idl/v1.8/*.idl in this repository and is a
 // verbatim copy of the spec repo. This wrapper adds NO types of its own — it
 // only #includes the profile files so build scripts that expect a single IDL
 // entry point keep working.
@@ -13,26 +13,26 @@
 // or the next profile file pulls the body in a second time and idlc fails with
 // "Declaration 'MODULE_ID' collides with an earlier declaration".
 
-#include "idl/v1.7/types.idl"
+#include "idl/v1.8/types.idl"
 
 #ifndef SPATIAL_CORE_INCLUDED
 #define SPATIAL_CORE_INCLUDED
-#include "idl/v1.7/core.idl"
+#include "idl/v1.8/core.idl"
 #endif
 
 #ifndef SPATIAL_SENSING_COMMON_INCLUDED
 #define SPATIAL_SENSING_COMMON_INCLUDED
-#include "idl/v1.7/common.idl"
+#include "idl/v1.8/common.idl"
 #endif
 
-#include "idl/v1.7/discovery.idl"
-#include "idl/v1.7/anchors.idl"
-#include "idl/v1.7/vision.idl"
-#include "idl/v1.7/vio.idl"
-#include "idl/v1.7/slam_frontend.idl"
-#include "idl/v1.7/argeo.idl"
-#include "idl/v1.7/lidar.idl"
-#include "idl/v1.7/rad.idl"
-#include "idl/v1.7/semantics.idl"
-#include "idl/v1.7/events.idl"
-#include "idl/v1.7/mapping.idl"
+#include "idl/v1.8/discovery.idl"
+#include "idl/v1.8/anchors.idl"
+#include "idl/v1.8/vision.idl"
+#include "idl/v1.8/vio.idl"
+#include "idl/v1.8/slam_frontend.idl"
+#include "idl/v1.8/argeo.idl"
+#include "idl/v1.8/lidar.idl"
+#include "idl/v1.8/rad.idl"
+#include "idl/v1.8/semantics.idl"
+#include "idl/v1.8/events.idl"
+#include "idl/v1.8/mapping.idl"

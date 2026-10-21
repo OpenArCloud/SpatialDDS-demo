@@ -24,6 +24,7 @@ for path in (ROOT, os.path.join(ROOT, "bridges", "web_bridge"), os.path.join(ROO
         sys.path.insert(0, path)
 
 from announce_cache import AnnounceCache  # noqa: E402
+from spatialdds_demo.payloads import ABSENT_SCALE  # noqa: E402
 from spatialdds_demo.discovery_http import (  # noqa: E402
     DiscoveryError,
     geohash_bounds,
@@ -43,7 +44,8 @@ AUSTIN = (-97.75, 30.27, -97.72, 30.29)
 
 def _local_frame(fqn):
     return {"uuid": "6f1d0e9c-0b3a-4a3f-9f4e-2f1a5c7d8e90", "fqn": fqn,
-            "has_coord_convention": True, "coord_convention": "ENU"}
+            "has_coord_convention": True, "coord_convention": "ENU",
+            **ABSENT_SCALE}
 
 
 def _aabb_element(min_x, min_y, max_x, max_y):
@@ -85,9 +87,9 @@ def _announce(service_id, bbox=None, *, kind="VPS", name="Svc", topics=None, cap
         "manifest_uri": manifest_uri or f"spatialdds://demo.example/zone:z/manifest:{service_id[-4:]}",
         "caps": caps or {
             "supported_profiles": [
-                {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7}
+                {"name": "spatial.core", "major": 1, "min_minor": 8, "max_minor": 8}
             ],
-            "preferred_profiles": ["spatial.core/1.7"],
+            "preferred_profiles": ["spatial.core/1.8"],
             "features": ["blob.crc32"],
         },
         "topics": topics if topics is not None else [
@@ -155,7 +157,7 @@ CASES = [
     ("module_id_in matches the 1.7 family form",
      _query((-122.45, 37.75, -122.40, 37.80),
             has_filter=True,
-            filter={"type_in": [], "qos_profile_in": [], "module_id_in": ["spatial.core/1.7"]}),
+            filter={"type_in": [], "qos_profile_in": [], "module_id_in": ["spatial.core/1.8"]}),
      ["svc:a", "svc:c", "svc:f"]),
     ("empty filter arrays match all",
      _query((-122.45, 37.75, -122.40, 37.80),
@@ -263,7 +265,7 @@ class Parity(unittest.TestCase):
         docs = [search(b(ANNOUNCES).records(), dict(query))["results"] for b in BACKENDS]
         self.assertEqual(docs[0], docs[1])
         for doc in docs[0]:
-            self.assertEqual(doc["profile"], "spatial.manifest/1.7")
+            self.assertEqual(doc["profile"], "spatial.manifest/1.8")
             self.assertEqual(doc["rtype"], "service")
 
     def test_rejections_agree_across_backends(self):
@@ -442,7 +444,7 @@ class CacheLifecycle(unittest.TestCase):
 
 class ServeOrSynthesize(unittest.TestCase):
     def test_authored_manifest_is_served_verbatim(self):
-        authored = {"id": "spatialdds://x/zone:z/manifest:m", "profile": "spatial.manifest/1.7",
+        authored = {"id": "spatialdds://x/zone:z/manifest:m", "profile": "spatial.manifest/1.8",
                     "rtype": "service", "service": {"service_id": "svc:a", "kind": "VPS"},
                     "marker": "authored"}
         records = RegistryBackend([_announce("svc:a", SF)]).records()
@@ -454,7 +456,7 @@ class ServeOrSynthesize(unittest.TestCase):
         response = search(records, _query(SF), manifest_provider=lambda r: None)
         doc = response["results"][0]
         self.assertEqual(doc["service"]["service_id"], "svc:a")
-        self.assertEqual(doc["profile"], "spatial.manifest/1.7")
+        self.assertEqual(doc["profile"], "spatial.manifest/1.8")
         self.assertNotIn("marker", doc)
 
     def test_synthesis_omits_fields_the_announce_cannot_supply(self):

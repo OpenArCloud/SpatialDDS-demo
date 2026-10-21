@@ -19,8 +19,13 @@ from sensor_types import (
     BlobRef, CamIntrinsics, FrameHeader, FrameQuality, FrameRef, GeoPose,
     PoseSE3, QuaternionXYZW, StreamMeta, Time, Vec3, VisionFrame, VisionMeta,
 )
-from spatialdds_idl.spatial.core import CovMatrix
-from spatialdds_idl.spatial.sensing.common import Axis, AxisSpec, Linspace
+from spatialdds_idl18.spatial.core import CovMatrix
+from spatialdds_idl18.spatial.sensing.common import Axis, AxisSpec, Linspace
+from spatialdds_idl18.spatial.sensing.common import MODULE_ID as COMMON_MODULE_ID  # noqa: E402
+from spatialdds_idl18.spatial.sensing.rad import MODULE_ID as RAD_MODULE_ID  # noqa: E402
+from spatialdds_idl18.spatial.sensing.rf_beam import MODULE_ID as RF_BEAM_MODULE_ID  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import MODULE_ID as VISION_MODULE_ID  # noqa: E402
+from spatialdds_demo.absent import ABSENT_SCALE  # noqa: E402
 
 BLOCKAGE_THRESHOLD = 0.12
 IMAGE_WIDTH = 960
@@ -48,7 +53,7 @@ def _identity_pose() -> PoseSE3:
 
 def _frame_ref(uuid: str, fqn: str) -> FrameRef:
     return FrameRef(uuid=uuid, fqn=fqn, has_coord_convention=True,
-                    coord_convention="ENU")
+                    coord_convention="ENU", **ABSENT_SCALE)
 
 
 def _stream_meta(stream_id: str, uuid: str, fqn: str,
@@ -58,7 +63,7 @@ def _stream_meta(stream_id: str, uuid: str, fqn: str,
         frame_ref=_frame_ref(uuid, fqn),
         T_bus_sensor=_identity_pose(),
         nominal_rate_hz=rate_hz,
-        schema_version="spatial.sensing.common/1.7",
+        schema_version=COMMON_MODULE_ID,
     )
 
 
@@ -103,7 +108,7 @@ def make_beam_meta() -> RfBeamMeta:
         n_tx=1,
         n_rx=1,
         power_unit="DBM",
-        schema_version="spatial.sensing.rf_beam/1.7",
+        schema_version=RF_BEAM_MODULE_ID,
     )
 
 
@@ -132,7 +137,7 @@ def make_radar_meta() -> RadTensorMeta:
         has_quant_scale=False,
         quant_scale=0.0,
         tile_size=0,
-        schema_version="spatial.sensing.rad/1.7",
+        schema_version=RAD_MODULE_ID,
     )
 
 
@@ -163,7 +168,7 @@ def make_vision_meta() -> VisionMeta:
         codec="JPEG",
         pix="RGB8",
         color="SRGB",
-        schema_version="spatial.sensing.vision/1.7",
+        schema_version=VISION_MODULE_ID,
     )
 
 

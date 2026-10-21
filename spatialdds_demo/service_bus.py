@@ -34,14 +34,18 @@ from spatialdds_demo.topics import (
     TOPIC_VPS_QUERY_V1,
     TOPIC_VPS_RESULT_V1,
 )
-from spatialdds_idl.oarc_demo import (
+from spatialdds_demo_idl18.oarc_demo import (
     BootstrapQuery,
     BootstrapResponse,
+)
+# The catalogue stays on its 1.7 types until it moves to
+# ContentAnnounce -> manifest (docs/final-migration-census.md §1).
+from spatialdds_idl.oarc_demo import (
     CatalogQuery,
     CatalogResponse,
 )
-from spatialdds_idl.spatial.argeo import VpsRequest, VpsResponse
-from spatialdds_idl.spatial.disco import CoverageQuery, CoverageResponse
+from spatialdds_idl18.spatial.argeo import VpsRequest, VpsResponse
+from spatialdds_idl18.spatial.disco import CoverageQuery, CoverageResponse
 
 # How often a waiting client re-checks its reply reader. 20 ms is a fine
 # default for a demo at demo rates, and it is also a hard latency floor: a

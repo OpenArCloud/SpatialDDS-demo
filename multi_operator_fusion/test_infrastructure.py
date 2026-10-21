@@ -92,7 +92,7 @@ class Detection3DPayload(unittest.TestCase):
 
     def test_payload_is_a_real_detection_set(self):
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.spatial.semantics import Detection3DSet
+        from spatialdds_idl18.spatial.semantics import Detection3DSet
 
         payload = make_detection3d_payload(
             frame_seq=7, stamp=_stamp_from_index(7),

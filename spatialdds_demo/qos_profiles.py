@@ -176,6 +176,24 @@ def get(profile_name: str) -> QosProfile:
         ) from None
 
 
+def durability_for(profile_name: str) -> str:
+    """
+    ``TopicMeta.durability`` for a profile: ``"TRANSIENT_LOCAL"``,
+    ``"VOLATILE"``, or ``""`` for one this table does not carry.
+
+    1.8 appended ``durability`` to TopicMeta so a bridged gateway can fill the
+    N.7-required manifest ``durability`` from the bus instead of inventing it
+    (1.9 candidates entry 3, finding 17). Derived from ``latched`` rather than
+    written per announce, so there is one place the answer comes from. Empty
+    for an unknown or deployment-specific profile: the spec says empty means
+    absent, and a guessed durability is a claim nobody made.
+    """
+    profile = PROFILES.get(profile_name)
+    if profile is None:
+        return ""
+    return "TRANSIENT_LOCAL" if profile.latched else "VOLATILE"
+
+
 def qos_for(profile_name: str, lifespan_sec: Optional[float] = None) -> qos.Qos:
     """The CycloneDDS Qos for a spec profile name."""
     return get(profile_name).to_qos(lifespan_sec=lifespan_sec)

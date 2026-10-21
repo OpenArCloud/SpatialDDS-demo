@@ -4,8 +4,8 @@ Bootstrap → discovery → coverage query → localization → catalog → anch
 The cold-start flow an AR client follows: find a VPS that covers your
 area, get a 6DoF localisation, discover content, publish anchors.
 Exercised against the canonical IDL bundled at
-[`../idl/v1.7`](../idl/v1.7) and the manifests at
-[`../manifests/v1.7`](../manifests/v1.7).
+[`../idl/v1.8`](../idl/v1.8) and the manifests at
+[`../manifests/v1.8`](../manifests/v1.8).
 
 ![Cesium web UI](../web/screenshot.png)
 
@@ -189,8 +189,8 @@ and `hlocMaps/<map-id>/`:
 That copies a few of the map's own registered frames and writes
 `manifest.json`, whose `anchor` comes from the map's `transform.json`.
 
-Frames from the map, rather than an upload control, because a 1.7 `VpsRequest`
-has nowhere to carry camera intrinsics. OpenVPS's DDS binding falls back to the
+Frames from the map, rather than an upload control, because a `VpsRequest` —
+unchanged from 1.7 to 1.8 — has nowhere to carry camera intrinsics. OpenVPS's DDS binding falls back to the
 map's own camera model — right for query images drawn from the map, wrong for a
 foreign camera, and their notes record that returning `VPS_SUCCESS` while 9.6 m
 out. An upload button would invite exactly that.
@@ -246,7 +246,7 @@ PYTHONPATH=. python3 ar_demo/http_binding.py
 # Register a service manifest
 curl -X POST http://localhost:8080/.well-known/spatialdds/register \
   -H "Content-Type: application/json" \
-  -d @manifests/v1.7/vps_manifest.json
+  -d @manifests/v1.8/vps_manifest.json
 
 # Fetch the bootstrap manifest
 curl http://localhost:8080/.well-known/spatialdds/bootstrap

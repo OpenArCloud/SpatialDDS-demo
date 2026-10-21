@@ -31,7 +31,7 @@ from cyclonedds.domain import DomainParticipant
 from spatialdds_demo import topic_types, typed_transport as tt
 from spatialdds_demo.discovery_bus import AnnouncePublisher, AnnounceSubscriber
 from spatialdds_demo.json_mapping import from_json, to_json
-from spatialdds_idl.spatial.disco import Announce
+from spatialdds_idl18.spatial.disco import Announce
 
 
 class UndeclaredTopic(KeyError):

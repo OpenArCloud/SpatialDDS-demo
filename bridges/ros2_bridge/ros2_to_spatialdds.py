@@ -27,12 +27,13 @@ from frame_mapping import FrameMapper
 
 
 # ---------- Schema-version literals ------------------------------------------
-# These mirror the v1.7 IDL profile names. 1.7 dropped selective per-profile
-# minor bumps: every module versions together with the spec, so every
-# MODULE_ID and schema_version is spatial.<profile>/1.7.
-SCHEMA_CORE = "spatial.core/1.7"
-SCHEMA_VISION = "spatial.sensing.vision/1.7"
-SCHEMA_SEMANTICS = "spatial.semantics/1.7"
+# Every module versions together with the spec (1.7 dropped selective minor
+# bumps and 1.8 kept it that way), so each of these is the generated
+# MODULE_ID of the module the type comes from -- taken from it rather than
+# written down, so an era bump cannot leave one behind. They were literals
+# until 1.8, and the migration found three copies of them.
+from spatialdds_demo.payloads import SCHEMA_CORE, SCHEMA_SEMANTICS  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import MODULE_ID as SCHEMA_VISION  # noqa: E402
 
 
 # ---------- Wire-format msg_type strings -------------------------------------

@@ -42,6 +42,8 @@ from spatialdds_demo.topics import (
     TOPIC_VPS_RESULT_V1,
     validate_topics_are_canonical,
 )
+from spatialdds_demo.discovery_http import BOOTSTRAP_SCHEMA  # noqa: E402
+from spatialdds_demo.topics import topic_meta  # noqa: E402
 
 
 def _time_to_iso(t: Dict[str, int]) -> str:
@@ -244,7 +246,7 @@ class VPSServiceV15:
     def __init__(self, logger: SpatialDDSLogger):
         self.logger = logger
         self.service_id = os.getenv("SPATIALDDS_VPS_SERVICE_ID", "svc:vps:demo/sf-downtown")
-        self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.7")
+        self.service_name = os.getenv("SPATIALDDS_VPS_SERVICE_NAME", "MockVPS-v1.8")
         self.manifest_uri = os.getenv(
             "SPATIALDDS_DEMO_MANIFEST_URI",
             "spatialdds://vps.example.com/zone:sf-downtown/manifest:vps",
@@ -282,36 +284,20 @@ class VPSServiceV15:
             # now carries the full module family, ProfileSupport.preferred
             # is deleted, and features is a plain string sequence.
             "supported_profiles": [
-                {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7},
-                {"name": "spatial.discovery", "major": 1, "min_minor": 7, "max_minor": 7},
-                {"name": "spatial.sensing.vision", "major": 1, "min_minor": 7, "max_minor": 7},
-                {"name": "spatial.anchors", "major": 1, "min_minor": 7, "max_minor": 7},
+                {"name": "spatial.core", "major": 1, "min_minor": 8, "max_minor": 8},
+                {"name": "spatial.discovery", "major": 1, "min_minor": 8, "max_minor": 8},
+                {"name": "spatial.sensing.vision", "major": 1, "min_minor": 8, "max_minor": 8},
+                {"name": "spatial.anchors", "major": 1, "min_minor": 8, "max_minor": 8},
             ],
-            "preferred_profiles": ["spatial.discovery/1.7", "spatial.core/1.7"],
+            "preferred_profiles": ["spatial.discovery/1.8", "spatial.core/1.8"],
             "features": ["blob.crc32", "vision.codec.jpeg"],
         }
 
     def _topic_meta(self) -> List[Dict[str, Any]]:
-        """TopicMeta rows using the 1.7 registered type / QoS names (3.3.2, 3.3.3)."""
+        """TopicMeta rows using the registered type / QoS names (3.3.2, 3.3.3)."""
         return [
-            {
-                "name": TOPIC_VPS_QUERY_V1,
-                "type": "vps_query",
-                "version": "v1",
-                "qos_profile": "VPS_REQ",
-                # Advisory hints. Optional in intent, but real struct members,
-                # so they carry a value like every presence-flagged field.
-                "target_rate_hz": 0.0,
-                "max_chunk_bytes": 0,
-            },
-            {
-                "name": TOPIC_VPS_RESULT_V1,
-                "type": "vps_response",
-                "version": "v1",
-                "qos_profile": "VPS_RESP",
-                "target_rate_hz": 0.0,
-                "max_chunk_bytes": 0,
-            },
+            topic_meta(TOPIC_VPS_QUERY_V1, "vps_query", "VPS_REQ"),
+            topic_meta(TOPIC_VPS_RESULT_V1, "vps_response", "VPS_RESP"),
         ]
 
     def create_announce(self) -> Dict[str, Any]:
@@ -320,7 +306,7 @@ class VPSServiceV15:
             "service_id": self.service_id,
             "name": self.service_name,
             "kind": "VPS",
-            "version": "1.7",
+            "version": "1.8",
             "org": "ExampleOrg",
             "hints": [{"key": "priority", "value": "edge"}],
             "caps": self._capabilities(),
@@ -858,7 +844,7 @@ def run_spatialdds_test(show_message_content: bool = True, detailed_content: boo
         show_message_content,
     )
     response = {
-        "spatialdds_bootstrap": "1.7",
+        "spatialdds_bootstrap": BOOTSTRAP_SCHEMA,
         "client_id": client_id,
         "dds_domain": int(os.getenv("SPATIALDDS_BOOTSTRAP_DOMAIN", "1")),
         "cyclonedds_profile": "",
@@ -1157,7 +1143,7 @@ def main():
     print("   1. Exercise multiple services to validate paging in CoverageResponse")
     print("   2. Swap mock frames with live camera blobs")
     print("   3. Emit AnchorDelta streams into a registry for persistence")
-    print("   4. Validate manifests against manifests/v1.7/* examples")
+    print("   4. Validate manifests against manifests/v1.8/* examples")
 
     return success
 

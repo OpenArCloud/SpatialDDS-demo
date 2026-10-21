@@ -25,7 +25,23 @@ import dataclasses
 import enum
 from typing import Any, Dict, Type, TypeVar, get_args, get_origin
 
-from spatialdds_idl._field_aliases import FIELD_ALIASES
+from spatialdds_demo_idl18._field_aliases import FIELD_ALIASES as _DEMO_ALIASES
+from spatialdds_idl18._field_aliases import FIELD_ALIASES as _SPEC_ALIASES
+
+# One table for every generated type this repository maps. The spec tree and
+# the demo-owned package each carry their own -- the demo types live outside
+# `spatialdds_idl18` so that tree stays byte-identical to spatialdds_ros's --
+# and a mapper that read only one of them would emit `_global` for a demo
+# type's field and `global` for a spec type's, depending on which tree the
+# value happened to come from. Merged once here, and imported from here by
+# anything else that needs it, so there is no second copy to drift.
+#
+# Disjoint by construction (spec typenames are `spatial.*`/`builtin.*`, demo
+# ones `oarc_demo.*`); asserted, because a silent overwrite in a merge is
+# exactly the failure a merge invites.
+assert not set(_SPEC_ALIASES) & set(_DEMO_ALIASES), \
+    set(_SPEC_ALIASES) & set(_DEMO_ALIASES)
+FIELD_ALIASES = {**_SPEC_ALIASES, **_DEMO_ALIASES}
 
 T = TypeVar("T")
 

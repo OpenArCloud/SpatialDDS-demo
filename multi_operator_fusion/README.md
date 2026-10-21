@@ -136,10 +136,14 @@ service that starts mid-run is picked up, and one whose type a consumer
 cannot resolve is skipped rather than fatal (§3.3.2 treats unregistered names
 as extension points).
 
-The two `oarc.*` names are the demo's own: 1.7 has no fused-track type
-(`semantics::Tracklet` is feature-level, `vision::Track2D` per-image) and none
-for fusion coverage metrics. See
-[`ar_demo/SPEC_COMPLIANCE.md`](../ar_demo/SPEC_COMPLIANCE.md#extensions-what-17-still-has-no-type-for).
+The one `oarc.*` name is the demo's own. Fused tracks are not: they ride the
+spec's `semantics::FusedTrack`, registered as `fused_track`, which arrived in
+1.7 batch 3 (this sentence said otherwise until the 1.8 migration, two eras
+after it stopped being true). What the spec still has no type for is the
+coverage *diagnostic* — a per-operator "no single source could build this"
+scoreboard, an aggregate rather than track content — so `oarc.fusion_coverage`
+stays demo-owned. See
+[`ar_demo/SPEC_COMPLIANCE.md`](../ar_demo/SPEC_COMPLIANCE.md#extensions-what-18-still-has-no-type-for).
 
 ### Expect drops on the real-time lanes
 

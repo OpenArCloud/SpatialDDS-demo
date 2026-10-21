@@ -135,9 +135,9 @@ def test_http_search_returns_service_manifests() -> bool:
     frame_ref, cov_elem = create_coverage_bbox_earth_fixed(-122.5, 37.7, -122.3, 37.8)
     caps = {
         "supported_profiles": [
-            {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7}
+            {"name": "spatial.core", "major": 1, "min_minor": 8, "max_minor": 8}
         ],
-        "preferred_profiles": ["spatial.core/1.7"],
+        "preferred_profiles": ["spatial.core/1.8"],
         "features": ["blob.crc32"],
     }
     topics = [{"name": "spatialdds/vps/query/v1", "type": "vps_query",
@@ -258,7 +258,7 @@ def test_at_form_profile_rejected() -> bool:
             continue
         return False
     try:
-        SpatialDDSValidator.validate_manifest_profile("spatial.manifest/1.7")
+        SpatialDDSValidator.validate_manifest_profile("spatial.manifest/1.8")
     except Exception:
         return False
     return True

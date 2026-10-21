@@ -235,7 +235,7 @@ def _hints(cls: Any) -> Dict[str, Any]:
 def _field_aliases(cls: Any) -> Dict[str, str]:
     """idlc renames Python keywords; the aliases put the IDL name back."""
     try:
-        from spatialdds_idl._field_aliases import FIELD_ALIASES
+        from spatialdds_demo.json_mapping import FIELD_ALIASES
 
         idl = getattr(cls, "__idl__", None)
         name = getattr(idl, "idl_transformed_typename", "") or ""

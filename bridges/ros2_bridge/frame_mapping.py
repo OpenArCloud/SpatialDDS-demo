@@ -17,6 +17,8 @@ from __future__ import annotations
 import uuid
 from typing import Dict
 
+from spatialdds_demo.payloads import ABSENT_SCALE
+
 
 # Stable namespace for SpatialDDS FrameRef UUIDs derived from this bridge.
 # Picking a fixed UUID here means the mapping is reproducible — the same
@@ -51,6 +53,9 @@ def frame_ref_dict(uuid_str: str, fqn: str) -> Dict[str, object]:
         "fqn": fqn,
         "has_coord_convention": True,
         "coord_convention": COORD_CONVENTION,
+        # 1.8's appended scale members, from the one source: no scale claim,
+        # which the spec defines as metric. ROS frames are metres by REP-103.
+        **ABSENT_SCALE,
     }
 
 

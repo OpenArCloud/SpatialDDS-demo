@@ -3,9 +3,22 @@ FROM ghcr.io/openarcloud/cyclonedds-python-base:11.0.1-ubuntu22.04
 
 WORKDIR /app
 
-# Copy SpatialDDS v1.7 files. AR-demo files live under ar_demo/ on the host
-# but are flattened into /app inside the container so existing in-container
-# entry points (`python3 spatialdds_test.py`, etc.) keep working unchanged.
+# Copy the SpatialDDS 1.8 demo files. AR-demo files live under ar_demo/ on
+# the host but are flattened into /app inside the container so existing
+# in-container entry points (`python3 spatialdds_test.py`, etc.) keep working.
+#
+# **These baked copies are what `docker run cyclonedds-python ...` runs
+# without a bind mount** -- and until the 1.8 migration this set copied no
+# generated tree at all, while `spatialdds_demo` (which it does copy) imports
+# one. The test lanes bind-mount the working tree instead (scripts/
+# run_tests.sh), because an image built in August went on passing a lane for
+# two months against code that no longer existed. Rebuild after changing any
+# file below if you mean to run the baked copies.
+COPY spatialdds_idl18 ./spatialdds_idl18
+COPY spatialdds_demo_idl18 ./spatialdds_demo_idl18
+# Transitional: the catalogue still imports its 1.7 types until it moves to
+# ContentAnnounce -> manifest. Removed with the 1.7 tree.
+COPY spatialdds_idl ./spatialdds_idl
 COPY spatialdds_test.py .
 COPY spatialdds_validation.py .
 COPY spatialdds_demo ./spatialdds_demo

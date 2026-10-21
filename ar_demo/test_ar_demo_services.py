@@ -39,7 +39,7 @@ from spatialdds_demo.json_mapping import from_json  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
     TOPIC_CATALOG_QUERY_V1, TOPIC_VPS_QUERY_V1,
 )
-from spatialdds_idl.spatial.disco import Announce  # noqa: E402
+from spatialdds_idl18.spatial.disco import Announce  # noqa: E402
 from spatialdds_validation import SpatialDDSValidator  # noqa: E402
 
 SEED = _HERE / "catalog_seed.json"
@@ -155,6 +155,29 @@ class BootstrapConfig(unittest.TestCase):
         mapping = bootstrap._mapping_for_site("", 7, [])
         self.assertEqual(mapping["site"], "default")
         self.assertEqual(mapping["dds_domain"], 7)
+
+
+class VpsAnnounce(unittest.TestCase):
+    """
+    The mock VPS's own announce builds into the type it publishes.
+
+    `spatialdds_demo_server.py` types its announce with `from_json` at
+    startup, so an announce that does not build is a server that dies before
+    it can answer anything. During the 1.8 migration exactly that happened --
+    its TopicMeta rows lacked the appended `durability` -- and the only
+    symptom was the web-bridge HTTP lane timing out on a CoverageQuery nobody
+    was alive to answer. The catalogue had this check; the VPS did not.
+    """
+
+    def test_the_mock_vps_announce_builds_into_the_1_8_type(self):
+        from spatialdds_test import SpatialDDSLogger, VPSServiceV15
+        announce = VPSServiceV15(SpatialDDSLogger()).create_announce()
+        validate_announce(from_json(Announce, announce))
+        self.assertEqual(announce["kind"], "VPS")
+        for row in announce["topics"]:
+            self.assertIn(row["durability"], ("VOLATILE", "TRANSIENT_LOCAL"),
+                          f"{row['name']}: durability is derived, never blank "
+                          "for a registered profile")
 
 
 class AnnounceFreshness(unittest.TestCase):

@@ -30,28 +30,28 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from spatialdds_demo.json_mapping import to_json as _to_json  # noqa: E402
-from spatialdds_idl.spatial.common import (  # noqa: E402
+from spatialdds_idl18.spatial.common import (  # noqa: E402
     FrameRef,
     QuaternionXYZW,
     Vec3,
 )
-from spatialdds_idl.spatial.core import BlobRef, GeoPose, PoseSE3  # noqa: E402
-from spatialdds_idl.builtin import Time  # noqa: E402
-from spatialdds_idl.spatial.semantics import (  # noqa: E402
+from spatialdds_idl18.spatial.core import BlobRef, GeoPose, PoseSE3  # noqa: E402
+from spatialdds_idl18.builtin import Time  # noqa: E402
+from spatialdds_idl18.spatial.semantics import (  # noqa: E402
     Detection3D,
     Detection3DSet,
 )
-from spatialdds_idl.spatial.sensing.common import (  # noqa: E402
+from spatialdds_idl18.spatial.sensing.common import (  # noqa: E402
     FrameHeader,
     FrameQuality,
     StreamMeta,
 )
-from spatialdds_idl.spatial.sensing.lidar import LidarFrame, LidarMeta  # noqa: E402
-from spatialdds_idl.spatial.sensing.rad import (  # noqa: E402
+from spatialdds_idl18.spatial.sensing.lidar import LidarFrame, LidarMeta  # noqa: E402
+from spatialdds_idl18.spatial.sensing.rad import (  # noqa: E402
     RadDetection,
     RadDetectionSet,
 )
-from spatialdds_idl.spatial.sensing.vision import (  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import (  # noqa: E402
     CamIntrinsics,
     VisionFrame,
     VisionMeta,

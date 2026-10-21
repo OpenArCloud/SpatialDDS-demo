@@ -13,7 +13,8 @@ from cyclonedds.domain import DomainParticipant
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.json_mapping import from_json, to_json
 from spatialdds_demo.service_bus import BootstrapService
-from spatialdds_idl.oarc_demo import BootstrapResponse as TypedBootstrapResponse
+from spatialdds_demo.discovery_http import BOOTSTRAP_SCHEMA
+from spatialdds_demo_idl18.oarc_demo import BootstrapResponse as TypedBootstrapResponse
 from spatialdds_demo.topics import (
     TOPIC_BOOTSTRAP_QUERY_V1,
     TOPIC_BOOTSTRAP_RESPONSE_V1,
@@ -74,7 +75,7 @@ def run_server(
                 # Demo-local bootstrap topic pair, but tagged with the 1.7
                 # bootstrap schema version so it matches the manifest served
                 # at /.well-known/spatialdds/bootstrap.
-                "spatialdds_bootstrap": "1.7",
+                "spatialdds_bootstrap": BOOTSTRAP_SCHEMA,
                 "client_id": query.client_id,
                 "dds_domain": mapping["dds_domain"],
                 "cyclonedds_profile": os.getenv("SPATIALDDS_BOOTSTRAP_PROFILE", ""),

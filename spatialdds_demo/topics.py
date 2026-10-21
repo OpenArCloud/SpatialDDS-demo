@@ -107,6 +107,11 @@ REGISTERED_TOPIC_TYPES = {
     # Blob transfer is its own mechanism rather than a topic type, but a
     # lane carrying chunks still has to name something.
     "blob_chunk",
+    # Added in 1.8. Found by comparing this set against the 1.8 spec's
+    # §3.3.2 table during the migration, not by anything failing: until then
+    # the validator would have refused a conformant 1.8 announce of either.
+    "crossing_line",    # events::CrossingLine, ZONE_META
+    "model_entity",     # owm::Entity (provisional spatial.owm/0.1)
 }
 
 REGISTERED_QOS_PROFILES = {
@@ -188,6 +193,35 @@ def validate_topics_are_canonical(
             errors.append("Missing VPS result topic for VPS service")
 
     return len(errors) == 0, errors
+
+
+def topic_meta(name: str, type_: str, qos_profile: str, *,
+               target_rate_hz: float = 0.0, max_chunk_bytes: int = 0) -> dict:
+    """
+    One complete 1.8 ``TopicMeta`` row, as plain data.
+
+    ``type`` and ``qos_profile`` must be registered (3.3.2 / 3.3.3) or a
+    documented extension -- ``validate_topic_meta`` below says which.
+    ``durability`` is derived from the profile (``qos_profiles.durability_for``)
+    and never written by hand: 1.8 appended it so a bridged gateway can fill a
+    manifest's N.7-required durability from the bus, and a guessed value is a
+    claim nobody made.
+
+    The one builder for this shape. There were two, in ``spatialdds_test`` and
+    in the fusion demo, and the 1.8 migration updated only one: the mock VPS
+    then could not build its own announce, never answered a CoverageQuery,
+    and the web-bridge HTTP lane timed out with nothing pointing at why.
+    """
+    from spatialdds_demo import qos_profiles   # imported lazily, see module doc
+    return {
+        "name": name,
+        "type": type_,
+        "version": "v1",
+        "qos_profile": qos_profile,
+        "target_rate_hz": float(target_rate_hz),
+        "max_chunk_bytes": int(max_chunk_bytes),
+        "durability": qos_profiles.durability_for(qos_profile),
+    }
 
 
 def validate_topic_meta(entries: List[dict]) -> Tuple[bool, List[str]]:

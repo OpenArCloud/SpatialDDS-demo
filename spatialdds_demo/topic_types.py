@@ -16,19 +16,23 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Type
 
-from spatialdds_idl.oarc_demo import (
+from spatialdds_demo_idl18.oarc_demo import (
     BootstrapQuery,
     BootstrapResponse,
-    CatalogQuery,
-    CatalogResponse,
     FusionCoverage,
 )
-from spatialdds_idl.spatial.anchors import AnchorDelta
-from spatialdds_idl.spatial.argeo import VpsRequest, VpsResponse
-from spatialdds_idl.spatial.semantics import (
+# The catalogue stays on its 1.7 types until it moves to
+# ContentAnnounce -> manifest (docs/final-migration-census.md §1).
+from spatialdds_idl.oarc_demo import (
+    CatalogQuery,
+    CatalogResponse,
+)
+from spatialdds_idl18.spatial.anchors import AnchorDelta
+from spatialdds_idl18.spatial.argeo import VpsRequest, VpsResponse
+from spatialdds_idl18.spatial.semantics import (
     Detection2DSet, Detection3DSet, FusedTrackSet,
 )
-from spatialdds_idl.spatial.core import (
+from spatialdds_idl18.spatial.core import (
     BlobChunk,
     EntityBinding,
     FramedPose,
@@ -36,15 +40,16 @@ from spatialdds_idl.spatial.core import (
     NavSatStatus,
     PlannedTrajectory,
 )
-from spatialdds_idl.spatial.disco import Announce, CoverageQuery, CoverageResponse, Depart
-from spatialdds_idl.spatial.events import SpatialEvent
-from spatialdds_idl.spatial.vio import ImuSample
-from spatialdds_idl.spatial.sensing.lidar import LidarFrame, LidarMeta
-from spatialdds_idl.spatial.sensing.rad import (
+from spatialdds_idl18.spatial.disco import Announce, CoverageQuery, CoverageResponse, Depart
+from spatialdds_idl18.spatial.events import CrossingLine, SpatialEvent
+from spatialdds_idl18.spatial.owm import Entity as ModelEntity
+from spatialdds_idl18.spatial.vio import ImuSample
+from spatialdds_idl18.spatial.sensing.lidar import LidarFrame, LidarMeta
+from spatialdds_idl18.spatial.sensing.rad import (
     RadDetectionSet, RadTensorFrame, RadTensorMeta,
 )
-from spatialdds_idl.spatial.sensing.rf_beam import RfBeamFrame, RfBeamMeta
-from spatialdds_idl.spatial.sensing.vision import VisionFrame, VisionMeta
+from spatialdds_idl18.spatial.sensing.rf_beam import RfBeamFrame, RfBeamMeta
+from spatialdds_idl18.spatial.sensing.vision import VisionFrame, VisionMeta
 
 # --- §3.3.2 registered types -----------------------------------------------
 REGISTERED: Dict[str, Type] = {
@@ -77,6 +82,10 @@ REGISTERED: Dict[str, Type] = {
     # than a topic type — but every consumer needs to resolve it, so it
     # lives with the registered names rather than as an extension.
     "blob_chunk": BlobChunk,
+    # Registered in 1.8 (§3.3.2). `model_entity` is provisional, from
+    # spatial.owm/0.1, which versions independently of the spec.
+    "crossing_line": CrossingLine,
+    "model_entity": ModelEntity,
 }
 
 # --- deployment-specific extensions, named per §3.3.2 guidance --------------
@@ -142,6 +151,14 @@ PROFILE_FOR_TYPE: Dict[str, str] = {
     "vps_response": "VPS_RESP",
     "blob_chunk": "GEOM_TILE",
     "oarc.fusion_coverage": "MAP_META",
+    "crossing_line": "ZONE_META",
+    # The spec names no profile for model_entity: its row spells the QoS out
+    # (RELIABLE + TRANSIENT_LOCAL, KEEP_LAST(1) per key) instead. MAP_META is
+    # the registered §3.3.3 profile with exactly those values, so it is the
+    # default here. The model layer and spatialdds_ros announce the same QoS
+    # under their own name, MODEL_LATCHED, which no §3.3.3 table contains --
+    # filed in docs/owm-1.8-spec-queue.md rather than papered over.
+    "model_entity": "MAP_META",
 }
 
 DEFAULT_PROFILE = "EVENT_RT"

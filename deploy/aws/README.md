@@ -203,7 +203,7 @@ no map neither localizes nor announces, so discovery reports no VPS at all. The
 script's `--align`, `--transform` and `--verify` cover the rest of the map-side
 preparation.
 
-**`transform.json` is not optional.** Coverage in 1.7 is entirely geographic,
+**`transform.json` is not optional.** Coverage in 1.8 is entirely geographic,
 so a map with no geodetic anchor has nothing truthful to advertise and that
 binding declines to announce it. It stays localizable over HTTP and invisible
 to discovery — correct, and confusing if unexpected.

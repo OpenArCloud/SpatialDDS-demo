@@ -21,10 +21,13 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Sequence
 
 from spatialdds_demo import payloads
+from spatialdds_demo import topics as _topics
 
 
-SCHEMA_CORE = "spatial.core/1.7"
-SCHEMA_EVENTS = "spatial.events/1.7"
+# Imported, not restated: these were copies of payloads' constants and
+# the era bump had to find every copy by hand.
+SCHEMA_CORE = payloads.SCHEMA_CORE
+SCHEMA_EVENTS = payloads.SCHEMA_EVENTS
 
 
 # The primitives and the spec-type builders live in spatialdds_demo.payloads
@@ -156,7 +159,7 @@ def make_entity_binding(
 _frame_ref = payloads.frame_ref
 
 
-SCHEMA_DISCOVERY = "spatial.discovery/1.7"
+SCHEMA_DISCOVERY = payloads.SCHEMA_DISCOVERY
 
 # ServiceKind gained SENSING, INFRASTRUCTURE and FUSION in 1.7's
 # findings-batch-2 revision, so these are the enum's own values now. They
@@ -173,15 +176,8 @@ _SERVICE_KIND = {
 
 
 def topic_meta(name: str, type_: str, qos_profile: str) -> Dict:
-    """One TopicMeta row. type and qos_profile must be registered (3.3.2/3.3.3)."""
-    return {
-        "name": name,
-        "type": type_,
-        "version": "v1",
-        "qos_profile": qos_profile,
-        "target_rate_hz": 0.0,
-        "max_chunk_bytes": 0,
-    }
+    """One 1.8 TopicMeta row; see ``spatialdds_demo.topics.topic_meta``."""
+    return _topics.topic_meta(name, type_, qos_profile)
 
 
 def circle_coverage(center_x: float, center_y: float, radius_m: float,
@@ -247,15 +243,15 @@ def make_announce(
         "service_id": f"svc:{operator}",
         "name": operator,
         "kind": _SERVICE_KIND.get(service_kind, "OTHER"),
-        "version": "1.7",
+        "version": "1.8",
         "org": "OARC demo",
         "hints": [{"key": "role", "value": str(service_kind)}],
         "caps": {
             "supported_profiles": [
-                {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7},
-                {"name": "spatial.discovery", "major": 1, "min_minor": 7, "max_minor": 7},
+                {"name": "spatial.core", "major": 1, "min_minor": 8, "max_minor": 8},
+                {"name": "spatial.discovery", "major": 1, "min_minor": 8, "max_minor": 8},
             ],
-            "preferred_profiles": ["spatial.discovery/1.7", "spatial.core/1.7"],
+            "preferred_profiles": ["spatial.discovery/1.8", "spatial.core/1.8"],
             "features": [],
         },
         "topics": list(topics),
@@ -357,6 +353,9 @@ def make_fused_track(track) -> Dict:
         "source_modalities": [str(m) for m in track.source_modalities],
         "source_count": int(track.source_count),
         "track_age_s": float(track.track_age),
+        # Appended in 1.8 Batch 2. The fused position covariance above is the
+        # track's own; there is no separate observer pose to report.
+        **payloads.absent_fused_track_observer(),
     }
 
 
@@ -367,7 +366,7 @@ def make_fused_track_set(tracks, *, stream_id: str = "platform/fusion",
     """A ``semantics::FusedTrackSet`` for one fusion stream (keyed by stream_id)."""
     return {
         "stream_id": str(stream_id),
-        "schema_version": "spatial.semantics/1.7",
+        "schema_version": payloads.SCHEMA_SEMANTICS,
         "frame_ref": _frame_ref(frame_ref_fqn),
         "tracks": [make_fused_track(t) for t in tracks],
         "stamp": _stamp(timestamp_s),
@@ -476,4 +475,7 @@ def make_trajectory_conflict_event(conflict: Dict, *, timestamp_s: float,
         "source_id": str(source_id),
         "attributes": [],
         "participant_ids": sorted(agents),
+        # Appended in 1.8: line-crossing events. A predicted conflict is not
+        # one -- it names a pair of agents, not a line either crossed.
+        **payloads.ABSENT_CROSSING,
     }

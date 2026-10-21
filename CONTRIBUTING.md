@@ -382,7 +382,7 @@ subject rather than an incidental property.
   the failure.
 - **`ar_demo` scripts are cwd-sensitive.** Run `spatialdds_demo_tests.py` from
   `ar_demo/` (it opens `catalog_seed.json` relatively) and
-  `comprehensive_test.py` from the repo root (it compiles `idl/v1.7/*.idl`).
+  `comprehensive_test.py` from the repo root (it compiles `idl/v1.8/*.idl`).
   Wrong directory looks like a failure and isn't.
 - **The DDS suites skip loudly without `CYCLONEDDS_URI`.** cyclonedds will
   build a participant on a host with no usable networking config, so the gate

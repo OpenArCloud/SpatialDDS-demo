@@ -24,15 +24,15 @@ if str(_HERE) not in sys.path:
 import rerun as rr  # noqa: E402
 
 from spatialdds_demo.json_mapping import from_json, to_json  # noqa: E402
-from spatialdds_idl.spatial.semantics import (  # noqa: E402
+from spatialdds_idl18.spatial.semantics import (  # noqa: E402
     Detection3DSet, FusedTrackSet,
 )
-from spatialdds_idl.oarc_demo import FusionCoverage  # noqa: E402
-from spatialdds_idl.spatial.core import (  # noqa: E402
+from spatialdds_demo_idl18.oarc_demo import FusionCoverage  # noqa: E402
+from spatialdds_idl18.spatial.core import (  # noqa: E402
     EntityBinding, FramedPose, PlannedTrajectory,
 )
-from spatialdds_idl.spatial.disco import Announce  # noqa: E402
-from spatialdds_idl.spatial.events import SpatialEvent  # noqa: E402
+from spatialdds_idl18.spatial.disco import Announce  # noqa: E402
+from spatialdds_idl18.spatial.events import SpatialEvent  # noqa: E402
 from spatialdds_types import (  # noqa: E402
     circle_coverage, make_announce, make_detection, make_detection_set,
     make_entity_binding, make_framed_pose,

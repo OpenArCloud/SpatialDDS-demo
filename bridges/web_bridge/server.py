@@ -54,8 +54,8 @@ from spatialdds_demo import blob
 from spatialdds_demo.blob import BlobPublisher
 from spatialdds_demo.service_bus import CatalogClient, CoverageClient, VpsClient
 from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
-from spatialdds_idl.spatial.argeo import VpsRequest as TypedVpsRequest
-from spatialdds_idl.spatial.disco import CoverageQuery as TypedCoverageQuery
+from spatialdds_idl18.spatial.argeo import VpsRequest as TypedVpsRequest
+from spatialdds_idl18.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_CATALOG_REPLIES,

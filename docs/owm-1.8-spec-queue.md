@@ -1,4 +1,4 @@
-# For the spec queue: three things the migration surfaced
+# For the spec queue: what the 1.8 migrations surfaced
 
 The Open World Model demo is the first consumer of 1.8's provisional
 `spatial.owm` module outside the SceneScape sidecar, and migrating onto it put
@@ -172,3 +172,49 @@ have checked only the one somebody remembered.
 `spatialdds_idl/` — the exclusion was per-path, so a new path got the scrutiny
 the old one had been exempted from, and the exemption turned out to be
 covering something real.
+
+---
+
+# Surfaced by the last migration (2026-10-20)
+
+The final migration put the rest of the repository onto 1.8 and, in doing
+so, compared this repo's topic registry against the 1.8 spec's §3.3.2 table
+for the first time. That comparison found two registered types the validator
+did not know (`crossing_line`, `model_entity`, both now added) and the two
+observations below, both about `model_entity`'s row.
+
+## 4. `model_entity`'s registered topic disagrees with its reference gateway
+
+At spec commit `9c3e1f2`, the §3.3.2 row reads:
+
+> `model_entity` — World-model entity, lifecycle-shaped (provisional) —
+> `spatial::owm::Entity` on `spatialdds/<scene>/model/entity/v0`.
+
+Every implementation this programme has — this demo's model layer,
+`spatialdds_ros`, and the reference gateway in `spatialdds-web`, which pins
+the **same** spec commit — uses `spatialdds/<scene>/world/entity/v1`. The
+gateway serves it at `/{scene}/world/entity/v1`. So the registry row and the
+gateway built against it disagree on two of the five §3.3.1 segments: the
+group (`model` vs `world`) and the version (`v0` vs `v1`).
+
+Not changed here. Renaming the topic would break the library, the gateway
+and every recorded acceptance chain, to match a row the reference
+implementation does not follow. Which one is right is the spec's call.
+
+**Origin:** measured during the migration — the §3.3.2 table read out of `SpatialDDS-1.8-full.md` at `9c3e1f2`, set
+against `spatialdds_demo/topics.py` and the gateway's served paths.
+
+## 5. `model_entity` has no named QoS profile
+
+The same row spells its QoS out — "RELIABLE + TRANSIENT_LOCAL, KEEP_LAST(1)
+per key" — rather than naming a §3.3.3 profile. Implementations have filled
+the gap with a name of their own: this demo's model layer and
+`spatialdds_ros` announce the lane as `MODEL_LATCHED`, which no §3.3.3 table
+contains, so a strict validator (this repo's included) rejects the announce
+that the rest of the stack produces.
+
+`MODEL_LATCHED` is QoS-identical to the registered `MAP_META`. Either the
+row could name `MAP_META`, or §3.3.3 could register a model profile. This
+repo's type registry now defaults `model_entity` to `MAP_META`, because a
+default should validate; what the model layer announces is unchanged pending
+the spec's answer.

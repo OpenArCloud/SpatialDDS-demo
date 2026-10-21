@@ -51,12 +51,12 @@ def announce(service_id="svc:vps:demo/sf", kind="VPS",
         "name": "SF VPS",
         "kind": kind,
         "org": "demo.example",
-        "version": "1.7",
+        "version": "1.8",
         "coverage": [element],
         "coverage_frame_ref": frame_ref,
         "manifest_uri": manifest_uri,
         "caps": {"supported_profiles": [{"name": "spatial.core", "major": 1,
-                                         "min_minor": 7, "max_minor": 7}],
+                                         "min_minor": 8, "max_minor": 8}],
                  "preferred_profiles": [], "features": []},
         "topics": [{"name": "spatialdds/vps/query/v1", "type": "vps_query",
                     "version": "v1", "qos_profile": "VPS_REQ"}],
@@ -164,7 +164,7 @@ class HarnessEndpoints(unittest.TestCase):
     def test_results_are_service_manifests(self):
         _, body = self.get("/.well-known/spatialdds/search?geohash=9q8yy")
         doc = body["results"][0]
-        self.assertEqual(doc["profile"], "spatial.manifest/1.7")
+        self.assertEqual(doc["profile"], "spatial.manifest/1.8")
         self.assertEqual(doc["rtype"], "service")
         self.assertEqual(doc["service"]["service_id"], "svc:vps:demo/sf")
         self.assertEqual(doc["service"]["kind"], "VPS")
@@ -186,7 +186,7 @@ class HarnessEndpoints(unittest.TestCase):
     def test_bootstrap_shape(self):
         status, body = self.get("/.well-known/spatialdds/bootstrap")
         self.assertEqual(status, 200)
-        self.assertEqual(body["spatialdds_bootstrap"], "1.7")
+        self.assertEqual(body["spatialdds_bootstrap"], "1.8")
         self.assertIsInstance(body["domain_id"], int)
         self.assertTrue(body["initial_peers"])
         # Omitted rather than advertised as a placeholder when unconfigured.
@@ -322,7 +322,7 @@ class BridgeEndpoints(unittest.TestCase):
         from the announce's summary of itself.
         """
         authored = {"id": "spatialdds://demo.example/zone:sf/manifest:vps",
-                    "profile": "spatial.manifest/1.7", "rtype": "service",
+                    "profile": "spatial.manifest/1.8", "rtype": "service",
                     "service": {"service_id": "svc:vps:demo/sf", "kind": "VPS"},
                     "marker": "authored"}
         original = self.server._served_manifest
@@ -346,7 +346,7 @@ class BridgeEndpoints(unittest.TestCase):
         """
         record = self.cache.records()[0]
         other = {"id": "spatialdds://demo.example/zone:sf/manifest:vps",
-                 "profile": "spatial.manifest/1.7", "rtype": "service",
+                 "profile": "spatial.manifest/1.8", "rtype": "service",
                  "service": {"service_id": "svc:vps:someone/else", "kind": "VPS"}}
         mine = {**other, "service": {"service_id": record.service_id, "kind": "VPS"}}
 
@@ -364,7 +364,7 @@ class BridgeEndpoints(unittest.TestCase):
     def test_an_unmatched_announce_is_synthesized(self):
         response = self.client.get("/.well-known/spatialdds/search?geohash=9q8yy")
         doc = response.json()["results"][0]
-        self.assertEqual(doc["profile"], "spatial.manifest/1.7")
+        self.assertEqual(doc["profile"], "spatial.manifest/1.8")
         self.assertNotIn("marker", doc)
 
     def test_malformed_bodies_are_400(self):
@@ -377,7 +377,7 @@ class BridgeEndpoints(unittest.TestCase):
 
     def test_bootstrap_shape(self):
         body = self.client.get("/.well-known/spatialdds/bootstrap").json()
-        self.assertEqual(body["spatialdds_bootstrap"], "1.7")
+        self.assertEqual(body["spatialdds_bootstrap"], "1.8")
         self.assertIn("initial_peers", body)
 
 

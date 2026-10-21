@@ -125,10 +125,10 @@ class ServiceAnnouncer:
             ],
             "caps": {
                 "supported_profiles": [
-                    {"name": "spatial.core", "major": 1, "min_minor": 7, "max_minor": 7},
-                    {"name": "spatial.discovery", "major": 1, "min_minor": 7, "max_minor": 7},
+                    {"name": "spatial.core", "major": 1, "min_minor": 8, "max_minor": 8},
+                    {"name": "spatial.discovery", "major": 1, "min_minor": 8, "max_minor": 8},
                 ],
-                "preferred_profiles": ["spatial.discovery/1.7", "spatial.core/1.7"],
+                "preferred_profiles": ["spatial.discovery/1.8", "spatial.core/1.8"],
                 "features": [],
             },
             "ttl_sec": 300,

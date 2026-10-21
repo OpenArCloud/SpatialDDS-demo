@@ -2,24 +2,22 @@
 
 ![The venue as a live model — robot, ducks and declared water at Littlefield Fountain](docs/images/owm-venue.jpg)
 
-Reference demos for **SpatialDDS 1.7** — the stamped release, 2026-08-23, tag
-`v1.7` — running on CycloneDDS, **with the Open World Model lane on 1.8**. The
-repo vendors 1.7's IDL verbatim under [`idl/v1.7`](idl/v1.7), mirrors its
-manifest examples in [`manifests/v1.7`](manifests/v1.7), and ships five
-runnable demos.
+Reference demos for **SpatialDDS 1.8**, running on CycloneDDS. The repo
+vendors 1.8's IDL verbatim under [`idl/v1.8`](idl/v1.8) (spec commit
+`9c3e1f2`, the one the validating gateway pins), carries its manifest
+examples in [`manifests/v1.8`](manifests/v1.8), and ships five runnable demos.
 
-Two eras, deliberately, in two generated packages:
-
-| | era | generated from | used by |
+| package | era | generated from | used by |
 | --- | --- | --- | --- |
-| `spatialdds_idl` | **1.7**, stamped | [`idl/v1.7`](idl/v1.7) | the AR demo (`ar_demo/`, which drives a real OpenVPS), discovery, the MCAP / MQTT / ROS 2 bridges, the web bridge's own routes |
-| `spatialdds_idl18` | **1.8**, including provisional `spatial.owm/0.1` | [`idl/v1.8`](idl/v1.8) | the Open World Model: venue, ducks, robot, keep-out node, operator scripts, and the web binding |
+| `spatialdds_idl18` | **1.8**, including provisional `spatial.owm/0.1` | [`idl/v1.8`](idl/v1.8) | every demo: the AR demo and its mock VPS, discovery, the Open World Model, the MCAP / MQTT / ROS 2 bridges, fusion, and both web surfaces |
+| `spatialdds_demo_idl18` | **1.8** | [`idl/demo18`](idl/demo18) | the demo-owned types the spec has no struct for — bootstrap and fusion-coverage diagnostics — bound to `spatialdds_idl18` for every spec type |
+| `spatialdds_idl` | 1.7, stamped | [`idl/v1.7`](idl/v1.7) | **transitional**: the content catalogue until it moves onto `ContentAnnounce` → manifest, and the interop probe. See [`docs/final-migration-census.md`](docs/final-migration-census.md) |
 
-So "1.7" is right for everything except the world model, which moved in
-October 2026 and is documented member by member in
-[`docs/owm-1.8-census.md`](docs/owm-1.8-census.md). `bridges/web_bridge`
-imports both on purpose: its 1.7 routes serve the AR demo while
-`binding.py` serves the model over the 1.8 web binding.
+The 1.7 → 1.8 move is appendable evolution as the spec describes it, and it
+was measured rather than assumed: of 146 definitions the two trees share, 138
+are byte-identical and the other 8 only *append* members. The interop probe —
+still built from the 1.7 tree — discovers and reads the 1.8 demo, and is read
+by it, in both directions.
 
 The spec lives at [spatialdds.org](https://spatialdds.org); its source is
 [OpenArCloud/SpatialDDS-spec](https://github.com/OpenArCloud/SpatialDDS-spec).

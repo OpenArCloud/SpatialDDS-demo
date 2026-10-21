@@ -103,7 +103,14 @@ else
     FAILED+=("docker unavailable")
   else
     # ── standard: the container suites that need a real bus ────────────────
-    run "IDL compile + protocol"  docker run --rm cyclonedds-python
+    # The working tree, like every lane below -- not the image's default
+    # command. That ran the copies `Dockerfile` COPYs in at build time, and
+    # the image was last built 2026-08-23: the lane spent two months passing
+    # 3/3 against an August snapshot while the tree moved on underneath it,
+    # and would have passed the whole 1.8 migration without loading one line
+    # of it. Bind-mounted and run from the repo root, it exercises the tree
+    # as checked out.
+    run "IDL compile + protocol"  in_image python3 ar_demo/comprehensive_test.py
     run "interop probe"           in_image python3 -m unittest tests.test_interop
     run "head-of-line isolation"  in_image python3 -m unittest tests.test_head_of_line
     run "ROS 2 DDS round-trip"    in_image python3 -m unittest bridges.ros2_bridge.test_dds_roundtrip

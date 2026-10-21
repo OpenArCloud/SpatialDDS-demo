@@ -206,8 +206,8 @@ class PublisherLanes(unittest.TestCase):
 
         from spatialdds_demo import blob
         from spatialdds_demo.json_mapping import from_json
-        from spatialdds_idl.spatial.core import BlobChunk
-        from spatialdds_idl.spatial.sensing.lidar import LidarFrame
+        from spatialdds_idl18.spatial.core import BlobChunk
+        from spatialdds_idl18.spatial.sensing.lidar import LidarFrame
 
         points = np.arange(4 * 512, dtype=np.float32).reshape(512, 4)
         frame, chunks = self.pub._lidar_frame_and_blob(ROW, points)

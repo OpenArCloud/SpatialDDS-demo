@@ -32,8 +32,8 @@ from spatialdds_demo.topics import (
     TOPIC_DISCOVERY_DEPART_V1,
     validate_topic_meta,
 )
-from spatialdds_idl.builtin import Time
-from spatialdds_idl.spatial.disco import Announce, Depart
+from spatialdds_idl18.builtin import Time
+from spatialdds_idl18.spatial.disco import Announce, Depart
 
 ANNOUNCE_PROFILE = "DISCOVERY_ANNOUNCE"
 DEPART_PROFILE = "DISCOVERY_ANNOUNCE"  # latched too: a departure must not be missed

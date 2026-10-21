@@ -62,7 +62,7 @@ HTTP:
 
 | Endpoint | Returns |
 |---|---|
-| `GET /.well-known/spatialdds/bootstrap` | Bootstrap manifest (`spatialdds_bootstrap: "1.7"`), from `SPATIALDDS_BOOTSTRAP_*` config |
+| `GET /.well-known/spatialdds/bootstrap` | Bootstrap manifest (`spatialdds_bootstrap: "1.8"`), from `SPATIALDDS_BOOTSTRAP_*` config |
 | `POST /.well-known/spatialdds/search` | `{"results": [<service manifest>, ...], "next_page_token": ""}` |
 | `GET /.well-known/spatialdds/search?geohash=&kind=` | Same. §3.3.0 makes the GET form REQUIRED alongside POST, for the Geospatial DNS-SD binding, and defines it as equivalent to `POST {"geohash": ...}` — so it is implemented as exactly that body through the same call |
 
@@ -152,7 +152,7 @@ $ ./run_bridge_server_docker.sh          # bridge on :8088, VPS + catalogue behi
 $ scripts/cold_start.sh                  # BRIDGE=… GEOHASH=… to point it elsewhere
 
 == 1. Bootstrap — which bus, and where
-{"spatialdds_bootstrap":"1.7","domain_id":1,"initial_peers":["udpv4://127.0.0.1:7400"],
+{"spatialdds_bootstrap":"1.8","domain_id":1,"initial_peers":["udpv4://127.0.0.1:7400"],
  "discovery_topic":"spatialdds/discovery/announce/v1","site":"sf-downtown",
  "manifest_uri":"spatialdds://vps.example.com/zone:sf-downtown/manifest:vps"}
 

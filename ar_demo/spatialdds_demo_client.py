@@ -12,13 +12,13 @@ from cyclonedds.domain import DomainParticipant
 from spatialdds_demo import topic_types, typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.service_bus import BootstrapClient, CoverageClient
-from spatialdds_idl.oarc_demo import BootstrapQuery as TypedBootstrapQuery
-from spatialdds_idl.spatial.disco import CoverageQuery as TypedCoverageQuery
+from spatialdds_demo_idl18.oarc_demo import BootstrapQuery as TypedBootstrapQuery
+from spatialdds_idl18.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.discovery_bus import AnnounceSubscriber
 from spatialdds_demo.json_mapping import from_json, to_json
 from spatialdds_demo.service_bus import CatalogClient, VpsClient
 from spatialdds_idl.oarc_demo import CatalogQuery as TypedCatalogQuery
-from spatialdds_idl.spatial.argeo import VpsRequest as TypedVpsRequest
+from spatialdds_idl18.spatial.argeo import VpsRequest as TypedVpsRequest
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
     TOPIC_BOOTSTRAP_QUERY_V1,
