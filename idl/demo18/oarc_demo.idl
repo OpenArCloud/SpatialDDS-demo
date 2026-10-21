@@ -11,7 +11,8 @@
 // byte-identical to the one spatialdds_ros vendors, and
 // tests/test_idl_trees_agree.py fails on any file present in only one of them.
 //
-// What did not come forward from the 1.7 module (idl/demo/oarc_demo.idl):
+// What did not come forward from the 1.7 module (idl/demo/oarc_demo.idl,
+// deleted 2026-10-21 with the 1.7 tree; git history has it):
 //
 // * CatalogFilter / CatalogQuery / CatalogEntry / CatalogResponse. The
 //   catalogue moves onto the 1.8-native chain: ContentAnnounce (latched,

@@ -227,10 +227,27 @@ runnable again against a 1.8 mock.
 
 ---
 
-## 3. The 1.7 generated tree and the compile lane — **RETIRE**, last
+## 3. The 1.7 generated tree and the compile lane — **RETIRED**
 
-Retireable only after §1, §2 and §5 land: 41 consumers today. Two parts are
-already dead and can go independently:
+Retireable only after §1, §2 and §5 landed: 41 consumers at the census. Two
+parts were already dead and went independently, `oarc_model` and `/v1/frames`
+(§1). The rest went on 2026-10-21, in the same change that built the §4
+exhibit, so the repository never had neither:
+
+* **Deleted:** `spatialdds_idl/` (the 1.7 generated tree), `idl/v1.7`,
+  `idl/demo` (the 1.7 demo IDL), `idl/v1.4`, `idl/v1.6`, `manifests/v1.4`,
+  `manifests/v1.6` — 155 tracked files.
+* **The last two consumers**, measured before deleting: `tests/interop_probe.py`
+  (now the exhibit) and `tests/test_generated_types.py`, whose round-trip,
+  key and wire-name checks now run against `spatialdds_idl18` and
+  `spatialdds_demo_idl18`, with the era read from the tree's own `MODULE_ID`.
+* **The compile lane:** `scripts/generate_types.py`'s defaults moved to
+  `idl/v1.8` → `spatialdds_idl18`, spec types only; `--no-demo` is gone
+  because an unbound run is spec-only and demo types come only through
+  `--bind-to`. Its `HEADER` is unchanged — it is written into every generated
+  file, and `spatialdds_idl18` must stay byte-identical to `spatialdds_ros`'s
+  copy. Drift gate green on both remaining trees in the demo image.
+* `Dockerfile`'s transitional `COPY spatialdds_idl` is gone.
 
 * **`oarc_model`** — **RETIRED.** Zero imports remained; the six files that
   mentioned it did so in prose only (`model_service.py:5`, `robot_bridge.py:24`,
@@ -257,7 +274,41 @@ No gate currently asserts "one era". Acceptance item 2 therefore needs a
 
 ---
 
-## 4. The cross-era fixture — **CURATE**
+## 4. The cross-era fixture — **CURATED**: `tests/cross_era/`
+
+**Built** as ruled — probe, driver, the mechanically derived subset, a
+checksum manifest and a README stating the claim. The README carries the
+derivation; in brief:
+
+* **The subset is the closure, derived:** 19 of the tree's 29 generated
+  modules, by a static walk from the probe's imports through every import and
+  every dotted type name a reached module spells. Package `__init__`s are not
+  followed, since idlc's import every sibling and would make the closure the
+  whole tree. The 19 are byte-identical to `bcea0c4`; three `__init__`s are
+  filtered to the kept children. A type-level walk (field types only) finds
+  18, missing `zone_kind_enum`, which `_events.py` names in a module-level
+  typedef. The module-level closure is the right one for files kept whole.
+* **The probe is byte-identical** to `tests/interop_probe.py` at `bcea0c4`
+  (sha256 `619422b0…`).
+* **Isolated by the import system:** the driver runs the probe with its own
+  directory as its only path, so the 1.7 package is the subset and
+  `spatialdds_demo` does not import. Checked in the image: `spatial.core/1.7`,
+  4-member `FrameRef`, `No module named 'spatialdds_demo'`.
+* **Frozen:** `MANIFEST.sha256` lists all 45 files; its digest is pinned in
+  `tests/test_cross_era_fixture.py`, which also re-derives the closure over the
+  subset each run — closed and minimal both asserted. Failable: a one-byte
+  change, a stray file, a dangling reference and an unreached module are each
+  caught.
+* **Green in the image** with the 1.7 tree gone: both directions, plus the
+  deadline test, which was split out to `tests/test_deadline_qos.py` so the
+  exhibit does not freeze a test of 1.8 behaviour.
+* **The driver is `interop_driver.py`, not `test_*.py`:** pytest's default
+  import mode prepends a collected test's directory to `sys.path`, which would
+  have made the 1.7 subset importable for the rest of the host suite. Its two
+  tests were skips on the host anyway (they need DDS); they run in their
+  Docker lane, now "cross-era interop probe".
+
+The census as written before the ruling:
 
 ### FINDING 3 — the exhibit does not exist yet; this migration creates it
 
@@ -278,8 +329,8 @@ driver — isolated in one directory so nothing else accommodates a second era.
 
 | subject | verdict | basis |
 |---|---|---|
-| `idl/v1.4` (13 files), `idl/v1.6` (18) | ~~ARCHIVE~~ **RETIRE (delete)** per ruling | no code imports either; every reference is prose (`SPEC_COMPLIANCE.md:324`, `subscriber_rerun.py:487`, a dashboard-test docstring) |
-| `manifests/v1.4`, `manifests/v1.6` | ~~ARCHIVE~~ **RETIRE (delete)** per ruling | same; prose references updated instead |
+| `idl/v1.4` (13 files), `idl/v1.6` (18) | ~~ARCHIVE~~ **RETIRED (deleted)** per ruling | no code imported either. The prose at `subscriber_rerun.py:487` and the dashboard-test docstring name the spec *revision* that added a type, not the directory, and stay; `SPEC_COMPLIANCE.md`'s now says the bundles were deleted |
+| `manifests/v1.4`, `manifests/v1.6` | ~~ARCHIVE~~ **RETIRED (deleted)** per ruling | same; the URI gate's exemption for them went with them |
 | `multi_operator_fusion` runtime | **MIGRATE** via `spatialdds_demo` | `fusion_service.py` → `spatialdds_types.py` → `spatialdds_demo.payloads`; no direct generated-tree import. Only its 6 **tests** import 1.7 |
 | `recordings/owm-littlefield.*`, `robot-littlefield-on-library.*` | **keep** (already 1.8) | in acceptance chains |
 | `recordings/bridge-littlefield.*`, `dispose-without-tombstone.*` | **keep** (1.8) | provenance reads `idl/v1.8`, spec `9c3e1f2`, `spatial.owm/0.1` |
@@ -295,7 +346,12 @@ split as deliberate — it becomes one era plus one exhibit), `CONTRIBUTING.md`,
 `benchmarks/README.md`, `bridges/web_bridge/README.md`,
 `multi_operator_fusion/README.md`, `deploy/aws/README.md`.
 
-**ARCHIVE, labeled:** `docs/SpatialDDS-1.7-full.md`.
+~~**ARCHIVE, labeled:** `docs/SpatialDDS-1.7-full.md`.~~ **Deleted**, on the
+ruling's reasoning for `idl/v1.4`/`v1.6` (git history is the archive). It is
+the only call here the ruling did not name. A vendored 1.7 spec text in a 1.8
+repository was also the README's one link to "the spec text". That link now
+points at SpatialDDS-spec at `9c3e1f2`, the commit `idl/v1.8` is vendored
+from. Restoring the file is one `git checkout bcea0c4 -- docs/SpatialDDS-1.7-full.md`.
 
 **Keep as history:** the censuses (`bridge-1.8`, `owm-1.8`, `robot-1.8`,
 `venue-georeference`) and `recordings/*.evidence.md` — they describe a
@@ -344,3 +400,7 @@ it or filed with its measurement.
 | The first `ContentAnnounce` builder stamped each item with its content's update time, so under §3.3's `2 × ttl_sec` rule a January edit announced itself expired | stamp is publication time; update time is the manifest's; pinned by `test_the_announce_stamp_is_its_publication_time` |
 | `bench_coverage_query.py` timed the retired catalogue query, against its own mock server | now times a late-joining reader receiving the whole inventory; pre- and post-migration results are not comparable, and the plotter refuses the old column |
 | `web/tests/model-layer.spec.ts` placed every model entity through a hand-typed venue frame labelled "as measured"; its quaternion `w` differed from the announced one in the ninth digit (`…3448856` vs `…3490789`) | **measured, not inferred:** `a41e6de`'s own projection rerun on its own anchor gives the announced value, so the copy was a transcription slip, never a measurement. The spec now reads the frozen `/v1/frames` capture. Harmless at venue scale (~1e-7 m over 20 m), and exactly the retyped-number class |
+| `spatialdds_validation` rejected `spatial.core/1.7` with "expected `spatial.<profile>/1.7`" — its pattern had moved to 1.8 and its four messages had not | one `ERA` constant now builds the pattern, `MANIFEST_MIN_MINOR` and every message; the era gate asserts the constant is the generated era and that a rejection names it (shown failable by restoring the old message) |
+| `ar_demo/http_binding.py`'s root document said `"version": "1.7.0"`; no era gate looked, because it is not shaped like a module identifier | derived from `SpatialDDSValidator.ERA` |
+| The static gate's generated-tree discovery matched names starting `spatialdds_idl`, so `spatialdds_demo_idl18` was never introspected | trees are found by the generator's own mark; both resolve. It also required "at least two" trees, which the 1.7 retirement would have satisfied only by luck |
+| `ar_demo/README.md`, `SPEC_COMPLIANCE.md`, `topic_types.py`, `deepsense/*`, `web/tests/fixtures/README.md`, `idl/demo18/oarc_demo.idl`, `analysis/scenescape/…/mapping-table.md` pointed at `idl/v1.7`, `idl/demo` or `spatialdds_idl` | repointed to `idl/v1.8` or dated as history; the mapping table's line citations are kept and say to follow them at the spec's `v1.7` tag |

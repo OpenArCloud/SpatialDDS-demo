@@ -16,9 +16,6 @@ WORKDIR /app
 # file below if you mean to run the baked copies.
 COPY spatialdds_idl18 ./spatialdds_idl18
 COPY spatialdds_demo_idl18 ./spatialdds_demo_idl18
-# Transitional: the catalogue still imports its 1.7 types until it moves to
-# ContentAnnounce -> manifest. Removed with the 1.7 tree.
-COPY spatialdds_idl ./spatialdds_idl
 COPY spatialdds_test.py .
 COPY spatialdds_validation.py .
 COPY spatialdds_demo ./spatialdds_demo

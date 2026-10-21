@@ -56,7 +56,8 @@ The table below is what those tiers run, if you want one of them alone.
 | Suite | How to run | Needs |
 |---|---|---|
 | Unit + bridge logic | `python3 -m pytest multi_operator_fusion ar_demo/test_ar_demo_services.py bridges/ros2_bridge/test_conversions.py bridges/ros2_bridge/test_bridge_node.py bridges/mqtt_bridge bridges/web_bridge/test_router.py bridges/web_bridge/test_client.py bridges/web_bridge/test_dashboard_routes.py bridges/web_bridge/test_discovery_http.py bridges/web_bridge/test_wellknown_endpoints.py bridges/web_bridge/test_model_cache.py bridges/mcap_bridge tests/ nuscenes/test_nuscenes_shapes.py deepsense/test_deepsense_shapes.py` | host — **360 passed, 11 skipped** |
-| Interop probe, both directions | `python3 -m unittest tests.test_interop` | Docker (needs `CYCLONEDDS_URI`) |
+| Cross-era interop probe (1.7 participant, 1.8 demo), both directions | `python3 -m unittest tests.cross_era.interop_driver` | Docker (needs `CYCLONEDDS_URI`) |
+| §3.3.3 deadline is load-bearing | `python3 -m unittest tests.test_deadline_qos` | Docker (needs `CYCLONEDDS_URI`) |
 | Head-of-line isolation | `python3 -m unittest tests.test_head_of_line` | Docker (needs `CYCLONEDDS_URI`) |
 | ROS 2 DDS round-trip | `python3 -m unittest bridges.ros2_bridge.test_dds_roundtrip` | Docker |
 | MCAP record → replay | `python3 bridges/mcap_bridge/test_live.py` | Docker + `pip install mcap` |
@@ -81,7 +82,7 @@ The container suites all take the same shape:
 ```bash
 docker run --rm -v "$PWD:/app" -w /app -e PYTHONPATH=/app \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml cyclonedds-python \
-  python3 -m unittest tests.test_interop
+  python3 -m unittest tests.cross_era.interop_driver
 ```
 
 ### Switches for exercising a path deliberately

@@ -25,17 +25,20 @@ used to carry everything on one unkeyed topic is deleted.
 
 ### Evidence, not assertion
 
-`tests/interop_probe.py` is a participant built from three things — the
-types generated from `idl/v1.7`, the spec's topic names, and the §3.3.3
-profile table — and from **no demo transport code at all**. If it can talk
-to the demo, the spec is what the two have in common.
+`tests/cross_era/interop_probe.py` is a participant built from three things —
+types generated from the spec's 1.7 IDL, the spec's topic names, and the
+§3.3.3 profile table — and from **no demo code at all**: it runs with nothing
+but its own directory on its path. If it can talk to the demo, the spec is
+what the two have in common.
 
-Since the 1.8 migration it is also a **cross-era** proof: the probe is still a
-1.7 participant, the demo is 1.8, and they discover and read each other in
-both directions. That is appendable evolution as the spec describes it,
-measured on a real bus rather than asserted.
+It is also a **cross-era** proof: the probe is a 1.7 participant, the demo is
+1.8, and they discover and read each other in both directions. That is
+appendable evolution as the spec describes it, measured on a real bus rather
+than asserted. The probe and the 1.7 types it needs are kept frozen and
+checksummed as the repository's one deliberate exhibit of the earlier era;
+see `tests/cross_era/README.md`.
 
-Both directions pass (`tests/test_interop.py`):
+Both directions pass (`tests/cross_era/interop_driver.py`):
 
 * the probe reads the demo's announces off the well-known keyed topic,
   follows one announce's own `TopicMeta` to a data lane, and reads from it;
@@ -432,8 +435,8 @@ Further gaps, filed in `docs/owm-1.8-spec-queue.md` with their origins:
   (`spatial.manifest/1.8`) and are what the demo's parser reads. Upstream's
   `manifests/v1.8/` examples (at `9c3e1f2`) are content-identical to its v1.7
   ones; see the SpatialDDS-spec repo for those.
-- `manifests/v1.4/` and `manifests/v1.6/`, like `idl/v1.4/` and `idl/v1.6/`, are
-  kept for reference only. Nothing loads them.
+- The pre-1.8 manifests and IDL (`v1.4`, `v1.6`, `v1.7`) were deleted on
+  2026-10-21; nothing loaded them, and git history is their archive.
 
 ## Validation
 
@@ -893,7 +896,7 @@ Three, all flagged rather than quietly resolved:
 * **Deadline is request/offered, and silently so.** A reader requesting
   33 ms does not match a writer offering none — no error, no warning, no
   data. The §3.3.3 table's deadline column is normative for that reason, and
-  `tests/test_interop.py::DeadlineIsLoadBearing` pins the behaviour so it
+  `tests/test_deadline_qos.py::DeadlineIsLoadBearing` pins the behaviour so it
   cannot be rediscovered the hard way.
 * **EntityBinding removal is unspecified — filed against 1.8.**
   `core::EntityBinding` is `@key entity_id`, RELIABLE + TRANSIENT_LOCAL,

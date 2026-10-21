@@ -16,7 +16,7 @@ column was headed "Typical", which reads as advisory.
 so a reader requesting 33 ms does not match a writer offering none — and the
 failure is silent. An independently-built probe hit exactly this against
 this demo: it transcribed the old table, took "Typical" at its word, omitted
-the deadlines, and exchanged nothing. `tests/test_interop.py::
+the deadlines, and exchanged nothing. `tests/test_deadline_qos.py::
 DeadlineIsLoadBearing` pins the behaviour. A dash in the spec's column means
 no deadline, which is different from an unstated one.
 

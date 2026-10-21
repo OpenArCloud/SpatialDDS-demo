@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-SpatialDDS v1.7 Validation Utilities
+SpatialDDS 1.8 Validation Utilities
 Lightweight helpers for Time/FrameRef/Coverage/GeoPose/ServiceSummary
-validation aligned with the 1.7 IDL shapes under idl/v1.7.
+validation aligned with the 1.8 IDL shapes under idl/v1.8.
 
-1.7 is a hard cutover (pre-adoption instability clause, spec 3.1): the
-1.5/1.6 shapes are rejected outright, not tolerated.
+Each era is a hard cutover (pre-adoption instability clause, spec 3.1): the
+previous era's identifiers are rejected outright, not tolerated. Several
+checks below name the revision that removed a field; that is when the spec
+changed, not what this module accepts.
 """
 
 import math
@@ -42,11 +44,15 @@ class SpatialDDSValidator:
     )
 
     VALID_CRS = {"EPSG:4979", "EPSG:4326"}
-    # 1.7 unifies every module on /1.7 and retires the `name@MAJOR.MINOR`
-    # form; `spatial.<profile>/MAJOR.MINOR` is the only identifier syntax.
-    MODULE_VERSION_PATTERN = r"^spatial\.[a-z_][a-z0-9_.]*/1\.8$"
+    # Every module versions together on the era, and the `name@MAJOR.MINOR`
+    # form is retired; `spatial.<profile>/MAJOR.MINOR` is the only identifier
+    # syntax. One constant, so the pattern and the messages that explain a
+    # rejection cannot name different eras -- they did until 2026-10-21, when
+    # `spatial.core/1.7` was rejected for not being `spatial.<profile>/1.7`.
+    ERA = "1.8"
+    MODULE_VERSION_PATTERN = r"^spatial\.[a-z_][a-z0-9_.]*/%s$" % ERA.replace(".", r"\.")
     MANIFEST_PROFILE_PATTERN = r"^spatial\.manifest/1\.(\d+)$"
-    MANIFEST_MIN_MINOR = 8
+    MANIFEST_MIN_MINOR = int(ERA.split(".")[1])
     VALID_SERVICE_KINDS = {
         "VPS",
         "MAPPING",
@@ -287,9 +293,9 @@ class SpatialDDSValidator:
         """
         Validate a module/schema version string.
 
-        Hard cutover: 1.7 unifies every module on ``spatial.<profile>/1.7``
-        and retires the ``name@MAJOR.MINOR`` form, so ``/1.5``, ``/1.6``
-        and every ``@`` form are rejected.
+        Hard cutover: every module is on ``spatial.<profile>/<ERA>``, and
+        the ``name@MAJOR.MINOR`` form is retired, so any other minor and every
+        ``@`` form are rejected.
         """
         import re
 
@@ -298,13 +304,14 @@ class SpatialDDSValidator:
         if "@" in version:
             raise ValidationError(
                 f"Profile identifier '{version}' uses the retired "
-                "'name@MAJOR.MINOR' form; 1.7 accepts only "
+                f"'name@MAJOR.MINOR' form; {cls.ERA} accepts only "
                 "'spatial.<profile>/MAJOR.MINOR'"
             )
         if not re.match(cls.MODULE_VERSION_PATTERN, version):
             raise ValidationError(
                 f"Invalid module version '{version}' (expected "
-                "'spatial.<profile>/1.7'; all modules version together in 1.7)"
+                f"'spatial.<profile>/{cls.ERA}'; all modules version together "
+                f"in {cls.ERA})"
             )
 
     @classmethod
@@ -317,7 +324,7 @@ class SpatialDDSValidator:
         if "@" in profile:
             raise ValidationError(
                 f"Manifest profile '{profile}' uses the retired "
-                "'spatial.manifest@MAJOR.MINOR' form; 1.7 requires "
+                f"'spatial.manifest@MAJOR.MINOR' form; {cls.ERA} requires "
                 "'spatial.manifest/1.<minor>'"
             )
         match = re.match(cls.MANIFEST_PROFILE_PATTERN, profile)
@@ -329,7 +336,7 @@ class SpatialDDSValidator:
         minor = int(match.group(1))
         if minor < cls.MANIFEST_MIN_MINOR:
             raise ValidationError(
-                f"Manifest profile '{profile}' predates 1.7; minor must be "
+                f"Manifest profile '{profile}' predates {cls.ERA}; minor must be "
                 f">= {cls.MANIFEST_MIN_MINOR}"
             )
 

@@ -31,10 +31,7 @@ from spatialdds_validation import SpatialDDSValidator, ValidationError  # noqa: 
 
 URI = re.compile(r"spatialdds://[A-Za-z0-9.\-]+/[^\s\"'`)<>,\]]+")
 # History and vendored text are not the repository's own claims.
-EXEMPT = ("spatialdds_idl", "idl/", "directions/", "web/node_modules",
-          "docs/SpatialDDS-1.7-full.md",
-          # Deleted with the pre-1.8 trees; this exemption leaves with them.
-          "manifests/v1.4/", "manifests/v1.6/")
+EXEMPT = ("spatialdds_idl18", "idl/", "directions/", "web/node_modules")
 
 
 def corpus():

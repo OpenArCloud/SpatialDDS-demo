@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SpatialDDS v1.7 HTTP Binding
+SpatialDDS 1.8 HTTP Binding
 Provides REST API endpoints for discovery-style registration and search using
 discovery.Announce and discovery.CoverageQuery/Response shapes.
 
@@ -37,6 +37,11 @@ from spatialdds_validation import (
     ValidationError,
 )
 
+# What the root document claims to be. Derived, not written: this said
+# "1.7.0" until 2026-10-21, a month after everything it served was 1.8, and no
+# era gate looked at it because it was not shaped like a module identifier.
+BINDING_VERSION = f"{SpatialDDSValidator.ERA}.0"
+
 # Module-level registry, shared across request handlers. The bridge's
 # equivalent is its live announce cache; both feed the same core.
 _announce_registry: List[ServiceRecord] = []
@@ -51,7 +56,7 @@ def _now_ms() -> int:
 
 
 class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
-    """HTTP handler for SpatialDDS v1.7 endpoints"""
+    """HTTP handler for SpatialDDS endpoints"""
 
     @property
     def announce_registry(self):
@@ -84,7 +89,7 @@ class SpatialDDSHTTPHandler(BaseHTTPRequestHandler):
             self._send_json(
                 {
                     "name": "SpatialDDS HTTP Binding",
-                    "version": "1.7.0",
+                    "version": BINDING_VERSION,
                     "endpoints": {
                         # Consolidated well-known namespace (one RFC 8615
                         # registration). `resolver` is not served here — this
@@ -257,7 +262,7 @@ _normalize_manifest = record_from_manifest
 def run_server(port: int = 8080):
     server_address = ("", port)
     httpd = HTTPServer(server_address, SpatialDDSHTTPHandler)
-    print(f"Serving SpatialDDS v1.7 HTTP binding on port {port}")
+    print(f"Serving SpatialDDS {SpatialDDSValidator.ERA} HTTP binding on port {port}")
     httpd.serve_forever()
 
 

@@ -111,7 +111,8 @@ else
     # of it. Bind-mounted and run from the repo root, it exercises the tree
     # as checked out.
     run "IDL compile + protocol"  in_image python3 ar_demo/comprehensive_test.py
-    run "interop probe"           in_image python3 -m unittest tests.test_interop
+    run "cross-era interop probe" in_image python3 -m unittest tests.cross_era.interop_driver
+    run "deadline is load-bearing" in_image python3 -m unittest tests.test_deadline_qos
     run "head-of-line isolation"  in_image python3 -m unittest tests.test_head_of_line
     run "ROS 2 DDS round-trip"    in_image python3 -m unittest bridges.ros2_bridge.test_dds_roundtrip
     run "MCAP live record→replay" in_image bash -lc \

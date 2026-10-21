@@ -70,7 +70,7 @@ REGISTERED: Dict[str, Type] = {
     "vps_query": VpsRequest,
     "vps_response": VpsResponse,
     # Appendix E provisional: registered in 3.3.2, IDL under
-    # idl/v1.7/provisional/. Provisional in the spec's sense — the type is
+    # idl/v1.8/provisional/. Provisional in the spec's sense — the type is
     # registered and stable enough to announce, its profile is not yet.
     "rf_beam": RfBeamFrame,
     "rf_beam_meta": RfBeamMeta,

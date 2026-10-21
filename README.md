@@ -11,13 +11,14 @@ examples in [`manifests/v1.8`](manifests/v1.8), and ships five runnable demos.
 | --- | --- | --- | --- |
 | `spatialdds_idl18` | **1.8**, including provisional `spatial.owm/0.1` | [`idl/v1.8`](idl/v1.8) | every demo: the AR demo and its mock VPS, discovery, the Open World Model, the MCAP / MQTT / ROS 2 bridges, fusion, and both web surfaces |
 | `spatialdds_demo_idl18` | **1.8** | [`idl/demo18`](idl/demo18) | the demo-owned types the spec has no struct for — bootstrap and fusion-coverage diagnostics — bound to `spatialdds_idl18` for every spec type |
-| `spatialdds_idl` | 1.7, stamped | [`idl/v1.7`](idl/v1.7) | **transitional**: only the interop probe, until it is frozen as the cross-era fixture. The content catalogue moved onto `ContentAnnounce` → manifest. See [`docs/final-migration-census.md`](docs/final-migration-census.md) |
+| `tests/cross_era/spatialdds_idl` | 1.7, **frozen** | the `v1.7` tag's IDL (retired from this repo) | nothing but the cross-era exhibit: 19 of the 1.7 tree's 29 modules<!-- exhibit-subset: modules=19 packages=23 -->, the closure of what its probe needs, checksummed. See [`tests/cross_era/README.md`](tests/cross_era/README.md) |
 
 The 1.7 → 1.8 move is appendable evolution as the spec describes it, and it
 was measured rather than assumed: of 146 definitions the two trees share, 138
 are byte-identical and the other 8 only *append* members. The interop probe —
-still built from the 1.7 tree — discovers and reads the 1.8 demo, and is read
-by it, in both directions.
+a 1.7 participant, kept frozen as the one deliberate exhibit of the earlier
+era — discovers and reads the 1.8 demo, and is read by it, in both
+directions.
 
 The spec lives at [spatialdds.org](https://spatialdds.org); its source is
 [OpenArCloud/SpatialDDS-spec](https://github.com/OpenArCloud/SpatialDDS-spec).
@@ -110,23 +111,17 @@ profiles.** JSON exists only at the edges — WebSocket clients, MQTT payloads,
 MCAP records.
 
 That is verifiable rather than asserted:
-[`tests/interop_probe.py`](tests/interop_probe.py) is a participant built from
-the generated types, the spec's topic names and the §3.3.3 profile table, with
-**no demo transport code**, and it exchanges samples with the demo in both
-directions.
+[`tests/cross_era/interop_probe.py`](tests/cross_era/interop_probe.py) is a
+participant built from 1.7 generated types, the spec's topic names and the
+§3.3.3 profile table, with **no demo code** — its path holds nothing else —
+and it exchanges samples with the 1.8 demo in both directions.
 
-> **The 1.7 pin is the `v1.7` tag, not the spec repo's `main`.** Resyncing
-> `idl/v1.7` from main would mix draft IDL into the lanes that document
-> themselves as 1.7 conformant, and the drift gate would not catch it —
+> **The 1.8 pin is spec commit `9c3e1f2`, not the spec repo's `main`.**
+> Resyncing `idl/v1.8` from main would mix draft IDL into lanes that document
+> themselves as 1.8 conformant, and the drift gate would not catch it —
 > generated output always matches whatever is vendored, so it can only prove
-> the two agree, never that the right thing was vendored.
->
-> The 1.8 bundle is vendored *separately* for that reason rather than by
-> upgrading the pin: `idl/v1.8` generates its own package, and the two trees
-> never share a module. `generate_types.py` takes `--spec-idl` to say which
-> bundle it is building, and the annotation gate checks both trees and fails
-> if it finds fewer than two. Reasoning and resync instructions are in
-> [`scripts/generate_types.py`](scripts/generate_types.py).
+> the two agree, never that the right thing was vendored. Reasoning and resync
+> instructions are in [`scripts/generate_types.py`](scripts/generate_types.py).
 
 ## Everything else
 
@@ -135,4 +130,5 @@ directions.
 - **AWS** — [`deploy/aws/`](deploy/aws/README.md).
 - **Contributing, and the lessons this repo has paid for** —
   [`CONTRIBUTING.md`](CONTRIBUTING.md).
-- **The spec text, vendored** — [`docs/SpatialDDS-1.7-full.md`](docs/SpatialDDS-1.7-full.md).
+- **The spec text this demo is pinned to** — SpatialDDS-spec at
+  [`9c3e1f2`](https://github.com/OpenArCloud/SpatialDDS-spec/tree/9c3e1f2).

@@ -82,8 +82,12 @@ class TheHandWrittenEraIsTheGeneratedOne(unittest.TestCase):
         prev = re.sub(r"/1\.(\d+)$",
                       lambda m: f"/1.{int(m.group(1)) - 1}",
                       payloads.SCHEMA_CORE)
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception) as caught:
             SpatialDDSValidator.validate_module_version(prev)
+        # And the reason names the era it wants, not the one it refused.
+        era = payloads.SCHEMA_CORE.split("/")[1]
+        self.assertIn(f"/{era}'", str(caught.exception))
+        self.assertEqual(SpatialDDSValidator.ERA, era)
 
 
 if __name__ == "__main__":

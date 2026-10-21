@@ -3,8 +3,9 @@ Tests for the generated SpatialDDS types and the generator that produces them.
 
 Three jobs:
 
-1. The checked-in output under ``spatialdds_idl/`` is importable and
-   round-trips — no idlc needed, so this runs anywhere.
+1. The checked-in output under ``spatialdds_idl18/`` and
+   ``spatialdds_demo_idl18/`` is importable and round-trips — no idlc
+   needed, so this runs anywhere.
 2. Keys and wire names survive the generator's post-processing, which is what
    makes typed topics behave per the spec rather than merely compile.
 3. A drift gate: re-running the generator must reproduce the checked-in tree
@@ -23,14 +24,16 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_idl._field_aliases import FIELD_ALIASES, wire_name  # noqa: E402
-from spatialdds_idl.builtin import Time  # noqa: E402
-from spatialdds_idl.oarc_demo import BootstrapQuery, BootstrapResponse  # noqa: E402
-from spatialdds_idl.spatial.common import CoordConvention, FrameRef  # noqa: E402
-from spatialdds_idl.spatial.core import (  # noqa: E402
-    Aabb3, CovMatrix, FramedPose, GeoPose, PoseSE3,
+from spatialdds_demo_idl18.oarc_demo import BootstrapQuery, BootstrapResponse  # noqa: E402
+from spatialdds_idl18._field_aliases import FIELD_ALIASES, wire_name  # noqa: E402
+from spatialdds_idl18.builtin import Time  # noqa: E402
+from spatialdds_idl18.spatial.common import (  # noqa: E402
+    CoordConvention, FrameRef, ScaleStatus,
 )
-from spatialdds_idl.spatial.disco import (  # noqa: E402
+from spatialdds_idl18.spatial.core import (  # noqa: E402
+    MODULE_ID as CORE_MODULE_ID, Aabb3, CovMatrix, FramedPose, GeoPose, PoseSE3,
+)
+from spatialdds_idl18.spatial.disco import (  # noqa: E402
     Announce, Capabilities, CoverageElement, CoverageFilter, CoverageQuery,
     CoverageResponse, Depart, ProfileSupport, ServiceKind, ServiceSummary,
     TopicMeta,
@@ -47,9 +50,14 @@ def _idlc() -> str | None:
     return None
 
 
+# The era these trees are, from the tree itself rather than restated.
+ERA = CORE_MODULE_ID.split("/")[1]
+MAJOR, MINOR = (int(n) for n in ERA.split("."))
 STAMP = Time(sec=1700000000, nanosec=0)
 FRAME = FrameRef(uuid="f-uuid", fqn="earth-fixed",
-                 has_coord_convention=True, coord_convention=CoordConvention.ENU)
+                 has_coord_convention=True, coord_convention=CoordConvention.ENU,
+                 has_scale=False, scale_status=ScaleStatus.SCALE_UNKNOWN,
+                 meters_per_unit=1.0, display_unit="m")
 ZERO_AABB = Aabb3(min_xyz=[0.0, 0.0, 0.0], max_xyz=[0.0, 0.0, 0.0])
 COVERAGE = CoverageElement(
     has_crs=True, crs="EPSG:4979", has_bbox=True,
@@ -61,14 +69,16 @@ COVERAGE = CoverageElement(
     has_circle=False, circle_center=[0.0, 0.0, 0.0], circle_radius_m=0.0,
 )
 TOPIC = TopicMeta(name="spatialdds/vps/query/v1", type="vps_query", version="v1",
-                  qos_profile="VPS_REQ", target_rate_hz=0.0, max_chunk_bytes=0)
+                  qos_profile="VPS_REQ", target_rate_hz=0.0, max_chunk_bytes=0,
+                  durability="VOLATILE")
 CAPS = Capabilities(
-    supported_profiles=[ProfileSupport(name="spatial.core", major=1, min_minor=7, max_minor=7)],
-    preferred_profiles=["spatial.core/1.7"], features=["blob.crc32"],
+    supported_profiles=[ProfileSupport(name="spatial.core", major=MAJOR,
+                                       min_minor=MINOR, max_minor=MINOR)],
+    preferred_profiles=[CORE_MODULE_ID], features=["blob.crc32"],
 )
 ANNOUNCE = Announce(
     service_id="svc:vps:demo/sf-downtown", name="MockVPS", kind=ServiceKind.VPS,
-    version="1.7", org="ExampleOrg", hints=[], caps=CAPS, topics=[TOPIC],
+    version=ERA, org="ExampleOrg", hints=[], caps=CAPS, topics=[TOPIC],
     coverage=[COVERAGE], coverage_frame_ref=FRAME, has_coverage_eval_time=False,
     coverage_eval_time=STAMP, transforms=[],
     manifest_uri="spatialdds://vps.example.com/sf-downtown/service/vps",
@@ -107,7 +117,7 @@ ROUND_TRIP_CASES = {
                                      capabilities=["localize", "catalog"],
                                      location_hint="sf-downtown", stamp=STAMP),
     "BootstrapResponse": BootstrapResponse(
-        client_id="c1", spatialdds_bootstrap="1.7", dds_domain=1,
+        client_id="c1", spatialdds_bootstrap=ERA, dds_domain=1,
         cyclonedds_profile="", manifest_uris=["spatialdds://x/z/service/m"],
         ttl_sec=300, stamp=STAMP),
 }
@@ -158,21 +168,20 @@ class KeysAndNames(unittest.TestCase):
         self.assertFalse(COVERAGE._global)
 
     def test_typenames_are_the_spec_names(self):
-        """Nesting under spatialdds_idl must not leak into DDS type identity."""
+        """Nesting under spatialdds_idl18 must not leak into DDS type identity."""
         self.assertEqual(Announce.__idl__.idl_transformed_typename, "spatial::disco::Announce")
         self.assertEqual(GeoPose.__idl__.idl_transformed_typename, "spatial::core::GeoPose")
 
 
 class GeneratorDrift(unittest.TestCase):
     #: Every checked-in generated tree, with the command line that makes it.
-    #: This checked only the default (1.7) tree until 2026-10-20, so
+    #: This checked only the default (then 1.7) tree until 2026-10-20, so
     #: `spatialdds_idl18` -- the tree the whole model layer runs on -- had no
     #: drift gate here at all; it was clean when first checked, which is luck
-    #: rather than coverage.
+    #: rather than coverage. The 1.7 tree was retired on 2026-10-21, and the
+    #: bare command line is the 1.8 spec tree's now.
     TREES = {
-        "spatialdds_idl": [],
-        "spatialdds_idl18": ["--spec-idl", "idl/v1.8",
-                             "--out", "spatialdds_idl18", "--no-demo"],
+        "spatialdds_idl18": [],
         "spatialdds_demo_idl18": ["--spec-idl", "idl/v1.8",
                                   "--demo-idl", "idl/demo18",
                                   "--bind-to", "spatialdds_idl18",

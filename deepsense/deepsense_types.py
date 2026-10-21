@@ -7,8 +7,8 @@ These used to be hand-written dataclasses mirroring the spec's provisional
 drift that made the nuScenes types not-quite-SpatialDDS applies here, and
 there is no reason for a second definition of a type the IDL already has.
 
-`rf_beam`'s IDL ships under `idl/v1.7/examples/` rather than beside the
-stable modules, so the generator names it explicitly; see the findings list.
+`rf_beam`'s IDL ships under `idl/v1.8/provisional/` rather than beside the
+stable modules, so the generator globs that directory explicitly.
 
 `Detection2D`/`Detection2DSet` are spec types as of 1.7's findings-batch-2
 revision. Before that the most common camera perception output there is —

@@ -128,10 +128,11 @@ class ConverterShapes(unittest.TestCase):
 
     def test_detection2d_set_is_a_spec_type(self):
         """
-        1.7 has Detection3D for 3D boxes and nothing for 2D ones —
+        1.7 shipped with Detection3D for 3D boxes and nothing for 2D ones —
         VisionDetections carries keypoints and 2D tracks, not labelled boxes.
-        So the most common camera perception output there is has no spec
-        type, and this one is defined in idl/demo/oarc_demo.idl.
+        So the most common camera perception output there is had no spec
+        type, and the demo defined one in its own 1.7 IDL until
+        findings-batch-2 added `semantics::Detection2DSet`, checked here.
         """
         det_set = self.d2s.row_to_detection2d(ROW, Path("/nonexistent"))
         self._check("detection2d", self.d2s.to_dict(det_set))
