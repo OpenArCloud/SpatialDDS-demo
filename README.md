@@ -8,6 +8,8 @@ plans against. The first runs in two commands,
 the second in three. The IDL is vendored verbatim at a pinned spec commit —
 [conformance](#conformance) says which, and how that is checked.
 
+## How the pieces fit
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ecosystem-dark.svg">
   <img alt="Ecosystem map: native participants above the SpatialDDS DDS bus (venue services, OpenVPS, a ROS 2 robot running spatialdds_ros, the SceneScape sidecar); bridges below it (web gateway embedding the spatialdds package, ros2_bridge, mcap_bridge, mqtt_bridge) connecting browsers, ROS 2 sensor graphs, MCAP files and MQTT brokers" src="docs/images/ecosystem-light.svg">
