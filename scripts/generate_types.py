@@ -101,6 +101,11 @@ REPO = Path(__file__).resolve().parent.parent
 # them, and `--spec-idl` / `--demo-idl` rebind them before anything runs. The
 # demo IDL is compiled only with `--bind-to`: a spec tree is spec types only.
 SPEC_IDL = REPO / "idl" / "v1.8"
+# Where `SPEC_IDL` came from, as the resync command above spells it. Constants
+# so a gate can read the pin rather than retype it: `tests/test_topic_registry.py`
+# reads the spec's topic registry at this same commit from this same checkout.
+SPEC_COMMIT = "9c3e1f2"
+SPEC_CHECKOUT = REPO.parent / "SpatialDDS-spec"
 DEMO_IDL = REPO / "idl" / "demo18"
 DEFAULT_OUT = REPO / "spatialdds_idl18"
 
