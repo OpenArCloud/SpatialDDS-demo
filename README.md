@@ -2,25 +2,11 @@
 
 ![The venue as a live model — robot, ducks and declared water at Littlefield Fountain](docs/images/owm-venue.jpg)
 
-Reference demos for **SpatialDDS 1.8**, running on CycloneDDS. The repo
-vendors 1.8's IDL verbatim under [`idl/v1.8`](idl/v1.8) (spec commit
-`9c3e1f2`, the one the validating gateway pins), carries its manifest
-examples in [`manifests/v1.8`](manifests/v1.8), and ships five runnable demos.
-
-| package | era | generated from | used by |
-| --- | --- | --- | --- |
-| `spatialdds_idl18` | **1.8**, including provisional `spatial.owm/0.1` | [`idl/v1.8`](idl/v1.8) | every demo: the AR demo and its mock VPS, discovery, the Open World Model, the MCAP / MQTT / ROS 2 bridges, fusion, and both web surfaces |
-| `spatialdds_demo_idl18` | **1.8** | [`idl/demo18`](idl/demo18) | the demo-owned types the spec has no struct for — bootstrap and fusion-coverage diagnostics — bound to `spatialdds_idl18` for every spec type |
-| `tests/cross_era/spatialdds_idl` | 1.7, **frozen** | the `v1.7` tag's IDL (retired from this repo) | nothing but the cross-era exhibit: 19 of the 1.7 tree's 29 modules<!-- exhibit-subset: modules=19 packages=23 -->, the closure of what its probe needs, checksummed. See [`tests/cross_era/README.md`](tests/cross_era/README.md) |
-
-The 1.7 → 1.8 move is appendable evolution as the spec describes it, and it
-was measured rather than assumed: of 146 definitions the two trees share, 138
-are byte-identical and the other 8 only *append* members. The interop probe —
-a 1.7 participant, kept frozen as the one deliberate exhibit of the earlier
-era — discovers and reads the 1.8 demo, and is read by it, in both
-directions. Everywhere else the repository is one era, and
-[`tests/test_one_era.py`](tests/test_one_era.py) fails if that stops being
-true.
+Reference demos for **SpatialDDS 1.8** on CycloneDDS: a browser that finds
+its positioning service on the bus, and a venue running as a live model a robot
+plans against. The first runs in two commands,
+the second in three. The IDL is vendored verbatim at a pinned spec commit —
+[conformance](#conformance) says which, and how that is checked.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ecosystem-dark.svg">
@@ -29,9 +15,6 @@ true.
 
 Libraries make things native: a robot runs `spatialdds_ros` on the bus it
 already rides. Bridges convert, for the worlds that will never be participants.
-
-The spec lives at [spatialdds.org](https://spatialdds.org); its source is
-[OpenArCloud/SpatialDDS-spec](https://github.com/OpenArCloud/SpatialDDS-spec).
 
 ## The two ISMAR demos
 
@@ -101,17 +84,16 @@ are not interchangeable: [which one do I want?](docs/servers-and-uis.md)
 |---|---|---|
 | Intel SceneScape sidecar | [spatialdds-scenescape](https://github.com/OpenArCloud/spatialdds-scenescape) | Publishes a stock SceneScape deployment's scene analytics as typed SpatialDDS samples: tracks, detections, polygon zones, crossing lines, events, and a georeference. Lives in its own repo with its own pins: it vendors SpatialDDS 1.8 at spec commit `424a8b3` beside a pinned SceneScape release, while this repo is at `9c3e1f2`, 21 spec commits later (the 1.8 revision that added `TopicMeta.durability`). Each moves its pin on its own evidence. |
 
-## Conformance, in one line
+## Conformance
 
 **The demos publish spec IDL types on spec-named topics with spec QoS
 profiles.** JSON exists only at the edges — WebSocket clients, MQTT payloads,
 MCAP records.
 
-That is verifiable rather than asserted:
-[`tests/cross_era/interop_probe.py`](tests/cross_era/interop_probe.py) is a
-participant built from 1.7 generated types, the spec's topic names and the
-§3.3.3 profile table, with **no demo code** — its path holds nothing else —
-and it exchanges samples with the 1.8 demo in both directions.
+The repo vendors 1.8's IDL verbatim under [`idl/v1.8`](idl/v1.8) (spec commit
+`9c3e1f2`, the one the validating gateway pins), carries its manifest
+examples in [`manifests/v1.8`](manifests/v1.8), and generates the types its
+five runnable demos use from it.
 
 > **The 1.8 pin is spec commit `9c3e1f2`, not the spec repo's `main`.**
 > Resyncing `idl/v1.8` from main would mix draft IDL into lanes that document
@@ -119,6 +101,29 @@ and it exchanges samples with the 1.8 demo in both directions.
 > generated output always matches whatever is vendored, so it can only prove
 > the two agree, never that the right thing was vendored. Reasoning and resync
 > instructions are in [`scripts/generate_types.py`](scripts/generate_types.py).
+
+| package | era | generated from | used by |
+| --- | --- | --- | --- |
+| `spatialdds_idl18` | **1.8**, including provisional `spatial.owm/0.1` | [`idl/v1.8`](idl/v1.8) | every demo: the AR demo and its mock VPS, discovery, the Open World Model, the MCAP / MQTT / ROS 2 bridges, fusion, and both web surfaces |
+| `spatialdds_demo_idl18` | **1.8** | [`idl/demo18`](idl/demo18) | the demo-owned types the spec has no struct for — bootstrap and fusion-coverage diagnostics — bound to `spatialdds_idl18` for every spec type |
+| `tests/cross_era/spatialdds_idl` | 1.7, **frozen** | the `v1.7` tag's IDL (retired from this repo) | nothing but the cross-era exhibit: 19 of the 1.7 tree's 29 modules<!-- exhibit-subset: modules=19 packages=23 -->, the closure of what its probe needs, checksummed. See [`tests/cross_era/README.md`](tests/cross_era/README.md) |
+
+The claim is verifiable rather than asserted.
+[`tests/cross_era/interop_probe.py`](tests/cross_era/interop_probe.py) is a
+participant built from 1.7 generated types, the spec's topic names and the
+§3.3.3 profile table, with **no demo code** — its path holds nothing else. It
+discovers and reads the 1.8 demo, and is read by it, in both directions.
+
+That works because the 1.7 → 1.8 move is appendable evolution as the spec
+describes it, and it was measured rather than assumed: of 146 definitions the
+two trees share, 138 are byte-identical and the other 8 only *append* members.
+The probe is kept frozen as the one deliberate exhibit of the earlier era.
+Everywhere else the repository is one era, and
+[`tests/test_one_era.py`](tests/test_one_era.py) fails if that stops being
+true.
+
+The spec lives at [spatialdds.org](https://spatialdds.org); its source is
+[OpenArCloud/SpatialDDS-spec](https://github.com/OpenArCloud/SpatialDDS-spec).
 
 ## Everything else
 
