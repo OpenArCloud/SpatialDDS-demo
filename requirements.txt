@@ -5,10 +5,16 @@ typing-extensions>=4.0.0
 pytest>=7.0.0
 
 # The robot lane runs on the published spatialdds_ros library rather than on
-# this repository's own robot_bridge. **Pinned to a commit, not a branch.**
+# this repository's own robot_bridge. **Pinned to a release, not a commit.**
 # Every consumed artifact in this programme is pinned and bumped deliberately:
 # a library change should be a decision with a diff to read, not something a
 # rebuild picks up silently.
+#
+# **The demo consumes releases.** It is the library's first consumer, and that
+# proof is strongest against the artifact users get -- the same way the
+# gateway embeds `spatialdds` from PyPI (run_bridge_server_docker.sh). A git
+# commit pin is for the window of developing against an unreleased fix, and
+# goes back to a release once one carries the fix.
 #
 # Bumped e8e5ec2 -> e7b897d on 2026-10-19: that release added `content_refs`
 # and `external_refs` to its Config, which is what the robot lane needed. The
@@ -28,4 +34,9 @@ pytest>=7.0.0
 # its own types; `tests/test_idl_trees_agree.py` is the gate that asserts the
 # two have not drifted, because a mismatch between two generated trees shows
 # up as a plausible wrong value rather than an exception.
-spatialdds_ros @ git+https://github.com/OpenArCloud/spatialdds-ros@aa52a743db87bc31465de1c8964d2661f2c70e82
+#
+# Moved aa52a74 (0.2.1, git) -> 0.3.0 (PyPI) on 2026-10-21. 0.3.0 is the first
+# published release; its library code is 0.2.1's, and the change is packaging
+# (install_requires is `cyclonedds>=0.10`, already met by the demo image's
+# 11.0.1). Robot-lane acceptance re-run on it: see docs/ros-adoption-findings.md.
+spatialdds_ros==0.3.0

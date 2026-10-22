@@ -411,10 +411,14 @@ def make_trajectory_conflict_event(conflict: Dict, *, timestamp_s: float,
     """
     A predicted trajectory conflict as a ``spatial::events::SpatialEvent``.
 
-    ``PROXIMITY_ALERT`` is the closest registered EventType, but it is not
-    an exact fit: 1.7's event types all describe something that has already
-    happened or is happening now, and this is a *predicted* conflict some
-    seconds ahead.
+    The type is ``PREDICTED_CONFLICT``, the registered EventType for "a
+    predicted future conflict/collision (event_start > stamp)": value 13 in
+    idl/v1.8/events.idl, and already value 13 in 1.7 (check
+    tests/cross_era/spatialdds_idl/spatial/events/enums/event_type_enum/_events.py).
+    This docstring used to say 1.7 had no predicted-conflict type and
+    ``PROXIMITY_ALERT`` was the closest fit. The code had moved to
+    PREDICTED_CONFLICT; the claim stayed, and both renderers kept drawing only
+    PROXIMITY_ALERT on its authority.
 
     The lead time needs no extension, though. ``event_start`` is when the
     event begins and ``stamp`` is when this sample was produced; for a

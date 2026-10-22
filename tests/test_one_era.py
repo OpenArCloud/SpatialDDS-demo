@@ -9,7 +9,7 @@ one era: `tests/test_idl_trees_agree.py` compares two copies of *1.8*, and
 the era-claims gate checks the literals it knows the shape of.
 
 **What counts.** The era is the one vendored spec bundle, `idl/v<era>`;
-anything versioned below it is pre-era. Four properties:
+anything versioned below it is pre-era. Five properties:
 
 1. **No pre-era import.** No tracked Python file outside the exhibit imports
    the 1.7 package, statically or by string.
@@ -24,13 +24,19 @@ anything versioned below it is pre-era. Four properties:
    there now; it has no history voice). Prose that says what happened -- a
    comment, a docstring, a census -- is history and stays; a command, a
    COPY, an import or a link that points at what is gone is a defect.
-4. **Not importable at all.** From the repository root, with the repository
+4. **No stale era label in a page.** Static web assets -- `.html` files and
+   the gateway's `static/` scripts -- carry no literal "SpatialDDS 1.<n>" for
+   an earlier minor outside comments. Narrow on purpose: a page's title or
+   heading is what a reader is told the page is, and two of these survived
+   the migration (the README's SceneScape row, then the fusion dashboard's
+   "SpatialDDS 1.6" title and canvas heading).
+5. **Not importable at all.** From the repository root, with the repository
    on the path, the 1.7 package does not import -- which also catches one
    installed in the environment, which no static check can see.
 
 **What it cannot reach.** A present-tense claim in prose -- "this repo stays
-on 1.7", "the button is disabled without a bundle" -- names no retired path
-and imports nothing, so none of the four properties sees it, and exempting
+on 1.7", "the button is disabled without a bundle" -- names no retired path,
+imports nothing and is not a page label, so no property sees it, and exempting
 history (property 3) is exactly what lets it through. One outlived the
 migration this gate was written for: the README's SceneScape row said the
 repository "stays on stamped 1.7" until an external review at `384e766`
@@ -188,6 +194,28 @@ def live_svg(path: str, text: str, patterns) -> list:
             if any(p.search(line) for p in patterns)]
 
 
+def label_pattern(minor: int):
+    before = "|".join(str(n) for n in range(minor))
+    return re.compile(r"SpatialDDS\s+1\.(?:%s)(?![\d])" % before)
+
+
+def is_web_asset(path: str) -> bool:
+    return (path.endswith(".html") and not path.startswith("web/public/cesium/")) \
+        or (path.startswith("bridges/web_bridge/static/") and path.endswith(".js"))
+
+
+JS_BLOCK = re.compile(r"/\*.*?\*/", re.S)
+
+
+def stale_labels(path: str, text: str, label) -> list:
+    """Era labels a reader of the page would see: not in comments."""
+    blank = lambda m: "\n" * m.group(0).count("\n")
+    text = JS_BLOCK.sub(blank, XML_COMMENT.sub(blank, text))
+    return [f"{path}:{n}: {line.strip()[:80]}"
+            for n, line in enumerate(text.splitlines(), 1)
+            if not line.lstrip().startswith("//") and label.search(line)]
+
+
 def scan(files, patterns) -> dict:
     found = {"imports": [], "references": []}
     for f in files:
@@ -275,6 +303,15 @@ class TheRepositoryIsOneEra(unittest.TestCase):
                                     or major_minor.startswith("0."))
         self.assertGreater(seen, 10, "found almost no MODULE_IDs to check")
 
+    def test_no_stale_era_label_in_a_page(self):
+        label = label_pattern(self.minor)
+        assets = [f for f in self.files if is_web_asset(f)]
+        self.assertIn("bridges/web_bridge/static/index.html", assets)
+        found = []
+        for f in assets:
+            found += stale_labels(f, (REPO / f).read_text(errors="ignore"), label)
+        self.assertEqual(found, [])
+
     def test_the_old_package_does_not_import(self):
         env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
         env["PYTHONPATH"] = str(REPO)
@@ -347,6 +384,16 @@ class TheGateCanFail(unittest.TestCase):
                 '<text x="2">idl/v1.8 · spatialdds_idl18</text>\n</svg>\n')
         hits = live_svg("x.svg", text, self.patterns)
         self.assertEqual([h.split(":")[1] for h in hits], ["4"])
+
+    def test_a_page_label_is_caught_and_a_comment_is_not(self):
+        label = label_pattern(era_minor())
+        text = ("<title>SpatialDDS 1.6 — Intersection</title>\n"
+                "<!-- was SpatialDDS 1.7 -->\n"
+                "// SpatialDDS 1.7 had no X\n"
+                'ctx.fillText("SpatialDDS 1.8 — Intersection");\n')
+        hits = stale_labels("x.html", text, label)
+        self.assertEqual([h.split(":")[1] for h in hits], ["1"])
+        self.assertFalse(is_web_asset("web/public/cesium/Widgets/x.html"))
 
 
 if __name__ == "__main__":

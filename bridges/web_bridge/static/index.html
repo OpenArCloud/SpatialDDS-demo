@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>SpatialDDS 1.6 — Multi-Operator Intersection</title>
+<title>SpatialDDS — Multi-Operator Intersection</title>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; background: #0a0e1a;
                 font-family: -apple-system, ui-sans-serif, sans-serif;
@@ -29,6 +29,7 @@ const COLORS = {
   infrastructure: { fill: "#dc64dc", stroke: "#aa4caa", label: "Infrastructure" },
   fused:          { fill: "#f0f0f0", stroke: "#cccccc", label: "Fused" },
   conflict:       { fill: "#ff2828", stroke: "#cc2020", label: "Conflict" },
+  proximity:      { fill: "#ffa51e", stroke: "#cc8418", label: "Proximity" },
   grid:           "#1a2038",
   background:     "#0a0e1a",
   text:           "#a0adc4",
@@ -193,16 +194,24 @@ function onFusedTracks(msg) {
 
 function onConflict(msg) {
   const p = msg.payload || {};
-  // A predicted trajectory conflict is published as SpatialEvent with the
-  // nearest registered type, PROXIMITY_ALERT — 1.7 has no predicted-conflict
-  // type. The conflicting pair rides in event_id ("conflict:a|b") because
-  // SpatialEvent's trigger/secondary slots are det/track ids and its generic
-  // attributes field is a JSON string this demo will not put on the bus.
-  if (p.type && p.type !== "PROXIMITY_ALERT") return;
+  // Two kinds are drawn, and kept apart (drawConflicts):
+  //   PREDICTED_CONFLICT -- what fusion_service publishes: planned
+  //     trajectories meet some seconds ahead. Dashed red ring, ETA.
+  //   PROXIMITY_ALERT -- two objects too close now. Solid amber ring.
+  // PREDICTED_CONFLICT is a registered EventType: value 13 in
+  // idl/v1.8/events.idl, and already 13 in 1.7 -- check
+  // tests/cross_era/spatialdds_idl/spatial/events/enums/event_type_enum/_events.py.
+  // This handler used to say 1.7 had no such type and keep only
+  // PROXIMITY_ALERT, so every conflict the service published was dropped
+  // (measured 2026-10-21: 3 arrived, 0 drawn).
+  if (p.type !== "PREDICTED_CONFLICT" && p.type !== "PROXIMITY_ALERT") return;
   const pos = p.has_position ? vec(p.position) : vec(p.conflict_position);
-  const agents = p.agents
+  // participant_ids carries the pair; older samples had it only in event_id.
+  const agents = (p.participant_ids && p.participant_ids.length && p.participant_ids)
+    || p.agents
     || String(p.event_id || "").split(":").pop().split("|").filter(Boolean);
   state.conflicts.push({
+    kind: p.type === "PREDICTED_CONFLICT" ? "predicted" : "proximity",
     x: pos.x,
     y: pos.y,
     agents: agents,
@@ -486,27 +495,36 @@ function drawConflicts() {
     const pulse = 1 + 0.3 * Math.sin(now / 150);
     const r = 16 * pulse;
     const fade = Math.max(0, 1 - age / 10);
+    const predicted = c.kind === "predicted";
+    // Red and dashed for a conflict still ahead; amber and solid for one now.
+    const rgb = predicted ? "255,40,40" : "255,165,30";
 
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255,40,40,${0.30 * fade})`;
+    ctx.fillStyle = `rgba(${rgb},${0.30 * fade})`;
     ctx.fill();
-    ctx.strokeStyle = `rgba(255,40,40,${0.85 * fade})`;
+    ctx.setLineDash(predicted ? [5, 4] : []);
+    ctx.strokeStyle = `rgba(${rgb},${0.85 * fade})`;
     ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.setLineDash([]);
 
     ctx.beginPath();
     ctx.moveTo(cx - 7, cy - 7); ctx.lineTo(cx + 7, cy + 7);
     ctx.moveTo(cx + 7, cy - 7); ctx.lineTo(cx - 7, cy + 7);
-    ctx.strokeStyle = `rgba(255,40,40,${fade})`;
+    ctx.strokeStyle = `rgba(${rgb},${fade})`;
     ctx.lineWidth = 2.5;
     ctx.stroke();
 
-    ctx.fillStyle = `rgba(255,90,90,${fade})`;
+    ctx.fillStyle = `rgba(${rgb},${fade})`;
     ctx.font = "bold 11px sans-serif";
-    ctx.fillText(`CONFLICT ${(c.agents || []).join("×")}`, cx + r + 4, cy - 4);
+    const pair = (c.agents || []).join("×");
+    ctx.fillText(predicted ? `PREDICTED CONFLICT ${pair}` : `PROXIMITY ${pair}`,
+                  cx + r + 4, cy - 4);
     ctx.font = "10px ui-monospace, monospace";
-    ctx.fillText(`${c.min_dist.toFixed(1)} m | ETA ${c.time_to.toFixed(1)} s`,
+    ctx.fillText(predicted
+                   ? `${c.min_dist.toFixed(1)} m | ETA ${c.time_to.toFixed(1)} s`
+                   : `${c.min_dist.toFixed(1)} m now`,
                   cx + r + 4, cy + 10);
   }
 }
@@ -538,7 +556,7 @@ function drawTitleBar() {
 
   ctx.fillStyle = "#e2e6f0";
   ctx.font = "bold 14px sans-serif";
-  ctx.fillText("SpatialDDS 1.6 — Multi-Operator Intersection", 16, 26);
+  ctx.fillText("SpatialDDS — Multi-Operator Intersection", 16, 26);
 
   ctx.beginPath();
   ctx.arc(cssW - 18, 20, 5, 0, Math.PI * 2);

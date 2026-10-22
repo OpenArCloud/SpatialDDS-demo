@@ -23,3 +23,12 @@ json.dump(wire, open('web/tests/fixtures/localize_response.json','w'),
 `confidence` and `rmse_m` are pinned to fixed values after capture: the
 responder randomises them, and a fixture that changes every time it is
 refreshed tells you nothing.
+
+`conflict_frame.json` is one `/ws` data frame carrying a
+`spatial::events::SpatialEvent` of type `PREDICTED_CONFLICT`, as the gateway
+delivered it from `fusion_service`. It was captured live on 2026-10-21 from
+the local fusion stack. Refresh it by bringing that stack up
+(`docker compose -f deploy/aws/docker-compose.local.yaml up -d`), opening
+`http://localhost:8088/`, and saving the first frame whose `sub_id` is
+`conflict`. `fusion-dashboard.spec.ts` feeds it to the dashboard, along with a
+`PROXIMITY_ALERT` copy of it.

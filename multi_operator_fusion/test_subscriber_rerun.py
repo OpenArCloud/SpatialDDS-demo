@@ -189,6 +189,38 @@ class TestSubscriberRerun(unittest.TestCase):
                      _conflict_payload(),
                      operator="platform")
 
+    def _drawn(self, payload):
+        """Entity paths the handler logged, with each TextLog's level."""
+        from unittest import mock
+        with mock.patch.object(rr, "log", wraps=rr.log) as log:
+            self._drive("spatial_event",
+                        "spatialdds/platform/events/trajectory_conflict/v1",
+                        payload, operator="platform")
+        return [(c.args[0], str(getattr(c.args[1], "level", "")))
+                for c in log.call_args_list]
+
+    def test_a_predicted_conflict_is_drawn(self):
+        # What fusion_service publishes. Measured 2026-10-21: three arrived
+        # on a live stack and none was drawn, because this handler kept only
+        # PROXIMITY_ALERT; the smoke test above passed throughout.
+        payload = _conflict_payload()
+        self.assertEqual(payload["type"], "PREDICTED_CONFLICT")
+        paths = [p for p, _ in self._drawn(payload)]
+        self.assertIn("world/fused/conflicts", paths)
+        self.assertNotIn("world/fused/proximity", paths)
+
+    def test_a_proximity_alert_is_drawn_apart(self):
+        payload = dict(_conflict_payload())
+        payload["type"] = "PROXIMITY_ALERT"
+        paths = [p for p, _ in self._drawn(payload)]
+        self.assertIn("world/fused/proximity", paths)
+        self.assertNotIn("world/fused/conflicts", paths)
+
+    def test_another_event_type_is_only_a_log_line(self):
+        payload = dict(_conflict_payload())
+        payload["type"] = "ANOMALY"
+        self.assertEqual([p for p, _ in self._drawn(payload)], ["events/log"])
+
     def test_spatial_event_unknown_kind_does_not_raise(self):
         payload = dict(_conflict_payload())
         payload["type"] = "ANOMALY"

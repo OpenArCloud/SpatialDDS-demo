@@ -76,6 +76,7 @@ OPERATOR_COLORS: Dict[str, List[int]] = {
 }
 FUSED_COLOR = [240, 240, 240]
 CONFLICT_COLOR = [255, 40, 40]
+PROXIMITY_COLOR = [255, 165, 30]
 BINDING_COLOR = [180, 180, 180]
 DEFAULT_COLOR = [200, 200, 200]
 
@@ -545,25 +546,40 @@ class RerunMultiOpSubscriber:
 
     def _handle_spatial_event(self, payload: Dict[str, Any],
                                  frame_num: int) -> None:
-        """trajectory_conflict events get a bright red marker plus a
-        WARN-level entry in the events log so the timeline highlights
-        them."""
+        """Conflicts get a marker plus a WARN-level entry in the events log.
+
+        Two kinds are drawn, and kept apart:
+
+        * ``PREDICTED_CONFLICT`` -- what ``fusion_service`` publishes: two
+          planned trajectories meet some seconds ahead. Red marker under
+          ``world/fused/conflicts``, labelled with the ETA.
+        * ``PROXIMITY_ALERT`` -- two objects too close *now*. Amber marker
+          under ``world/fused/proximity``, labelled with the distance.
+
+        Any other event type is a plain INFO line in the events log.
+        """
         event_type = payload.get("type", "OTHER")
         if self.debug:
             print(f"RENDER spatial_event: {event_type} frame={frame_num}",
                   file=sys.stderr)
         _set_time(payload.get("stamp", {}), frame_num)
-        # A predicted trajectory conflict is published as PROXIMITY_ALERT —
-        # the nearest registered EventType; 1.7 has no predicted-conflict
-        # type. The event_id carries the pair, since SpatialEvent has no
-        # typed slot for "these two agents" and MetaKV is a JSON string.
-        if event_type != "PROXIMITY_ALERT":
+        # PREDICTED_CONFLICT is a registered EventType: value 13 in
+        # idl/v1.8/events.idl, and already 13 in 1.7 -- check
+        # tests/cross_era/spatialdds_idl/spatial/events/enums/event_type_enum/_events.py.
+        # This handler used to say 1.7 had no such type and draw only
+        # PROXIMITY_ALERT, so every conflict fusion_service published became
+        # one INFO line and no marker (measured 2026-10-21: 3 of 3).
+        if event_type not in ("PREDICTED_CONFLICT", "PROXIMITY_ALERT"):
             rr.log("events/log", rr.TextLog(
                 f"{event_type}: {payload.get('description') or payload.get('event_id', '')}"[:200],
                 level=rr.TextLogLevel.INFO))
             return
+        predicted = event_type == "PREDICTED_CONFLICT"
         pos = payload.get("position") if payload.get("has_position") else None
-        agents = [a for a in str(payload.get("event_id", "")).split(":")[-1].split("|") if a]
+        # participant_ids carries the pair; older samples had it only in
+        # event_id ("conflict:a|b").
+        agents = [str(a) for a in payload.get("participant_ids") or []] or \
+            [a for a in str(payload.get("event_id", "")).split(":")[-1].split("|") if a]
         dist = (float(payload.get("min_distance_m", 0.0))
                 if "min_distance_m" in payload
                 else float(payload.get("measured_distance_m", 0.0)))
@@ -576,18 +592,25 @@ class RerunMultiOpSubscriber:
         ttc_str = f"{lead:.1f}s" if lead > 0 else "?"
         agents_str = " × ".join(agents) if agents else "?"
         description = payload.get("description") or ""
-        marker_label = f"⚠ CONFLICT {agents_str} in {ttc_str}"
+        if predicted:
+            path, color = "world/fused/conflicts", CONFLICT_COLOR
+            marker_label = f"⚠ PREDICTED CONFLICT {agents_str} in {ttc_str}"
+            line = (f"PREDICTED CONFLICT: {agents_str} | dist={dist:.1f}m | "
+                    f"ETA={ttc_str}")
+        else:
+            path, color = "world/fused/proximity", PROXIMITY_COLOR
+            marker_label = f"⚠ PROXIMITY {agents_str} at {dist:.1f} m"
+            line = f"PROXIMITY: {agents_str} | dist={dist:.1f}m"
         rr.log(
-            "world/fused/conflicts",
+            path,
             rr.Points3D(np.array([center]),
                          radii=8.0,
-                         colors=[CONFLICT_COLOR + [200]],
+                         colors=[color + [200]],
                          labels=[marker_label]),
             static=True,
         )
         rr.log("events/log", rr.TextLog(
-            f"CONFLICT: {agents_str} | dist={dist:.1f}m | ETA={ttc_str} | "
-            f"pos=({px:.0f}, {py:.0f}) | {description}",
+            f"{line} | pos=({px:.0f}, {py:.0f}) | {description}",
             level=rr.TextLogLevel.WARN,
         ))
 
@@ -776,12 +799,13 @@ def main() -> int:
     # always produces a Spatial3DView for /world contents.
 
     rr.log("description", rr.TextDocument(
-        "# SpatialDDS 1.6 — Multi-Operator Fusion\n\n"
+        "# SpatialDDS — Multi-Operator Fusion\n\n"
         "Three vehicle operators (a/b/c) plus a roadside radar "
         "(infrastructure) sharing Detection3D on a SpatialDDS bus.\n\n"
         "**wire types added in v1.6, rendered here:**\n"
         "* `PlannedTrajectory` — semi-transparent path ahead of each ego\n"
-        "* trajectory-conflict `SpatialEvent` — red marker + warn log\n"
+        "* trajectory-conflict `SpatialEvent` — red marker (predicted, with ETA) "
+        "or amber (proximity now), plus a warn log\n"
         "* `EntityBinding` — grey markers with source provenance label\n"
         "* `Announce` — coverage circles per operator (static, faint)\n",
         media_type=rr.MediaType.MARKDOWN,

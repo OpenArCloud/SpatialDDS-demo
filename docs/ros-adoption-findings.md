@@ -138,3 +138,41 @@ every future subscriber *and* all discovery churn, and a demo entity that can
 silently fail to appear is worth more than one line of a publisher. Filed
 rather than fixed because it is the venue's publisher, not the robot lane, and
 this batch owns the latter.
+
+## 4. The pin moves to the published release, and the acceptance is re-run
+
+On 2026-10-21 the demo's `spatialdds_ros` moved from a git commit (`aa52a74`,
+0.2.1) to the PyPI release `spatialdds_ros==0.3.0`. The demo is the library's
+first consumer, and that proof is strongest against the artifact a user
+installs. The gateway already embeds `spatialdds` from PyPI on the same
+reasoning. From here the demo consumes releases. A commit pin is for the
+window of developing against an unreleased fix.
+
+0.3.0's library code is 0.2.1's. What changed is packaging: `install_requires`
+is now `cyclonedds>=0.10`, which the demo image's 11.0.1 already meets, so the
+install swaps nothing. Each of the three places the lane runs was checked to
+import 0.3.0: the capture container, the bridge container (installed from
+`requirements.txt` at start) and the rebuilt robot-tier image.
+
+The robot lane's three claims, re-run on 0.3.0:
+
+- **Reaction contrast.** A fresh `tools/capture_robot_session.sh` capture,
+  measured by `tools/measure_duck_reaction.py`. Ducks sit **+1.49 m** closer to
+  the corner furthest from the robot while it is inside the radius than while
+  it is outside (237 against 171 observations). The same instrument gives
+  +2.03 m on `recordings/robot-littlefield.mcap` and +2.34 m on
+  `recordings/robot-littlefield-on-library.mcap`. The contrast holds with the
+  same sign; its size follows the ducks' wander. The capture was scratch and
+  replaces neither committed recording.
+- **Goto from the web.** `web/tests/robot-goto.spec.ts`, "a tap on the ground
+  sends the robot there", passed against the nav2 tier: asked for (22, −24),
+  arrived at (20.97, −23.88).
+- **Refusal surfaced.** `web/tests/nav-refusal.spec.ts`, "a refusal on the
+  robot's record is reported, once", passed.
+
+**One thing the capture showed that predates the bump.** Leg 2 of
+`tools/capture_robot_session.sh` stops at (12.47, −21.25), short of its goal at
+(12, −21), because a straight line from there enters the declared shallows.
+The script's header says neither goal crosses a keep-out. All three captures
+end at the same point, so this is not the library. It is a stale claim in the
+header, filed here rather than fixed in this batch.
