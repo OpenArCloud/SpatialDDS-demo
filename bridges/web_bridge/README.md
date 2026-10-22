@@ -359,10 +359,14 @@ zero-dep ES6 client. Auto-reconnects with a 2 s backoff, runs a 10 s ping.
 
 ## Built-in debug dashboard
 
-If the bridge is running with the default static dir, hit `/static/index.html`
-in a browser for a minimal topic browser + raw-message viewer. ~80 LOC of
-vanilla HTML/JS. Useful for verifying which topics are live without wiring
-up a real client.
+With the default static dir the gateway serves two pages:
+
+- `/` is the multi-operator fusion dashboard: a 2D top-down view of the
+  intersection, drawn from the fusion demo's detections, ego poses, fused
+  tracks, trajectories and conflict events.
+- `/debug` is a minimal topic browser and raw-message viewer, about 100 lines
+  of vanilla HTML/JS. It shows which topics are live without wiring up a real
+  client.
 
 ## Architecture (discovery in, two fan-outs, typed out)
 

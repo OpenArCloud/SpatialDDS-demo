@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 700" font-family="system-ui, -apple-system, sans-serif">
+  <style>
+    .node{fill:#ffffff;stroke:#1c2427;stroke-width:1.4}
+    .own{fill:#ffffff;stroke:#1c2427;stroke-width:1.4;stroke-dasharray:5 4}
+    .pypi{fill:#e4f0f3;stroke:#0e7490;stroke-width:1.8}
+    .extbox{fill:#e9eef0;stroke:#c3ccd1;stroke-width:1}
+    .bus{fill:#dde4e7;stroke:#1c2427;stroke-width:1.6}
+    .t{font-size:13px;font-weight:700;fill:#1c2427}
+    .s{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;fill:#5d6a72}
+    .b{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;fill:#1c2427}
+    .lab{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;fill:#5d6a72}
+    .ta{fill:#0e7490;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;font-weight:600}
+    .flow{stroke:#1c2427;stroke-width:1.3;fill:none}
+  </style>
+  <defs>
+    <marker id="ae" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="#1c2427"/></marker>
+    <marker id="as" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" fill="#1c2427"/></marker>
+  </defs>
+
+  <!-- legend -->
+  <rect class="pypi" x="50" y="16" width="26" height="15" rx="3"/><text class="lab" x="84" y="27.5">published on PyPI</text>
+  <rect class="node" x="230" y="16" width="26" height="15" rx="3"/><text class="lab" x="264" y="27.5">this repo</text>
+  <rect class="own" x="390" y="16" width="26" height="15" rx="3"/><text class="lab" x="424" y="27.5">its own repo</text>
+  <rect class="extbox" x="540" y="16" width="26" height="15" rx="3"/><text class="lab" x="574" y="27.5">outside the bus</text>
+
+  <!-- top row: native participants -->
+  <rect class="node" x="45" y="70" width="235" height="170" rx="6"/>
+  <text class="t" x="162" y="96" text-anchor="middle">Demo venue services</text>
+  <text class="s" x="162" y="112" text-anchor="middle">this repo</text>
+  <text class="b" x="162" y="140" text-anchor="middle">OWM venue model 1.8</text>
+  <text class="b" x="162" y="158" text-anchor="middle">ducks · robot keep-out</text>
+  <text class="b" x="162" y="176" text-anchor="middle">venue georeference</text>
+  <text class="b" x="162" y="194" text-anchor="middle">catalogue: announces,</text>
+  <text class="b" x="162" y="212" text-anchor="middle">manifests + resolver</text>
+  <line class="flow" x1="162" y1="240" x2="162" y2="328" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="170" y="268">entities, announces</text>
+  <text class="lab" x="170" y="282">commands back</text>
+
+  <rect class="own" x="310" y="70" width="200" height="170" rx="6"/>
+  <text class="t" x="410" y="96" text-anchor="middle">OpenVPS</text>
+  <text class="s" x="410" y="112" text-anchor="middle">its own repo · 1.8</text>
+  <text class="b" x="410" y="146" text-anchor="middle">visual positioning</text>
+  <text class="b" x="410" y="164" text-anchor="middle">announces coverage</text>
+  <text class="b" x="410" y="182" text-anchor="middle">+ map frame with scale</text>
+  <text class="b" x="410" y="200" text-anchor="middle">answers VpsRequest</text>
+  <line class="flow" x1="410" y1="240" x2="410" y2="328" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="418" y="268">VPS query / response</text>
+
+  <rect class="node" x="550" y="70" width="250" height="170" rx="6"/>
+  <text class="t" x="675" y="96" text-anchor="middle">A ROS 2 robot</text>
+  <text class="s" x="675" y="112" text-anchor="middle">one process · ROS 2 rides DDS too</text>
+  <rect class="extbox" x="565" y="126" width="95" height="66" rx="4"/>
+  <text class="b" x="612" y="156" text-anchor="middle">nav2 · TF</text>
+  <text class="s" x="612" y="172" text-anchor="middle">robot's own</text>
+  <line class="flow" x1="660" y1="159" x2="674" y2="159" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <rect class="pypi" x="675" y="126" width="110" height="66" rx="4"/>
+  <text class="ta" x="730" y="152" text-anchor="middle">spatialdds_ros</text>
+  <text class="s" x="730" y="168" text-anchor="middle">PyPI package</text>
+  <text class="s" x="675" y="216" text-anchor="middle">goto → NavigateToPose · result → status</text>
+  <line class="flow" x1="730" y1="240" x2="730" y2="328" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="738" y="268">entity pose, announce</text>
+  <text class="lab" x="738" y="282">goto in, refusals out</text>
+
+  <rect class="own" x="845" y="70" width="195" height="170" rx="6"/>
+  <text class="t" x="942" y="96" text-anchor="middle">SceneScape sidecar</text>
+  <text class="s" x="942" y="112" text-anchor="middle">its own repo · adapter</text>
+  <text class="b" x="942" y="146" text-anchor="middle">Intel SceneScape</text>
+  <text class="b" x="942" y="164" text-anchor="middle">tracks · detections</text>
+  <text class="b" x="942" y="182" text-anchor="middle">zones · georeference</text>
+  <line class="flow" x1="942" y1="240" x2="942" y2="328" marker-end="url(#ae)"/>
+  <text class="lab" x="950" y="268">typed samples</text>
+  <text class="lab" x="950" y="282">(publish only)</text>
+
+  <!-- the bus -->
+  <rect class="bus" x="40" y="330" width="1000" height="46" rx="8"/>
+  <text class="t" x="540" y="350" text-anchor="middle">SpatialDDS bus</text>
+  <text class="s" x="540" y="366" text-anchor="middle">DDS (CycloneDDS) · typed 1.8 IDL topics, pinned to the spec</text>
+
+  <!-- bottom row: bridges -->
+  <line class="flow" x1="172" y1="378" x2="172" y2="438" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="180" y="412">typed samples</text>
+  <rect class="node" x="45" y="440" width="255" height="130" rx="6"/>
+  <text class="t" x="172" y="464" text-anchor="middle">Web gateway · web_bridge</text>
+  <text class="s" x="172" y="479" text-anchor="middle">this repo</text>
+  <rect class="pypi" x="60" y="488" width="225" height="38" rx="4"/>
+  <text class="ta" x="172" y="504" text-anchor="middle">spatialdds (PyPI)</text>
+  <text class="s" x="172" y="519" text-anchor="middle">Appendix N web binding</text>
+  <text class="s" x="172" y="544" text-anchor="middle">+ routes for filed 1.8 gaps</text>
+  <text class="s" x="172" y="558" text-anchor="middle">(/v1/localize, content query)</text>
+  <line class="flow" x1="172" y1="570" x2="172" y2="618" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="180" y="598">HTTP / WebSocket</text>
+  <rect class="extbox" x="70" y="620" width="205" height="64" rx="6"/>
+  <text class="b" x="172" y="648" text-anchor="middle">Browser · Cesium UI</text>
+  <text class="s" x="172" y="664" text-anchor="middle">+ conformance suite</text>
+
+  <line class="flow" x1="450" y1="378" x2="450" y2="438" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="458" y="412">typed spec topics</text>
+  <rect class="node" x="340" y="440" width="220" height="130" rx="6"/>
+  <text class="t" x="450" y="464" text-anchor="middle">ros2_bridge</text>
+  <text class="s" x="450" y="479" text-anchor="middle">this repo</text>
+  <text class="b" x="450" y="506" text-anchor="middle">sensor message converter</text>
+  <text class="b" x="450" y="524" text-anchor="middle">poses · IMU · images</text>
+  <text class="b" x="450" y="542" text-anchor="middle">detections · fused tracks</text>
+  <line class="flow" x1="450" y1="570" x2="450" y2="618" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="458" y="598">ROS 2 messages</text>
+  <rect class="extbox" x="348" y="620" width="204" height="64" rx="6"/>
+  <text class="b" x="450" y="648" text-anchor="middle">ROS 2 sensor graphs</text>
+  <text class="s" x="450" y="664" text-anchor="middle">nuScenes · DeepSense · fusion</text>
+
+  <line class="flow" x1="695" y1="378" x2="695" y2="438" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="703" y="412">record / replay</text>
+  <rect class="node" x="595" y="440" width="200" height="130" rx="6"/>
+  <text class="t" x="695" y="464" text-anchor="middle">mcap_bridge</text>
+  <text class="s" x="695" y="479" text-anchor="middle">this repo</text>
+  <text class="b" x="695" y="506" text-anchor="middle">record / replay</text>
+  <text class="b" x="695" y="524" text-anchor="middle">schemas from the IDL,</text>
+  <text class="b" x="695" y="542" text-anchor="middle">readable without the repo</text>
+  <line class="flow" x1="695" y1="570" x2="695" y2="618" marker-end="url(#ae)"/>
+  <text class="lab" x="703" y="598">.mcap files</text>
+  <rect class="extbox" x="610" y="620" width="170" height="64" rx="6"/>
+  <text class="b" x="695" y="648" text-anchor="middle">MCAP files</text>
+  <text class="s" x="695" y="664" text-anchor="middle">open in Foxglove</text>
+
+  <line class="flow" x1="940" y1="378" x2="940" y2="438" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="948" y="412">typed on the bus</text>
+  <rect class="node" x="840" y="440" width="200" height="130" rx="6"/>
+  <text class="t" x="940" y="464" text-anchor="middle">mqtt_bridge</text>
+  <text class="s" x="940" y="479" text-anchor="middle">this repo</text>
+  <text class="b" x="940" y="506" text-anchor="middle">bidirectional</text>
+  <text class="b" x="940" y="524" text-anchor="middle">inbound JSON built into</text>
+  <text class="b" x="940" y="542" text-anchor="middle">its announced type</text>
+  <line class="flow" x1="940" y1="570" x2="940" y2="618" marker-start="url(#as)" marker-end="url(#ae)"/>
+  <text class="lab" x="948" y="598">JSON at the edge</text>
+  <rect class="extbox" x="855" y="620" width="170" height="64" rx="6"/>
+  <text class="b" x="940" y="648" text-anchor="middle">MQTT broker</text>
+  <text class="s" x="940" y="664" text-anchor="middle">Mosquitto · AWS IoT</text>
+</svg>

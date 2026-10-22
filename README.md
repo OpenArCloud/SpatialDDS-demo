@@ -22,6 +22,14 @@ directions. Everywhere else the repository is one era, and
 [`tests/test_one_era.py`](tests/test_one_era.py) fails if that stops being
 true.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/ecosystem-dark.svg">
+  <img alt="Ecosystem map: native participants above the SpatialDDS DDS bus (venue services, OpenVPS, a ROS 2 robot running spatialdds_ros, the SceneScape sidecar); bridges below it (web gateway embedding the spatialdds package, ros2_bridge, mcap_bridge, mqtt_bridge) connecting browsers, ROS 2 sensor graphs, MCAP files and MQTT brokers" src="docs/images/ecosystem-light.svg">
+</picture>
+
+Libraries make things native: a robot runs `spatialdds_ros` on the bus it
+already rides. Bridges convert, for the worlds that will never be participants.
+
 The spec lives at [spatialdds.org](https://spatialdds.org); its source is
 [OpenArCloud/SpatialDDS-spec](https://github.com/OpenArCloud/SpatialDDS-spec).
 
@@ -31,47 +39,24 @@ Both need Docker. The web UI also needs Node.
 
 ### 1 · SpatialDDS + OpenVPS
 
-A browser localizes against a real visual positioning service it discovered on
-the bus — no configured endpoint, no per-service client code.
+A browser localizes against a visual positioning service it discovered on the
+bus — no configured endpoint, no per-service client code.
 
 ```bash
 ./run_bridge_server_docker.sh          # VPS + catalogue + bridge on :8088
 cd web && npm install && npm run dev   # → http://localhost:5173/
 ```
 
-Turn on **REST Messages** and **DDS Messages**, then:
-
-- **Localize with Image** sends a query frame to the VPS discovery found. The
-  REST panel shows the two calls the browser makes — discovery search,
-  localize — and the DDS panel the five bus messages they cause; the camera
-  moves to the pose the service returns. A fresh clone sends a **synthetic**
-  frame: a drawn card, labelled SYNTHETIC under its preview and in its name,
-  anchored at the venue's declared anchor. Same path end to end, but no VPS
-  could match it against a map.
-  For real photographs from a VPS map's own scan, install a query-frame bundle
-  from an OpenVPS dataset (git-ignored: pictures of a real place); it replaces
-  the synthetic frame:
-  [`ar_demo/README.md`](ar_demo/README.md#localize-with-image).
-- **Localize (Mock)** puts the camera at the venue on the page and sends
-  nothing, so both panels stay quiet.
-- **Discover Content (DDS)** then finds the catalogue the same way, reads its
-  latched content announces and resolves each item's manifest, and places
-  what it finds.
-
-The bundled localizer returns the prior plus jitter. For poses computed from
-pixels, put a real [OpenVPS](https://github.com/OpenArCloud/openvps) on the bus
-— nothing here changes, discovery simply finds it instead.
+With the REST and DDS panels on, **Localize with Image** turns two HTTP calls
+into five bus messages and moves the camera to the pose the VPS returns. A
+fresh clone sends a labelled **synthetic** frame down that same real path;
+real photographs need a [query-frame bundle](ar_demo/README.md#localize-with-image).
 **[Full recipe →](docs/ismar-openvps.md)**
 
 ### 2 · Open World Model
 
-The venue as a live model rather than a list of files: entities with identity,
-pose, type, basis and lifecycle. A robot plans against the venue's own
-declarations; ducks follow the water; every claim says how it was arrived at.
-Migrated to SpatialDDS 1.8's `spatial.owm/0.1`, which carries no relationship
-type -- the containment hierarchy this demo used to publish is the one thing
-the migration cost, and [`docs/owm-1.8-census.md`](docs/owm-1.8-census.md)
-says so member by member.
+The screenshot above: the venue as a live model, every entity with identity,
+pose, basis and lifecycle, and a ROS 2 robot planning around its declared water.
 
 ```bash
 SPATIALDDS_MODEL_LAYER=1 SPATIALDDS_POND_WATCH=1 ./run_bridge_server_docker.sh
@@ -80,14 +65,9 @@ cd web && VITE_SPATIALDDS_BINDING_URL=http://localhost:5173 \
           VITE_SPATIALDDS_BINDING_TOKEN=bridge-session npm run dev
 ```
 
-State and live come over the 1.8 web binding on `:8089`, which the first
-command starts alongside the bridge. The two variables point the client at
-this dev server's proxy so `Send Robot` can carry its credential same-origin —
-[`docs/ismar-owm.md`](docs/ismar-owm.md) explains why, and plain
-`npm run dev` still shows the venue live without them.
-
-The screenshot above is that view. **[Full recipe →](docs/ismar-owm.md)** —
-including the ROS 2 robot tier, which is what makes the keep-out real.
+The two variables let **Send Robot** carry its credential through the dev
+server's proxy; plain `npm run dev` still shows the venue live.
+**[Full recipe →](docs/ismar-owm.md)**
 
 ## Demos
 
@@ -107,10 +87,10 @@ per-demo wiring.
 
 | Bridge | Path | What it does |
 |---|---|---|
-| Web (HTTP/WebSocket) | [`bridges/web_bridge/`](bridges/web_bridge/README.md) | FastAPI gateway. REST for the Cesium demo, subscribe-by-pattern `/ws`, `/api/topics`, and the fusion dashboard at `/`. |
-| MCAP record / replay | [`bridges/mcap_bridge/`](bridges/mcap_bridge/README.md) | Records typed samples with schemas **generated from the IDL**, so a recording is readable without this repo. Foxglove-compatible. |
-| ROS 2 | [`bridges/ros2_bridge/`](bridges/ros2_bridge/README.md) | Bidirectional: `PoseStamped`, `NavSatFix`, `Imu`, `CompressedImage`, `Detection3DArray`, and `FusedTrackSet` in reverse. |
-| MQTT | [`bridges/mqtt_bridge/`](bridges/mqtt_bridge/README.md) | Bidirectional, against Mosquitto or AWS IoT Core. Inbound JSON is built into its announced type before it reaches the bus. |
+| Web (HTTP/WebSocket) | [`bridges/web_bridge/`](bridges/web_bridge/README.md) | The browser's way onto the bus, embedding the web binding. |
+| MCAP record / replay | [`bridges/mcap_bridge/`](bridges/mcap_bridge/README.md) | Recordings whose schemas come from the IDL. |
+| ROS 2 | [`bridges/ros2_bridge/`](bridges/ros2_bridge/README.md) | ROS 2 sensor messages in, decoded spec samples out. |
+| MQTT | [`bridges/mqtt_bridge/`](bridges/mqtt_bridge/README.md) | JSON at the broker, typed samples on the bus. |
 
 There are **two** HTTP servers — a gateway and a conformance harness — and they
 are not interchangeable: [which one do I want?](docs/servers-and-uis.md)

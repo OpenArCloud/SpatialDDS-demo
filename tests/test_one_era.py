@@ -19,7 +19,9 @@ anything versioned below it is pre-era. Four properties:
 3. **No live pre-era reference.** Nothing that would be *used* names a
    retired path or the 1.7 package: Python string literals other than
    docstrings, non-comment lines of shell, Dockerfiles, YAML, JSON, TypeScript
-   and IDL, and Markdown link targets. Prose that says what happened -- a
+   and IDL, Markdown link targets, and all of an SVG's text and attributes
+   outside XML comments (a diagram's labels are what a reader is told is
+   there now; it has no history voice). Prose that says what happened -- a
    comment, a docstring, a census -- is history and stays; a command, a
    COPY, an import or a link that points at what is gone is a defect.
 4. **Not importable at all.** From the repository root, with the repository
@@ -175,6 +177,17 @@ def live_links(path: str, text: str, patterns) -> list:
             if any(p.search(m.group(1)) for p in patterns)]
 
 
+XML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+
+def live_svg(path: str, text: str, patterns) -> list:
+    """Everything but XML comments: labels, attributes, embedded paths."""
+    text = XML_COMMENT.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    return [f"{path}:{n}: {line.strip()[:80]}"
+            for n, line in enumerate(text.splitlines(), 1)
+            if any(p.search(line) for p in patterns)]
+
+
 def scan(files, patterns) -> dict:
     found = {"imports": [], "references": []}
     for f in files:
@@ -192,6 +205,8 @@ def scan(files, patterns) -> dict:
                 found["references"].append(f"{f}: does not parse")
         elif suffix == ".md":
             found["references"] += live_links(f, text, patterns)
+        elif suffix == ".svg":
+            found["references"] += live_svg(f, text, patterns)
         elif suffix == ".json":
             found["references"] += [
                 f"{f}: {s[:80]!r}" for s in _json_strings(text)
@@ -232,6 +247,8 @@ class TheRepositoryIsOneEra(unittest.TestCase):
         self.assertGreater(len(py), 150, f"only {len(py)} Python files seen")
         self.assertIn("spatialdds_demo/model_service.py", self.files)
         self.assertIn("Dockerfile", self.files)
+        # Diagrams are read too, and the gate has to have seen one.
+        self.assertIn("docs/images/ecosystem-light.svg", self.files)
 
     def test_no_pre_era_import(self):
         self.assertEqual(self.found["imports"], [])
@@ -322,6 +339,13 @@ class TheGateCanFail(unittest.TestCase):
                 "/* and idl/v1.6\n   before that */\n"
                 "const p = 'idl/v1.7/core.idl';\n")
         hits = live_lines("x.ts", text, self.patterns)
+        self.assertEqual([h.split(":")[1] for h in hits], ["4"])
+
+    def test_a_diagram_label_is_caught_and_an_xml_comment_is_not(self):
+        text = ("<svg>\n<!-- redrawn after idl/v1.7\n     retired -->\n"
+                f'<text x="1">imports {OLD_PACKAGE}.spatial.core</text>\n'
+                '<text x="2">idl/v1.8 · spatialdds_idl18</text>\n</svg>\n')
+        hits = live_svg("x.svg", text, self.patterns)
         self.assertEqual([h.split(":")[1] for h in hits], ["4"])
 
 
