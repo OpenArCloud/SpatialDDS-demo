@@ -179,7 +179,7 @@ class HeadOfLine(unittest.TestCase):
         topic in the demo, so the shared-lane case above is unreachable by
         construction rather than by discipline.
         """
-        from spatialdds_demo import topic_types
+        from spatialdds_demo import lanes as demo_lanes
 
         sys.path.insert(0, str(_REPO / "multi_operator_fusion"))
         from synthetic_publisher import (
@@ -195,7 +195,7 @@ class HeadOfLine(unittest.TestCase):
         }
         for topic, type_name in lanes.items():
             with self.subTest(topic=topic):
-                self.assertIsNotNone(topic_types.try_resolve(type_name))
+                self.assertTrue(callable(demo_lanes.class_for(type_name)))
         # One type per topic — the property that makes the isolation
         # structural. Under the envelope this set had exactly one member.
         self.assertGreater(len({t for t in lanes}), 1)

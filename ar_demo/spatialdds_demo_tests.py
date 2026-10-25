@@ -5,10 +5,10 @@ import subprocess
 import sys
 
 from spatialdds_demo.manifest_resolver import resolve_manifest
-from spatialdds_demo.topics import (
+from spatialdds_demo import lanes
+from spatialdds_test import (
     TOPIC_VPS_QUERY_V1,
     TOPIC_VPS_RESULT_V1,
-    validate_topic_meta,
     validate_topics_are_canonical,
 )
 from spatialdds_test import SpatialDDSLogger, VPSServiceV15
@@ -53,7 +53,7 @@ def test_demo_output() -> bool:
         "manifest_loaded: yes",
         "topic=spatialdds/vps/query/v1",
         "topic=spatialdds/vps/result/v1",
-        "topic=spatialdds/discovery/response/",
+        "topic=spatialdds/discovery/replies/",
         "topic=spatialdds/anchors/",
         "topic=spatialdds/discovery/content/v1",
         "topic_source=manifest",
@@ -269,8 +269,7 @@ def test_manifest_topics_are_registered() -> bool:
     topics = manifest.get("service", {}).get("topics", []) if manifest else []
     if not topics:
         return False
-    ok, _ = validate_topic_meta(topics)
-    return ok
+    return not lanes.topic_meta_problems(topics)
 
 
 def test_no_identity_transforms() -> bool:

@@ -57,17 +57,16 @@ python3 -c "import mcap" 2>/dev/null || {
 goto () {   # x y note
   python3 - "$1" "$2" "$DOMAIN" <<'PY'
 import sys, time
-from cyclonedds.domain import DomainParticipant
-from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.qos_profiles import MODEL_COMMAND
-from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1
-from spatialdds_idl18.builtin import Time
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
-from spatialdds_idl18.spatial.owm import ModelCommand
+import spatialdds as sd
+from spatialdds_demo.lanes import MODEL_COMMAND, SCENE
+from spatialdds.dds.types.builtin import Time
+from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
+from spatialdds.dds.types.spatial.owm import ModelCommand
 x, y, domain = float(sys.argv[1]), float(sys.argv[2]), int(sys.argv[3])
-w = tt.make_writer(DomainParticipant(domain), TOPIC_MODEL_COMMAND_V1,
-                   ModelCommand, MODEL_COMMAND.name)
-time.sleep(0.6)
+p = sd.participant(SCENE, domain=domain,
+                   service_id="tool:capture_robot_session")
+w = p.writer("model_command", qos_profile=MODEL_COMMAND)
+w.wait_matched(timeout=5.0)
 now = time.time()
 w.write(ModelCommand(
     command_id=f"cmd:robot:goto-{x:.0f}-{y:.0f}", verb="goto",
@@ -77,7 +76,7 @@ w.write(ModelCommand(
     pose=PoseSE3(t=[x, y, -0.84], q=[0.0, 0.0, 0.0, 1.0]),
     has_extent=False, extent=Aabb3(min_xyz=[0.0]*3, max_xyz=[0.0]*3),
     stamp=Time(sec=int(now), nanosec=int((now % 1) * 1e9))))
-time.sleep(0.8)
+p.close(reason="the command was sent")
 PY
 }
 

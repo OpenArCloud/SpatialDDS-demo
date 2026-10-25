@@ -68,17 +68,17 @@ class ConverterShapes(unittest.TestCase):
             import numpy  # noqa: F401
             import scipy.io  # noqa: F401
 
-            from spatialdds_demo import topic_types  # noqa: F401
+            from spatialdds_demo import lanes  # noqa: F401
         except Exception as exc:                       # pragma: no cover
             raise unittest.SkipTest(f"dependencies unavailable: {exc}")
         cls.d2s = _load("deepsense_to_spatialdds")
 
     def _check(self, lane_key, payload):
-        from spatialdds_demo import topic_types
+        from spatialdds_demo import lanes
         from spatialdds.dds import from_json
 
         type_name, _profile = LANES[lane_key]
-        cls = topic_types.try_resolve(type_name)
+        cls = lanes.class_for(type_name)
         self.assertIsNotNone(cls, f"{type_name!r} resolves to no class")
         from_json(cls, payload)
 
@@ -139,12 +139,12 @@ class ConverterShapes(unittest.TestCase):
         self.assertEqual(det_set.camera_id, "unit1_cam")
 
     def test_lanes_name_resolvable_types_and_real_profiles(self):
-        from spatialdds_demo import qos_profiles, topic_types
+        from spatialdds_demo import lanes
 
         for key, (type_name, profile) in LANES.items():
             with self.subTest(lane=key):
-                self.assertIsNotNone(topic_types.try_resolve(type_name))
-                self.assertIsNotNone(qos_profiles.get(profile))
+                self.assertIsNotNone(lanes.class_for(type_name))
+                self.assertIsNotNone(lanes.profile(profile))
 
 
 class _fake_file:
@@ -183,19 +183,19 @@ class PublisherLanes(unittest.TestCase):
             import numpy  # noqa: F401
             import scipy.io  # noqa: F401
 
-            from spatialdds_demo import topic_types  # noqa: F401
+            from spatialdds_demo import lanes  # noqa: F401
         except Exception as exc:                       # pragma: no cover
             raise unittest.SkipTest(f"dependencies unavailable: {exc}")
         cls.pub = _load("publisher")
 
     def test_every_lane_resolves(self):
-        from spatialdds_demo import qos_profiles, topic_types
+        from spatialdds_demo import lanes
 
         for key, (topic, type_name, profile) in self.pub.LANES.items():
             with self.subTest(lane=key):
                 self.assertTrue(topic.startswith("spatialdds/"))
-                self.assertIsNotNone(topic_types.try_resolve(type_name))
-                self.assertIsNotNone(qos_profiles.get(profile))
+                self.assertIsNotNone(lanes.class_for(type_name))
+                self.assertIsNotNone(lanes.profile(profile))
 
     def test_lidar_sweep_goes_as_blob_chunks(self):
         """
@@ -205,7 +205,7 @@ class PublisherLanes(unittest.TestCase):
         """
         import numpy as np
 
-        from spatialdds_demo import blob
+        from spatialdds.dds import blob
         from spatialdds.dds import from_json
         from spatialdds.dds.types.spatial.core import BlobChunk
         from spatialdds.dds.types.spatial.sensing.lidar import LidarFrame

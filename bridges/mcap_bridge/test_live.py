@@ -176,17 +176,17 @@ def _publish_thread(domain: int, sender: str, samples: List[Tuple[str, str, dict
                     inter_msg_delay: float, recorder_warmup: float,
                     done_evt: threading.Event):
     """Run from a daemon thread: wait for recorder discovery, publish, then SIGINT."""
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds as sd
 
-    from spatialdds_demo import topic_types, typed_transport as tt
+    from spatialdds_demo import lanes
 
     profiles = {DET_TYPE: "RADAR_RT", POSE_TYPE: "POSE_RT",
                 TRACK_TYPE: "POSE_RT"}
-    participant = DomainParticipant(domain)
+    participant = sd.participant("mcap-live", domain=domain,
+                                 service_id=f"svc:{sender}")
     writers = {
-        topic: tt.TypedDictWriter(participant, topic,
-                                  topic_types.resolve(type_name),
-                                  profiles[type_name])
+        topic: lanes.open_writer(participant, type_name, topic,
+                                 qos_profile=profiles[type_name])
         for type_name, topic, _ in samples
     }
     try:
@@ -198,6 +198,7 @@ def _publish_thread(domain: int, sender: str, samples: List[Tuple[str, str, dict
         # Let the recorder drain the last samples.
         time.sleep(1.0)
     finally:
+        participant.close()
         done_evt.set()
         # Signal the main thread (recorder) to exit.
         try:
@@ -281,15 +282,18 @@ def _prewarm_idl(domain: int) -> None:
     a Topic is created. If two threads race that init concurrently, the
     second observer sees `version_support is None`. Pre-warm in the main
     thread before any worker threads build their own endpoints."""
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds as sd
 
-    from spatialdds_demo import topic_types, typed_transport as tt
+    from spatialdds_demo import lanes
 
-    participant = DomainParticipant(domain)
+    participant = sd.participant("prewarm", domain=domain,
+                                 service_id="svc:test:prewarm")
     for i, type_name in enumerate((DET_TYPE, POSE_TYPE, TRACK_TYPE)):
-        tt.make_writer(participant, f"spatialdds/prewarm/{i}/v1",
-                       topic_types.resolve(type_name), "EVENT_RT")
+        lanes.open_writer(participant, type_name,
+                          f"spatialdds/prewarm/s{i}/{type_name}/v1",
+                          qos_profile="EVENT_RT")
     time.sleep(0.3)
+    participant.close()
 
 
 def main() -> int:

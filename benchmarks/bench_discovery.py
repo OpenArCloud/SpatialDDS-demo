@@ -14,7 +14,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from common import DDS_DOMAIN_MAIN, Stats, WARMUP_ITERATIONS, log, parse_csv_ints, write_csv
-from spatialdds_demo.topics import TOPIC_DISCOVERY_ANNOUNCE_V1
+import spatialdds as sd
+
+TOPIC_DISCOVERY_ANNOUNCE_V1 = sd.dds.registry.well_known("Announce").topic
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 
 

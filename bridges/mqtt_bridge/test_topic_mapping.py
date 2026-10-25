@@ -53,12 +53,12 @@ class TestMsgTypeInference(unittest.TestCase):
         cannot act on.
         """
         try:
-            from spatialdds_demo import topic_types
+            from spatialdds_demo import lanes
         except Exception as exc:                       # pragma: no cover
             self.skipTest(f"generated bindings unavailable: {exc}")
         for _, name in self.CASES:
             with self.subTest(type=name):
-                self.assertIsNotNone(topic_types.try_resolve(name))
+                self.assertIsNotNone(lanes.class_for(name))
 
     def test_announce_is_its_own_case(self):
         # Discovery is not a TopicMeta lane, so it has no registry name.

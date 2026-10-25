@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Sequence
 
 from spatialdds_demo import payloads
-from spatialdds_demo import topics as _topics
+from spatialdds_demo import lanes as _lanes
 
 
 # Imported, not restated: these were copies of payloads' constants and
@@ -176,8 +176,8 @@ _SERVICE_KIND = {
 
 
 def topic_meta(name: str, type_: str, qos_profile: str) -> Dict:
-    """One 1.8 TopicMeta row; see ``spatialdds_demo.topics.topic_meta``."""
-    return _topics.topic_meta(name, type_, qos_profile)
+    """One 1.8 TopicMeta row; see ``spatialdds_demo.lanes.topic_meta``."""
+    return _lanes.topic_meta(name, type_, qos_profile)
 
 
 def circle_coverage(center_x: float, center_y: float, radius_m: float,

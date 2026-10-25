@@ -44,25 +44,40 @@ def _expected_topics() -> Dict[str, str]:
     Read from the publisher's own lane table rather than restated here, so
     adding a lane cannot leave this test silently checking the old set.
     """
-    sys.path.insert(0, str(_REPO_ROOT / "deepsense"))
-    sys.path.insert(0, str(_REPO_ROOT / "nuscenes"))
-    from publisher import LANES  # deepsense/publisher.py
+    return {topic: type_name
+            for topic, type_name, _profile in _deepsense_lanes().values()}
 
-    return {topic: type_name for topic, type_name, _profile in LANES.values()}
+
+def _deepsense_lanes() -> Dict[str, Tuple[str, str, str]]:
+    """deepsense/publisher.py's LANES, loaded by its file. Three directories
+    here each have a `publisher.py`, and the bare import this used got
+    whichever sys.path put first: nuscenes's, inserted after deepsense's."""
+    import importlib.util
+    for sub in ("deepsense", "nuscenes"):      # its own imports need both
+        if str(_REPO_ROOT / sub) not in sys.path:
+            sys.path.append(str(_REPO_ROOT / sub))
+    spec = importlib.util.spec_from_file_location(
+        "deepsense_publisher", _REPO_ROOT / "deepsense" / "publisher.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.LANES
 
 
 def _prewarm_idl(domain: int) -> None:
     """Force the lazy IDL type-object cache to fill once before any worker
     thread/subprocess races on it (see bug fix in test_live.py)."""
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds as sd
 
-    from spatialdds_demo import topic_types, typed_transport as tt
+    from spatialdds_demo import lanes
 
-    participant = DomainParticipant(domain)
+    participant = sd.participant("prewarm", domain=domain,
+                                 service_id="svc:test:prewarm")
     for i, type_name in enumerate(sorted(set(_expected_topics().values()))):
-        tt.make_writer(participant, f"spatialdds/prewarm/{i}/v1",
-                       topic_types.resolve(type_name), "EVENT_RT")
+        lanes.open_writer(participant, type_name,
+                          f"spatialdds/prewarm/s{i}/{type_name}/v1",
+                          qos_profile="EVENT_RT")
     time.sleep(0.3)
+    participant.close()
 
 
 def _spawn_publisher(domain: int, dataroot: str, max_samples: int,
@@ -158,29 +173,30 @@ def _phase2_replay(domain: int, mcap_path: Path) -> Tuple[int, Counter, Dict[str
     live publisher's would. That is the profile, not the bridge. The latched
     metadata lanes are reliable and must not lose anything.
     """
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds as sd
 
-    from spatialdds_demo import topic_types, typed_transport as tt
+    from spatialdds_demo import lanes
 
     received_msg_types: Counter = Counter()
     received_per_topic: Dict[str, int] = {}
     rx_lock = threading.Lock()
     stop = threading.Event()
 
-    sys.path.insert(0, str(_REPO_ROOT / "deepsense"))
-    from publisher import LANES  # deepsense/publisher.py
+    LANES = _deepsense_lanes()
 
-    participant = DomainParticipant(domain)
+    participant = sd.participant("deepsense-test", domain=domain)
     readers = [
-        (tt.make_reader(participant, topic, topic_types.resolve(type_name),
-                        profile), topic, type_name)
+        (lanes.open_reader(participant, type_name, topic, qos_profile=profile),
+         topic, type_name)
         for topic, type_name, profile in LANES.values()
     ]
 
     def _drain():
         while not stop.is_set():
             for reader, topic, type_name in readers:
-                for _sample in tt.take_samples(reader, n=512):
+                for _ev in reader.take():
+                    if not isinstance(_ev, sd.Sample):
+                        continue
                     with rx_lock:
                         received_msg_types[type_name] += 1
                         received_per_topic[topic] = (
@@ -204,6 +220,7 @@ def _phase2_replay(domain: int, mcap_path: Path) -> Tuple[int, Counter, Dict[str
     finally:
         stop.set()
         drain_thread.join(timeout=2.0)
+        participant.close()
     return published, received_msg_types, received_per_topic
 
 

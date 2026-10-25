@@ -25,9 +25,9 @@ DOMAIN = 43
 REPO = Path("/ws")
 sys.path.insert(0, str(REPO))
 
-from cyclonedds.domain import DomainParticipant  # noqa: E402
+import spatialdds as sd  # noqa: E402
 
-from spatialdds_demo import topic_types, typed_transport as tt  # noqa: E402
+from spatialdds_demo import lanes  # noqa: E402
 from spatialdds.dds import to_json  # noqa: E402
 
 # (lane, topic, §3.3.2 type, §3.3.3 QoS profile) — what the bridge's config
@@ -64,12 +64,11 @@ def main() -> int:
     print(f"[verifier] subscribing on SpatialDDS domain {DOMAIN}")
     time.sleep(5)                      # let the bridge come up
 
-    participant = DomainParticipant(DOMAIN)
+    participant = sd.participant("ros2-verifier", domain=DOMAIN)
     readers = {}
     for lane, topic, type_name, profile in LANES:
         readers[lane] = (
-            tt.make_reader(participant, topic,
-                           topic_types.resolve(type_name), profile),
+            lanes.open_reader(participant, type_name, topic, qos_profile=profile),
             topic, type_name,
         )
 
@@ -78,9 +77,11 @@ def main() -> int:
     deadline = time.time() + 20
     while time.time() < deadline:
         for lane, (reader, _topic, _type_name) in readers.items():
-            for sample in tt.take_samples(reader):
+            for ev in reader.take():
+                if not isinstance(ev, sd.Sample):
+                    continue
                 counts[lane] = counts.get(lane, 0) + 1
-                first.setdefault(lane, to_json(sample))
+                first.setdefault(lane, to_json(ev.data))
         if len(counts) == len(LANES):
             break
         time.sleep(0.2)

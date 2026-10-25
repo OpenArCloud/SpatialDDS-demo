@@ -261,5 +261,5 @@ class TestBuildersMatchTheIdl(unittest.TestCase):
 
         self._assert_no_unknown_fields(Announce, make_announce(
             operator="op", service_kind="SENSING",
-            topics=[topic_meta("t/v1", "framed_pose", "POSE_RT")],
+            topics=[topic_meta("spatialdds/op/ego/framed_pose/v1", "framed_pose", "POSE_RT")],
             coverage=circle_coverage(0.0, 0.0, 10.0), timestamp_s=1.0))

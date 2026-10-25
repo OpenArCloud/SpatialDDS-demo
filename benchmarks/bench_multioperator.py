@@ -15,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from common import DDS_DOMAIN_MAIN, Stats, log, parse_csv_ints, write_csv
-from spatialdds_demo.topics import TOPIC_DDS_ENVELOPE_V1
+from envelope_baseline import TOPIC_DDS_ENVELOPE_V1
 
 
 def _idl_string(types_module):

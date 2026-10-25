@@ -107,7 +107,7 @@ class ConverterShapes(unittest.TestCase):
         try:
             import numpy  # noqa: F401
 
-            from spatialdds_demo import topic_types  # noqa: F401
+            from spatialdds_demo import lanes  # noqa: F401
         except Exception as exc:                       # pragma: no cover
             raise unittest.SkipTest(f"generated bindings unavailable: {exc}")
         # Not guarded: if the converters cannot be imported that is a
@@ -118,11 +118,11 @@ class ConverterShapes(unittest.TestCase):
         cls.sensor_types = _load("sensor_types")
 
     def _check(self, lane, payload):
-        from spatialdds_demo import topic_types
+        from spatialdds_demo import lanes
         from spatialdds.dds import from_json
 
         type_name, profile = lane
-        cls = topic_types.try_resolve(type_name)
+        cls = lanes.class_for(type_name)
         self.assertIsNotNone(cls, f"{type_name!r} resolves to no class")
         from_json(cls, payload)
 
@@ -179,7 +179,7 @@ class ConverterShapes(unittest.TestCase):
         self.assertEqual(pub.TYPE_GEO_POSE[0], "geopose")
 
     def test_lanes_name_registered_or_documented_types(self):
-        from spatialdds_demo import topic_types
+        from spatialdds_demo import lanes
 
         pub = self.pub
         for lane in (pub.TYPE_EGO_POSE, pub.TYPE_GEO_POSE, pub.TYPE_VISION_META,
@@ -187,9 +187,8 @@ class ConverterShapes(unittest.TestCase):
                      pub.TYPE_RAD_DET, pub.TYPE_DET3D):
             type_name, profile = lane
             with self.subTest(type=type_name):
-                self.assertIsNotNone(topic_types.try_resolve(type_name))
-                from spatialdds_demo import qos_profiles
-                self.assertIsNotNone(qos_profiles.get(profile))
+                self.assertIsNotNone(lanes.class_for(type_name))
+                self.assertIsNotNone(lanes.profile(profile))
 
 
 if __name__ == "__main__":

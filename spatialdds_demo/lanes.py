@@ -210,6 +210,49 @@ def endpoint(type_name: str, qos_profile: Any = None):
     return class_for(type_name), dict(kw, type_name=type_name)
 
 
+def topic_meta(name: str, type_name: str, qos_profile: str, *,
+               target_rate_hz: float = 0.0, max_chunk_bytes: int = 0) -> dict:
+    """One TopicMeta row for a document (an announce or manifest built as data).
+
+    The SDK's builder (`sd.records.topic`), which holds the name to section
+    3.3.1 and derives `durability` from a registered profile. For a profile
+    only this deployment declares, the durability is that declaration's: the
+    SDK leaves it empty, rightly, since it cannot read a name it was never
+    given. Until the SDK adoption this was `topics.topic_meta`, with its own
+    table. (A participant's own announce needs none of this: its rows are
+    its endpoints' own TopicMeta.)
+    """
+    prof = profile(qos_profile)
+    return sd.records.topic(
+        type_name, scene=SCENE, name=name, qos_profile=qos_profile,
+        durability=None if prof.registered else prof.durability,
+        rate_hz=float(target_rate_hz), max_chunk_bytes=int(max_chunk_bytes))
+
+
+def topic_meta_problems(rows) -> list:
+    """Why each TopicMeta row is not a lane this deployment can open, or [].
+
+    A section 3.3.1 name (or a template's), a version, a type that resolves
+    and a profile registered or declared: what `endpoint` and the SDK check
+    when a lane is opened, asked of a document's rows before anything is.
+    Until the SDK adoption this was `topics.validate_topic_meta`, against the
+    demo's own copy of the registries.
+    """
+    problems = []
+    for row in rows:
+        name = row.get("name") or "<unnamed>"
+        try:
+            if not row.get("version"):
+                raise ValueError("TopicMeta.version is required")
+            sd.dds.registry.check_topic(name, row.get("type") or "")
+            endpoint(row.get("type") or "", row.get("qos_profile") or None)
+            if not row.get("qos_profile"):
+                raise ValueError("TopicMeta.qos_profile is required")
+        except Exception as error:
+            problems.append(f"{name}: {error}")
+    return problems
+
+
 def _latched_and_keyed(type_name: str, qos: Any) -> bool:
     if qos is None:
         row = sd.dds.registry.registration(type_name)

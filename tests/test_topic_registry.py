@@ -4,30 +4,38 @@ The deployed topic names against the spec's registry, at the pinned commit.
 
 A topic name is the whole of interop — two participants meet because they
 chose the same string — and its failure mode is an empty bus, not an error.
-So the strings this demo deploys (`spatialdds_demo/topics.py`) and the ones the
-`spatialdds_ros` release it runs publishes are checked against the registry
-in SpatialDDS-spec **at the commit `scripts/generate_types.py` pins, from the
-checkout its resync command reads** — the same source the vendored IDL came
-from, so the types and the names cannot be from two revisions.
+So the strings this demo deploys and the ones the `spatialdds_ros` release it
+runs publishes are checked against the registry in SpatialDDS-spec **at the
+commit the SDK's registry was generated from** (`sd.dds.registry.pin()`), read
+from the checkout beside this one. Two kinds of name are deployed:
+
+* this deployment's own, in `spatialdds_demo/lanes.py`: the VPS, bootstrap,
+  blob, reply and anchor lanes, which the registry does not name;
+* the venue's lanes, which the SDK names from its registry when the venue
+  opens them (`sd.dds.registry.topic_name`), and the well-known discovery
+  topics. Reading those here, from the spec text, by a parser that is not the
+  SDK's generator, is a second reading of the same rows.
+
+Until the SDK adoption the subject was `spatialdds_demo/topics.py`, and the
+pin was `scripts/generate_types.py`'s, from which the v1.8 IDL tree was
+vendored.
 
 Both directions fail. A deployed string that moves off its registered name
-fails; a registry row that moves, or disappears, fails; a new `TOPIC_*`
-constant that nobody has classified fails; a registry row appearing for a
-string this file calls unregistered fails.
+fails; a registry row that moves, or disappears, fails; a new deployed name
+that nobody has classified fails; a registry row appearing for a string this
+file calls unregistered fails.
 
-**One divergence is known and recorded rather than tolerated.** The registry
-names the world-model entity lane `spatialdds/<scene>/model/entity/v0`; this
-demo and `spatialdds_ros` both use `…/world/entity/v1`. Which side moves is a
-pre-stamp decision for James (filed in spatialdds-ros `docs/spec-queue.md` §5).
-`KNOWN_DIVERGENCE` pins both halves exactly, so the moment either side moves
-the entry fails and has to be removed — it cannot outlive the disagreement.
+**Divergences are recorded rather than tolerated.** `KNOWN_DIVERGENCE` pins
+both halves of one exactly, so the moment either side moves the entry fails
+and has to be removed. The one it held (the registry's `model/entity/v0`
+against the deployed `world/entity/v1`) expired at the SDK's pin, where the
+registry names `world/entity/v1`.
 
 Skips with a reason when the spec checkout or the commit is absent; the
 blocker is probed, so the skip ends when the checkout exists.
 """
 from __future__ import annotations
 
-import importlib.util
 import re
 import subprocess
 import sys
@@ -38,58 +46,50 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_demo import topics                           # noqa: E402
+import spatialdds as sd                                       # noqa: E402
 
-REGISTRY_FILE = "sections/v1.8/02-idl-profiles.md"
+from spatialdds_demo import lanes                              # noqa: E402
 
-#: Deployed constant -> the registry row it implements (the row's first cell).
+SPEC_CHECKOUT = REPO.parent / "SpatialDDS-spec"
+REGISTRY_FILE = sd.dds.registry.pin()["source"]
+
+#: Deployed name -> the registry row it implements (the row's first cell).
 REGISTERED = {
-    "TOPIC_DISCOVERY_ANNOUNCE_V1": "Announce",
-    "TOPIC_DISCOVERY_DEPART_V1": "Depart",
-    "TOPIC_DISCOVERY_QUERY_V1": "CoverageQuery",
-    "TOPIC_DISCOVERY_CONTENT_V1": "ContentAnnounce",
-    "TOPIC_MODEL_ENTITY_V1": "model_entity",
+    "Announce": "Announce",
+    "Depart": "Depart",
+    "CoverageQuery": "CoverageQuery",
+    "ContentAnnounce": "ContentAnnounce",
+    "model_entity": "model_entity",
+    "model_pose": "model_pose",
+    "model_command": "model_command",
 }
 
-#: Deployed constants the registry has no row for, and why that is right.
+#: Deployed names the registry has no row for, and why that is right.
 UNREGISTERED = {
-    "TOPIC_VPS_QUERY_V1": "demo-owned VPS lane (a §3.3.2 deployment extension)",
-    "TOPIC_VPS_RESULT_V1": "demo-owned VPS lane (a §3.3.2 deployment extension)",
-    "TOPIC_BOOTSTRAP_QUERY_V1": "demo-owned bootstrap type (idl/demo18)",
-    "TOPIC_BOOTSTRAP_RESPONSE_V1": "demo-owned bootstrap type (idl/demo18)",
-    "TOPIC_DDS_ENVELOPE_V1": "demo-owned transport envelope",
-    "TOPIC_MODEL_POSE_V1": "spec type with no registry row at the pin",
-    "TOPIC_MODEL_COMMAND_V1": "spec type with no registry row at the pin",
-    "TOPIC_FRAME_TRANSFORM_V1": "spec type with no topic name in the registry",
-    "TOPIC_ANCHORS_DELTA": "`anchor_delta` is registered as a type, with no name",
-    "TOPIC_DISCOVERY_RESPONSE": "CoverageResponse rides the query's reply_topic",
+    "lanes.TOPIC_VPS_QUERY": "demo-owned VPS lane (a §3.3.2 deployment extension)",
+    "lanes.TOPIC_VPS_RESULT": "demo-owned VPS lane (a §3.3.2 deployment extension)",
+    "lanes.TOPIC_BOOTSTRAP_QUERY": "demo-owned bootstrap type (idl/demo18)",
+    "lanes.TOPIC_BOOTSTRAP_RESPONSE": "demo-owned bootstrap type (idl/demo18)",
+    "lanes.BLOB_TOPIC": "1.8 defines BlobChunk and names no lane (candidates 9.6)",
+    "lanes.anchors_delta": "`anchor_delta` is registered as a type, with no name",
+    "lanes.reply_topic": "CoverageResponse rides the query's reply_topic",
+    "frame_transform": "spec type with no topic name in the registry",
 }
 
-#: Deployed constant -> the registered name it knowingly differs from.
-KNOWN_DIVERGENCE = {
-    "TOPIC_MODEL_ENTITY_V1": "spatialdds/<scene>/model/entity/v0",
-}
+#: Deployed name -> the registered name it knowingly differs from. Empty: see
+#: the module docstring for the one it held.
+KNOWN_DIVERGENCE: dict = {}
 
 
-def _generate_types():
-    spec = importlib.util.spec_from_file_location(
-        "generate_types", REPO / "scripts" / "generate_types.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _registry_text(gt) -> str:
-    checkout = Path(gt.SPEC_CHECKOUT)
-    if not (checkout / ".git").exists():
-        raise unittest.SkipTest(f"no SpatialDDS-spec checkout at {checkout}, "
-                                f"which generate_types.py resyncs from")
+def _registry_text() -> str:
+    commit = sd.dds.registry.pin()["commit"]
+    if not (SPEC_CHECKOUT / ".git").exists():
+        raise unittest.SkipTest(f"no SpatialDDS-spec checkout at {SPEC_CHECKOUT}")
     out = subprocess.run(
-        ["git", "-C", str(checkout), "show",
-         f"{gt.SPEC_COMMIT}:{REGISTRY_FILE}"],
+        ["git", "-C", str(SPEC_CHECKOUT), "show", f"{commit}:{REGISTRY_FILE}"],
         capture_output=True, text=True)
     if out.returncode != 0:
-        raise unittest.SkipTest(f"{checkout} lacks {gt.SPEC_COMMIT}:"
+        raise unittest.SkipTest(f"{SPEC_CHECKOUT} lacks {commit}:"
                                 f"{REGISTRY_FILE}: {out.stderr.strip()}")
     return out.stdout
 
@@ -121,18 +121,30 @@ def matches(name: str, pattern: str) -> bool:
 
 def deployed() -> dict[str, str]:
     """
-    Every topic name the module defines, chosen by value rather than by name:
-    any module-level string that is a topic name, whatever it is called, and
-    each `TOPIC_*` builder, called with a placeholder segment. (`TOPIC_SOURCE_*`
-    are provenance labels, not names, and a prefix rule would have swept them.)
+    Every topic name this deployment uses. Its own, from `lanes.py`, chosen by
+    value rather than by name: any module-level string that is a topic name,
+    and each function that builds one, called with a placeholder segment. The
+    venue's, as the SDK names them when the venue opens them, and the
+    well-known topics, as the SDK's registry holds them.
     """
+    import inspect
     out = {}
-    for name in dir(topics):
-        value = getattr(topics, name)
-        if callable(value) and name.startswith("TOPIC_"):
-            value = value("x")
+    for name in dir(lanes):
+        value = getattr(lanes, name)
+        if inspect.isfunction(value) and inspect.getmodule(value) is lanes:
+            try:
+                value = value("x")
+            except Exception:
+                continue
         if isinstance(value, str) and value.startswith("spatialdds/"):
-            out[name] = value
+            out[f"lanes.{name}"] = value
+    for message in ("Announce", "Depart", "CoverageQuery", "ContentAnnounce"):
+        out[message] = sd.dds.registry.well_known(message).topic
+    for type_name in ("model_entity", "model_pose", "model_command"):
+        out[type_name] = sd.dds.registry.topic_name(lanes.SCENE, None, type_name)
+    # As model_service opens it: stream "frames", an unregistered type.
+    out["frame_transform"] = sd.dds.registry.topic_name(
+        lanes.SCENE, "frames", "frame_transform")
     return out
 
 
@@ -140,14 +152,16 @@ class TheDeployedNamesAreTheRegisteredOnes(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.gt = _generate_types()
-        cls.registry = registry(_registry_text(cls.gt))
+        cls.text = _registry_text()
+        cls.registry = registry(cls.text)
         cls.deployed = deployed()
 
     def test_the_registry_was_read_at_the_pin(self):
-        """An empty registry would pass everything below."""
-        self.assertIn(f"archive {self.gt.SPEC_COMMIT} idl/v1.8",
-                      self.gt.__doc__, "the prose pin and the constant differ")
+        """An empty registry would pass everything below, and a different
+        revision would check the names against rows the SDK never read."""
+        import hashlib
+        self.assertEqual(hashlib.sha256(self.text.encode()).hexdigest(),
+                         sd.dds.registry.pin()["source_sha256"])
         self.assertIn("Announce", self.registry)
         self.assertIn("model_entity", self.registry)
         self.assertGreaterEqual(len(self.registry), 6)
@@ -199,12 +213,12 @@ class TheDeployedNamesAreTheRegisteredOnes(unittest.TestCase):
         self.assertEqual(spatialdds_ros.__version__, pin,
                          "installed spatialdds_ros is not the pinned release: "
                          "pip install -r requirements.txt")
-        lib = Topics(topics.SCENE)
-        self.assertEqual(lib.entity, topics.TOPIC_MODEL_ENTITY_V1)
-        self.assertEqual(lib.pose, topics.TOPIC_MODEL_POSE_V1)
-        self.assertEqual(lib.command, topics.TOPIC_MODEL_COMMAND_V1)
-        self.assertEqual(lib.frame_transform, topics.TOPIC_FRAME_TRANSFORM_V1)
-        self.assertEqual(ANNOUNCE_TOPIC, topics.TOPIC_DISCOVERY_ANNOUNCE_V1)
+        lib, ours = Topics(lanes.SCENE), self.deployed
+        self.assertEqual(lib.entity, ours["model_entity"])
+        self.assertEqual(lib.pose, ours["model_pose"])
+        self.assertEqual(lib.command, ours["model_command"])
+        self.assertEqual(lib.frame_transform, ours["frame_transform"])
+        self.assertEqual(ANNOUNCE_TOPIC, ours["Announce"])
 
 
 if __name__ == "__main__":

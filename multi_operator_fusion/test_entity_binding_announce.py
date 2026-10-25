@@ -34,7 +34,7 @@ from synthetic_publisher import (  # noqa: E402
     _operator_coverage,
 )
 from spatialdds.dds import from_json  # noqa: E402
-from spatialdds_demo.topics import validate_topic_meta  # noqa: E402
+from spatialdds_demo import lanes as demo_lanes  # noqa: E402
 from spatialdds.dds.types.spatial.disco import Announce, ServiceKind  # noqa: E402
 
 
@@ -224,7 +224,8 @@ class TestAnnounceBuilder(unittest.TestCase):
         for op_idx in (0, 1, 2):
             with self.subTest(op_idx=op_idx):
                 a = _build_operator_announce(op_idx=op_idx, t_wall=0.0)
-                ok, errors = validate_topic_meta(a["topics"])
+                errors = demo_lanes.topic_meta_problems(a["topics"])
+                ok = not errors
                 self.assertTrue(ok, errors)
 
     def test_announce_builds_a_real_typed_announce(self):
@@ -257,14 +258,14 @@ class TestAnnounceBuilder(unittest.TestCase):
         typed reader without a hardcoded topic list. Whatever this demo
         announces must therefore be resolvable, registered or extension.
         """
-        from spatialdds_demo import topic_types
+        from spatialdds_demo import lanes
 
         for build in (lambda: _build_operator_announce(op_idx=1, t_wall=0.0),
                       lambda: _build_infra_announce(t_wall=1.0)):
             for topic in build()["topics"]:
                 with self.subTest(topic=topic["name"]):
                     self.assertIsNotNone(
-                        topic_types.try_resolve(topic["type"]),
+                        lanes.class_for(topic["type"]),
                         f"announced type {topic['type']!r} resolves to nothing",
                     )
 

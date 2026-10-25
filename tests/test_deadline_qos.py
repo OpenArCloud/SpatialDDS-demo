@@ -67,14 +67,15 @@ class DeadlineIsLoadBearing(unittest.TestCase):
         from cyclonedds.sub import DataReader
         from cyclonedds.topic import Topic
 
-        from spatialdds_demo import qos_profiles
+        import spatialdds as sd
+        from spatialdds.dds.qos import reader_qos
         from spatialdds.dds.types.builtin import Time
         from spatialdds.dds.types.spatial.core import CovMatrix, GeoPose
 
         pub, sub = DomainParticipant(DOMAIN + 1), DomainParticipant(DOMAIN + 1)
         writer = DataWriter(pub, Topic(pub, topic, GeoPose), qos=writer_qos)
         reader = DataReader(sub, Topic(sub, topic, GeoPose),
-                            qos=qos_profiles.qos_for("POSE_RT"))
+                            qos=reader_qos(sd.dds.registry.profile("POSE_RT")))
         time.sleep(2.0)
         for _ in range(5):
             writer.write(GeoPose(lat_deg=1.0, lon_deg=2.0, alt_m=3.0,

@@ -23,25 +23,46 @@ from spatialdds_validation import (
     demo_geo_pose,
 )
 from spatialdds_demo.manifest_resolver import resolve_manifest
-from spatialdds_demo.topics import (
-    TOPIC_ANCHORS_DELTA,
-    TOPIC_BOOTSTRAP_QUERY_V1,
-    TOPIC_BOOTSTRAP_RESPONSE_V1,
-    TOPIC_DISCOVERY_CONTENT_V1,
-    TOPIC_DISCOVERY_ANNOUNCE_V1,
-    TOPIC_DISCOVERY_QUERY_V1,
-    TOPIC_DISCOVERY_RESPONSE,
+import spatialdds as sd
+from spatialdds_demo import lanes
+from spatialdds_demo.lanes import (
     TOPIC_SOURCE_ANNOUNCE_PREVIEW,
     TOPIC_SOURCE_FALLBACK,
     TOPIC_SOURCE_MANIFEST,
     TOPIC_SOURCE_REQUEST,
     TOPIC_SOURCE_SPEC,
-    TOPIC_VPS_QUERY_V1,
-    TOPIC_VPS_RESULT_V1,
-    validate_topics_are_canonical,
 )
+
+# The names, from where they are defined: the well-known discovery topics from
+# the SDK's registry, this deployment's other lanes from lanes.py. (Until the
+# SDK adoption all of them came from spatialdds_demo.topics.)
+TOPIC_DISCOVERY_ANNOUNCE_V1 = sd.dds.registry.well_known("Announce").topic
+TOPIC_DISCOVERY_QUERY_V1 = sd.dds.registry.well_known("CoverageQuery").topic
+TOPIC_DISCOVERY_CONTENT_V1 = sd.dds.registry.well_known("ContentAnnounce").topic
+TOPIC_VPS_QUERY_V1 = lanes.TOPIC_VPS_QUERY
+TOPIC_VPS_RESULT_V1 = lanes.TOPIC_VPS_RESULT
+TOPIC_BOOTSTRAP_QUERY_V1 = lanes.TOPIC_BOOTSTRAP_QUERY
+TOPIC_BOOTSTRAP_RESPONSE_V1 = lanes.TOPIC_BOOTSTRAP_RESPONSE
+TOPIC_ANCHORS_DELTA = lanes.anchors_delta
+
+
+def validate_topics_are_canonical(topics, service_kind=None):
+    """The walkthrough's own sanity check on the names it prints: prefixed,
+    versioned, and, for a VPS, both of its lanes present."""
+    errors = []
+    for topic in topics:
+        if not topic.startswith("spatialdds/"):
+            errors.append(f"Topic missing spatialdds/ prefix: {topic}")
+        if "//" in topic:
+            errors.append(f"Topic contains double slash: {topic}")
+        if not topic.endswith("/v1"):
+            errors.append(f"Topic missing /v1 suffix: {topic}")
+    if service_kind == "VPS":
+        for lane in (TOPIC_VPS_QUERY_V1, TOPIC_VPS_RESULT_V1):
+            if lane not in topics:
+                errors.append(f"Missing VPS lane {lane} for a VPS service")
+    return not errors, errors
 from spatialdds_demo.discovery_http import BOOTSTRAP_SCHEMA  # noqa: E402
-from spatialdds_demo.topics import topic_meta  # noqa: E402
 from spatialdds_demo import content_catalogue  # noqa: E402
 
 
@@ -295,8 +316,8 @@ class VPSServiceV15:
     def _topic_meta(self) -> List[Dict[str, Any]]:
         """TopicMeta rows using the registered type / QoS names (3.3.2, 3.3.3)."""
         return [
-            topic_meta(TOPIC_VPS_QUERY_V1, "vps_query", "VPS_REQ"),
-            topic_meta(TOPIC_VPS_RESULT_V1, "vps_response", "VPS_RESP"),
+            lanes.topic_meta(TOPIC_VPS_QUERY_V1, "vps_query", "VPS_REQ"),
+            lanes.topic_meta(TOPIC_VPS_RESULT_V1, "vps_response", "VPS_RESP"),
         ]
 
     def create_announce(self) -> Dict[str, Any]:
@@ -484,7 +505,11 @@ class SpatialDDSClientV15:
             # 1.7 deleted CoverageQuery.expr — `filter` is the only query form.
             "has_filter": True,
             "filter": {"type_in": [], "qos_profile_in": [], "module_id_in": []},
-            "reply_topic": TOPIC_DISCOVERY_RESPONSE(query_id),
+            # Where the replies go: a lane the asker names for itself, as the
+            # shipped CoverageClient names it. This used to be
+            # spatialdds/discovery/response/<id>, with no version, which the
+            # SDK's coverage service refuses to reply on.
+            "reply_topic": lanes.reply_topic(query_id),
             "stamp": SpatialDDSValidator.now_time(),
             "ttl_sec": 60,
         }

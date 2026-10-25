@@ -74,14 +74,16 @@ def _prewarm_idl():
     """CycloneDDS Python lazily fills the IDL type-object cache the first
     time a Topic is built. Pre-warm in the main thread before background
     threads (the bridge / test publisher) race on it."""
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds as sd
 
-    from spatialdds_demo import typed_transport as tt
-    from spatialdds.dds.types.spatial.semantics import Detection3DSet
+    from spatialdds_demo import lanes
 
-    tt.make_writer(DomainParticipant(DDS_DOMAIN), "spatialdds/prewarm/v1",
-                   Detection3DSet, "DET_RT")
-    time.sleep(0.2)
+    with sd.participant("prewarm", domain=DDS_DOMAIN,
+                        service_id="svc:test:prewarm") as p:
+        lanes.open_writer(p, "detection3d",
+                          "spatialdds/prewarm/s0/detection3d/v1",
+                          qos_profile="DET_RT")
+        time.sleep(0.2)
 
 
 def _det_set(operator: str, det_id: str = "d1") -> dict:
@@ -126,31 +128,32 @@ class _DdsObserver:
     """
 
     def __init__(self, topic: str, type_name: str, qos_profile: str):
-        from cyclonedds.domain import DomainParticipant
+        import spatialdds as sd
 
-        from spatialdds_demo import topic_types, typed_transport as tt
+        from spatialdds_demo import lanes
         from spatialdds.dds import to_json
 
-        self._to_json = to_json
-        self.datatype = topic_types.resolve(type_name)
+        self._sd, self._to_json = sd, to_json
+        self.datatype = lanes.class_for(type_name)
         self.samples: List[dict] = []
-        self._reader = tt.make_reader(DomainParticipant(DDS_DOMAIN), topic,
-                                      self.datatype, qos_profile)
+        self._participant = sd.participant("mqtt-test", domain=DDS_DOMAIN)
+        self._reader = lanes.open_reader(self._participant, type_name, topic,
+                                         qos_profile=qos_profile)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def _run(self):
-        from spatialdds_demo import typed_transport as tt
-
         while not self._stop.is_set():
-            for sample in tt.take_samples(self._reader):
-                self.samples.append(self._to_json(sample))
+            for ev in self._reader.take():
+                if isinstance(ev, self._sd.Sample):
+                    self.samples.append(self._to_json(ev.data))
             self._stop.wait(0.05)
 
     def stop(self):
         self._stop.set()
         self._thread.join(timeout=2)
+        self._participant.close()
 
 
 def _announce_lane(topic: str, type_name: str, qos_profile: str,
@@ -298,11 +301,10 @@ class TestMqttBridgeIntegration(unittest.TestCase):
     # ──────────────────────────────────────────────────────────────────────
 
     def test_dds_to_mqtt_outbound(self):
-        from cyclonedds.domain import DomainParticipant
+        import spatialdds as sd
 
         from bridge import MqttDdsBridge
-        from spatialdds_demo import typed_transport as tt
-        from spatialdds.dds.types.spatial.semantics import FusedTrackSet
+        from spatialdds_demo import lanes
 
         topic = "spatialdds/platform/fusion/fused_track/v1"
         cfg = _make_config("outbound_only", bridge_id="bridge-out",
@@ -323,11 +325,13 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         time.sleep(1.0)
 
         try:
-            writer = tt.TypedDictWriter(DomainParticipant(DDS_DOMAIN), topic,
-                                        FusedTrackSet, "POSE_RT")
-            time.sleep(2.0)
-            writer.write(_track_set())
-            time.sleep(3.0)
+            with sd.participant("platform", domain=DDS_DOMAIN,
+                                service_id="svc:test:tracks") as p:
+                writer = lanes.open_writer(p, "fused_track", topic,
+                                           qos_profile="POSE_RT")
+                time.sleep(2.0)
+                writer.write(_track_set())
+                time.sleep(3.0)
         finally:
             mqtt_sub.loop_stop()
             mqtt_sub.disconnect()
@@ -472,11 +476,10 @@ class TestMqttBridgeIntegration(unittest.TestCase):
     # ──────────────────────────────────────────────────────────────────────
 
     def test_outbound_filter_excludes_unmatched(self):
-        from cyclonedds.domain import DomainParticipant
+        import spatialdds as sd
 
         from bridge import MqttDdsBridge
-        from spatialdds_demo import typed_transport as tt
-        from spatialdds.dds.types.spatial.semantics import Detection3DSet
+        from spatialdds_demo import lanes
 
         topic = "spatialdds/operator_a/sensing/detection3d/v1"   # not outbound
         cfg = _make_config("outbound_only", bridge_id="bridge-filter",
@@ -496,11 +499,13 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         time.sleep(1.0)
 
         try:
-            writer = tt.TypedDictWriter(DomainParticipant(DDS_DOMAIN), topic,
-                                        Detection3DSet, "DET_RT")
-            time.sleep(2.0)
-            writer.write(_det_set("operator_a"))
-            time.sleep(2.0)
+            with sd.participant("operator_a", domain=DDS_DOMAIN,
+                                service_id="svc:test:detections") as p:
+                writer = lanes.open_writer(p, "detection3d", topic,
+                                           qos_profile="DET_RT")
+                time.sleep(2.0)
+                writer.write(_det_set("operator_a"))
+                time.sleep(2.0)
         finally:
             mqtt_sub.loop_stop()
             mqtt_sub.disconnect()

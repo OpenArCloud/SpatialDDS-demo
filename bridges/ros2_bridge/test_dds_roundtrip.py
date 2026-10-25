@@ -37,7 +37,9 @@ sys.path.insert(0, str(_HERE))
 sys.path.insert(0, str(_BRIDGES))
 sys.path.insert(0, str(_REPO_ROOT))
 
-from spatialdds_demo import blob, topic_types, typed_transport as tt  # noqa: E402
+import spatialdds as sd  # noqa: E402
+
+from spatialdds_demo import lanes  # noqa: E402
 from frame_mapping import FrameMapper  # noqa: E402
 from ros2_to_spatialdds import (  # noqa: E402
     compressed_image_blob,
@@ -76,13 +78,14 @@ def _prewarm_idl(domain: int) -> None:
     """CycloneDDS Python lazily fills its type-object cache the first time a
     Topic is built. Pre-warm in the main thread before the publisher and
     subscriber participants race on it."""
-    from cyclonedds.domain import DomainParticipant
-
-    participant = DomainParticipant(domain)
+    participant = sd.participant("prewarm", domain=domain,
+                                 service_id="svc:test:prewarm")
     for i, type_name in enumerate(PROFILES):
-        tt.make_writer(participant, f"spatialdds/prewarm/{i}/v1",
-                       topic_types.resolve(type_name), PROFILES[type_name])
+        lanes.open_writer(participant, type_name,
+                          f"spatialdds/prewarm/s{i}/{type_name}/v1",
+                          qos_profile=PROFILES[type_name])
     time.sleep(0.3)
+    participant.close()
 
 
 class _Endpoints:
@@ -95,10 +98,9 @@ class _Endpoints:
     """
 
     def __init__(self, domain: int, on_sample):
-        from cyclonedds.domain import DomainParticipant
-
-        self._pub = DomainParticipant(domain)
-        self._sub = DomainParticipant(domain)
+        self._pub = sd.participant("roundtrip", domain=domain,
+                                   service_id="svc:test:roundtrip")
+        self._sub = sd.participant("roundtrip", domain=domain)
         self._on_sample = on_sample
         self._writers = {}
         self._readers = {}
@@ -109,11 +111,12 @@ class _Endpoints:
     def _endpoint_pair(self, topic: str, type_name: str):
         if topic in self._writers:
             return self._writers[topic]
-        datatype = topic_types.resolve(type_name)
         profile = PROFILES.get(type_name, "EVENT_RT")
         self._readers[topic] = (
-            tt.make_reader(self._sub, topic, datatype, profile), type_name)
-        writer = tt.TypedDictWriter(self._pub, topic, datatype, profile)
+            lanes.open_reader(self._sub, type_name, topic, qos_profile=profile),
+            type_name)
+        writer = lanes.open_writer(self._pub, type_name, topic,
+                                   qos_profile=profile)
         self._writers[topic] = writer
         # Let discovery complete before the first sample: most of the spec's
         # profiles are BEST_EFFORT, so a writer used the instant it is built
@@ -129,13 +132,16 @@ class _Endpoints:
 
         while not self._stop.is_set():
             for topic, (reader, type_name) in list(self._readers.items()):
-                for sample in tt.take_samples(reader):
-                    self._on_sample(type_name, topic, to_json(sample))
+                for ev in reader.take():
+                    if isinstance(ev, sd.Sample):
+                        self._on_sample(type_name, topic, to_json(ev.data))
             self._stop.wait(0.02)
 
     def close(self):
         self._stop.set()
         self._thread.join(timeout=2)
+        self._pub.close()
+        self._sub.close()
 
 
 class TestEnvelopeRoundtrip(unittest.TestCase):
@@ -242,18 +248,18 @@ class TestEnvelopeRoundtrip(unittest.TestCase):
         chunks = list(compressed_image_blob(original, "cam_front"))
         self.assertTrue(chunks)
         with self._lock:
-            before = len(self.received[blob.BLOB_TYPE])
+            before = len(self.received["blob_chunk"])
         for chunk in chunks:
-            self.endpoints.publish(blob.BLOB_TOPIC, blob.BLOB_TYPE, chunk)
-        self._wait_for(blob.BLOB_TYPE, before + len(chunks), timeout_s=10.0)
+            self.endpoints.publish(lanes.BLOB_TOPIC, "blob_chunk", chunk)
+        self._wait_for("blob_chunk", before + len(chunks), timeout_s=10.0)
 
         from spatialdds.dds import from_json
         from spatialdds.dds.types.spatial.core import BlobChunk
 
-        reassembler = blob.Reassembler()
+        reassembler = sd.dds.Reassembler()
         data = None
         with self._lock:
-            arrived = [p for _t, p in self.received[blob.BLOB_TYPE][before:]]
+            arrived = [p for _t, p in self.received["blob_chunk"][before:]]
         for payload_dict in sorted(arrived, key=lambda p: p["index"]):
             data = reassembler.feed(from_json(BlobChunk, payload_dict)) or data
         self.assertEqual(data, original.data)

@@ -97,15 +97,15 @@ class OffsetApplication(unittest.TestCase):
 
 class LaneTable(unittest.TestCase):
     def test_every_lane_names_a_resolvable_type_and_a_real_profile(self):
-        from spatialdds_demo import qos_profiles, topic_types
+        from spatialdds_demo import lanes
 
         for key, lane in LANES.items():
             if lane is None:
                 continue                   # per-camera, built at publish time
             _parts, type_name, profile = lane
             with self.subTest(lane=key):
-                self.assertIsNotNone(topic_types.try_resolve(type_name))
-                self.assertIsNotNone(qos_profiles.get(profile))
+                self.assertIsNotNone(lanes.class_for(type_name))
+                self.assertIsNotNone(lanes.profile(profile))
 
     def test_detection_lane_carries_velocity(self):
         """

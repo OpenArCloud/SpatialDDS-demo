@@ -361,11 +361,11 @@ class TestEncodersMatchTheIdl(unittest.TestCase):
 
     def _check(self, type_name, payload):
         try:
-            from spatialdds_demo import topic_types
+            from spatialdds_demo import lanes
             from spatialdds.dds import from_json
         except Exception as exc:                       # pragma: no cover
             self.skipTest(f"generated bindings unavailable: {exc}")
-        cls = topic_types.try_resolve(type_name)
+        cls = lanes.class_for(type_name)
         self.assertIsNotNone(cls, f"{type_name!r} resolves to no class")
         return from_json(cls, payload)
 

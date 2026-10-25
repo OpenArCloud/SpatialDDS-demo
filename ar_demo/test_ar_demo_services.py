@@ -54,13 +54,10 @@ def validate_announce(announce) -> None:
     sd.dds.validate(announce)
     doc = sd.dds.to_json(announce)
     record_from_announce(doc)
-    for row in doc["topics"]:
-        assert row["version"], f"{row['name']}: TopicMeta.version is required"
-        sd.dds.registry.check_topic(row["name"], row["type"])
-        lanes.endpoint(row["type"], row["qos_profile"])
-from spatialdds_demo.topics import (  # noqa: E402
-    TOPIC_DISCOVERY_CONTENT_V1, TOPIC_VPS_QUERY_V1,
-)
+    problems = lanes.topic_meta_problems(doc["topics"])
+    assert not problems, "; ".join(problems)
+from spatialdds_demo.lanes import TOPIC_VPS_QUERY as TOPIC_VPS_QUERY_V1  # noqa: E402
+TOPIC_DISCOVERY_CONTENT_V1 = sd.dds.registry.well_known("ContentAnnounce").topic
 from spatialdds.dds.types.spatial.disco import Announce  # noqa: E402
 from spatialdds_validation import SpatialDDSValidator  # noqa: E402
 from spatialdds_demo import content_catalogue as cc  # noqa: E402
@@ -323,10 +320,11 @@ class CatalogueSeed(unittest.TestCase):
         topic, which -- like the announce topic itself -- is not listed in an
         announce. Until 1.8 this advertised the demo's own query lane.
         """
-        from spatialdds_demo import topic_types as tt
         announce = catalog._catalog_announce(cc.load_seed(str(SEED)))
         self.assertEqual(announce["topics"], [])
-        self.assertIn(TOPIC_DISCOVERY_CONTENT_V1, tt.WELL_KNOWN)
+        # Its lane is a well-known topic, which an announce does not list.
+        self.assertEqual(sd.dds.registry.well_known("ContentAnnounce").topic,
+                         "spatialdds/discovery/content/v1")
 
 
 class ServiceSummaryShape(unittest.TestCase):
