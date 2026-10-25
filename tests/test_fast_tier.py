@@ -27,15 +27,12 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_demo import typed_transport as tt  # noqa: E402
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bus as bus  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
     IDLE_FLUSH_S, LATCH_EVERY_N_MOVES, ModelPublisher, seed_entities,
 )
-from spatialdds_demo.qos_profiles import MODEL_FAST, MODEL_LATCHED  # noqa: E402
-from spatialdds_demo.topics import (  # noqa: E402
-    TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
-)
-from spatialdds.dds.types.spatial.owm import Entity, ModelPose  # noqa: E402
 from spatialdds.dds.types.spatial.core import PoseSE3  # noqa: E402
 
 DOMAIN = 58
@@ -43,11 +40,8 @@ DUCK = "ent:duck:east"
 
 
 def _participant(domain_id: int):
-    try:
-        from cyclonedds.domain import DomainParticipant
-        return DomainParticipant(domain_id)
-    except Exception as exc:
-        raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
+    """A participant on the venue scene, or a skip if there is no usable DDS."""
+    return bus.participant(domain_id)
 
 
 class Cadence(unittest.TestCase):
@@ -56,13 +50,11 @@ class Cadence(unittest.TestCase):
         self.publisher = ModelPublisher(self.participant)
         for entity in seed_entities():
             self.publisher.publish_entity(entity)
-        self.poses = tt.make_reader(
-            self.participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
-        self.entities = tt.make_reader(
-            self.participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        self.poses = bus.reader(self.participant, "model_pose")
+        self.entities = bus.reader(self.participant, "model_entity")
         time.sleep(0.6)
-        tt.take_samples(self.poses)
-        tt.take_samples(self.entities)
+        bus.samples(self.poses)
+        bus.samples(self.entities)
 
     def tearDown(self):
         self.publisher.close()
@@ -82,8 +74,8 @@ class Cadence(unittest.TestCase):
             self.publisher.move(DUCK, PoseSE3(t=[self._x, -14.0, -1.423],
                                               q=[0.0, 0.0, 0.0, 1.0]))
             time.sleep(0.15)
-            poses.extend(tt.take_samples(self.poses) or [])
-            records.extend(s for s in (tt.take_samples(self.entities) or [])
+            poses.extend(bus.samples(self.poses))
+            records.extend(s for s in (bus.samples(self.entities))
                            if s.entity_id == DUCK)
         return poses, records
 
@@ -112,11 +104,10 @@ class Cadence(unittest.TestCase):
         poses, _ = self._move(LATCH_EVERY_N_MOVES - 1)
         latest = poses[-1].pose.t[0]
 
-        joiner = tt.make_reader(_participant(DOMAIN), TOPIC_MODEL_ENTITY_V1,
-                                Entity, MODEL_LATCHED.name)
+        joiner = bus.reader(_participant(DOMAIN), "model_entity")
         got, deadline = None, time.time() + 6
         while got is None and time.time() < deadline:
-            for sample in tt.take_samples(joiner) or []:
+            for sample in bus.samples(joiner):
                 if sample.entity_id == DUCK:
                     got = sample
             time.sleep(0.02)
@@ -142,11 +133,10 @@ class Cadence(unittest.TestCase):
         self.assertEqual(self.publisher.flush_idle(), [DUCK])
         time.sleep(0.4)
 
-        joiner = tt.make_reader(_participant(DOMAIN), TOPIC_MODEL_ENTITY_V1,
-                                Entity, MODEL_LATCHED.name)
+        joiner = bus.reader(_participant(DOMAIN), "model_entity")
         got, deadline = None, time.time() + 6
         while got is None and time.time() < deadline:
-            for sample in tt.take_samples(joiner) or []:
+            for sample in bus.samples(joiner):
                 if sample.entity_id == DUCK:
                     got = sample
             time.sleep(0.02)
@@ -229,17 +219,16 @@ class LayerDecides(unittest.TestCase):
         publisher = ModelPublisher(participant)
         for entity in seed_entities():
             publisher.publish_entity(entity)
-        entities = tt.make_reader(participant, TOPIC_MODEL_ENTITY_V1, Entity,
-                                  MODEL_LATCHED.name)
+        entities = bus.reader(participant, "model_entity")
         time.sleep(0.6)
-        tt.take_samples(entities)
+        bus.samples(entities)
         try:
             # The pond is STATIC. Moving it is odd but legal, and it must not
             # take the fast path.
             publisher.move("ent:pond:littlefield",
                            PoseSE3(t=[15.0, -14.0, -1.5], q=[0, 0, 0, 1]))
             time.sleep(0.5)
-            seen = [s for s in (tt.take_samples(entities) or [])
+            seen = [s for s in (bus.samples(entities))
                     if s.entity_id == "ent:pond:littlefield"]
             self.assertEqual(len(seen), 1,
                              "a non-FAST entity is latched immediately")

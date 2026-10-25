@@ -27,7 +27,15 @@ if ! python3 -c "import spatialdds_ros" 2>/dev/null; then
   echo "    docker build -t spatialdds-robot-tier:latest -f robot_tier/Dockerfile ." >&2
   exit 1
 fi
+if ! python3 -c "import spatialdds.dds" 2>/dev/null; then
+  echo "robot_tier: this image has no spatialdds[dds], so the keep-out node" >&2
+  echo "  cannot read the model. The image installs it from requirements.txt;" >&2
+  echo "  rebuild after a pin bump:" >&2
+  echo "    docker build -t spatialdds-robot-tier:latest -f robot_tier/Dockerfile ." >&2
+  exit 1
+fi
 echo "robot_tier: spatialdds_ros $(python3 -c 'import spatialdds_ros as r; print(r.__version__)')"
+echo "robot_tier: spatialdds $(python3 -c 'import spatialdds as s; print(s.__version__)')"
 
 python3 /ws/robot_tier/plaza_sim_node.py &
 python3 /ws/robot_tier/keepout_node.py &

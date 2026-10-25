@@ -43,15 +43,12 @@ import time
 import uuid
 from typing import List, Optional, Tuple
 
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
 
-from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.duck_mover import INSET_M
 from spatialdds_demo.model_service import (
     POND_MAX, POND_MIN, SHALLOWS_MAX, SHALLOWS_MIN)
-from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
-from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1
+from spatialdds_demo.lanes import MODEL_COMMAND, MODEL_LATCHED, SCENE
 from spatialdds.dds.types.builtin import Time
 from spatialdds.dds.types.spatial.owm import Entity, ModelCommand
 from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
@@ -73,27 +70,32 @@ def _now() -> Time:
     return Time(sec=int(now), nanosec=int((now % 1) * 1e9))
 
 
-def read_entity(participant: DomainParticipant, entity_id: str,
+#: One entity reader per participant for the run, and what it has seen. An SDK
+#: reader lives as long as its participant, and the wait below looks often.
+_WORLD: dict = {}
+
+
+def read_entity(participant: "sd.dds.Participant", entity_id: str,
                 timeout: float = 5.0) -> Optional[Entity]:
-    reader = tt.make_reader(
-        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+    reader, seen = _WORLD.setdefault(id(participant), (
+        participant.reader("model_entity", qos_profile=MODEL_LATCHED,
+                           settle_s=0.3), {}))
     deadline = time.time() + timeout
-    while time.time() < deadline:
-        for sample in tt.take_samples(reader) or []:
-            if sample.entity_id == entity_id:
-                return sample
+    while True:
+        for ev in reader.take():
+            if isinstance(ev, sd.Sample):
+                seen[ev.key] = ev.data
+        if entity_id in seen:
+            return seen[entity_id]
+        if time.time() >= deadline:
+            return None
         time.sleep(0.05)
-    return None
 
 
-def send(participant: DomainParticipant, entity_id: str,
+def send(participant: "sd.dds.Participant", entity_id: str,
          extent: Aabb3) -> None:
-    writer = tt.make_writer(
-        participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
-    deadline = time.time() + 5.0
-    while (time.time() < deadline
-           and not writer.get_publication_matched_status().current_count):
-        time.sleep(0.05)
+    writer = participant.writer("model_command", qos_profile=MODEL_COMMAND)
+    writer.wait_matched(timeout=5.0)
     writer.write(ModelCommand(
         command_id=str(uuid.uuid4()), verb="set_extent", subject_id=entity_id,
         reason="", requester_id=REQUESTER_ID,
@@ -124,7 +126,7 @@ def spans(extent: Aabb3) -> Tuple[float, float]:
             extent.max_xyz[1] - extent.min_xyz[1])
 
 
-def apply(participant: DomainParticipant, entity_id: str, target: Aabb3) -> int:
+def apply(participant: "sd.dds.Participant", entity_id: str, target: Aabb3) -> int:
     before = read_entity(participant, entity_id)
     if before is None:
         print(f"reshape: no {entity_id} on the bus — is the model service "
@@ -177,8 +179,8 @@ SEEDED = {POND_ID: (POND_MIN, POND_MAX),
 
 def run(shrink: Optional[float], restore: bool, bounds: Optional[List[float]],
         entity_id: str = POND_ID, domain_id: Optional[int] = None) -> int:
-    domain_id = require_dds_env() if domain_id is None else domain_id
-    participant = DomainParticipant(domain_id)
+    participant = sd.participant(SCENE, domain=domain_id,
+                                 service_id=REQUESTER_ID)
 
     if restore:
         seed = SEEDED.get(entity_id)

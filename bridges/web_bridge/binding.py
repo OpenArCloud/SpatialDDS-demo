@@ -52,7 +52,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 REPO = Path(__file__).resolve().parent.parent.parent
 if str(REPO) not in sys.path:
@@ -63,19 +63,14 @@ from aiohttp import web                                        # noqa: E402
 from spatialdds.server import (                                # noqa: E402
     commands, gateway, gw_http, pin, publish, webjson, xcdr2)
 
-from spatialdds_demo import typed_transport as tt              # noqa: E402
-from spatialdds_demo.dds_transport import require_dds_env      # noqa: E402
-from spatialdds_demo.qos_profiles import (                     # noqa: E402
-    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED)
-from spatialdds_demo.topics import (                           # noqa: E402
-    SCENE, TOPIC_FRAME_TRANSFORM_V1, TOPIC_MODEL_COMMAND_V1,
-    TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1)
-from spatialdds.dds.types.spatial.core import FrameTransform        # noqa: E402
-from spatialdds.dds.types.spatial.owm import (                      # noqa: E402
-    Entity, ModelCommand, ModelPose)
+import spatialdds as sd                                        # noqa: E402
 
-IDL_DIR = REPO / "idl" / "v1.8"
-SPEC_COMMIT = "9c3e1f2"
+from spatialdds_demo.lanes import (                            # noqa: E402
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, SCENE)
+from spatialdds.dds.types.spatial.core import FrameTransform        # noqa: E402
+
+#: Who this bridge is when it writes: the command lane is its one writer.
+SOURCE_ID = "svc:bridge:demo/owm-binding"
 
 #: How often the pump says what it has moved. See `Pump.run`.
 HEARTBEAT_S = 5.0
@@ -129,55 +124,51 @@ ACCESS: dict[str, str] = {
     "spatial.owm.ModelCommand": gateway.OPERATOR,
 }
 
-#: The closure each type needs, in dependency order. Same list the recorder
-#: embeds in an MCAP, for the same reason: a reader parses one schema record
-#: as a single translation unit.
-CLOSURE = ["types.idl", "core.idl", "provisional/owm.idl"]
-
-#: Topic, python type, QoS profile, and the type's FQN in both spellings.
-LANES: list[tuple[str, Any, Any, str, str]] = [
-    (TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED,
-     "spatial::owm::Entity", "spatial.owm.Entity"),
-    (TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST,
-     "spatial::owm::ModelPose", "spatial.owm.ModelPose"),
-    (TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND,
-     "spatial::owm::ModelCommand", "spatial.owm.ModelCommand"),
+#: Each lane by what a reader opens it with, its profile, and its type's FQN.
+#: Topics come from the SDK's registry for SCENE.
+LANES: list[tuple[dict, Any, str]] = [
+    (dict(type_="model_entity"), MODEL_LATCHED, "spatial.owm.Entity"),
+    (dict(type_="model_pose"), MODEL_FAST, "spatial.owm.ModelPose"),
+    (dict(type_="model_command"), MODEL_COMMAND, "spatial.owm.ModelCommand"),
     # The scene's georeference. No ACCESS row below and none wanted: the
     # package already defaults `spatial.core.FrameTransform` to latched and
     # `public-cacheable`, which is right under N.4 --- a georeference is
     # configured geometry --- and it is also the only classification a
     # cross-origin page can read at all, since a credential would force a
-    # preflight the gateway does not answer (blocker B).
-    (TOPIC_FRAME_TRANSFORM_V1, FrameTransform, MODEL_LATCHED,
-     "spatial::core::FrameTransform", "spatial.core.FrameTransform"),
+    # preflight the gateway does not answer (blocker B). FrameTransform has
+    # no §3.3.2 row at v1.8, so the lane is the deployment's own, under the
+    # name model_service writes it on.
+    (dict(type_=FrameTransform, type_name="frame_transform", stream="frames"),
+     MODEL_LATCHED, "spatial.core.FrameTransform"),
 ]
 
 
-def build_state() -> gateway.State:
-    """A live registry: no recording, types from this repository's own pin.
+def lane_topic(spec: dict) -> str:
+    return sd.dds.topic_name(SCENE, spec.get("stream"),
+                             spec.get("type_name") or spec["type_"])
 
-    The package's vendored IDL carries `core`, `discovery` and `types` --- the
-    three publishable types an empty registry has to know. `spatial.owm` is
-    provisional and independently versioned, so the package does not vendor it
-    and should not. This repository does, at `idl/v1.8`, from spec commit
-    9c3e1f2, which is the same commit the package's own artifacts came from;
-    a bridge whose types came from a different commit than the binding
-    serving them would be two type systems in one process.
+
+def build_state() -> gateway.State:
+    """A live registry: no recording, types from the SDK's own pin.
+
+    One pin for the bus and the binding: the IDL the installed `spatialdds`
+    ships, at SpatialDDS-spec's `v1.8` tag, `spatial.owm` included. Until the
+    SDK adoption this was this repository's vendored `idl/v1.8` at 9c3e1f2,
+    because the package's server half did not carry `spatial.owm`; a bridge
+    whose types came from a different commit than the binding serving them
+    would be two type systems in one process.
     """
-    flat = pin.flatten(IDL_DIR, CLOSURE).encode()
-    # One record per type, all with the same bytes, which is what the closure
-    # being shared means. `model_from_records` keeps every record rather than
-    # deduping, so each type is registered under its own name.
     model, idl = pin.model_from_records(
-        [(colons, flat) for _t, _c, _q, colons, _fqn in LANES],
-        whence=f"{IDL_DIR.relative_to(REPO)} (SpatialDDS-spec {SPEC_COMMIT})")
+        [pin.schema_record(fqn.replace(".", "::")) for _s, _q, fqn in LANES],
+        whence=f"spatialdds {sd.__version__} (SpatialDDS-spec {sd.SPEC_TAG})")
     st = gateway.State(
         source="live DDS",
         model=model,
         idl=idl,
-        type_source=f"this repository's vendored IDL, {IDL_DIR.name} "
-                    f"(SpatialDDS-spec {SPEC_COMMIT})")
-    for topic, _cls, _qos, _colons, fqn in LANES:
+        type_source=f"the IDL spatialdds {sd.__version__} ships "
+                    f"(SpatialDDS-spec {sd.SPEC_TAG}, {sd.SPEC_COMMIT})")
+    for spec, _qos, fqn in LANES:
+        topic = lane_topic(spec)
         _scene, stream, type_seg, version = topic.split("/")[1:]
         latched, _default_access = gateway.DURABILITY.get(
             fqn, (False, gateway.OPERATOR))
@@ -207,23 +198,21 @@ class Pump:
     """
 
     def __init__(self, st: gateway.State, app: web.Application,
-                 domain_id: int) -> None:
-        from cyclonedds.domain import DomainParticipant
-
+                 domain_id: Optional[int]) -> None:
         self.st = st
         self.app = app
-        self.participant = DomainParticipant(domain_id)
+        self.participant = sd.participant(SCENE, domain=domain_id,
+                                          service_id=SOURCE_ID)
         self.dec = xcdr2.Decoder(st.model)
         self.proj = webjson.Projector(st.model, webjson.tables())
-        self.readers = [
-            (topic, tt.make_reader(self.participant, topic, cls, qos.name),
-             fqn)
-            for topic, cls, qos, _colons, fqn in LANES]
-        #: instance handle -> key, per topic. A dispose arrives carrying only
-        #: a handle, so the only way to name what went is to have seen it
-        #: alive. Same rule the recorder follows, and for the same reason.
-        self.keys: dict[tuple[str, int], str] = {}
-        self.counts: dict[str, int] = {t: 0 for t, *_ in LANES}
+        # The SDK's readers name the key of every removal, which is what this
+        # pump used to keep a handle-to-key map for.
+        self.readers = []
+        for spec, qos, fqn in LANES:
+            kw = {k: v for k, v in spec.items() if k != "type_"}
+            self.readers.append((self.participant.reader(
+                spec["type_"], qos_profile=qos, **kw), fqn))
+        self.counts: dict[str, int] = {r.topic: 0 for r, _f in self.readers}
         self.removals = 0
         self._stop = threading.Event()
 
@@ -238,30 +227,28 @@ class Pump:
 
     def poll_once(self) -> int:
         moved = 0
-        for topic, reader, fqn in self.readers:
+        for reader, fqn in self.readers:
+            topic = reader.topic
             res = self.st.resources[f"/{SCENE}/" + "/".join(topic.split("/")[2:])]
-            for s in tt.take_with_state(reader) or []:
-                if s.data is None:
+            for ev in reader.take():
+                if isinstance(ev, sd.Dispose):
                     # A removal, and only on a latched lane: an instance
                     # ending on a VOLATILE lane had no late-joiner state to
-                    # stop being the answer for, and a writer's exit disposes
-                    # its instances by default. Same rule as the recorder.
-                    if not (s.was_disposed and res.latched):
+                    # stop being the answer for. Same rule as the recorder.
+                    if not res.latched or not ev.key:
                         continue
-                    key = self.keys.get((topic, s.instance_handle))
-                    if key is None:
-                        continue              # never seen alive: unnameable
-                    publish.apply_dispose(self.st, topic, key)
+                    publish.apply_dispose(self.st, topic, ev.key)
                     gw_http.notify(self.app, topic,
                                    {"event": "dispose", "topic": topic,
-                                    "key": key, "reason": "disposed on the bus"})
+                                    "key": ev.key,
+                                    "reason": ev.reason or "disposed on the bus"})
                     self.removals += 1
                     moved += 1
                     continue
-                doc = self._project(fqn, s.data)
+                if not isinstance(ev, sd.Sample):
+                    continue                  # liveliness, the replay marker
+                doc = self._project(fqn, ev.data)
                 key = str(doc.get(res.key, "")) if res.key else ""
-                if s.instance_handle is not None and key:
-                    self.keys[(topic, s.instance_handle)] = key
                 if res.latched:
                     publish.apply_sample(self.st, topic, res, key, doc)
                 else:
@@ -319,49 +306,25 @@ class CommandLane:
     command would be the absence M.1 forbids.
     """
 
-    def __init__(self, participant) -> None:
-        self.writer = tt.make_writer(participant, TOPIC_MODEL_COMMAND_V1,
-                                     ModelCommand, MODEL_COMMAND.name)
+    def __init__(self, participant: "sd.dds.Participant") -> None:
+        self.writer = participant.writer("model_command",
+                                         qos_profile=MODEL_COMMAND)
         self.sent = 0
 
     def handle(self, record: dict) -> commands.Outcome:
-        from spatialdds.dds.types.builtin import Time
-        from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
+        # The record is already N.1, so the SDK writer takes it as it is: one
+        # lift, the gateway's own, where a ModelCommand used to be rebuilt
+        # here member by member.
         try:
-            pose = record.get("pose") or {}
-            extent = record.get("extent") or {}
-            stamp = record.get("stamp") or {}
-            cmd = ModelCommand(
-                command_id=record["command_id"],
-                verb=record["verb"],
-                subject_id=record.get("subject_id", ""),
-                reason=record.get("reason", ""),
-                requester_id=record.get("requester_id", ""),
-                has_pose=bool(record.get("has_pose")),
-                pose=PoseSE3(t=[float(v) for v in pose.get("t", [0, 0, 0])],
-                             q=[float(v) for v in pose.get("q", [0, 0, 0, 1])]),
-                has_extent=bool(record.get("has_extent")),
-                extent=Aabb3(
-                    min_xyz=[float(v) for v in extent.get("min_xyz", [0, 0, 0])],
-                    max_xyz=[float(v) for v in extent.get("max_xyz", [0, 0, 0])]),
-                # §N.1: an int64 is a decimal string on the wire, so `sec`
-                # arrives as a string and has to go back to an integer here.
-                stamp=Time(sec=int(stamp.get("sec", 0)),
-                           nanosec=int(stamp.get("nanosec", 0))),
-            )
-        except (KeyError, TypeError, ValueError) as e:
+            cmd = self.writer.write(record)
+        except Exception as e:
             return commands.Outcome.decline(
-                f"the command could not be built for the bus: "
+                f"the command could not be put on the bus: "
                 f"{type(e).__name__}: {e}")
-        try:
-            self.writer.write(cmd)
-        except Exception as e:                            # pragma: no cover
-            return commands.Outcome.decline(
-                f"the bus would not take it: {type(e).__name__}: {e}")
         self.sent += 1
         return commands.Outcome.accept(
             f"published {cmd.verb!r} for {cmd.subject_id!r} on "
-            f"{TOPIC_MODEL_COMMAND_V1}")
+            f"{self.writer.topic}")
 
 
 def main() -> int:
@@ -376,7 +339,6 @@ def main() -> int:
 
     import secrets
     sys.stdout.reconfigure(line_buffering=True)
-    domain_id = require_dds_env() if args.domain is None else args.domain
     token = args.token or secrets.token_urlsafe(24)
     base = args.public_url or f"http://{args.host}:{args.port}"
 
@@ -389,11 +351,11 @@ def main() -> int:
     app = gw_http.make_app(st, base, token, publish_enabled=False,
                            live_subscriptions=True,
                            command_registry=registry)
-    pump = Pump(st, app, domain_id)
+    pump = Pump(st, app, args.domain)
     lane = CommandLane(pump.participant)
     registry.register("spatial.owm.ModelCommand", lane.handle)
 
-    print(f"bridge: domain {domain_id}, scene {SCENE}")
+    print(f"bridge: domain {pump.participant.domain}, scene {SCENE}")
     print(f"bridge: binding  spatialdds[server] "
           f"{__import__('spatialdds').__version__} from PyPI, embedded")
     print(f"bridge: types    {st.type_source}")
@@ -426,6 +388,7 @@ def main() -> int:
         pass
     finally:
         pump.stop()
+        pump.participant.close(reason="the web bridge's binding stopped")
         print(f"bridge: pumped {sum(pump.counts.values())} sample(s), "
               f"{pump.removals} removal(s); sent {lane.sent} command(s)")
     return 0

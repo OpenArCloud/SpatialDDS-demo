@@ -63,20 +63,19 @@ while nothing had stopped.
 """
 
 import argparse
+import os
 import math
 import signal
 import sys
 import time
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 from cyclonedds.domain import DomainParticipant
 
-from spatialdds_ros import transport as ros_tt
+import spatialdds as sd
 from spatialdds_ros.adapter import RobotAdapter, already_published
 from spatialdds_ros.config import Config
 
-from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.dds_transport import require_dds_env
 # The 1.8 frame now, which is the whole of this lane's type-level change: the
 # census found one construction site and zero reads of any member, so the four
 # members 1.8 added cannot alter what this file does -- they alter what it
@@ -85,20 +84,9 @@ from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.model_service import VENUE_FRAME_FQN
 from spatialdds_demo.keepout import FREE, build_mask, contributing
 from spatialdds_demo.plaza import GROUND_Z, ROBOT_START_XY
-from spatialdds_demo.qos_profiles import MODEL_LATCHED
-from spatialdds_demo.tempo import Tempo
-# Migrated to `spatial.owm/0.1` on the scene-scoped topic names, same scene as
-# the venue it stands in -- the robot is in the Littlefield plaza, not a second
-# venue. This lane was pinned at the pre-1.8 names while the OWM pilot ran so
-# the cost of staging was visible in source rather than discovered as silence;
-# docs/robot-1.8-census.md is the field-level check that took the pin out.
-from spatialdds_demo.topics import SCENE, TOPIC_MODEL_ENTITY_V1
-from spatialdds.dds.types.builtin import Time
-from spatialdds.dds.types.spatial.owm import (
-    Basis, Entity, LifecycleState, ModelLayer, ModelPose,
-)
-from spatialdds.dds.types.spatial.common import KV
-from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
+# The venue's own scene, the robot being in the Littlefield plaza, and its
+# latched profile.
+from spatialdds_demo.lanes import MODEL_LATCHED, SCENE
 
 ENTITY_ID = "ent:robot:tb3"
 SOURCE_ID = "svc:robot:demo/tb3"
@@ -306,7 +294,16 @@ def _library_version() -> str:
 
 def run(domain_id: Optional[int] = None, source: str = "kinematic",
         hz: float = SIM_HZ) -> int:
-    domain_id = require_dds_env() if domain_id is None else domain_id
+    # The library's lanes are on a raw participant, because spatialdds_ros
+    # 0.3.0 takes one: a labelled workaround until the ROS rebase (census
+    # filing S7). Its domain is read the way the SDK reads it, and refused the
+    # same way when it is not set, rather than defaulting to 0.
+    if domain_id is None:
+        if not os.environ.get(sd.dds.DOMAIN_ENV):
+            print(f"robot: no domain: pass --domain or set "
+                  f"{sd.dds.DOMAIN_ENV}", file=sys.stderr)
+            return 2
+        domain_id = int(os.environ[sd.dds.DOMAIN_ENV])
     participant = DomainParticipant(domain_id)
 
     if source == "ros":
@@ -376,8 +373,15 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
     # reader was refused with `DDS_RETCODE_INCONSISTENT_POLICY`. The library
     # now creates topics with default QoS, as `typed_transport.get_topic`
     # always has, and the conventions agree.
-    entities_reader = ros_tt.make_reader(
-        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+    #
+    # Since the SDK adoption the venue's lane is read through the SDK, on an
+    # SDK participant of its own beside the library's: the SDK's Entity class
+    # and the library's are two Python classes for one topic, and two
+    # classes in one participant is that same collision. Two participants in
+    # one process interoperate (measured, docs/sdk-adoption-census.md), and the
+    # profile's columns are the library's.
+    venue = sd.participant(SCENE, domain=domain_id)
+    entities_reader = venue.reader("model_entity", qos_profile=MODEL_LATCHED)
     known: dict = {}
     # The contributing extents as last rasterised; None until the first read,
     # which is a different statement from "nothing contributes" (an empty
@@ -385,10 +389,13 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
     law = None
 
     def refresh_keepout():
-        for sample in tt.take_samples(entities_reader) or []:
-            if sample.entity_id == ENTITY_ID:
+        for ev in entities_reader.take():
+            if isinstance(ev, sd.Dispose):
+                known.pop(ev.key, None)       # a withdrawn thing keeps no one out
+                continue
+            if not isinstance(ev, sd.Sample) or ev.key == ENTITY_ID:
                 continue                      # never keep yourself out
-            known[sample.entity_id] = sample
+            known[ev.key] = ev.data
 
         # **Only a contributing extent can change the law.** Diffing every
         # entity's extent reported a change on almost every tick: the venue
@@ -465,6 +472,7 @@ def _run_kinematic(participant: DomainParticipant, domain_id: int,
             print(f"robot: {reported} poses; at ({x:.2f}, {y:.2f})", flush=True)
         time.sleep(interval)
     print("robot: stopping.")
+    venue.close()
     return 0
 
 

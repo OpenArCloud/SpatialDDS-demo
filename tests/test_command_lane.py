@@ -24,9 +24,9 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_demo import typed_transport as tt  # noqa: E402
-from spatialdds_demo.qos_profiles import MODEL_COMMAND  # noqa: E402
-from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1  # noqa: E402
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bus as bus  # noqa: E402
 from spatialdds.dds.types.builtin import Time  # noqa: E402
 from spatialdds.dds.types.spatial.owm import ModelCommand  # noqa: E402
 from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3  # noqa: E402
@@ -35,11 +35,8 @@ DOMAIN = 52
 
 
 def _participant(domain_id: int):
-    try:
-        from cyclonedds.domain import DomainParticipant
-        return DomainParticipant(domain_id)
-    except Exception as exc:
-        raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
+    """A participant on the venue scene, or a skip if there is no usable DDS."""
+    return bus.participant(domain_id)
 
 
 def _command(command_id: str) -> ModelCommand:
@@ -81,32 +78,81 @@ class CommandLane(unittest.TestCase):
         reading afterwards.
         """
         participant = _participant(DOMAIN)
-        reader = tt.make_reader(
-            participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
+        reader = bus.reader(participant, "model_command")
 
         seen = []
         for i in range(4):
             writer_participant = _participant(DOMAIN)
-            writer = tt.make_writer(
-                writer_participant, TOPIC_MODEL_COMMAND_V1, ModelCommand,
-                MODEL_COMMAND.name)
-            deadline = time.time() + 3
-            while (time.time() < deadline
-                   and not writer.get_publication_matched_status().current_count):
-                time.sleep(0.02)
+            writer = bus.writer(writer_participant, "model_command")
+            writer.wait_matched(timeout=3)
             writer.write(_command(f"cmd-{i}"))
             time.sleep(0.3)
             # The tool exits: writer and its participant go out of scope.
             del writer, writer_participant
             for _ in range(10):
                 # The take that used to raise.
-                seen.extend(c.command_id for c in tt.take_samples(reader) or [])
+                seen.extend(c.command_id for c in bus.samples(reader))
                 time.sleep(0.05)
 
         self.assertGreaterEqual(len(set(seen)), 3,
                                 f"reader should have survived and read; got {seen}")
         print(f"\n  command lane: {len(set(seen))} commands read across "
               f"4 writers that came and went")
+
+
+class DepthOneIsPerCommand(unittest.TestCase):
+    """
+    §3.3.2 spells `model_command` KEEP_LAST(1), and the venue's MODEL_COMMAND
+    profile is exactly that since the SDK adoption (it said KEEP_LAST(16)).
+
+    Depth is per instance, and the lane is keyed on `command_id`, with every
+    command minting its own. The reader here reads as the model service does:
+    the lane's own profile, so a depth-1 cache, taken only after the burst has
+    landed (the service takes every 0.1 s). Keyed, each command is its own
+    instance holding its own one sample, so nothing is lost. The control is
+    the same burst with one shared id, one instance at depth 1, which keeps
+    only the last. That is what shows this test can tell the two apart.
+
+    (A first draft read with history="KEEP_ALL" and taking as it went. Over
+    loopback the writer delivers each sample at once, so the control lost
+    nothing either, and the test measured nothing. Ledgered.)
+    """
+
+    BURST = 50
+
+    def _burst(self, ids):
+        reader_p = _participant(DOMAIN + 3)
+        writer_p = _participant(DOMAIN + 3)
+        reader = bus.reader(reader_p, "model_command")
+        writer = bus.writer(writer_p, "model_command")
+        self.assertTrue(writer.wait_matched(timeout=5))
+        for cid in ids:
+            writer.write(_command(cid))
+        # A clean stop waits for every acknowledgement, so after it the burst
+        # has landed in the reader's cache, untaken -- as it would between two
+        # of the service's 0.1 s takes.
+        writer_p.close()
+        time.sleep(0.2)
+        seen = [c.command_id for c in bus.samples(reader)]
+        reader_p.close()
+        return seen
+
+    def test_a_burst_of_keyed_commands_loses_none_at_depth_one(self):
+        ids = [f"cmd:burst:{i}" for i in range(self.BURST)]
+        seen = self._burst(ids)
+        self.assertEqual(sorted(set(seen)), sorted(ids),
+                         f"{len(set(seen))}/{len(ids)} delivered")
+        print(f"\n  command lane: {len(set(seen))}/{len(ids)} keyed commands "
+              f"in a burst at KEEP_LAST(1)")
+
+    def test_the_control_one_shared_id_does_lose_at_depth_one(self):
+        seen = self._burst(["cmd:burst:shared"] * self.BURST)
+        self.assertLess(len(seen), self.BURST,
+                        "one instance at depth 1 should keep only the last of "
+                        "a burst; if it keeps them all, this test cannot tell "
+                        "keyed from unkeyed and measures nothing")
+        print(f"\n  command lane control: {len(seen)}/{self.BURST} samples of "
+              f"one shared id survived the same burst")
 
 
 if __name__ == "__main__":

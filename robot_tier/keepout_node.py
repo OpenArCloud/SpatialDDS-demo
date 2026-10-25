@@ -53,16 +53,13 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
 sys.path.insert(0, "/ws")
 
-from spatialdds_demo import typed_transport as tt  # noqa: E402
+import spatialdds as sd  # noqa: E402
+
 from spatialdds_demo.keepout import build_mask, describe  # noqa: E402
-from spatialdds_demo.qos_profiles import MODEL_LATCHED  # noqa: E402
-# Migrated to `spatial.owm/0.1` on the scene-scoped topic names, same scene as
-# the venue it stands in -- the robot is in the Littlefield plaza, not a second
-# venue. This lane was pinned at the pre-1.8 names while the OWM pilot ran so
-# the cost of staging was visible in source rather than discovered as silence;
-# docs/robot-1.8-census.md is the field-level check that took the pin out.
-from spatialdds_demo.topics import TOPIC_MODEL_ENTITY_V1  # noqa: E402
-from spatialdds.dds.types.spatial.owm import Entity  # noqa: E402
+# The venue's own scene and its latched profile: the robot is in the
+# Littlefield plaza, not a second venue. The topic is the SDK registry's
+# `model_entity` template for that scene.
+from spatialdds_demo.lanes import MODEL_LATCHED, SCENE  # noqa: E402
 
 # The robot's own entity, excluded from its own keep-out. Named here rather
 # than imported from robot_bridge so this file's imports stay readable.
@@ -113,10 +110,9 @@ class KeepoutNode(Node):
         self._map_pub = self.create_publisher(OccupancyGrid, MAP_TOPIC, latched())
         self._info_pub = self.create_publisher(CostmapFilterInfo, INFO_TOPIC, latched())
 
-        from cyclonedds.domain import DomainParticipant
-        self._participant = DomainParticipant(domain_id)
-        self._reader = tt.make_reader(
-            self._participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        self._participant = sd.participant(SCENE, domain=domain_id)
+        self._reader = self._participant.reader("model_entity",
+                                                qos_profile=MODEL_LATCHED)
         self._entities = {}
         self._published_signature = None
 
@@ -166,10 +162,16 @@ class KeepoutNode(Node):
         self._map_pub.publish(canvas)
 
     def _tick(self) -> None:
-        for sample in tt.take_with_state(self._reader):
-            if sample.data is None:
-                continue
-            self._entities[sample.data.entity_id] = sample.data
+        # Non-blocking, inside rclpy's timer: the reader's take(), not its
+        # blocking events().
+        for ev in self._reader.take():
+            if isinstance(ev, sd.Sample):
+                self._entities[ev.key] = ev.data
+            elif isinstance(ev, sd.Dispose):
+                # A withdrawn entity stops being keep-out. It used to stay in
+                # the mask: the old read skipped every dispose, unable to say
+                # which instance one was for (census finding 2's class).
+                self._entities.pop(ev.key, None)
 
         mask = build_mask(self._entities.values(), exclude_ids=(ROBOT_ID,),
                           shoulder_m=SHOULDER_M)
@@ -206,6 +208,7 @@ def main() -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        node._participant.close()
         node.destroy_node()
         rclpy.shutdown()
     return 0

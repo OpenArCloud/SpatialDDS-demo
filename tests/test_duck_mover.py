@@ -25,7 +25,9 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_demo import typed_transport as tt  # noqa: E402
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bus as bus  # noqa: E402
 from spatialdds_demo.duck_mover import (  # noqa: E402
     AVOID_STALE_S, CORNER_SPREAD_M, INSET_M, DuckMover, clamp_into,
     farthest_corner, heading_quaternion,
@@ -33,11 +35,6 @@ from spatialdds_demo.duck_mover import (  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
     SHALLOWS_MAX, SHALLOWS_MIN, ModelPublisher, seed_entities,
 )
-from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED  # noqa: E402
-from spatialdds_demo.topics import (  # noqa: E402
-    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1,
-)
-from spatialdds.dds.types.spatial.owm import Entity, ModelCommand  # noqa: E402
 from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3  # noqa: E402
 
 DOMAIN = 56
@@ -45,11 +42,8 @@ POND = Aabb3(min_xyz=[9.5, -18.0, -2.0], max_xyz=[20.0, -10.0, -1.0])
 
 
 def _participant(domain_id: int):
-    try:
-        from cyclonedds.domain import DomainParticipant
-        return DomainParticipant(domain_id)
-    except Exception as exc:
-        raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
+    """A participant on the venue scene, or a skip if there is no usable DDS."""
+    return bus.participant(domain_id)
 
 
 class Geometry(unittest.TestCase):
@@ -344,7 +338,7 @@ class AvoidingSomethingAlive(unittest.TestCase):
                   / "spatialdds_demo" / "duck_mover.py").read_text()
         for banned in ("import rclpy", "from rclpy", "nav_msgs", "geometry_msgs"):
             self.assertNotIn(banned, source)
-        self.assertIn("TOPIC_MODEL_POSE_V1", source)
+        self.assertIn('"model_pose"', source)
 
 
 class WritesNothing(unittest.TestCase):
@@ -356,8 +350,8 @@ class WritesNothing(unittest.TestCase):
         during the test. The single-writer rule is that it *cannot*.
         """
         source = (REPO / "spatialdds_demo" / "duck_mover.py").read_text()
-        writers = re.findall(r"make_writer\(\s*\w+,\s*(\w+)", source)
-        self.assertEqual(writers, ["TOPIC_MODEL_COMMAND_V1"],
+        writers = re.findall(r"\.writer\(\s*\"(\w+)\"", source)
+        self.assertEqual(writers, ["model_command"],
                          f"the mover must only write commands; found {writers}")
         self.assertNotIn("TOPIC_MODEL_RELATIONSHIP_V1", source)
 
@@ -376,8 +370,7 @@ class Wandering(unittest.TestCase):
         entities = seed_entities()
         for entity in entities:
             publisher.publish_entity(entity)
-        commands = tt.make_reader(
-            participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
+        commands = bus.reader(participant, "model_command")
         return participant, publisher, commands
 
     def test_the_ducks_wander_and_never_leave_the_declared_water(self):
@@ -389,7 +382,7 @@ class Wandering(unittest.TestCase):
         try:
             for _ in range(60):                       # a sustained window
                 mover.tick()
-                for command in tt.take_samples(commands) or []:
+                for command in bus.samples(commands):
                     publisher.handle_command(command)
                     seen.append((command.subject_id,
                                  command.pose.t[0], command.pose.t[1]))
@@ -433,24 +426,22 @@ class Wandering(unittest.TestCase):
         try:
             for _ in range(40):
                 mover.tick()
-                for command in tt.take_samples(commands) or []:
+                for command in bus.samples(commands):
                     publisher.handle_command(command)
                 time.sleep(0.02)
 
             # The mover stops. Nothing else does.
             del mover
             for _ in range(10):
-                for command in tt.take_samples(commands) or []:
+                for command in bus.samples(commands):
                     publisher.handle_command(command)
                 time.sleep(0.05)
 
             def read_world():
-                reader = tt.make_reader(_participant(DOMAIN + 2),
-                                        TOPIC_MODEL_ENTITY_V1, Entity,
-                                        MODEL_LATCHED.name)
+                reader = bus.reader(_participant(DOMAIN + 2), "model_entity")
                 got, deadline = {}, time.time() + 6
                 while time.time() < deadline and len(got) < len(seed_entities()):
-                    for sample in tt.take_samples(reader) or []:
+                    for sample in bus.samples(reader):
                         got[sample.entity_id] = tuple(
                             round(v, 6) for v in sample.pose.t)
                     time.sleep(0.02)
@@ -492,7 +483,7 @@ class Wandering(unittest.TestCase):
             asked = []
             for _ in range(80):
                 mover.tick()
-                for command in tt.take_samples(commands) or []:
+                for command in bus.samples(commands):
                     publisher.handle_command(command)
                     asked.append((command.pose.t[0], command.pose.t[1]))
                 time.sleep(0.02)

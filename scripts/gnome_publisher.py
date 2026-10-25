@@ -34,14 +34,11 @@ import time
 import uuid
 from typing import Optional
 
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
 
-from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.dds_transport import require_dds_env
+from spatialdds_demo.lanes import MODEL_LATCHED, SCENE
 from spatialdds_demo.model_service import VENUE_FRAME_FQN, venue_frame
-from spatialdds_demo.qos_profiles import MODEL_LATCHED
 from spatialdds_demo.model_service import live_log
-from spatialdds_demo.topics import TOPIC_MODEL_ENTITY_V1
 from spatialdds.dds.types.builtin import Time
 from spatialdds.dds.types.spatial.owm import (
     Basis, Entity, LifecycleState, ModelLayer,
@@ -97,14 +94,13 @@ def gnome(stamp: Optional[Time] = None) -> Entity:
 
 def run(domain_id: Optional[int] = None) -> int:
     live_log()
-    domain_id = require_dds_env() if domain_id is None else domain_id
-    participant = DomainParticipant(domain_id)
-    writer = tt.make_writer(
-        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+    participant = sd.participant(SCENE, domain=domain_id, service_id=SOURCE_ID)
+    writer = participant.writer("model_entity", qos_profile=MODEL_LATCHED,
+                                on_exit="withdraw")
 
     entity = gnome()
     writer.write(entity)
-    print(f"gnome: domain {domain_id}, source {SOURCE_ID}")
+    print(f"gnome: domain {participant.domain}, source {SOURCE_ID}")
     print(f"gnome: {entity.entity_id} — {entity.basis.name}/{entity.layer.name}, "
           f"pose ({POSE_T[0]:.2f}, {POSE_T[1]:.2f}, {POSE_T[2]:.2f}) "
           f"in {VENUE_FRAME_FQN}")
@@ -122,12 +118,11 @@ def run(domain_id: Optional[int] = None) -> int:
     while not stop:
         time.sleep(0.5)
 
-    # Stay a good citizen on the way out, the same as the model service.
-    try:
-        writer.dispose(entity)
-    except Exception:
-        pass
-    print("gnome: disposed and exiting")
+    # Stay a good citizen on the way out, the same as the model service: a
+    # terminal sample, then the dispose (it was a bare dispose until the SDK
+    # adoption).
+    participant.close(reason="the gnome publisher stopped")
+    print("gnome: withdrawn and exiting")
     return 0
 
 

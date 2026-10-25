@@ -50,40 +50,41 @@ if str(REPO) not in sys.path:
 
 def _service(domain: int, seconds: float) -> None:
     """The model service: seed, hold latched, answer the command lane."""
-    from cyclonedds.domain import DomainParticipant
-    from spatialdds_demo import typed_transport as tt
-    from spatialdds_demo.model_service import ModelPublisher, seed_entities
-    from spatialdds_demo.qos_profiles import MODEL_COMMAND
-    from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1
-    from spatialdds.dds.types.spatial.owm import ModelCommand
+    import spatialdds as sd
+    from spatialdds_demo.lanes import MODEL_COMMAND, SCENE
+    from spatialdds_demo.model_service import (
+        SOURCE_ID, ModelPublisher, seed_entities)
 
-    participant = DomainParticipant(domain)
+    participant = sd.participant(SCENE, domain=domain, service_id=SOURCE_ID)
     publisher = ModelPublisher(participant)
     for entity in seed_entities():
         publisher.publish_entity(entity)
-    commands = tt.make_reader(participant, TOPIC_MODEL_COMMAND_V1,
-                              ModelCommand, MODEL_COMMAND.name)
+    commands = participant.reader("model_command", qos_profile=MODEL_COMMAND)
     print(f"session: service holding {len(publisher._published)} entities",
           flush=True)
     deadline = time.time() + seconds
     while time.time() < deadline:
-        for command in tt.take_samples(commands) or []:
+        for command in [ev.data for ev in commands.take()
+                        if isinstance(ev, sd.Sample)]:
             line = publisher.handle_command(command)
             if line and not line.startswith("move "):
                 print(f"session: {line}", flush=True)
         time.sleep(0.02)
     publisher.close()
+    participant.close(reason="the recorded session ended")
 
 
 def _mover(domain: int, seconds: float, seed: int) -> None:
     """The duck mover: asks the owner to move its ducks."""
     import random
 
-    from cyclonedds.domain import DomainParticipant
-    from spatialdds_demo.duck_mover import DuckMover
+    import spatialdds as sd
+    from spatialdds_demo.duck_mover import REQUESTER_ID, DuckMover
+    from spatialdds_demo.lanes import SCENE
 
     time.sleep(1.0)                       # let the venue latch first
-    mover = DuckMover(DomainParticipant(domain), rng=random.Random(seed))
+    participant = sd.participant(SCENE, domain=domain, service_id=REQUESTER_ID)
+    mover = DuckMover(participant, rng=random.Random(seed))
     deadline = time.time() + seconds
     ticks = 0
     while time.time() < deadline:
@@ -91,23 +92,22 @@ def _mover(domain: int, seconds: float, seed: int) -> None:
         ticks += 1
         time.sleep(0.2)
     print(f"session: mover asked for {ticks} rounds of moves", flush=True)
+    participant.close(reason="the recorded session ended")
 
 
 def _one_command(domain: int) -> None:
     """One operator command through the real lane, mid-session."""
-    from cyclonedds.domain import DomainParticipant
-    from spatialdds_demo import typed_transport as tt
+    import spatialdds as sd
+    from spatialdds_demo.lanes import MODEL_COMMAND, SCENE
     from spatialdds_demo.model_service import POND_MIN, POND_MAX
-    from spatialdds_demo.qos_profiles import MODEL_COMMAND
-    from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1
     from spatialdds.dds.types.builtin import Time
     from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
     from spatialdds.dds.types.spatial.owm import ModelCommand
 
-    participant = DomainParticipant(domain)
-    writer = tt.make_writer(participant, TOPIC_MODEL_COMMAND_V1, ModelCommand,
-                            MODEL_COMMAND.name)
-    time.sleep(0.5)
+    participant = sd.participant(SCENE, domain=domain,
+                                 service_id="tool:run_owm_session")
+    writer = participant.writer("model_command", qos_profile=MODEL_COMMAND)
+    writer.wait_matched(timeout=5.0)
     now = time.time()
     # The shallows, a metre narrower in y. A real `set_extent`: the service
     # rewrites its own latched copy and the movers read the new bounds.
@@ -125,6 +125,7 @@ def _one_command(domain: int) -> None:
         stamp=Time(sec=int(now), nanosec=int((now % 1) * 1e9)),
     ))
     time.sleep(1.0)
+    participant.close()
 
 
 def main() -> int:

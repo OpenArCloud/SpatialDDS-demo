@@ -26,18 +26,15 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_demo import typed_transport as tt  # noqa: E402
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bus as bus  # noqa: E402
 from spatialdds.dds import to_json  # noqa: E402
 from spatialdds.dds.types.builtin import Time  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
     DUCK_CONTENT_ID, IDLE_FLUSH_S, LATCH_EVERY_N_MOVES, ModelPublisher,
     POND_MIN, seed_entities,
 )
-from spatialdds_demo.qos_profiles import MODEL_LATCHED  # noqa: E402
-from spatialdds_demo.topics import (  # noqa: E402
-    TOPIC_MODEL_ENTITY_V1,
-)
-from spatialdds.dds.types.spatial.owm import Entity  # noqa: E402
 
 # High enough to stay clear of the demo stack's own domains.
 DOMAIN = 43
@@ -48,12 +45,8 @@ SEEDED_ENTITIES = len(seed_entities())
 
 
 def _participant(domain_id: int):
-    """A participant, or a skip if this environment has no usable DDS."""
-    try:
-        from cyclonedds.domain import DomainParticipant
-        return DomainParticipant(domain_id)
-    except Exception as exc:
-        raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
+    """A participant on the venue scene, or a skip if there is no usable DDS."""
+    return bus.participant(domain_id)
 
 
 def _command(verb, entity_id="", reason="", pose=None, extent=None):
@@ -75,7 +68,7 @@ def _drain(entity_reader, want_e, timeout=10.0):
     entities = {}
     deadline = time.time() + timeout
     while time.time() < deadline:
-        for sample in tt.take_samples(entity_reader) or []:
+        for sample in bus.samples(entity_reader):
             entities[sample.entity_id] = sample
         if len(entities) >= want_e:
             break
@@ -104,8 +97,7 @@ class LateJoin(unittest.TestCase):
         time.sleep(0.5)
         started = time.time()
         subscriber = _participant(DOMAIN)
-        entity_reader = tt.make_reader(
-            subscriber, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        entity_reader = bus.reader(subscriber, "model_entity")
         got_entities = _drain(entity_reader, SEEDED_ENTITIES)
         elapsed = time.time() - started
 
@@ -190,19 +182,17 @@ class SecondPublisher(unittest.TestCase):
             publisher.publish_entity(entity)
 
         # A second, independent writer on the same topic.
-        gnome_writer = tt.make_writer(
-            publisher_participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        gnome_writer = bus.writer(publisher_participant, "model_entity")
         gnome_writer.write(module.gnome())
 
         time.sleep(0.5)
         started = time.time()
         subscriber = _participant(DOMAIN + 2)
-        entity_reader = tt.make_reader(
-            subscriber, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        entity_reader = bus.reader(subscriber, "model_entity")
         got = {}
         deadline = time.time() + 10
         while time.time() < deadline and len(got) < SEEDED_ENTITIES + 1:
-            for sample in tt.take_samples(entity_reader) or []:
+            for sample in bus.samples(entity_reader):
                 got[sample.entity_id] = sample
             time.sleep(0.02)
         elapsed = time.time() - started
@@ -369,8 +359,7 @@ class Retirement(unittest.TestCase):
 
     def test_a_live_subscriber_sees_the_tombstone_then_the_eviction(self):
         participant, publisher = self._publisher(DOMAIN + 3)
-        entity_reader = tt.make_reader(
-            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        entity_reader = bus.reader(participant, "model_entity")
         _drain(entity_reader, SEEDED_ENTITIES)
 
         target = "ent:duck:east"
@@ -378,12 +367,16 @@ class Retirement(unittest.TestCase):
         events = []
 
         def collect():
-            for sample in tt.take_with_state(entity_reader):
-                if sample.data is None:
+            import spatialdds as sd
+            for ev in entity_reader.take():
+                if isinstance(ev, sd.Dispose) and ev.key == target:
                     events.append(("disposed", None))
-                elif (sample.data.entity_id == target
-                      and sample.data.state.name == "RETIRED"):
-                    events.append(("tombstone", sample.data.state_reason))
+                elif (isinstance(ev, sd.Sample) and ev.key == target
+                      and ev.data.state.name == "RETIRED"
+                      and ("tombstone", ev.data.state_reason) not in events):
+                    # The withdrawal re-writes the terminal sample before its
+                    # dispose; the tombstone is one fact, seen once.
+                    events.append(("tombstone", ev.data.state_reason))
 
         try:
             # A short settle so the two samples are distinguishable to a
@@ -431,8 +424,7 @@ class Retirement(unittest.TestCase):
         try:
             subscriber = _participant(DOMAIN + 4)
             entities = _drain(
-                tt.make_reader(subscriber, TOPIC_MODEL_ENTITY_V1, Entity,
-                               MODEL_LATCHED.name),
+                bus.reader(subscriber, "model_entity"),
                 SEEDED_ENTITIES - 1, timeout=6.0)
             self.assertNotIn(target, entities)
             # And nothing else went with it.
@@ -455,8 +447,7 @@ class Retirement(unittest.TestCase):
         try:
             subscriber = _participant(DOMAIN + 5)
             entities = _drain(
-                tt.make_reader(subscriber, TOPIC_MODEL_ENTITY_V1, Entity,
-                               MODEL_LATCHED.name),
+                bus.reader(subscriber, "model_entity"),
                 SEEDED_ENTITIES)
             self.assertIn(target, entities)
             self.assertEqual(entities[target].state.name, "ACTIVE")
@@ -529,7 +520,7 @@ class Mover(unittest.TestCase):
 
         mover = self._load_mover()
         target = "ent:duck:west"
-        before = mover.read_entity(participant, target)
+        before = mover.read_entity(mover.World(participant), target)
         self.assertIsNotNone(before, "publisher did not latch the entity")
         before_json = to_json(before)
 
@@ -544,7 +535,7 @@ class Mover(unittest.TestCase):
         # A duck is FAST, so one move goes out on the pose topic and the
         # latched record is not rewritten yet. That is the fast tier working,
         # not a bug -- and the reason the flush below exists.
-        mid = mover.read_entity(_participant(DOMAIN + 1), target)
+        mid = mover.read_entity(mover.World(_participant(DOMAIN + 1)), target)
         self.assertEqual(list(mid.pose.t), before_json["pose"]["t"],
                          "a single fast move should not have rewritten the latch")
 
@@ -553,7 +544,7 @@ class Mover(unittest.TestCase):
         self.assertEqual(publisher.flush_idle(), [target])
         time.sleep(0.5)
 
-        after = mover.read_entity(_participant(DOMAIN + 1), target)
+        after = mover.read_entity(mover.World(_participant(DOMAIN + 1)), target)
         self.assertIsNotNone(after)
         after_json = to_json(after)
 
@@ -596,12 +587,11 @@ class Mover(unittest.TestCase):
 
         try:
             subscriber = _participant(DOMAIN + 8)
-            reader = tt.make_reader(
-                subscriber, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+            reader = bus.reader(subscriber, "model_entity")
             got = {}
             deadline = time.time() + 10
             while time.time() < deadline and target not in got:
-                for sample in tt.take_samples(reader) or []:
+                for sample in bus.samples(reader):
                     got[sample.entity_id] = sample
                 time.sleep(0.02)
             self.assertIn(target, got)

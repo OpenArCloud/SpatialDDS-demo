@@ -40,16 +40,13 @@ import sys
 import time
 from typing import Optional
 
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
 
-from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.dds_transport import require_dds_env
+from spatialdds_demo.lanes import MODEL_LATCHED, SCENE
 from spatialdds_demo.model_service import (
     live_log,
     POND_MAX, POND_MIN, TYPE_BASIN, venue_frame,
 )
-from spatialdds_demo.qos_profiles import MODEL_LATCHED
-from spatialdds_demo.topics import TOPIC_MODEL_ENTITY_V1
 from spatialdds.dds.types.builtin import Time
 from spatialdds.dds.types.spatial.owm import (
     Basis, Entity, LifecycleState, ModelLayer,
@@ -121,13 +118,14 @@ def observation(rng: random.Random, stamp: Optional[Time] = None) -> Entity:
 
 def run(domain_id: Optional[int] = None, seed: Optional[int] = None) -> int:
     live_log()
-    domain_id = require_dds_env() if domain_id is None else domain_id
-    participant = DomainParticipant(domain_id)
-    writer = tt.make_writer(
-        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+    participant = sd.participant(SCENE, domain=domain_id, service_id=SOURCE_ID)
+    # A clean stop withdraws the observation: its terminal sample, then the
+    # dispose, with the reason. It used to be a bare dispose (census defect 5).
+    writer = participant.writer("model_entity", qos_profile=MODEL_LATCHED,
+                                on_exit="withdraw")
     rng = random.Random(seed)
 
-    print(f"pondwatch: domain {domain_id}, source {SOURCE_ID}")
+    print(f"pondwatch: domain {participant.domain}, source {SOURCE_ID}")
     print(f"pondwatch: publishing {ENTITY_ID} — DERIVED, every {PERIOD_S}s")
     print(f"pondwatch: it disagrees with the venue by about {MARGIN_M} m, "
           f"on purpose")
@@ -157,11 +155,8 @@ def run(domain_id: Optional[int] = None, seed: Optional[int] = None) -> int:
                       f"{entity.extent.max_xyz[1]:.2f}", flush=True)
         time.sleep(0.2)
 
-    try:
-        writer.dispose(observation(rng))
-    except Exception:
-        pass
-    print("pondwatch: disposed and exiting")
+    participant.close(reason="pondwatch stopped observing")
+    print("pondwatch: withdrawn and exiting")
     return 0
 
 

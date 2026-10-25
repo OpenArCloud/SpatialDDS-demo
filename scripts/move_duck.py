@@ -43,48 +43,62 @@ import sys
 import time
 from typing import List, Optional, Tuple
 
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
 
-from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.qos_profiles import (
-    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
-)
-from spatialdds_demo.topics import (
-    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
+from spatialdds_demo.lanes import (
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, SCENE,
 )
 from spatialdds.dds.types.builtin import Time
-from spatialdds.dds.types.spatial.owm import Entity, ModelCommand, ModelPose
+from spatialdds.dds.types.spatial.owm import Entity, ModelCommand
 from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "tool:move_duck"
 
 
-def read_entity(participant: DomainParticipant, entity_id: str,
+class World:
+    """The latched entity lane, read once and kept current.
+
+    One reader for the run, not one per look: an SDK reader lives as long as
+    its participant, and `await_pose` looks many times.
+    """
+
+    def __init__(self, participant: "sd.dds.Participant"):
+        self._reader = participant.reader("model_entity",
+                                          qos_profile=MODEL_LATCHED,
+                                          settle_s=0.3)
+        self.seen: dict = {}
+
+    def poll(self) -> None:
+        for ev in self._reader.take():
+            if isinstance(ev, sd.Sample):
+                self.seen[ev.key] = ev.data
+            elif isinstance(ev, sd.Dispose):
+                self.seen.pop(ev.key, None)
+
+
+def read_entity(world: World, entity_id: str,
                 timeout: float = 5.0) -> Optional[Entity]:
     """The current sample for one key, from the writer's latched history."""
-    reader = tt.make_reader(
-        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
     deadline = time.time() + timeout
-    seen = {}
-    while time.time() < deadline:
-        for sample in tt.take_samples(reader) or []:
-            seen[sample.entity_id] = sample
-        if entity_id in seen:
-            return seen[entity_id]
+    while True:
+        world.poll()
+        if entity_id in world.seen:
+            return world.seen[entity_id]
+        if time.time() >= deadline:
+            break
         time.sleep(0.05)
-    if seen:
-        print(f"entities on the bus: {', '.join(sorted(seen))}", file=sys.stderr)
+    if world.seen:
+        print(f"entities on the bus: {', '.join(sorted(world.seen))}",
+              file=sys.stderr)
     return None
 
 
-def send(participant: DomainParticipant, verb: str, entity_id: str = "",
+def send(participant: "sd.dds.Participant", verb: str, entity_id: str = "",
          pose: Optional[PoseSE3] = None) -> None:
     """Ask the service. See the module docstring for why this is not a write."""
     import uuid
 
-    writer = tt.make_writer(
-        participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
+    writer = participant.writer("model_command", qos_profile=MODEL_COMMAND)
     now = time.time()
     command = ModelCommand(
         command_id=str(uuid.uuid4()), verb=verb, subject_id=entity_id, reason="",
@@ -96,16 +110,13 @@ def send(participant: DomainParticipant, verb: str, entity_id: str = "",
     # The command lane is VOLATILE: a writer with nobody attached drops the
     # sample on the floor. The service is long-lived, so this is a discovery
     # wait, not a retry.
-    deadline = time.time() + 5.0
-    while (time.time() < deadline
-           and not writer.get_publication_matched_status().current_count):
-        time.sleep(0.05)
+    writer.wait_matched(timeout=5.0)
     writer.write(command)
 
 
-def await_pose(participant: DomainParticipant, entity_id: str,
-               target: Tuple[float, float], timeout: float = 10.0
-               ) -> Optional[List[float]]:
+def await_pose(participant: "sd.dds.Participant", world: World,
+               entity_id: str, target: Tuple[float, float],
+               timeout: float = 10.0) -> Optional[List[float]]:
     """
     Watch until the bus agrees, so this reports what happened rather than what
     was asked for.
@@ -119,15 +130,15 @@ def await_pose(participant: DomainParticipant, entity_id: str,
     The pose lane answers first when something is moving; the latch answers
     for anything that is not FAST, and for the entity's rest state.
     """
-    poses = tt.make_reader(
-        participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
+    poses = participant.reader("model_pose", qos_profile=MODEL_FAST)
     deadline = time.time() + timeout
     while time.time() < deadline:
-        for sample in tt.take_samples(poses) or []:
+        for sample in [ev.data for ev in poses.take()
+                       if isinstance(ev, sd.Sample)]:
             if sample.entity_id == entity_id and all(
                     abs(a - b) < 0.01 for a, b in zip(sample.pose.t[:2], target)):
                 return list(sample.pose.t)
-        current = read_entity(participant, entity_id, timeout=0.2)
+        current = read_entity(world, entity_id, timeout=0.2)
         if current is not None and all(
                 abs(a - b) < 0.01 for a, b in zip(current.pose.t[:2], target)):
             return list(current.pose.t)
@@ -144,15 +155,16 @@ def reset(domain_id: Optional[int] = None) -> int:
     """
     from spatialdds_demo.model_service import seed_entities
 
-    domain_id = require_dds_env() if domain_id is None else domain_id
-    participant = DomainParticipant(domain_id)
+    participant = sd.participant(SCENE, domain=domain_id,
+                                 service_id=REQUESTER_ID)
+    world = World(participant)
     send(participant, "restore")
 
     seeded = {e.entity_id: e for e in seed_entities()
               if e.entity_id.startswith("ent:duck")}
     ok = True
     for entity_id, entity in sorted(seeded.items()):
-        landed = await_pose(participant, entity_id,
+        landed = await_pose(participant, world, entity_id,
                             (entity.pose.t[0], entity.pose.t[1]))
         if landed is None:
             print(f"{entity_id}: did not come back to "
@@ -165,10 +177,11 @@ def reset(domain_id: Optional[int] = None) -> int:
 
 def move(entity_id: str, x: float, y: float, z: Optional[float] = None,
          domain_id: Optional[int] = None) -> int:
-    domain_id = require_dds_env() if domain_id is None else domain_id
-    participant = DomainParticipant(domain_id)
+    participant = sd.participant(SCENE, domain=domain_id,
+                                 service_id=REQUESTER_ID)
+    world = World(participant)
 
-    current = read_entity(participant, entity_id)
+    current = read_entity(world, entity_id)
     if current is None:
         print(f"{entity_id}: not on the bus — is the model service running?",
               file=sys.stderr)
@@ -178,7 +191,7 @@ def move(entity_id: str, x: float, y: float, z: Optional[float] = None,
 
     send(participant, "move", entity_id,
          PoseSE3(t=[x, y, height], q=list(current.pose.q)))
-    landed = await_pose(participant, entity_id, (x, y))
+    landed = await_pose(participant, world, entity_id, (x, y))
     if landed is None:
         print(f"{entity_id}: the service did not move it — does it own this "
               f"entity?", file=sys.stderr)

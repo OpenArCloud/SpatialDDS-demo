@@ -54,17 +54,13 @@ import time
 import zlib
 from typing import Dict, List, Optional, Tuple
 
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
 
-from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.dds_transport import require_dds_env
+from spatialdds_demo.lanes import (
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, SCENE)
 from spatialdds_demo.model_service import TYPE_RUBBER_DUCK, live_log
-from spatialdds_demo.qos_profiles import (
-    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED)
-from spatialdds_demo.topics import (
-    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1)
 from spatialdds.dds.types.builtin import Time
-from spatialdds.dds.types.spatial.owm import Entity, ModelCommand, ModelPose
+from spatialdds.dds.types.spatial.owm import Entity, ModelCommand
 from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "svc:mover:demo/ducks"
@@ -278,18 +274,17 @@ class DuckMover:
     # this" into an AttributeError in a test about headings.
     _avoid: Optional[Tuple[float, float, float]] = None
 
-    def __init__(self, participant: DomainParticipant,
+    def __init__(self, participant: "sd.dds.Participant",
                  bounds_entity: str = DEFAULT_BOUNDS_ENTITY,
                  rng: Optional[random.Random] = None):
-        self._reader = tt.make_reader(
-            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+        self._reader = participant.reader("model_entity",
+                                          qos_profile=MODEL_LATCHED)
         # The fast lane, where things that move say so. Same bus, different
         # QoS: BEST_EFFORT and KEEP_LAST(1), because a stale pose is worse
         # than a missing one.
-        self._poses = tt.make_reader(
-            participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
-        self._commands = tt.make_writer(
-            participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
+        self._poses = participant.reader("model_pose", qos_profile=MODEL_FAST)
+        self._commands = participant.writer("model_command",
+                                            qos_profile=MODEL_COMMAND)
         self._bounds_entity = bounds_entity
         self._rng = rng or random.Random()
         self._entities: Dict[str, Entity] = {}
@@ -305,12 +300,19 @@ class DuckMover:
         """Take whatever the bus has. Late joins and updates arrive the same
         way, so nothing here distinguishes them."""
         applied = 0
-        for sample in tt.take_with_state(self._reader):
-            if sample.data is None:
-                continue          # a dispose; the id is not carried here.
-            self._entities[sample.data.entity_id] = sample.data
-            applied += 1
-        for pose in tt.take_samples(self._poses) or []:
+        for ev in self._reader.take():
+            if isinstance(ev, sd.Sample):
+                self._entities[ev.key] = ev.data
+                applied += 1
+            elif isinstance(ev, sd.Dispose):
+                # A withdrawal names its key, so a retired duck leaves this
+                # world too. It used to stay, because the old read could not
+                # say which instance a dispose was for, and the mover kept
+                # asking to move a duck that no longer existed.
+                self._entities.pop(ev.key, None)
+        poses = [ev.data for ev in self._poses.take()
+                 if isinstance(ev, sd.Sample)]
+        for pose in poses:
             # Anything we already know about gets its live pose applied. This
             # matters more than it looks: the latched entity topic only
             # republishes every few moves, so reading positions from it alone
@@ -331,7 +333,7 @@ class DuckMover:
                     # that one arrived: the interesting part is that this is
                     # another service's observation, off the same bus.
                     print(f"mover: keeping clear of {AVOID_ENTITY_ID} — poses "
-                          f"from {pose.source_id} on {TOPIC_MODEL_POSE_V1}",
+                          f"from {pose.source_id} on {self._poses.topic}",
                           flush=True)
                 self._avoid = (pose.pose.t[0], pose.pose.t[1], now)
         return applied
@@ -457,13 +459,8 @@ class DuckMover:
         """
         if self._matched:
             return True
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self._commands.get_publication_matched_status().current_count:
-                self._matched = True
-                return True
-            time.sleep(0.05)
-        return False
+        self._matched = self._commands.wait_matched(timeout=timeout)
+        return self._matched
 
     def ask_move(self, entity_id: str, pose: PoseSE3) -> None:
         if not self._wait_until_somebody_is_listening():
@@ -505,11 +502,11 @@ class DuckMover:
 def run(domain_id: Optional[int] = None,
         bounds_entity: str = DEFAULT_BOUNDS_ENTITY) -> int:
     live_log()
-    domain_id = require_dds_env() if domain_id is None else domain_id
-    participant = DomainParticipant(domain_id)
+    participant = sd.participant(SCENE, domain=domain_id,
+                                 service_id=REQUESTER_ID)
     mover = DuckMover(participant, bounds_entity)
 
-    print(f"mover: domain {domain_id}, requester {REQUESTER_ID}")
+    print(f"mover: domain {participant.domain}, requester {REQUESTER_ID}")
     print(f"mover: following the bounds of {bounds_entity}, inset {INSET_M} m")
     print(f"mover: {MOVES_PER_SECOND} move(s)/s, {STEP_M} m per step")
     print("mover: writes nothing on the model topics — it asks")
@@ -554,6 +551,7 @@ def run(domain_id: Optional[int] = None,
 
     print(f"mover: stopping after {moved} moves. The ducks stay where they are "
           f"— the model service owns their poses, not this process.")
+    participant.close(reason="the duck mover stopped")
     return 0
 
 

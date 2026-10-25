@@ -23,6 +23,10 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bus as bus  # noqa: E402
+
 from spatialdds_demo.duck_mover import BOUNDS_ENTITIES  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
     POND_MAX, POND_MIN, TYPE_BASIN, seed_entities,
@@ -117,8 +121,8 @@ class NothingJoinsThem(unittest.TestCase):
         # The claim is about what it publishes, not about what it mentions:
         # the module explains at length *why* there is no edge, and a guard
         # that banned the word would have banned the explanation.
-        writers = re.findall(r"make_writer\(\s*\w+,\s*(\w+)", source)
-        self.assertEqual(writers, ["TOPIC_MODEL_ENTITY_V1"],
+        writers = re.findall(r"\.writer\(\s*\"(\w+)\"", source)
+        self.assertEqual(writers, ["model_entity"],
                          f"pondwatch should publish one entity and no edges; "
                          f"found writers on {writers}")
         self.assertIn("R10", source, "and should say where the question went")
@@ -157,20 +161,10 @@ class WhomYouTrustChangesTheWorld(unittest.TestCase):
     DOMAIN = 61
 
     def _participant(self, domain):
-        try:
-            from cyclonedds.domain import DomainParticipant
-            return DomainParticipant(domain)
-        except Exception as exc:
-            raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
+        return bus.participant(domain)
 
     def _stack(self, domain):
-        from spatialdds_demo import typed_transport as tt
         from spatialdds_demo.model_service import ModelPublisher
-        from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
-        from spatialdds_demo.topics import (
-            TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1,
-        )
-        from spatialdds.dds.types.spatial.owm import Entity, ModelCommand
 
         participant = self._participant(domain)
         publisher = ModelPublisher(participant)
@@ -187,12 +181,10 @@ class WhomYouTrustChangesTheWorld(unittest.TestCase):
         # person who wrote it up. The rule is not "remember to keep a
         # reference"; it is that latched state lives exactly as long as its
         # writer, in tests as much as in services.
-        self._watcher = tt.make_writer(participant, TOPIC_MODEL_ENTITY_V1,
-                                       Entity, MODEL_LATCHED.name)
+        self._watcher = bus.writer(participant, "model_entity")
         observed = observation(random.Random(0))
         self._watcher.write(observed)
-        commands = tt.make_reader(participant, TOPIC_MODEL_COMMAND_V1,
-                                  ModelCommand, MODEL_COMMAND.name)
+        commands = bus.reader(participant, "model_command")
         return participant, publisher, commands, observed
 
     @staticmethod
@@ -230,7 +222,6 @@ class WhomYouTrustChangesTheWorld(unittest.TestCase):
         after being pulled in, and a true statement about the boundary
         became a false statement about a random position.
         """
-        from spatialdds_demo import typed_transport as tt
         from spatialdds_demo.duck_mover import DuckMover
 
         mover = DuckMover(self._participant(domain), bounds_entity,
@@ -240,7 +231,7 @@ class WhomYouTrustChangesTheWorld(unittest.TestCase):
         westmost = None
         for _ in range(30):
             mover.tick()
-            for command in tt.take_samples(commands) or []:
+            for command in bus.samples(commands):
                 publisher.handle_command(command)
                 if command.subject_id == "ent:duck:west":
                     applied += 1

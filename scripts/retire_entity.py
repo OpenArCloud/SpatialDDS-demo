@@ -29,14 +29,11 @@ import time
 import uuid
 from typing import Optional
 
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
 
-from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
-from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1
+from spatialdds_demo.lanes import MODEL_COMMAND, MODEL_LATCHED, SCENE
 from spatialdds.dds.types.builtin import Time
-from spatialdds.dds.types.spatial.owm import Entity, ModelCommand
+from spatialdds.dds.types.spatial.owm import ModelCommand
 from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "tool:retire_entity"
@@ -47,10 +44,9 @@ def _now() -> Time:
     return Time(sec=int(now), nanosec=int((now % 1) * 1e9))
 
 
-def send(participant: DomainParticipant, verb: str,
+def send(participant: "sd.dds.Participant", verb: str,
          entity_id: str = "", reason: str = "") -> ModelCommand:
-    writer = tt.make_writer(
-        participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
+    writer = participant.writer("model_command", qos_profile=MODEL_COMMAND)
     command = ModelCommand(
         command_id=str(uuid.uuid4()), verb=verb, subject_id=entity_id,
         reason=reason, requester_id=REQUESTER_ID,
@@ -63,14 +59,12 @@ def send(participant: DomainParticipant, verb: str,
         stamp=_now())
     # A VOLATILE writer with nobody attached drops the sample on the floor.
     # The service is long-lived, so this is a discovery wait, not a retry.
-    deadline = time.time() + 5.0
-    while time.time() < deadline and not writer.get_publication_matched_status().current_count:
-        time.sleep(0.05)
+    writer.wait_matched(timeout=5.0)
     writer.write(command)
     return command
 
 
-def watch(participant: DomainParticipant, entity_id: str,
+def watch(participant: "sd.dds.Participant", entity_id: str,
           timeout: float = 20.0) -> dict:
     """
     Follow the entity until it is gone, and report the order it happened in.
@@ -79,18 +73,24 @@ def watch(participant: DomainParticipant, entity_id: str,
     dispose is the entity leaving. A dispose with no tombstone in front of it
     is an entity that vanished without explanation.
     """
-    reader = tt.make_reader(
-        participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
+    reader = participant.reader("model_entity", qos_profile=MODEL_LATCHED,
+                                settle_s=0.3)
     seen = {"tombstone": None, "disposed": False, "order": []}
     deadline = time.time() + timeout
     while time.time() < deadline:
-        for sample in tt.take_with_state(reader):
-            if sample.data is None:
+        for ev in reader.take():
+            # A dispose names its key now. This counted *any* dispose as this
+            # entity's until the SDK adoption, because the old read could not
+            # say which instance one was for.
+            if isinstance(ev, sd.Dispose) and ev.key == entity_id:
                 seen["disposed"] = True
                 seen["order"].append("disposed")
-            elif sample.data.entity_id == entity_id:
-                if sample.data.state.name == "RETIRED":
-                    seen["tombstone"] = sample.data.state_reason
+            elif isinstance(ev, sd.Sample) and ev.key == entity_id:
+                # The withdrawal re-writes the terminal sample before its
+                # dispose, so the tombstone may arrive twice; it is one fact.
+                if ev.data.state.name == "RETIRED" \
+                        and seen["tombstone"] is None:
+                    seen["tombstone"] = ev.data.state_reason
                     seen["order"].append("tombstone")
         if seen["disposed"] and seen["tombstone"] is not None:
             break
@@ -100,8 +100,8 @@ def watch(participant: DomainParticipant, entity_id: str,
 
 def run(entity_id: str, reason: str, restore: bool,
         domain_id: Optional[int] = None) -> int:
-    domain_id = require_dds_env() if domain_id is None else domain_id
-    participant = DomainParticipant(domain_id)
+    participant = sd.participant(SCENE, domain=domain_id,
+                                 service_id=REQUESTER_ID)
 
     if restore:
         send(participant, "restore")

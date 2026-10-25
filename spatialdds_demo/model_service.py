@@ -2,10 +2,12 @@
 """
 World model publisher — `spatial.owm/0.1`, provisional, SpatialDDS 1.8.
 
-Migrated off the demo-local `oarc_model` layer this demo was built on. The
-types are generated from the spec at commit 9c3e1f2 into `spatialdds_idl18`,
-the topics follow §3.3.1's scene-scoped grammar, and the relationship lane is
-gone because the module carries no relationship type. What that cost, member
+Migrated off the demo-local `oarc_model` layer this demo was built on, and
+onto the SDK (`spatialdds[dds]`, docs/sdk-adoption-census.md): its types are
+the SDK's, generated at the spec's `v1.8` tag, its lanes are SDK writers and a
+reader, and the topics follow §3.3.1's scene-scoped grammar from the SDK's
+registry. The relationship lane is gone because the module carries no
+relationship type. What that cost, member
 by member, is docs/owm-1.8-census.md.
 
 Seeds a small model of the venue and stays alive holding it. The entity topic is
@@ -36,23 +38,17 @@ import time
 import uuid
 from typing import Dict, List, Optional, Tuple
 
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
+from spatialdds.frames import EARTH_FIXED_FQN, enu_to_ecef_pose
+from spatialdds.recency import (
+    GAP_SMOOTHING, IDLE_FACTOR, IDLE_FLOOR_S, LATCH_EVERY_N,
+)
 
-from spatialdds_demo import typed_transport as tt
+from spatialdds_demo.lanes import (
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, SCENE,
+)
 from spatialdds_demo.plaza import (
-    EARTH_FIXED_FQN, VENUE_ANCHOR_HEIGHT_M, VENUE_ANCHOR_LAT_DEG,
-    VENUE_ANCHOR_LON_DEG, enu_to_ecef_pose)
-from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.qos_profiles import (
-    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED,
-)
-from spatialdds_demo.tempo import (
-    GAP_SMOOTHING, IDLE_FACTOR, IDLE_FLOOR_S, LATCH_EVERY_N, Tempo,
-)
-from spatialdds_demo.topics import (
-    SCENE,
-    TOPIC_FRAME_TRANSFORM_V1,
-    TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
+    VENUE_ANCHOR_HEIGHT_M, VENUE_ANCHOR_LAT_DEG, VENUE_ANCHOR_LON_DEG,
 )
 from spatialdds.dds.types.builtin import Time
 from spatialdds.dds.types.spatial.owm import (
@@ -91,7 +87,7 @@ IDLE_FLUSH_FACTOR = IDLE_FACTOR
 # A FAST entity's every move goes out on the pose topic; its latched entity
 # record is refreshed every Nth move, so a late joiner is at most N-1 moves
 # behind and converges on the next pose that arrives.
-# The value is `tempo.LATCH_EVERY_N`, re-exported above. It used to be
+# The value is the SDK's `spatialdds.recency.LATCH_EVERY_N`, re-exported above. It used to be
 # repeated here as a literal, which shadowed the import: the two agreed,
 # so nothing broke, and changing tempo.py would silently not have
 # reached this module.
@@ -118,12 +114,12 @@ IDLE_FLUSH_FACTOR = IDLE_FACTOR
 # So the threshold is derived: a floor, and a multiple of the interval the
 # entity is actually being updated at. A thing moving every 100 ms is idle
 # after a beat; a thing moving every ten seconds is not idle after eleven.
-# `tempo.IDLE_FLOOR_S` and `tempo.IDLE_FACTOR`, re-exported above — same
+# `spatialdds.recency.IDLE_FLOOR_S` and `IDLE_FACTOR`, re-exported above — same
 # shadowing, same reason for removing the literals.
 # How much of the observed interval survives each new measurement. Low enough
 # to follow a cadence change within a few updates, high enough that one late
 # sample does not convince it everything stopped.
-# `tempo.GAP_SMOOTHING`, imported at the top of this module. This literal
+# `spatialdds.recency.GAP_SMOOTHING`, imported at the top of this module. This literal
 # shadowed the import rather than duplicating an assignment, which is why
 # an AST scan for repeated assignments missed it.
 
@@ -446,23 +442,28 @@ class ModelPublisher:
     problem measured for moves, and the reason retirement is a request.
     """
 
-    def __init__(self, participant: DomainParticipant):
-        self._entities = tt.make_writer(
-            participant, TOPIC_MODEL_ENTITY_V1, Entity, MODEL_LATCHED.name)
-        self._poses = tt.make_writer(
-            participant, TOPIC_MODEL_POSE_V1, ModelPose, MODEL_FAST.name)
+    def __init__(self, participant: "sd.dds.Participant"):
+        # A clean stop withdraws the venue: a terminal sample (RETIRED, with
+        # the reason) then the dispose, per entity. It used to be a bare
+        # dispose, which says an entity went and nothing about why.
+        self._entities = participant.writer(
+            "model_entity", qos_profile=MODEL_LATCHED, on_exit="withdraw")
+        self._poses = participant.writer("model_pose", qos_profile=MODEL_FAST)
         # Latched, like the entities: a georeference is state, and a tab
         # opened five minutes from now has to be handed it without asking.
-        self._frames = tt.make_writer(
-            participant, TOPIC_FRAME_TRANSFORM_V1, FrameTransform,
-            MODEL_LATCHED.name)
+        # FrameTransform has no §3.3.2 row at v1.8, so the lane is this
+        # deployment's own, under the name it has always had. A clean stop
+        # keeps it: the georeference was never withdrawn on exit.
+        self._frames = participant.writer(
+            FrameTransform, type_name="frame_transform", stream="frames",
+            qos_profile=MODEL_LATCHED, on_exit="keep")
         self._published: Dict[str, Entity] = {}
         # Per FAST entity: moves since the latched record was last refreshed,
         # and when its last fast pose went out. Both exist only for the fast
         # tier; a SLOW entity is latched on every move as it always was.
         # When to rewrite a FAST entity's latched record, and when it has
         # stopped moving. See spatialdds_demo/tempo.py.
-        self._tempo = Tempo()
+        self._tempo = sd.Recency()
 
     def publish_georeference(self, transform: FrameTransform) -> None:
         self._frames.write(transform)
@@ -518,7 +519,11 @@ class ModelPublisher:
         # read "nothing cascaded" rather than "no cascade exists".
         time.sleep(settle)
 
-        self._entities.dispose(entity)
+        # The SDK's withdrawal: the terminal sample again, then the dispose,
+        # with the reason. The 1.5 s between the first terminal sample and
+        # this is compliant: N.5.2's "immediately followed" is about the event
+        # stream (nothing else on this key in between), not the wall clock.
+        self._entities.withdraw(entity_id, reason=reason)
         del self._published[entity_id]
         cascaded: List[str] = []
         return cascaded
@@ -667,15 +672,19 @@ class ModelPublisher:
         return (f"retired {command.subject_id} — {command.reason!r}"
                 f"{edges} (asked by {command.requester_id})")
 
-    def close(self) -> None:
-        """Dispose entity instances so a clean shutdown does not leave a model
-        latched for readers that outlive us. Tombstones are Part 2; this is
-        only the courtesy version."""
-        for entity in self._published.values():
+    def close(self, reason: str = "the model service stopped") -> None:
+        """Withdraw every entity we published: its terminal sample (RETIRED,
+        with the reason), then its dispose, so a clean shutdown does not leave
+        a model latched for readers that outlive us. It was a bare dispose
+        until the SDK adoption. The participant's own `on_exit="withdraw"`
+        would do the same at its close; doing it here keeps this object's
+        contract for a caller that closes the publisher and not the
+        participant, as the tests do."""
+        for entity_id in list(self._published):
             try:
-                self._entities.dispose(entity)
-            except Exception:
-                pass
+                self._entities.withdraw(entity_id, reason=reason)
+            except KeyError:
+                pass                              # already withdrawn
         self._published.clear()
 
 
@@ -721,18 +730,20 @@ def live_log() -> bool:
 
 def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
     live_log()
-    domain_id = require_dds_env() if domain_id is None else domain_id
-    participant = DomainParticipant(domain_id)
+    # `domain=None` reads SPATIALDDS_DDS_DOMAIN; with neither, the SDK refuses
+    # rather than joining DDS's domain 0, which is not a choice anyone made.
+    participant = sd.participant(SCENE, domain=domain_id, service_id=SOURCE_ID)
     publisher = ModelPublisher(participant)
 
     entities = seed_entities()
 
-    print(f"model: domain {domain_id}, source {SOURCE_ID}")
-    print("model: types  spatial.owm/0.1 (SpatialDDS 1.8, provisional) "
-          "from spec 9c3e1f2")
+    print(f"model: domain {participant.domain}, source {SOURCE_ID}")
+    print(f"model: types  spatial.owm/0.1 (SpatialDDS 1.8, provisional) "
+          f"from the SDK, spatialdds {sd.__version__} at spec {sd.SPEC_TAG}")
     print(f"model: scene  {SCENE}")
-    print(f"model: entity topic       {TOPIC_MODEL_ENTITY_V1}")
-    print(f"model: qos {MODEL_LATCHED.name} — {MODEL_LATCHED.note}")
+    print(f"model: entity topic       {publisher._entities.topic}")
+    print(f"model: qos {MODEL_LATCHED.name} — {MODEL_LATCHED.reliability} + "
+          f"{MODEL_LATCHED.durability} + KEEP_LAST({MODEL_LATCHED.depth}) per key")
 
     # The venue's own georeference, before the entities that reference the
     # frame. Order matters for a late joiner only in the sense that both are
@@ -741,7 +752,7 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
     # placed.
     georeference = venue_georeference()
     publisher.publish_georeference(georeference)
-    print(f"model: frames topic       {TOPIC_FRAME_TRANSFORM_V1}")
+    print(f"model: frames topic       {publisher._frames.topic}")
     print(f"model: georeference      {georeference.transform_id} — "
           f"lat {VENUE_ANCHOR_LAT_DEG:.7f} lon {VENUE_ANCHOR_LON_DEG:.7f} "
           f"h {VENUE_ANCHOR_HEIGHT_M:.3f} (WGS84, visual fix)")
@@ -763,9 +774,8 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
     # The command lane. Retirement arrives here rather than being written
     # around us, because only the writer that latched a sample can make it
     # stop being the answer to a late join.
-    commands = tt.make_reader(
-        participant, TOPIC_MODEL_COMMAND_V1, ModelCommand, MODEL_COMMAND.name)
-    print(f"model: command topic     {TOPIC_MODEL_COMMAND_V1} "
+    commands = participant.reader("model_command", qos_profile=MODEL_COMMAND)
+    print(f"model: command topic     {commands.topic} "
           f"({MODEL_COMMAND.name})")
 
     stop = False
@@ -784,7 +794,8 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
             # so an operator tool exiting could take down the authority
             # holding the entire world. Nothing arriving on this topic is
             # worth more than the model being served.
-            batch = tt.take_samples(commands) or []
+            batch = [ev.data for ev in commands.take()
+                     if isinstance(ev, sd.Sample)]
         except Exception as error:
             failures += 1
             if failures == 1 or failures % 100 == 0:
@@ -797,7 +808,9 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
         for command in batch:
             try:
                 note = publisher.handle_command(command)
-                if note:
+                # `--quiet` drops the routine per-move notes, which was its
+                # help text all along; it was parsed and never used.
+                if note and not (quiet and command.verb in QUIET_VERBS):
                     print(f"model: {note}", flush=True)
             except Exception as error:
                 # A bad command must not take the service down with it; the
@@ -806,8 +819,9 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
                       f"{command.subject_id}): {error!r}", flush=True)
         time.sleep(0.1)
 
-    print("model: disposing instances and exiting")
+    print("model: withdrawing the venue and exiting")
     publisher.close()
+    participant.close(reason="the model service stopped")
     return 0
 
 
