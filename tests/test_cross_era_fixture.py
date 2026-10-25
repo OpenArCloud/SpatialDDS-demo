@@ -55,7 +55,7 @@ PACKAGE = SUBSET.name
 
 #: sha256 of MANIFEST.sha256. Pinned outside the exhibit so that editing a
 #: frozen file and re-running the manifest is not, by itself, enough.
-MANIFEST_SHA256 = "02ccd64992edf5b0bb8983128921feb59f891ff33688930ab2183966a171ed52"
+MANIFEST_SHA256 = "c7c206d7e78814a4b181108f5ae20343a8f9d57fa908ab22987af028c068de36"
 
 DOTTED = re.compile(r"^%s(\.[A-Za-z_]\w*)+$" % re.escape(PACKAGE))
 

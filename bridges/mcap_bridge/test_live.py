@@ -227,7 +227,7 @@ def _phase1_record(domain: int, mcap_path: Path) -> Dict[str, int]:
 
 def _phase2_replay(domain: int, mcap_path: Path):
     """Subscriber + replayer (main thread) → verify what the subscriber receives."""
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds as sd
 
     from spatialdds_demo.stream import StreamSubscriber
 
@@ -239,7 +239,10 @@ def _phase2_replay(domain: int, mcap_path: Path):
         with rx_lock:
             received.append(_fingerprint(type_name, topic, payload))
 
-    sub = StreamSubscriber(DomainParticipant(domain), on_sample)
+    # The subscriber reads other scenes' lanes by their full names, so the
+    # scene its own participant is in names nothing it reads.
+    participant = sd.participant("mcap-live", domain=domain)
+    sub = StreamSubscriber(participant, on_sample)
 
     def _pump():
         while not stop.is_set():
@@ -268,6 +271,7 @@ def _phase2_replay(domain: int, mcap_path: Path):
     finally:
         stop.set()
         pump.join(timeout=2)
+        participant.close()
     return n, received
 
 

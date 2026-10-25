@@ -23,6 +23,8 @@ from __future__ import annotations
 import fnmatch
 from typing import Dict, Iterable, List, Tuple
 
+import spatialdds as sd
+
 
 # ── msg_type inference ──────────────────────────────────────────────────────
 # §3.3.1 names a lane `spatialdds/<scene>/<stream>/<type>/<version>`, and this
@@ -37,22 +39,16 @@ from typing import Dict, Iterable, List, Tuple
 # * the lane templates §2 gives two profiles, which §3.3.1 makes normative
 #   where they are defined (and allows an extra segment): a PlannedTrajectory
 #   "SHOULD be advertised on the topic spatialdds/<scene>/plan/<agent_id>/
-#   trajectory/v1", an EntityBinding on spatialdds/<scene>/entity/binding/v1;
+#   trajectory/v1", an EntityBinding on spatialdds/<scene>/entity/binding/v1.
+#   Read from the SDK's registry, which reads them from §2's sentences
+#   (spatialdds 0.7.3), and matched with its own `fits_template`;
 # * announces: on MQTT each service's announce has a topic of its own
 #   (`spatialdds/<name>/discovery/announce/v1`), which is the bridges' edge
 #   convention, not a lane, and the bridge handles them as their own case.
 ANNOUNCE_MSG_TYPE = "spatialdds/discovery/announce"
-SPEC_TEMPLATES: List[Tuple[str, str]] = [
-    ("spatialdds/*/plan/*/trajectory/v*", "planned_trajectory"),
-    ("spatialdds/*/entity/binding/v*", "entity_binding"),
-]
-
-
-def _fits(topic: str, template: str) -> bool:
-    """Segment by segment, so a `*` never spans a `/`."""
-    have, want = topic.split("/"), template.split("/")
-    return len(have) == len(want) and all(
-        h and fnmatch.fnmatchcase(h, w) for h, w in zip(have, want))
+SPEC_TEMPLATES: List[Tuple[str, str]] = sorted(
+    (r.profile_template, t) for t, r in
+    sd.dds.registry.registrations().items() if r.profile_template)
 
 
 def _segments(topic: str) -> List[str]:
@@ -73,7 +69,7 @@ def infer_msg_type(topic: str) -> str:
     if fnmatch.fnmatchcase(topic, "*/discovery/announce/*"):
         return ANNOUNCE_MSG_TYPE
     for template, type_name in SPEC_TEMPLATES:
-        if _fits(topic, template):
+        if sd.dds.registry.fits_template(topic, template):
             return type_name
     parts = _segments(topic)
     return parts[3] if parts else "Unknown"

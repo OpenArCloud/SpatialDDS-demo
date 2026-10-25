@@ -7,8 +7,9 @@ directory, the spec's topic names and the §3.3.3 profile table, with no demo
 code — against the demo, both ways:
 
 * the probe reads the demo's announces and one announced data lane;
-* the demo discovers the probe, resolves its announced type, reads its data,
-  and sees it depart.
+* the demo discovers the probe, refuses the lane it announces by rule and
+  records why, and sees it depart. The probe's lane name was never a §3.3.1
+  name (README.md, "The lane's name").
 
 Needs a DDS domain, so it skips loudly where CycloneDDS cannot create a
 participant. Run it in the demo image:
@@ -39,7 +40,7 @@ DOMAIN = int(os.getenv("SPATIALDDS_INTEROP_DOMAIN", "31"))
 
 def _require_dds():
     """
-    A participant, or a loud skip.
+    An SDK participant, or a loud skip.
 
     Gated on ``CYCLONEDDS_URI`` as well as on the import: cyclonedds will
     happily build a participant on a host with no usable networking config,
@@ -51,9 +52,9 @@ def _require_dds():
             "DDS-UNAVAILABLE: CYCLONEDDS_URI is unset — run this in the "
             "demo image (see the module docstring)")
     try:
-        from cyclonedds.domain import DomainParticipant
+        import spatialdds as sd
 
-        return DomainParticipant(DOMAIN)
+        return sd.participant("cross-era", domain=DOMAIN)
     except Exception as exc:                           # pragma: no cover
         raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
 
@@ -91,7 +92,7 @@ class Interop(unittest.TestCase):
     """
 
     def test_probe_reads_the_demo(self):
-        _require_dds()
+        _require_dds().close()      # only the skip: this half is two processes
         publisher = subprocess.Popen(
             [sys.executable, "-m", "multi_operator_fusion.synthetic_publisher",
              "--domain", str(DOMAIN), "--operators", "2", "--rate", "5",
@@ -119,9 +120,15 @@ class Interop(unittest.TestCase):
 
     def test_demo_reads_the_probe(self):
         """
-        The demo discovers a service it has never heard of, resolves the
-        type that service announces, opens a reader and reads its data —
-        then learns it left.
+        The demo discovers a service it has never heard of, refuses the lane
+        that service announces because its name is not a §3.3.1 name, says
+        so, and learns the service left.
+
+        Until the SDK adoption the demo read that lane: its old transport
+        opened any name. The SDK holds names to the grammar, and this one is
+        six segments with no §2 template, so it was never valid in 1.7 or
+        1.8. The refusal must name the grammar, not the type: the type it
+        announces still resolves.
         """
         participant = _require_dds()
         from spatialdds_demo.stream import StreamSubscriber
@@ -158,13 +165,20 @@ class Interop(unittest.TestCase):
                          f"probe failed:\n{probe.stdout}\n{probe.stderr}")
         self.assertIn("svc:interop-probe", services,
                       "demo did not discover the probe")
-        probe_samples = [s for s in samples if "interop_probe" in s[1]]
-        self.assertTrue(probe_samples, "demo read no data from the probe")
-        self.assertEqual(probe_samples[0][0], "geopose")
-        self.assertAlmostEqual(probe_samples[0][2]["lon_deg"], -122.4194,
-                               places=4)
+        import spatialdds as sd
+
+        lane = "spatialdds/interop_probe/geo/ego/pose/v1"
+        self.assertIn(lane, sub.skipped,
+                      f"demo did not record refusing the probe's lane; "
+                      f"skipped={sub.skipped}")
+        self.assertIn("not a §3.3.1 name", sub.skipped[lane])
+        self.assertIsNotNone(sd.dds.class_for("geopose"),
+                             "the probe's announced type should resolve")
+        self.assertFalse([s for s in samples if "interop_probe" in s[1]],
+                         "demo read a lane the SDK should have refused")
         self.assertIn("svc:interop-probe", departed,
                       "demo did not see the probe depart")
+        participant.close()
 
 
 if __name__ == "__main__":

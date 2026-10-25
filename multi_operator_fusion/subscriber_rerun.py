@@ -192,12 +192,14 @@ class RerunMultiOpSubscriber:
     def start(self) -> None:
         import threading
 
-        from cyclonedds.domain import DomainParticipant
+        import spatialdds as sd
 
         from spatialdds_demo.stream import StreamSubscriber
 
+        # Every lane it reads is another scene's, by its full name.
+        self._participant = sd.participant("viewer", domain=self._domain)
         self.subscriber = StreamSubscriber(
-            DomainParticipant(self._domain), self._on_message,
+            self._participant, self._on_message,
             on_announce=self._on_announce,
         )
         self._stop = threading.Event()
@@ -217,6 +219,9 @@ class RerunMultiOpSubscriber:
         thread = getattr(self, "_pump_thread", None)
         if thread is not None:
             thread.join(timeout=2)
+        participant = getattr(self, "_participant", None)
+        if participant is not None:
+            participant.close()
 
     def spin(self, max_frames: int = 0) -> None:
         import time as _time

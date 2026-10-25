@@ -28,9 +28,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from cyclonedds.domain import DomainParticipant
 
-import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
-from spatialdds_demo import topic_types, typed_transport as tt
-from spatialdds_demo.discovery_bus import AnnouncePublisher, AnnounceSubscriber
+import spatialdds as sd
+
+from spatialdds_demo import lanes, topic_types, typed_transport as tt
+from spatialdds_demo.discovery_bus import AnnouncePublisher
 from spatialdds.dds import from_json, to_json
 from spatialdds.dds.types.spatial.disco import Announce
 
@@ -122,10 +123,16 @@ class StreamSubscriber:
     Services that appear later are picked up on the next poll; services that
     depart have their lanes reported through ``on_depart`` so a dashboard can
     grey them out instead of showing a frozen last value forever.
+
+    On SDK readers since the adoption. A departure is either door, the
+    Announce instance's dispose or a `Depart` on the spec's VOLATILE lane; a
+    service whose writer was merely lost has not departed (§2.14), and its
+    lanes stay open, because its records are still the last word on the bus.
     """
 
-    def __init__(self, participant: DomainParticipant, callback: StreamCallback,
-                 *, on_announce: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    def __init__(self, participant: "sd.dds.Participant",
+                 callback: StreamCallback, *,
+                 on_announce: Optional[Callable[[str, Dict[str, Any]], None]] = None,
                  on_depart: Optional[Callable[[str], None]] = None,
                  ignore_local: bool = False):
         """
@@ -133,48 +140,88 @@ class StreamSubscriber:
         own writers published — what a bridge needs so it does not read its
         own republished output back and relay it forever.
         """
+        self._participant = participant
         self._callback = callback
         self._on_announce = on_announce
         self._on_depart = on_depart
-        self._announces = AnnounceSubscriber(participant)
-        self._streams = tt.MultiTopicSubscriber(participant,
-                                                ignore_local=ignore_local)
+        self._ignore_local = ignore_local
+        # ignore_local here too: a bridge that relays announces must not
+        # hear its own relayed copies and carry them back out.
+        self._announce_reader = participant.reader(
+            "Announce", settle_s=0.3, ignore_local=ignore_local)
+        self._depart_reader = participant.reader(
+            "Depart", ignore_local=ignore_local)
+        self._readers: Dict[str, Tuple["sd.dds.Reader", str]] = {}
         self._service_topics: Dict[str, List[str]] = {}
+        #: Announced lanes this build could not open, with the reason. §3.3.2
+        #: treats an unregistered type as an extension point, so one is
+        #: skipped rather than fatal, and said here rather than nowhere.
+        self.skipped: Dict[str, str] = {}
+        self._lock = threading.Lock()
 
     @property
     def topics(self) -> List[str]:
-        return self._streams.topics
+        with self._lock:
+            return sorted(self._readers)
+
+    def _open(self, row: Dict[str, Any]) -> bool:
+        name = row.get("name") or ""
+        type_name = row.get("type") or ""
+        qos_profile = row.get("qos_profile") or ""
+        if not (name and type_name and qos_profile):
+            return False
+        with self._lock:
+            if name in self._readers or name in self.skipped:
+                return False
+        try:
+            reader = lanes.open_reader(
+                self._participant, type_name, name, qos_profile=qos_profile,
+                settle_s=0.0, ignore_local=self._ignore_local)
+        except Exception as error:
+            # A type or profile this build does not know, or a name that is
+            # not a §3.3.1 topic. Skipped, not fatal, and kept with its reason.
+            with self._lock:
+                self.skipped[name] = f"{type(error).__name__}: {error}"
+            return False
+        with self._lock:
+            self._readers[name] = (reader, type_name)
+        return True
+
+    def _departed(self, service_id: str) -> None:
+        if self._service_topics.pop(service_id, None) is not None \
+                and self._on_depart:
+            self._on_depart(service_id)
 
     def poll_announces(self) -> List[str]:
         """Apply discovery: returns the topics newly subscribed this poll."""
         added: List[str] = []
-        for event in self._announces.poll():
-            if event.departed:
-                self._service_topics.pop(event.service_id, None)
-                if self._on_depart:
-                    self._on_depart(event.service_id)
-                continue
-            announce = event.announce
-            if announce is None:
-                continue
-            added.extend(self._streams.subscribe_from_topic_meta(announce.topics))
-            self._service_topics[event.service_id] = [
-                row.name for row in (announce.topics or [])
-            ]
-            if self._on_announce:
-                self._on_announce(event.service_id, to_json(announce))
+        for ev in self._announce_reader.take():
+            if isinstance(ev, sd.Dispose):
+                self._departed(ev.key)
+            elif isinstance(ev, sd.Sample):
+                announce = to_json(ev.data)
+                rows = announce.get("topics") or []
+                added.extend(row["name"] for row in rows if self._open(row))
+                self._service_topics[announce["service_id"]] = [
+                    row.get("name", "") for row in rows]
+                if self._on_announce:
+                    self._on_announce(announce["service_id"], announce)
+        for ev in self._depart_reader.take():
+            if isinstance(ev, sd.Sample):
+                self._departed(ev.data.service_id)
         return added
 
     def poll(self, *, stamp_ns: int = 0) -> int:
         """Deliver every waiting sample. Returns how many were delivered."""
         self.poll_announces()
+        with self._lock:
+            readers = list(self._readers.items())
         delivered = 0
-        for sample in self._streams.poll():
-            if sample.data is None:
-                continue
-            self._callback(sample.type_name, sample.topic, to_json(sample.data),
-                           stamp_ns)
-            delivered += 1
+        for topic, (reader, type_name) in readers:
+            for ev in reader.take():
+                if isinstance(ev, sd.Sample):
+                    self._callback(type_name, topic, to_json(ev.data), stamp_ns)
+                    delivered += 1
         return delivered
 
 

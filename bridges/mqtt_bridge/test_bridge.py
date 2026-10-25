@@ -415,6 +415,57 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         self.assertEqual(from_bridge, [],
                          "bridge echoed its own DDS write back to MQTT")
 
+    def test_an_announce_heard_on_mqtt_is_relayed_onto_dds(self):
+        """
+        An announce arriving on MQTT reaches DDS as the asserter's claim,
+        re-published under the bridge's identity and marked `relayed_by`.
+
+        Until the SDK adoption every inbound announce failed: the topic
+        mapping names announces `spatialdds/discovery/announce`, which no
+        typed writer resolves, and the bridge counted each as an error
+        (census, defects found in passing).
+        """
+        import spatialdds as sd
+
+        from bridge import MqttDdsBridge
+        from spatialdds_demo.lanes import SCENE
+        sys.path.insert(0, str(_REPO_ROOT / "multi_operator_fusion"))
+        from spatialdds_types import circle_coverage, make_announce
+
+        topic = "spatialdds/operator_relayed/discovery/announce/v1"
+        cfg = _make_config("inbound_only", bridge_id="bridge-relay",
+                           client_id="bridge-relay-mqtt")
+        cfg.inbound_topics = ["spatialdds/+/discovery/announce/#"]
+        bridge = MqttDdsBridge(cfg)
+        bridge.start(block=False)
+        watcher = sd.participant(SCENE, domain=DDS_DOMAIN,
+                                 service_id="svc:test:relay-watcher")
+        announces = watcher.reader("Announce", settle_s=0.3)
+        time.sleep(2.0)
+        announce = make_announce(
+            operator="operator_relayed", service_kind="SENSING", topics=[],
+            coverage=circle_coverage(0.0, 0.0, 100.0), timestamp_s=time.time())
+        try:
+            _publish_mqtt("test-pub-relay", topic, announce)
+            deadline = time.time() + 5.0
+            seen = []
+            while not seen and time.time() < deadline:
+                seen = [ev.data for ev in announces.take()
+                        if isinstance(ev, sd.Sample)
+                        and ev.data.service_id == announce["service_id"]]
+                time.sleep(0.1)
+            errors = bridge.stats.inbound_errors
+        finally:
+            bridge.stop()
+            watcher.close()
+
+        self.assertEqual(errors, 0, "the bridge refused the announce")
+        self.assertEqual(len(seen), 1, "no relayed announce reached DDS")
+        hints = {h.key: h.value for h in seen[0].hints}
+        self.assertEqual(hints.get(sd.dds.RELAYED_BY),
+                         "svc:bridge:mqtt/bridge-relay",
+                         "relayed without saying who carried it")
+
     # ──────────────────────────────────────────────────────────────────────
     # Topic filtering
     # ──────────────────────────────────────────────────────────────────────

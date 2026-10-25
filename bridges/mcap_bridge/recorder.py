@@ -103,14 +103,16 @@ class _Recorder:
     """
 
     def __init__(self, domain_id: int, on_sample):
-        from cyclonedds.domain import DomainParticipant
+        import spatialdds as sd
 
+        from spatialdds_demo.lanes import SCENE
         from spatialdds_demo.stream import StreamSubscriber
 
         self._on_sample = on_sample
         self._sub = StreamSubscriber(
-            DomainParticipant(domain_id), self._deliver,
-            on_announce=self._deliver_announce,
+            sd.participant(SCENE, domain=domain_id,
+                           service_id="svc:bridge:demo/mcap-recorder"),
+            self._deliver, on_announce=self._deliver_announce,
         )
 
     def _deliver(self, type_name, topic, payload, stamp_ns):

@@ -45,8 +45,7 @@ from fastapi.staticfiles import StaticFiles
 
 import spatialdds as sd
 
-from spatialdds_demo import content_catalogue
-from spatialdds_demo.dds_transport import require_dds_env  # the stream pump's, until the bridges commit
+from spatialdds_demo import content_catalogue, lanes
 from spatialdds_demo.lanes import SCENE, blob_writer
 from spatialdds_demo.discovery_http import (
     normalize_search_request,
@@ -664,50 +663,30 @@ class _BrowserPublisher:
     all, in some other process.
     """
 
-    # 3.3.3 profile per registered type. A browser publishes on the lane the
-    # spec assigns that type, not on whatever the bridge felt like.
-    _PROFILES = {
-        "geopose": "POSE_RT",
-        "navsat_status": "POSE_RT",
-        "planned_trajectory": "EVENT_RT",
-        "entity_binding": "MAP_META",
-        "spatial_event": "EVENT_RT",
-        "video_frame": "VIDEO_LIVE",
-        "radar_tensor": "RADAR_RT",
-        "radar_detection": "RADAR_RT",
-        "detection3d": "DET_RT",
-        "rf_beam": "RF_BEAM_RT",
-        "vps_query": "VPS_REQ",
-        "vps_response": "VPS_RESP",
-        "detection3d": "DET_RT",
-        "framed_pose": "POSE_RT",
-        "fused_track": "DET_RT",
-        "oarc.fusion_coverage": "MAP_META",
-    }
-    DEFAULT_PROFILE = "EVENT_RT"
+    # The lane is the type's: its §3.3.2 row's profile, or the profile this
+    # deployment declares where the row names none (lanes.DECLARED_PROFILES).
+    # This class kept a table of its own until the SDK adoption, defaulting
+    # anything it did not list to EVENT_RT, which no row said.
 
     def __init__(self, domain_id: int):
-        from cyclonedds.domain import DomainParticipant
-
-        self._participant = DomainParticipant(domain_id)
+        self._participant = sd.participant(
+            SCENE, domain=domain_id, service_id="svc:bridge:demo/web-publish")
         self._writers: Dict[str, Any] = {}
 
     def publish(self, logical_topic: str, type_name: str,
                 payload: Dict[str, Any]) -> None:
-        from spatialdds_demo import topic_types, typed_transport as tt
-
-        writer = self._writers.get(logical_topic)
-        if writer is None:
-            datatype = topic_types.resolve(type_name)
-            writer = tt.TypedDictWriter(
-                self._participant, logical_topic, datatype,
-                self._PROFILES.get(type_name, self.DEFAULT_PROFILE))
-            self._writers[logical_topic] = writer
-        elif writer.datatype is not topic_types.resolve(type_name):
+        held = self._writers.get(logical_topic)
+        if held is None:
+            # A carrier: the claim is the browser's, so a clean stop of the
+            # bridge leaves a latched instance present (on_exit="keep").
+            held = (type_name, lanes.open_writer(
+                self._participant, type_name, logical_topic, on_exit="keep"))
+            self._writers[logical_topic] = held
+        elif held[0] != type_name:
             raise ValueError(
-                f"{logical_topic} already carries "
-                f"{writer.datatype.__name__}; a topic is one type")
-        writer.write(payload)
+                f"{logical_topic} already carries {held[0]}; a topic is one "
+                f"type")
+        held[1].write(payload)
 
 
 class _StreamPump:
@@ -719,16 +698,15 @@ class _StreamPump:
     """
 
     def __init__(self, domain_id: int, poll_interval: float = 0.02):
-        from cyclonedds.domain import DomainParticipant
-
         from spatialdds_demo.stream import StreamSubscriber
 
         self._interval = poll_interval
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._sub = StreamSubscriber(
-            DomainParticipant(domain_id), _stream_callback,
-            on_announce=_announce_callback,
+            sd.participant(SCENE, domain=domain_id,
+                           service_id="svc:bridge:demo/web-stream"),
+            _stream_callback, on_announce=_announce_callback,
         )
 
     @property
@@ -778,7 +756,6 @@ def _ensure_publisher():
 @app.on_event("startup")
 def on_startup() -> None:
     global _event_loop, _envelope_sub
-    require_dds_env()
     domain_id = _env_domain_id()
     if domain_id is None:
         raise RuntimeError("SPATIALDDS_DDS_DOMAIN is required")

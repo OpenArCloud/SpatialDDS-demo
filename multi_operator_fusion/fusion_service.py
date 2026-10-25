@@ -453,9 +453,14 @@ def run(args: argparse.Namespace) -> int:
         if svc is not None:
             svc.on_message(type_name, topic, payload, stamp_ns)
 
+    import spatialdds as sd
+
     participant = DomainParticipant(args.domain)
     publisher = StreamPublisher(participant)
-    subscriber = StreamSubscriber(participant, on_msg)
+    # The reading side is on the SDK; the writing side moves with
+    # StreamPublisher, onto this same participant.
+    reader_participant = sd.participant("platform", domain=args.domain)
+    subscriber = StreamSubscriber(reader_participant, on_msg)
 
     # The platform announces itself before writing, like any other service —
     # its outputs are discoverable rather than a set of topic names a
@@ -492,6 +497,7 @@ def run(args: argparse.Namespace) -> int:
     finally:
         svc.stop()
         publisher.close()
+        reader_participant.close()
     return 0
 
 

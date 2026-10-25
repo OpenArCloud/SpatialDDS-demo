@@ -9,10 +9,12 @@ first image. Only Tier 3 runs the node, and Tier 3 was unreachable because the
 tier before it ran a deleted file.
 
 `bridge_node` defers its ROS 2 imports precisely so it stays importable
-without them, which is what makes this possible at all. The DDS writer is
-replaced with a recorder, so the assertions are about what the node *decides*
-— topic, registered type, QoS lane, and whether bytes travel separately —
-rather than about DDS delivery, which the Tier 2 round-trip already covers.
+without them, which is what makes this possible at all. The assertions are
+about what the node *decides*: topic, registered type, QoS lane, and whether
+bytes travel separately. DDS delivery is the Tier 2 round-trip's. Since the
+SDK adoption the writers are real SDK writers on a participant of the test's
+own (a stand-in class here would test the stand-in), and each is read for
+the lane it was opened on.
 """
 
 from __future__ import annotations
@@ -28,67 +30,65 @@ for _p in (str(_HERE), str(_REPO)):
         sys.path.insert(0, _p)
 
 import bridge_node  # noqa: E402
-from spatialdds_demo import blob  # noqa: E402
+import spatialdds as sd  # noqa: E402
+from spatialdds.dds import blob  # noqa: E402
+from spatialdds_demo.lanes import SCENE  # noqa: E402
 from ros2_mocks import (  # noqa: E402
     make_test_compressed_image, make_test_imu, make_test_pose_stamped,
 )
 from frame_mapping import FrameMapper  # noqa: E402
 
 
-class _RecordingWriter:
-    """Stands in for a TypedDictWriter; remembers what it was asked to send."""
-
-    def __init__(self, participant, topic, datatype, qos_profile, **_kw):
-        self.topic = topic
-        self.datatype = datatype
-        self.qos_profile = qos_profile
-        _RecordingWriter.made.append(self)
-        self.written = []
-
-    made: list = []
-
-    def write(self, payload):
-        self.written.append(payload)
-
-
 class TypedWriterRouting(unittest.TestCase):
     """
-    `_TypedWriters` resolves a §3.3.2 type to its class and picks its lane.
+    `_TypedWriters` opens each topic on its registered type's lane.
 
     This is the class whose absence stopped the bridge from starting.
     """
 
     def setUp(self):
-        _RecordingWriter.made = []
-        self._real = bridge_node.tt.TypedDictWriter
-        bridge_node.tt.TypedDictWriter = _RecordingWriter
-        self.addCleanup(setattr, bridge_node.tt, "TypedDictWriter", self._real)
+        try:
+            self.participant = sd.participant(
+                SCENE, domain=72, service_id="svc:test:ros2-writers")
+        except Exception as exc:
+            raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
+        self.addCleanup(self.participant.close)
+        self.writers = bridge_node._TypedWriters(self.participant)
 
     def test_resolves_the_type_and_its_registered_lane(self):
-        writers = bridge_node._TypedWriters(participant=None)
-        writers.write("spatialdds/op/ego/framed_pose/v1", "framed_pose", {"any": "payload"})
-
-        self.assertEqual(len(_RecordingWriter.made), 1)
-        made = _RecordingWriter.made[0]
+        made = self.writers.writer("spatialdds/op/ego/framed_pose/v1",
+                                   "framed_pose")
         self.assertEqual(made.topic, "spatialdds/op/ego/framed_pose/v1")
-        # §3.3.3 assigns framed_pose to POSE_RT; taking it from the shared
-        # table is what stops this bridge drifting from the others.
-        self.assertEqual(made.qos_profile, "POSE_RT")
-        self.assertEqual(made.written, [{"any": "payload"}])
+        self.assertEqual(made.type_name, "framed_pose")
+        # §3.3.2 puts framed_pose on POSE_RT, and the SDK applies the row.
+        self.assertEqual(made.profile.name, "POSE_RT")
 
     def test_one_writer_per_topic_not_per_message(self):
-        writers = bridge_node._TypedWriters(participant=None)
-        for i in range(3):
-            writers.write("spatialdds/op/ego/framed_pose/v1", "framed_pose", {"n": i})
-        self.assertEqual(len(_RecordingWriter.made), 1, "writer rebuilt per message")
-        self.assertEqual(len(_RecordingWriter.made[0].written), 3)
+        first = self.writers.writer("spatialdds/op/ego/framed_pose/v1",
+                                    "framed_pose")
+        for _ in range(3):
+            again = self.writers.writer("spatialdds/op/ego/framed_pose/v1",
+                                        "framed_pose")
+            self.assertIs(again, first, "writer rebuilt per message")
 
     def test_distinct_topics_get_distinct_writers(self):
-        writers = bridge_node._TypedWriters(participant=None)
-        writers.write("spatialdds/op/ego/framed_pose/v1", "framed_pose", {})
-        writers.write("spatialdds/op/sensing/detection3d/v1", "detection3d", {})
-        self.assertEqual([w.qos_profile for w in _RecordingWriter.made],
+        pose = self.writers.writer("spatialdds/op/ego/framed_pose/v1",
+                                   "framed_pose")
+        dets = self.writers.writer("spatialdds/op/sensing/detection3d/v1",
+                                   "detection3d")
+        self.assertIsNot(pose, dets)
+        self.assertEqual([pose.profile.name, dets.profile.name],
                          ["POSE_RT", "DET_RT"])
+
+    def test_a_row_with_no_profile_takes_the_declared_one(self):
+        """
+        §3.3.2 names no profile for navsat_status. The SDK refuses to guess,
+        so this deployment declares one (lanes.DECLARED_PROFILES), in the
+        open, where `topic_types.profile_for` used to default it silently.
+        """
+        fix = self.writers.writer("spatialdds/op/gnss/navsat_status/v1",
+                                  "navsat_status")
+        self.assertEqual(fix.profile.name, "POSE_RT")
 
     def test_an_unresolvable_type_raises_rather_than_being_skipped(self):
         """
@@ -96,9 +96,8 @@ class TypedWriterRouting(unittest.TestCase):
         is about to advertise has nothing to write, so silence would be worse
         than the exception the caller already logs.
         """
-        writers = bridge_node._TypedWriters(participant=None)
         with self.assertRaises(Exception):
-            writers.write("spatialdds/op/x/v1", "not_a_registered_type", {})
+            self.writers.write("spatialdds/op/x/v1", "not_a_registered_type", {})
 
 
 class ImageBytesTravelSeparately(unittest.TestCase):

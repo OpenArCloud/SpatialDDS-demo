@@ -334,12 +334,12 @@ def compressed_image_to_vision_frame(msg: Any, operator: str, sensor_id: str,
 
 def compressed_image_blob(msg: Any, sensor_id: str, frame_seq: int = 0):
     """
-    The image bytes as ``oarc_demo::BlobChunk`` samples.
+    The image bytes as ``spatial::core::BlobChunk`` samples.
 
     Published on the shared blob topic alongside the VisionFrame that
     references them. Yields nothing for an empty image.
     """
-    from spatialdds_demo import blob
+    from spatialdds.dds import blob
 
     raw: bytes = bytes(getattr(msg, "data", b"") or b"")
     if not raw:
@@ -354,7 +354,7 @@ def _blob_id(sensor_id: str, stamp: Dict[str, int]) -> str:
 
 def _blob_ref_for(sensor_id: str, stamp: Dict[str, int],
                   raw: bytes) -> Dict[str, str]:
-    from spatialdds_demo import blob
+    from spatialdds.dds import blob
 
     return blob.blob_ref(_blob_id(sensor_id, stamp), "image", raw)
 

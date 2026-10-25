@@ -32,12 +32,10 @@ if str(_REPO_ROOT) not in sys.path:
 from mcap.reader import make_reader  # noqa: E402
 
 
-# The lane each type rides when nothing announced one. Imported rather than
-# restated: this file used to carry its own copy, and it drifted from the
-# announces it replays.
-from spatialdds_demo.topic_types import (  # noqa: E402
-    DEFAULT_PROFILE, PROFILE_FOR_TYPE as REPLAY_PROFILES,
-)
+import spatialdds as sd  # noqa: E402
+
+from spatialdds_demo import lanes  # noqa: E402
+
 ANNOUNCE_TYPE = "spatialdds/discovery/announce"
 
 
@@ -45,20 +43,39 @@ class _ReplayWriters:
     """Typed writers, created per topic on first message for that topic."""
 
     def __init__(self, domain_id: int):
-        from cyclonedds.domain import DomainParticipant
-
-        self._participant = DomainParticipant(domain_id)
+        self._participant = sd.participant(
+            lanes.SCENE, domain=domain_id, service_id="svc:bridge:demo/mcap-replayer")
+        # Recorded announces are someone else's claims, so they are relayed:
+        # under this replayer's identity, each marked `relayed_by`, and on
+        # close unregistered rather than removed (spatialdds 0.7.1's relay,
+        # the ruling's "re-publication, never impersonation").
+        self._relay = self._participant.relay()
         self._writers = {}
         self._skipped = set()
         self._announced_profiles = {}
 
     def write(self, topic: str, type_name: str, payload: dict) -> bool:
         """True if written. False if this build cannot type the topic."""
+        if type_name == ANNOUNCE_TYPE:
+            try:
+                self._relay.write(payload)
+            except Exception as exc:
+                # Refused by the relay's own rules: one already relayed, or
+                # with no room for the mark. Said once per service.
+                if payload.get("service_id") not in self._skipped:
+                    self._skipped.add(payload.get("service_id"))
+                    print(f"[replayer] not relaying {payload.get('service_id')}: "
+                          f"{exc}", file=sys.stderr)
+                return False
+            return True
         writer = self._ensure(topic, type_name)
         if writer is None:
             return False
         writer.write(payload)
         return True
+
+    def close(self) -> None:
+        self._participant.close(reason="the replay ended")
 
     def learn_profiles(self, announce: dict) -> None:
         """
@@ -81,42 +98,26 @@ class _ReplayWriters:
             if name and profile:
                 self._announced_profiles[name] = profile
 
-    def _profile_for(self, topic: str, type_name: str) -> str:
-        if type_name == ANNOUNCE_TYPE:
-            return "DISCOVERY_ANNOUNCE"
-        announced = self._announced_profiles.get(topic)
-        if announced:
-            return announced
-        # Nothing announced this lane — a partial recording, or data captured
-        # before its announce. Fall back to the type's usual profile.
-        return REPLAY_PROFILES.get(type_name, DEFAULT_PROFILE)
-
     def _ensure(self, topic: str, type_name: str):
-        from spatialdds_demo import topic_types, typed_transport as tt
-
         writer = self._writers.get(topic)
         if writer is None:
-            if topic in self._skipped:
+            if topic in self._skipped or type_name == ANNOUNCE_TYPE:
                 return None
-            datatype = (topic_types.WELL_KNOWN["spatialdds/discovery/announce/v1"]
-                        if type_name == ANNOUNCE_TYPE
-                        else topic_types.try_resolve(type_name))
-            if datatype is None:
+            try:
+                # The profile the recorded announce declared for this lane;
+                # with none (a partial recording, or data captured before its
+                # announce), the type's own: its row's, or this deployment's
+                # declaration. A carrier, so a clean stop keeps instances.
+                writer = lanes.open_writer(
+                    self._participant, type_name, topic,
+                    qos_profile=self._announced_profiles.get(topic),
+                    on_exit="keep")
+            except Exception as exc:
                 # A recording may legitimately carry a type this build has
                 # never heard of; skip that topic and say so once.
                 self._skipped.add(topic)
-                print(f"[replayer] skipping {topic}: unknown type "
-                      f"{type_name!r}", file=sys.stderr)
+                print(f"[replayer] skipping {topic}: {exc}", file=sys.stderr)
                 return None
-            writer = tt.TypedDictWriter(
-                self._participant,
-                # Announces go back on the well-known keyed topic; the
-                # per-service name in the recording is the bridges' edge
-                # convention, not a DDS topic.
-                ("spatialdds/discovery/announce/v1"
-                 if type_name == ANNOUNCE_TYPE else topic),
-                datatype,
-                self._profile_for(topic, type_name))
             self._writers[topic] = writer
         return writer
 
@@ -131,10 +132,7 @@ class _ReplayWriters:
         during the replay.
         """
         for topic, type_name in channels:
-            try:
-                self._ensure(topic, type_name)
-            except Exception as exc:
-                print(f"[replayer] cannot prepare {topic}: {exc}", file=sys.stderr)
+            self._ensure(topic, type_name)
 
 
 def _identify(schema, channel):
@@ -286,7 +284,7 @@ def replay(
     finally:
         # Give RELIABLE peers a moment to ack before tearing down.
         time.sleep(0.5)
-        del writers
+        writers.close()
 
     return total
 

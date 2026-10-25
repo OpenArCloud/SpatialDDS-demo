@@ -26,7 +26,7 @@ is the deployment's part alone:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
 
 import spatialdds as sd
 
@@ -105,7 +105,10 @@ for _name, _cls in EXTENSIONS.items():
 #: Names this deployment gives pinned types that §3.3.2 does not register.
 #: `blob_chunk` is the blob lane's: the spec leaves that lane unnamed
 #: (spatialdds-py candidates 9.6), so its announced `TopicMeta.type` is ours.
-DEPLOYMENT_NAMES = {"blob_chunk": "spatial.core.BlobChunk"}
+DEPLOYMENT_NAMES = {
+    "blob_chunk": "spatial.core.BlobChunk",
+    "frame_transform": "spatial.core.FrameTransform",
+}
 
 
 def class_for(type_name: str) -> type:
@@ -121,6 +124,81 @@ def class_for(type_name: str) -> type:
         if type_name in DEPLOYMENT_NAMES:
             return sd.dds.class_for(DEPLOYMENT_NAMES[type_name])
         raise
+
+
+# -- opening a lane by the names an announce or a message carries -----------
+# A bridge, a recorder or a replayer learns a lane as strings: a type name, a
+# topic, a profile name. These turn them into an SDK endpoint, the one way.
+
+#: Profiles this deployment declares where §3.3.2 names none: the `oarc.*`
+#: extensions, the pinned types the registry does not register, and two
+#: registered rows that spell no profile. Each is a claim this deployment
+#: makes, and says so here. Until the SDK adoption the last two were
+#: `topic_types.profile_for`'s silent defaults (census finding 6); the SDK
+#: refuses an unprofiled row rather than guess, and these are the answer.
+DECLARED_PROFILES = {
+    "oarc.fusion_coverage": "MAP_META",
+    "oarc.bootstrap_query": "MAP_META",
+    "oarc.bootstrap_response": "MAP_META",
+    "blob_chunk": "GEOM_TILE",
+    "frame_transform": "MODEL_LATCHED",
+    "model_entity": "MODEL_LATCHED",
+    "model_pose": "MODEL_FAST",
+    "model_command": "MODEL_COMMAND",
+    "navsat_status": "POSE_RT",       # a fix is a pose-rate sample
+    "entity_binding": "MAP_META",     # a binding is state, latched
+}
+
+
+def endpoint(type_name: str, qos_profile: Any = None):
+    """`(type_arg, keywords)` that open a lane of `type_name` on p.reader or
+    p.writer. A registered type is passed by name; anything else is its
+    class with `type_name=`. The profile is `qos_profile` (a name or a
+    Profile) if given, else the row's, else this deployment's declaration."""
+    if isinstance(qos_profile, str):
+        qos_profile = profile(qos_profile)
+    try:
+        row = sd.dds.registry.registration(type_name)
+    except sd.dds.RegistryError:
+        row = None
+    if qos_profile is None and (row is None or not row.profile):
+        declared = DECLARED_PROFILES.get(type_name)
+        qos_profile = profile(declared) if declared else None
+    kw = {} if qos_profile is None else {"qos_profile": qos_profile}
+    if row is not None:
+        return type_name, kw
+    return class_for(type_name), dict(kw, type_name=type_name)
+
+
+def _latched_and_keyed(type_name: str, qos: Any) -> bool:
+    if qos is None:
+        row = sd.dds.registry.registration(type_name)
+        qos = profile(row.profile) if row.profile else None
+    fqn = sd.dds.fqn_of(class_for(type_name))
+    return bool(qos is not None and qos.latched
+                and sd.dds.codec.key_member(fqn) is not None)
+
+
+def open_writer(p: "sd.dds.Participant", type_name: str, topic: str, *,
+                qos_profile: Any = None, on_exit: str = "withdraw"):
+    """A writer for `type_name` on `topic`.
+
+    `on_exit` is what a clean stop does to a latched keyed lane's instances,
+    and applies only there (the SDK refuses it anywhere else). A producer
+    withdraws what it published. A carrier, which writes what someone else
+    asserted (a bridge, a replayer), passes "keep": the presence is the
+    asserter's, so readers see the carrier leave and nothing removed.
+    """
+    type_arg, kw = endpoint(type_name, qos_profile)
+    if _latched_and_keyed(type_name, kw.get("qos_profile")):
+        kw["on_exit"] = on_exit
+    return p.writer(type_arg, topic=topic, **kw)
+
+
+def open_reader(p: "sd.dds.Participant", type_name: str, topic: str, *,
+                qos_profile: Any = None, **kw):
+    type_arg, ekw = endpoint(type_name, qos_profile)
+    return p.reader(type_arg, topic=topic, **ekw, **kw)
 
 
 # -- the blob lane ------------------------------------------------------------

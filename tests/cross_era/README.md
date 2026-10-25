@@ -3,9 +3,26 @@
 **The claim.** A participant built from nothing but SpatialDDS **1.7**
 generated types, the spec's topic names and the §3.3.3 QoS profile table, with
 no code from this repository, interoperates with this **1.8** demo in both
-directions: it reads the demo's announces and one announced data lane, and
-the demo discovers it, resolves the type it announces, reads its data and
-sees it depart.
+directions:
+- it reads the demo's announces and one announced data lane;
+- the demo discovers it and sees it depart;
+- the demo refuses the lane it announces, by rule, and records why.
+
+The refusal is part of the claim. The probe's 1.7 announce still reaches a
+1.8 reader and its departure is still heard: that is appendable evolution
+holding across eras. The demo's SDK reader holds every lane name to §3.3.1's
+grammar, so a name that was never valid is refused at the boundary with its
+reason, not read. One record shows both.
+
+### The lane's name
+
+The probe publishes on `spatialdds/interop_probe/geo/ego/pose/v1`. That is six
+segments and no §2 template, so it was not a §3.3.1 name in 1.7 or in 1.8. The
+probe predates grammar enforcement: the demo's old transport opened any name,
+and until the SDK adoption (2026-10-25) the demo read this lane. The probe is
+kept byte-identical, so its name keeps that history. The driver's assertion
+changed from "read its data" to "refused it, saying the name is not a §3.3.1
+name". That change was made through the route below.
 
 This is the one place in the repository where a second era is kept, and it
 is kept on purpose. Everything else in the repository is 1.8.

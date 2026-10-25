@@ -69,8 +69,12 @@ if str(_HERE) not in sys.path:
 if str(_BRIDGES) not in sys.path:
     sys.path.insert(0, str(_BRIDGES))
 
-from spatialdds_demo import blob, topic_types, typed_transport as tt  # noqa: E402
+import spatialdds as sd  # noqa: E402
+
+from spatialdds_demo import lanes  # noqa: E402
 from spatialdds_demo.stream import StreamSubscriber  # noqa: E402
+
+BLOB_TYPE = "blob_chunk"
 from frame_mapping import FrameMapper  # noqa: E402
 from ros2_to_spatialdds import (  # noqa: E402
     compressed_image_blob,
@@ -358,9 +362,12 @@ class _TypedWriters:
     Lazily-built typed writers, one per SpatialDDS topic.
 
     The ROS 2 side names a topic and a §3.3.2 type for each mapping; this
-    resolves the type to its generated class and opens a writer on the lane
-    §3.3.3 assigns it. Writers are built on first use because which topics a
-    run touches depends on its config.
+    opens a writer on the lane the type has: its row's profile, or this
+    deployment's declaration where the row names none (lanes.DECLARED_PROFILES;
+    until the SDK adoption, `topic_types.profile_for`'s silent defaults).
+    Writers are built on first use because which topics a run touches
+    depends on its config. A producer: a clean stop withdraws what it
+    published on a latched keyed lane.
 
     An unresolvable type raises rather than being skipped: this bridge is the
     producer, and a producer that cannot build the type it is about to
@@ -371,15 +378,17 @@ class _TypedWriters:
         self._participant = participant
         self._writers: Dict[str, Any] = {}
 
-    def write(self, topic: str, type_name: str, payload: Any) -> None:
+    def writer(self, topic: str, type_name: str):
+        """The writer for `topic`, opened on first use."""
         writer = self._writers.get(topic)
         if writer is None:
-            datatype = topic_types.resolve(type_name)
-            writer = tt.TypedDictWriter(
-                self._participant, topic, datatype,
-                topic_types.profile_for(type_name))
+            writer = lanes.open_writer(self._participant, type_name, topic,
+                                       on_exit="withdraw")
             self._writers[topic] = writer
-        writer.write(payload)
+        return writer
+
+    def write(self, topic: str, type_name: str, payload: Any) -> None:
+        self.writer(topic, type_name).write(payload)
 
 
 def main():  # pragma: no cover - Tier-3 only
@@ -449,11 +458,10 @@ def main():  # pragma: no cover - Tier-3 only
     domain_id = int(config.get("domain_id", 1))
     fm = FrameMapper(operator)
 
-    from cyclonedds.domain import DomainParticipant
-
     # One participant for both directions, so the SpatialDDS-side readers can
     # use IGNORE_LOCAL_PARTICIPANT and never see this bridge's own writes.
-    participant = DomainParticipant(domain_id)
+    participant = sd.participant(lanes.SCENE, domain=domain_id,
+                                 service_id=f"svc:bridge:ros2/{operator}")
     writers = _TypedWriters(participant)
 
     # ROS 2 → SpatialDDS subscriptions
@@ -478,7 +486,7 @@ def main():  # pragma: no cover - Tier-3 only
                 # is metadata plus a BlobRef, and the bytes travel as blob
                 # chunks on the shared blob topic.
                 for chunk in _image_chunks(_encoder, msg, _mapping):
-                    writers.write(blob.BLOB_TOPIC, blob.BLOB_TYPE, chunk)
+                    writers.write(lanes.BLOB_TOPIC, BLOB_TYPE, chunk)
             return cb
 
         node.create_subscription(ros2_cls, ros2_topic, make_callback(), 10)
@@ -495,12 +503,12 @@ def main():  # pragma: no cover - Tier-3 only
                 return entry
         return None
 
-    reassembler = blob.Reassembler()
+    reassembler = sd.dds.Reassembler()
     pending_images: Dict[str, tuple] = {}
 
     def sample_callback(msg_type: str, logical_topic: str, payload: dict,
                         _stamp_ns: int):
-        if msg_type == blob.BLOB_TYPE:
+        if msg_type == BLOB_TYPE:
             _on_blob_chunk(payload)
             return
         decoder = msg_type_to_decoder(msg_type)
@@ -568,7 +576,7 @@ def main():  # pragma: no cover - Tier-3 only
 
         try:
             data = reassembler.feed(from_json(BlobChunk, payload))
-        except blob.CorruptChunk as exc:
+        except sd.dds.CorruptChunk as exc:
             node.get_logger().warning(str(exc))
             return
         if data is None:

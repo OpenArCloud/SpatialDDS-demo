@@ -47,6 +47,9 @@ for p in (str(_HERE), str(_BRIDGES)):
         sys.path.insert(0, p)
 
 from topic_mapping import infer_msg_type, get_qos, matches_any, to_broker_filter  # noqa: E402
+
+#: What `infer_msg_type` returns for an announce topic: not a lane type.
+ANNOUNCE_TYPE = "spatialdds/discovery/announce"
 from config import BridgeConfig  # noqa: E402
 
 logger = logging.getLogger("spatialdds.mqtt_bridge")
@@ -79,39 +82,18 @@ class MqttDdsBridge:
     # inference, when the publisher knows the type explicitly.
     USER_PROPERTY_MSG_TYPE = "spatialdds_msg_type"
 
-    # 3.3.3 QoS profile per registered type. A message bridged in from MQTT
-    # goes onto the lane the spec assigns its type — not onto one profile
-    # the bridge picked for everything, which is what a single envelope
-    # topic forced.
-    DDS_QOS_PROFILES = {
-        "geopose": "POSE_RT",
-        "navsat_status": "POSE_RT",
-        "planned_trajectory": "EVENT_RT",
-        "entity_binding": "MAP_META",
-        "spatial_event": "EVENT_RT",
-        "video_frame": "VIDEO_LIVE",
-        "radar_tensor": "RADAR_RT",
-        "radar_detection": "RADAR_RT",
-        "detection3d": "DET_RT",
-        "rf_beam": "RF_BEAM_RT",
-        "detection3d": "DET_RT",
-        "framed_pose": "POSE_RT",
-        "fused_track": "DET_RT",
-        "oarc.fusion_coverage": "MAP_META",
-        "lidar_frame": "LIDAR_RT",
-        "lidar_meta": "SENSOR_META",
-        "radar_tensor_meta": "SENSOR_META",
-        "video_meta": "SENSOR_META",
-        "rf_beam_meta": "SENSOR_META",
-    }
-    DEFAULT_DDS_PROFILE = "EVENT_RT"
+    # A message bridged in from MQTT goes onto the lane its type has: the
+    # §3.3.2 row's profile, or this deployment's declaration where the row
+    # names none (lanes.DECLARED_PROFILES). This class kept a table of its
+    # own until the SDK adoption, defaulting the unlisted to EVENT_RT.
 
     def __init__(self, config: BridgeConfig):
         self.config = config
         self.stats = BridgeStats()
         self._stop_event = threading.Event()
-        self._participant = None       # cyclonedds DomainParticipant
-        self._writers: dict = {}       # logical_topic -> TypedDictWriter
+        self._participant = None       # spatialdds participant
+        self._writers: dict = {}       # logical_topic -> (type name, writer)
+        self._relay = None             # re-publishes announces heard on MQTT
         self._stream_sub = None        # spatialdds_demo.stream.StreamSubscriber
         self._pump = None              # thread polling the stream subscriber
         self._mqtt = None              # paho.mqtt.client.Client
@@ -124,15 +106,22 @@ class MqttDdsBridge:
         # Lazy-import paho/cyclonedds so unit tests can import the module
         # without these deps installed.
         import paho.mqtt.client as mqtt
-        from cyclonedds.domain import DomainParticipant
+        import spatialdds as sd
 
+        from spatialdds_demo.lanes import SCENE
         from spatialdds_demo.stream import StreamSubscriber
 
         # ── DDS side ────────────────────────────────────────────────────
         # One participant for both directions, which is what makes
         # IGNORE_LOCAL_PARTICIPANT the loop guard: the readers below are in
         # the same participant as the writers this bridge creates inbound.
-        self._participant = DomainParticipant(self.config.dds_domain_id)
+        self._participant = sd.participant(
+            SCENE, domain=self.config.dds_domain_id,
+            service_id=f"svc:bridge:mqtt/{self.config.bridge_id}")
+        # Announces heard on MQTT go onto DDS as what they are: someone
+        # else's claim, re-published under this bridge's identity and marked
+        # `relayed_by`, never as the asserter.
+        self._relay = self._participant.relay()
 
         if self.config.direction in ("bidirectional", "outbound_only"):
             self._stream_sub = StreamSubscriber(
@@ -203,6 +192,9 @@ class MqttDdsBridge:
                 self._mqtt.disconnect()
             except Exception:
                 pass
+        if self._participant is not None:
+            # A carrier's stop: what it relayed is unregistered, not removed.
+            self._participant.close(reason="the MQTT bridge stopped")
         self._log_stats(force=True)
 
     # ── MQTT → DDS ──────────────────────────────────────────────────────
@@ -267,7 +259,14 @@ class MqttDdsBridge:
         msg_type = self._extract_msg_type(msg) or infer_msg_type(topic)
 
         try:
-            self._dds_writer(topic, msg_type).write(payload)
+            if msg_type == ANNOUNCE_TYPE:
+                # Not a lane: the well-known Announce topic, by relay. Until
+                # the SDK adoption this went to a typed writer for a type
+                # name nothing resolves, and every inbound announce was
+                # counted as an error (census, defects found in passing).
+                self._relay.write(payload)
+            else:
+                self._dds_writer(topic, msg_type).write(payload)
             self.stats.inbound_count += 1
             self.stats.last_inbound_topic = topic
         except Exception as exc:
@@ -280,17 +279,20 @@ class MqttDdsBridge:
 
     def _dds_writer(self, logical_topic: str, msg_type: str):
         """A typed writer for ``logical_topic``, created on first use."""
-        writer = self._writers.get(logical_topic)
-        if writer is not None:
-            return writer
+        held = self._writers.get(logical_topic)
+        if held is not None:
+            if held[0] != msg_type:
+                raise ValueError(f"{logical_topic} already carries {held[0]}; "
+                                 f"a topic is one type")
+            return held[1]
 
-        from spatialdds_demo import topic_types, typed_transport as tt
+        from spatialdds_demo import lanes
 
-        datatype = topic_types.resolve(msg_type)
-        writer = tt.TypedDictWriter(
-            self._participant, logical_topic, datatype,
-            self.DDS_QOS_PROFILES.get(msg_type, self.DEFAULT_DDS_PROFILE))
-        self._writers[logical_topic] = writer
+        # A carrier: the claim is the MQTT publisher's, so a clean stop
+        # leaves a latched instance present.
+        writer = lanes.open_writer(self._participant, msg_type, logical_topic,
+                                   on_exit="keep")
+        self._writers[logical_topic] = (msg_type, writer)
         return writer
 
     def _extract_bridge_id(self, msg) -> Optional[str]:
