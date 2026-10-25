@@ -48,5 +48,7 @@ spatialdds_ros==0.3.0
 # Moved onto it 2026-10-24 (docs/sdk-adoption-census.md); the binding was a
 # separate `spatialdds[server]==0.5.4` until then, installed on top of this
 # file at container start, and that second install is gone so it cannot
-# downgrade this one.
-spatialdds[dds,server]==0.7.1
+# downgrade this one. 0.7.1 -> 0.7.2 the same day: 0.7.2 adds `sd.dds.extend`,
+# without which this repository's own `oarc.*` types could not be converted,
+# keyed or recorded by the SDK (spatialdds-py finding 69, found here).
+spatialdds[dds,server]==0.7.2
