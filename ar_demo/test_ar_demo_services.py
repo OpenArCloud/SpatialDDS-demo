@@ -8,7 +8,7 @@ referenced by any test. That is the same shape as the ROS 2 bridge node, where
 two undefined names survived six days behind a green suite.
 
 These modules defer nothing — they import cyclonedds at module scope — but
-`require_dds_env` is called inside `run_*`, not at import, so their pure
+their participants are made inside `run_*`, not at import, so their pure
 helpers are reachable on the host. Those helpers are where the decisions live:
 what a service announces about itself, whether an announce is still good, and
 which fields a compact summary may carry.

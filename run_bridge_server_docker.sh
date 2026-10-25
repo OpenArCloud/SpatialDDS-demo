@@ -39,12 +39,11 @@ trap cleanup EXIT INT TERM
 # localization that never answers.
 #
 # `SPATIALDDS_DDS_CONFIG` names a file to mount *at* /etc/cyclonedds.xml
-# rather than pointing CYCLONEDDS_URI elsewhere, because `require_dds_env`
-# refuses any other URI. That guard carries no stated reason, so it is
-# satisfied rather than loosened: a single config path shared by every process
-# in the container is a defensible thing to insist on, and changing the file
-# behind the path gets the same result without touching a rule whose purpose
-# is not written down. See deploy/aws/cyclonedds-colocated.xml.
+# rather than pointing CYCLONEDDS_URI elsewhere: a single config path shared by
+# every process in the container. (Until the SDK adoption that was also forced,
+# by the demo's `require_dds_env`, which refused any other URI and gave no
+# reason. The SDK's participant checks only that a domain was chosen.) See
+# deploy/aws/cyclonedds-colocated.xml.
 
 # SPATIALDDS_MOCK_VPS — the demo's own mock VPS, on by default because it is
 # what makes the AR demo self-contained. Set it to 0 to run against a real

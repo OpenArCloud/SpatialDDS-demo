@@ -9,11 +9,11 @@ lane, the duck mover asking for moves, and the recorder subscribing like any
 other consumer. Nothing is shared in memory -- the recorder sees only what
 reaches the bus.
 
-**Why a harness rather than the demo's own entry points.** `main()` in each
-module calls `require_dds_env`, which insists on
-`CYCLONEDDS_URI=file:///etc/cyclonedds.xml`: the container contract the demo
-ships under. This harness is the same stack with participants constructed
-directly, which is how `tests/test_duck_mover.py` has always run the service
+**Why a harness rather than the demo's own entry points.** The entry points
+run under the container contract the demo ships with
+(`CYCLONEDDS_URI=file:///etc/cyclonedds.xml`; until the SDK adoption each
+`main()` called `require_dds_env`, which refused anything else). This harness
+is the same stack with participants constructed directly, which is how `tests/test_duck_mover.py` has always run the service
 and the mover together, and it needs no file under /etc to reproduce.
 
 One command goes through the lane on purpose. A recording whose command topic

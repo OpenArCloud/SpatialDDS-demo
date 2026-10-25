@@ -3,8 +3,10 @@ The JSON envelope transport, kept as the benchmarks' baseline arm.
 
 Nothing in the demo publishes through this any more. It survives for one
 reason: the benchmarks compare the envelope against typed topics, and a
-comparison needs both arms. `require_dds_env` is the other reason — it
-validates the DDS environment and has nothing to do with the envelope.
+comparison needs both arms. A baseline is supposed to be raw, so it is raw
+cyclonedds and lives here, outside the demo's package, since the SDK
+adoption (it was `spatialdds_demo/dds_transport.py`, with `require_dds_env`
+beside it; the SDK's participant now refuses an unchosen domain itself).
 
 What it was: one struct on one topic, with the actual SpatialDDS payload
 serialised to a JSON string inside it and the topic name demoted to a
@@ -19,7 +21,6 @@ Do not add callers.
 
 import hashlib
 import json
-import os
 import sys
 import threading
 import time
@@ -27,7 +28,10 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Deque, Optional, Set, Tuple
 
-from spatialdds_demo.topics import TOPIC_DISCOVERY_ANNOUNCE_V1, TOPIC_DDS_ENVELOPE_V1
+#: The envelope's own topic, and the announce topic it once carried JSON
+#: announces on. Both kept verbatim: the baseline measures what was.
+TOPIC_DDS_ENVELOPE_V1 = "spatialdds/envelope/v1"
+TOPIC_DISCOVERY_ANNOUNCE_V1 = "spatialdds/discovery/announce/v1"
 
 
 class DDSTransport:
@@ -212,30 +216,6 @@ def _sender_id_from_payload(payload_json: str) -> Optional[str]:
         if isinstance(fqn, str) and fqn:
             return fqn
     return None
-
-
-def require_dds_env() -> int:
-    transport = os.getenv("SPATIALDDS_TRANSPORT", "mock")
-    if transport != "dds":
-        print("SPATIALDDS_TRANSPORT is not set to dds; exiting.")
-        sys.exit(1)
-
-    uri = os.getenv("CYCLONEDDS_URI", "")
-    if uri != "file:///etc/cyclonedds.xml":
-        print("CYCLONEDDS_URI must be set to file:///etc/cyclonedds.xml")
-        sys.exit(1)
-
-    domain_str = os.getenv("SPATIALDDS_DDS_DOMAIN", "0")
-    try:
-        domain_id = int(domain_str)
-    except ValueError:
-        print(f"Invalid SPATIALDDS_DDS_DOMAIN value: {domain_str}")
-        sys.exit(1)
-
-    print("DDS transport enabled: Cyclone DDS")
-    print(f"Domain: {domain_id}")
-    print(f"CYCLONEDDS_URI: {uri}")
-    return domain_id
 
 
 def _idl_string(types_module):

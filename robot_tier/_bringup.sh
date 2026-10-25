@@ -3,9 +3,10 @@
 set -e
 source /opt/ros/humble/setup.bash
 export PYTHONPATH=/ws:$PYTHONPATH
-# The demo's transport gate: `require_dds_env` refuses to run against a
-# transport nobody asked for, which is the right default and needs saying
-# here rather than assuming.
+# The demo's container contract, said here rather than assumed. The SDK's
+# participant refuses to run without a domain someone chose; the transport flag
+# and the URI are what the demo's own processes expect beside it (until the SDK
+# adoption its `require_dds_env` refused to run without them).
 export SPATIALDDS_TRANSPORT=dds
 export SPATIALDDS_DDS_DOMAIN=${SPATIALDDS_DDS_DOMAIN:-1}
 export CYCLONEDDS_URI=file:///etc/cyclonedds.xml

@@ -5,7 +5,9 @@
 #       bash tools/capture_owm_session.sh
 #
 # The real entry points under the shipped env contract -- SPATIALDDS_TRANSPORT,
-# CYCLONEDDS_URI=file:///etc/cyclonedds.xml, require_dds_env -- with
+# CYCLONEDDS_URI=file:///etc/cyclonedds.xml, SPATIALDDS_DDS_DOMAIN (the SDK's
+# participant refuses to pick a domain itself; until the SDK adoption the
+# demo's require_dds_env also checked the other two) -- with
 # tools/record_owm_session.py joined to the same bus by --domain. Nothing here
 # constructs a participant by hand; the harness in run_owm_session.py does that
 # and is the weaker provenance.

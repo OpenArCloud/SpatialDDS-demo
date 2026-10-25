@@ -6,7 +6,7 @@
 #       bash tools/capture_robot_session.sh
 #
 # Same contract as tools/capture_owm_session.sh and for the same reasons: the
-# real entry points under require_dds_env, the recorder joined by --domain,
+# real entry points under the same env contract, the recorder joined by --domain,
 # and the recorder in the foreground so no publisher's farewell disposes land
 # inside the window. Read that file's header for the ordering argument; it is
 # the same one.

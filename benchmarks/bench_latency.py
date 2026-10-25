@@ -33,8 +33,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from spatialdds_demo.dds_transport import DDSTransport
-from spatialdds_demo.topics import TOPIC_VPS_QUERY_V1, TOPIC_VPS_RESULT_V1
+from envelope_baseline import DDSTransport
+from spatialdds_demo.lanes import (
+    TOPIC_VPS_QUERY as TOPIC_VPS_QUERY_V1, TOPIC_VPS_RESULT as TOPIC_VPS_RESULT_V1)
 
 from common import (
     DDS_DOMAIN_MAIN,
@@ -213,6 +214,9 @@ class TypedRoundTrip:
             for request in self._service.take_requests():
                 reply = dict(self._reply_template)
                 reply["query_id"] = request.query_id
+                # Answered as the service the request named, which the client
+                # holds the reply to; the template carries the mock VPS's id.
+                reply["service_id"] = request.service_id
                 self._service.reply(from_json(VpsResponse, reply))
             time.sleep(0.001)
 
