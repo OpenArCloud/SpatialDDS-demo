@@ -1,75 +1,75 @@
 {
- "$comment": "One /ws data frame from the gateway, captured live on 2026-10-21 from the local fusion stack (deploy/aws/docker-compose.local.yaml: synthetic_publisher + fusion_service + web_bridge). What fusion_service actually publishes on spatialdds/platform/events/trajectory_conflict/v1. Frozen; read by fusion-dashboard.spec.ts. Re-derived 2026-10-24 at the SDK adoption: the captured payload, put through the SDK's N.1 codec (sd.dds.from_json then to_json), because /ws carries N.1 since then. Not a live recapture; the acceptance run replaces it with one. Its logical_topic renamed at the topic-rename commit (2026-10-25) to the name the service publishes since: spatialdds/platform/events/spatial_event/v1, the type segment being the registered type. The payload is unchanged.",
- "type": "data",
- "sub_id": "conflict",
- "msg_type": "spatial_event",
- "logical_topic": "spatialdds/platform/events/spatial_event/v1",
- "timestamp_ns": 1792629400371278800,
- "payload": {
-  "event_id": "conflict:operator_a_ego|operator_b_ego",
-  "type": "PREDICTED_CONFLICT",
-  "severity": "ALERT",
-  "state": "ACTIVE",
-  "has_zone_id": false,
-  "zone_id": "",
-  "has_position": true,
-  "position": [
-   0.6551343202590942,
-   -0.6551343202590942,
-   0.5
-  ],
-  "frame_ref": {
-   "uuid": "388ae8e3-82d0-5280-82c2-0e9596c24fd3",
-   "fqn": "scene/intersection",
-   "has_coord_convention": true,
-   "coord_convention": "ENU",
-   "has_scale": false,
-   "scale_status": "SCALE_UNKNOWN",
-   "meters_per_unit": 1.0,
-   "display_unit": "m"
-  },
-  "has_trigger_det_id": false,
-  "trigger_det_id": "",
-  "has_trigger_track_id": false,
-  "trigger_track_id": "",
-  "trigger_class_id": "",
-  "has_secondary_det_id": false,
-  "secondary_det_id": "",
-  "has_measured_speed_mps": false,
-  "measured_speed_mps": 0.0,
-  "has_measured_dwell_sec": false,
-  "measured_dwell_sec": 0.0,
-  "has_measured_distance_m": true,
-  "measured_distance_m": 1.8530000448226929,
-  "has_zone_occupancy": false,
-  "zone_occupancy": 0,
-  "confidence": 1.0,
-  "has_evidence": false,
-  "evidence": {
-   "blob_id": "",
-   "role": "",
-   "checksum": ""
-  },
-  "has_description": true,
-  "description": "predicted conflict between operator_a_ego and operator_b_ego in 5.0s",
-  "event_start": {
-   "sec": "1792629405",
-   "nanosec": 363418102
-  },
-  "stamp": {
-   "sec": "1792629400",
-   "nanosec": 363418102
-  },
-  "source_id": "platform-fusion",
-  "attributes": [],
-  "schema_version": "spatial.events/1.8",
-  "participant_ids": [
-   "operator_a_ego",
-   "operator_b_ego"
-  ],
-  "has_crossing_line_id": false,
-  "crossing_line_id": "",
-  "has_crossing": false,
-  "crossing_direction": "CROSSING_UNKNOWN"
- }
+  "$comment": "One /ws data frame from the gateway, captured live on 2026-10-25 at the SDK adoption's acceptance run: synthetic_publisher (3 operators) and fusion_service, both on spatialdds 0.7.3, into the stack's web_bridge (./run_bridge_server_docker.sh), subscribed to spatialdds/platform/events/spatial_event/v1. What fusion_service publishes since the SDK adoption, in N.1 as /ws carries it. Frozen; read by fusion-dashboard.spec.ts. It replaces the 2026-10-21 capture, which had been re-derived through the SDK's codec and renamed rather than recaptured.",
+  "type": "data",
+  "sub_id": "conflict",
+  "msg_type": "spatial_event",
+  "logical_topic": "spatialdds/platform/events/spatial_event/v1",
+  "timestamp_ns": 1792947761993534976,
+  "payload": {
+    "event_id": "conflict:operator_a_ego|operator_b_ego",
+    "type": "PREDICTED_CONFLICT",
+    "severity": "ALERT",
+    "state": "ACTIVE",
+    "has_zone_id": false,
+    "zone_id": "",
+    "has_position": true,
+    "position": [
+      -0.0088423490524292,
+      0.0088423490524292,
+      0.5
+    ],
+    "frame_ref": {
+      "uuid": "388ae8e3-82d0-5280-82c2-0e9596c24fd3",
+      "fqn": "scene/intersection",
+      "has_coord_convention": true,
+      "coord_convention": "ENU",
+      "has_scale": false,
+      "scale_status": "SCALE_UNKNOWN",
+      "meters_per_unit": 1.0,
+      "display_unit": "m"
+    },
+    "has_trigger_det_id": false,
+    "trigger_det_id": "",
+    "has_trigger_track_id": false,
+    "trigger_track_id": "",
+    "trigger_class_id": "",
+    "has_secondary_det_id": false,
+    "secondary_det_id": "",
+    "has_measured_speed_mps": false,
+    "measured_speed_mps": 0.0,
+    "has_measured_dwell_sec": false,
+    "measured_dwell_sec": 0.0,
+    "has_measured_distance_m": true,
+    "measured_distance_m": 0.02500000037252903,
+    "has_zone_occupancy": false,
+    "zone_occupancy": 0,
+    "confidence": 1.0,
+    "has_evidence": false,
+    "evidence": {
+      "blob_id": "",
+      "role": "",
+      "checksum": ""
+    },
+    "has_description": true,
+    "description": "predicted conflict between operator_a_ego and operator_b_ego in 5.0s",
+    "event_start": {
+      "sec": "1792947766",
+      "nanosec": 958786964
+    },
+    "stamp": {
+      "sec": "1792947761",
+      "nanosec": 958786964
+    },
+    "source_id": "platform-fusion",
+    "attributes": [],
+    "schema_version": "spatial.events/1.8",
+    "participant_ids": [
+      "operator_a_ego",
+      "operator_b_ego"
+    ],
+    "has_crossing_line_id": false,
+    "crossing_line_id": "",
+    "has_crossing": false,
+    "crossing_direction": "CROSSING_UNKNOWN"
+  }
 }
