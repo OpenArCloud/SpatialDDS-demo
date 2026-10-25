@@ -40,3 +40,13 @@ pytest>=7.0.0
 # (install_requires is `cyclonedds>=0.10`, already met by the demo image's
 # 11.0.1). Robot-lane acceptance re-run on it: see docs/ros-adoption-findings.md.
 spatialdds_ros==0.3.0
+
+# The SDK this repository's plumbing runs on: the native participant
+# (`[dds]`) and the embedded gateway the web bridge serves the binding with
+# (`[server]`). One pin for both, from PyPI, because the demo is the SDK's
+# first consumer and the proof is strongest against the artifact users get.
+# Moved onto it 2026-10-24 (docs/sdk-adoption-census.md); the binding was a
+# separate `spatialdds[server]==0.5.4` until then, installed on top of this
+# file at container start, and that second install is gone so it cannot
+# downgrade this one.
+spatialdds[dds,server]==0.7.1

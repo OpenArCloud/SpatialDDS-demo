@@ -94,7 +94,6 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
   -e SPATIALDDS_FRAME_ANCHORS="${SPATIALDDS_FRAME_ANCHORS:-/app/bridges/web_bridge/tests/frame_anchors_fountain.json}" \
   -e SPATIALDDS_MODEL_LAYER="${SPATIALDDS_MODEL_LAYER:-0}" \
   -e SPATIALDDS_BINDING_TOKEN="${SPATIALDDS_BINDING_TOKEN:-bridge-session}" \
-  -e SPATIALDDS_BINDING_VERSION="${SPATIALDDS_BINDING_VERSION:-0.5.4}" \
   -e PYTHONDONTWRITEBYTECODE=1 \
   -v "${PWD}:/app" \
   ${SPATIALDDS_DDS_CONFIG:+-v "${SPATIALDDS_DDS_CONFIG}:/etc/cyclonedds.xml:ro"} \
@@ -124,7 +123,6 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
       if [ \"\$SPATIALDDS_DUCK_MOVER\" = \"1\" ]; then \
         python3 -m spatialdds_demo.duck_mover >\"\$BRIDGE_LOG_DIR/mover_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
       fi; \
-      python3 -m pip install --quiet \"spatialdds[server]==\$SPATIALDDS_BINDING_VERSION\"; \
       python3 -m bridges.web_bridge.binding --host 0.0.0.0 --port 8089 \
         --domain \"\$SPATIALDDS_DDS_DOMAIN\" --token \"\$SPATIALDDS_BINDING_TOKEN\" \
         >\"\$binding_log\" 2>&1 &\

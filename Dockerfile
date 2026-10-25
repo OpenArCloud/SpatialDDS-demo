@@ -30,6 +30,11 @@ COPY ar_demo/comprehensive_test.py .
 COPY ar_demo/run_all_tests.sh .
 COPY ar_demo/catalog_seed.json .
 COPY cyclonedds.xml /etc/cyclonedds.xml
+# The pinned Python dependencies, the SDK among them, are part of the image:
+# the in-image suites (scripts/run_tests.sh standard) install nothing at
+# start, so an image without them would test a tree that cannot import.
+COPY requirements.txt /tmp/requirements.txt
+RUN python3 -m pip install --no-cache-dir -r /tmp/requirements.txt
 COPY idl ./idl
 COPY manifests ./manifests
 

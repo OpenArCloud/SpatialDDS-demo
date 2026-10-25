@@ -19,8 +19,8 @@
 # venue its own metadata says was removed. Read that file's header for the
 # argument.
 #
-# The bridge needs `spatialdds[server]` 0.5.4 from PyPI, which the demo image
-# does not carry: the binding is a dependency of this lane, not of the demo.
+# The bridge embeds `spatialdds[server]` from PyPI at requirements.txt's pin,
+# which the demo image carries since the SDK adoption (one pin, `[dds,server]`).
 set -u
 export SPATIALDDS_TRANSPORT=dds
 export CYCLONEDDS_URI=file:///etc/cyclonedds.xml
@@ -51,8 +51,9 @@ python3 -c "import mcap" 2>/dev/null || {
 # forces, without which no browser can reach this lane at all --- and 0.5.4
 # puts an origin on the reply, without which a command *publishes* while the
 # page that sent it reads a failure. An inexact pin would let a session run on
-# any of those and look like a bridge defect.
-BINDING="${BINDING:-0.5.4}"
+# any of those and look like a bridge defect. The pin is read from
+# requirements.txt, so this script and the image cannot disagree.
+BINDING="${BINDING:-$(sed -n 's/^spatialdds\[dds,server\]==//p' /app/requirements.txt)}"
 python3 -c "import spatialdds, sys; sys.exit(0 if spatialdds.__version__=='$BINDING' else 1)" 2>/dev/null || {
   say "installing spatialdds[server]==$BINDING from PyPI (the binding, embedded)"
   python3 -m pip install --quiet "spatialdds[server]==$BINDING" || {
