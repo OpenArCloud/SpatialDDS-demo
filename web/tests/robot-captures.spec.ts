@@ -370,19 +370,11 @@ test('the sim dies, and both the watching tab and a late one are told',
    * from the live stream would show a late-joiner an empty plaza.
    */
   test.setTimeout(600_000);
-  // **Expected to fail, until spatialdds_ros reads TF with an age check.**
-  // Its nav2 node takes the robot's pose as the latest map->base transform
-  // (`lookup_transform(map, base, Time())`) with no check on how old that
-  // transform is. When the sim dies the buffer keeps answering with its last
-  // transform, so the adapter hears a pose every tick and never declares
-  // UNOBSERVED. Measured 2026-10-25 on 0.3.0: 40 s after `pkill
-  // plaza_sim_node.py`, the record is still ACTIVE, restamped every 5 s, at
-  // the sim's last pose. This test could not see it: its tier probe looked
-  // for the demo's own robot_bridge, which the ROS adoption replaced, so it
-  // had skipped ever since. Filed against spatialdds-ros. `test.fail` turns
-  // this red the day it starts passing, so the mark cannot outlive the defect.
-  test.fail(true, 'spatialdds_ros 0.3.0: a dead sim never goes UNOBSERVED '
-            + '(robot_node reads the latest TF with no age check)');
+  // This failed on spatialdds_ros 0.3.0 and 0.4.0: their nav2 node read the
+  // latest TF with no age check, so a dead sim stayed ACTIVE, restamped every
+  // few seconds at its last pose (spatialdds-ros finding 10). It was marked
+  // test.fail until 0.4.1, which fixed it; the mark's flip to "Expected to
+  // fail, but passed" was that release's acceptance.
   const onBus = async () => (await venueEntities(request))
     .find((e: any) => e.entity_id === 'ent:robot:tb3');
   const drawnRobot = async (p: any) => {

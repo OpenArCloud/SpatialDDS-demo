@@ -295,7 +295,7 @@ def _library_version() -> str:
 def run(domain_id: Optional[int] = None, source: str = "kinematic",
         hz: float = SIM_HZ) -> int:
     # The library's lanes are on a raw participant, because spatialdds_ros
-    # 0.3.0 takes one: a labelled workaround until the ROS rebase (census
+    # (0.4.1 still) takes one: a labelled workaround until the ROS rebase (census
     # filing S7). Its domain is read the way the SDK reads it, and refused the
     # same way when it is not set, rather than defaulting to 0.
     if domain_id is None:
