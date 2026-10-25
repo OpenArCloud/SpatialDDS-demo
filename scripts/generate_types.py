@@ -431,17 +431,35 @@ def generate_bound(out_dir: Path, package: str, bind_to: str) -> list[str]:
     compiled from different bytes than the ones they will meet at import
     time, which is two type systems presenting as one.
     """
-    reference = REPO / bind_to
-    if not reference.is_dir():
-        raise SystemExit(f"--bind-to {bind_to}: no checked-in tree at {reference}")
+    installed = "." in bind_to
+    if installed:
+        # An installed package (`spatialdds.dds.types`, the SDK's): there is
+        # no checked-in tree to diff, and its generator is not this one, so
+        # the spec half is checked by its source instead. The IDL compiled
+        # here has to be byte for byte the IDL that package's distribution
+        # ships, which is the invariant the tree diff stood in for.
+        import importlib
+        reference = Path(importlib.import_module(bind_to).__file__).parent
+        drift = _idl_diff(SPEC_IDL, sdk_idl_dir())
+        if drift:
+            raise SystemExit(
+                f"the spec IDL compiled here is not the IDL {bind_to} was "
+                f"generated from; refusing to bind demo types to it:\n  "
+                + "\n  ".join(drift))
+    else:
+        reference = REPO / bind_to
+        if not reference.is_dir():
+            raise SystemExit(f"--bind-to {bind_to}: no checked-in tree at "
+                             f"{reference}")
     with tempfile.TemporaryDirectory() as tmp:
         staged = Path(tmp) / bind_to
         fixed = generate(staged, bind_to)
         spec_roots = sorted(p.name for p in reference.iterdir()
                             if p.is_dir() and p.name != "__pycache__")
         drift = []
-        for root in spec_roots:
-            drift += _tree_diff(reference / root, staged / root)
+        if not installed:
+            for root in spec_roots:
+                drift += _tree_diff(reference / root, staged / root)
         if drift:
             raise SystemExit(
                 f"the spec half compiled here differs from the checked-in "
@@ -487,13 +505,40 @@ def generate_bound(out_dir: Path, package: str, bind_to: str) -> list[str]:
         write_field_aliases(out_dir, aliases)
         (out_dir / "__init__.py").write_text(
             HEADER
-            + f'"""Demo-owned types, compiled against {SPEC_IDL.relative_to(REPO)} '
+            + f'"""Demo-owned types, compiled against {spec_label()} '
             f'and bound to `{bind_to}` for every spec type. See '
             f'scripts/generate_types.py."""\n\n'
             f"import {bind_to}  # noqa: F401  -- the root the annotations name\n"
             + "".join(f"from . import {r}\n" for r in demo_roots)
             + "\n__all__ = [%s]\n" % ", ".join(f'"{r}"' for r in demo_roots))
     return fixed
+
+
+def sdk_idl_dir() -> Path:
+    """The spec IDL the installed `spatialdds` ships, and its types came from."""
+    from spatialdds.server import pin
+    return Path(pin.IDL_DIR)
+
+
+def spec_label() -> str:
+    """Where SPEC_IDL is, said the same way on every machine."""
+    try:
+        return str(SPEC_IDL.relative_to(REPO))
+    except ValueError:
+        import spatialdds
+        return f"the IDL spatialdds {spatialdds.__version__} ships"
+
+
+def _idl_diff(a: Path, b: Path) -> list[str]:
+    """Every .idl file that differs between two bundles, by relative path."""
+    def files(root: Path) -> dict:
+        return {p.relative_to(root).as_posix(): p.read_bytes()
+                for p in root.rglob("*.idl")}
+    fa, fb = files(a), files(b)
+    return ([f"only in {a}: {k}" for k in sorted(set(fa) - set(fb))]
+            + [f"only in {b}: {k}" for k in sorted(set(fb) - set(fa))]
+            + [f"differs: {k}" for k in sorted(set(fa) & set(fb))
+               if fa[k] != fb[k]])
 
 
 def main() -> int:
@@ -515,6 +560,10 @@ def main() -> int:
     parser.add_argument("--check", action="store_true",
                         help="fail if the checked-in output differs from a fresh run")
     args = parser.parse_args()
+    if args.bind_to and "." in args.bind_to and args.spec_idl == SPEC_IDL:
+        # Bound to the SDK: its own IDL, unless told otherwise (and then
+        # checked against its own IDL all the same).
+        args.spec_idl = sdk_idl_dir()
     # Both paths are accepted relative to the repository root, so the
     # command lines in the docstring work from anywhere inside it.
     args.out = args.out if args.out.is_absolute() else (REPO / args.out)
@@ -527,7 +576,7 @@ def main() -> int:
         else (REPO / args.demo_idl)
     if not args.bind_to:
         DEMO_IDL = SPEC_IDL / "__no_demo__"   # a path that does not exist
-    print(f"bundle   {SPEC_IDL.relative_to(REPO)}"
+    print(f"bundle   {spec_label()}"
           f"{'  (spec only)' if not args.bind_to else ''}")
 
     make = (lambda out, pkg: generate_bound(out, pkg, args.bind_to)) \

@@ -17,7 +17,7 @@ import cyclonedds.idl.types as types
 # root module import for resolving types
 # generate_types.py: bind the root name the dotted
 # annotations below already use, so get_type_hints works
-import spatialdds_idl18
+import spatialdds.dds.types
 import spatialdds_demo_idl18
 from spatialdds_demo_idl18 import oarc_demo
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 MODULE_ID = "oarc.demo/1.8"
-Time = types.typedef['spatialdds_demo_idl18.oarc_demo.Time', 'spatialdds_idl18.builtin.Time']
+Time = types.typedef['spatialdds_demo_idl18.oarc_demo.Time', 'spatialdds.dds.types.builtin.Time']
 
 @dataclass
 @annotate.appendable

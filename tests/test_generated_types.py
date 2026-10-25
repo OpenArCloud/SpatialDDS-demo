@@ -25,6 +25,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from spatialdds_demo_idl18.oarc_demo import BootstrapQuery, BootstrapResponse  # noqa: E402
+from spatialdds.dds.types.builtin import Time as SdkTime  # noqa: E402
 from spatialdds_idl18._field_aliases import FIELD_ALIASES, wire_name  # noqa: E402
 from spatialdds_idl18.builtin import Time  # noqa: E402
 from spatialdds_idl18.spatial.common import (  # noqa: E402
@@ -113,13 +114,16 @@ ROUND_TRIP_CASES = {
     "CoverageResponse": CoverageResponse(query_id="q-1", results=[SUMMARY],
                                          next_page_token=""),
     "Depart": Depart(service_id="svc:vps:demo/sf-downtown", stamp=STAMP),
+    # The demo's own types bind to the SDK's spec types since the adoption,
+    # so they decode with the SDK's Time, and equality is per class.
     "BootstrapQuery": BootstrapQuery(client_id="c1", client_kind="robot",
                                      capabilities=["localize", "catalog"],
-                                     location_hint="sf-downtown", stamp=STAMP),
+                                     location_hint="sf-downtown",
+                                     stamp=SdkTime(sec=1700000000, nanosec=0)),
     "BootstrapResponse": BootstrapResponse(
         client_id="c1", spatialdds_bootstrap=ERA, dds_domain=1,
         cyclonedds_profile="", manifest_uris=["spatialdds://x/z/service/m"],
-        ttl_sec=300, stamp=STAMP),
+        ttl_sec=300, stamp=SdkTime(sec=1700000000, nanosec=0)),
 }
 
 
@@ -182,9 +186,10 @@ class GeneratorDrift(unittest.TestCase):
     #: bare command line is the 1.8 spec tree's now.
     TREES = {
         "spatialdds_idl18": [],
-        "spatialdds_demo_idl18": ["--spec-idl", "idl/v1.8",
-                                  "--demo-idl", "idl/demo18",
-                                  "--bind-to", "spatialdds_idl18",
+        # Bound to the SDK's types since the adoption, and compiled against
+        # the IDL the installed SDK ships (the generator checks that).
+        "spatialdds_demo_idl18": ["--demo-idl", "idl/demo18",
+                                  "--bind-to", "spatialdds.dds.types",
                                   "--out", "spatialdds_demo_idl18"],
     }
 
