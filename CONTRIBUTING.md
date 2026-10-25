@@ -402,6 +402,14 @@ subject rather than an incidental property.
 - `scripts/run_bridge_http_tests_docker.sh` can report `COVERAGE_RESPONSE timeout`. Its
   discovery query is sent once with no retry. Re-run it, or use the pytest
   variant.
+- The same lane can fail at `/v1/localize` with `HTTP 502: LOCALIZE_RESPONSE
+  timeout`, right after "coverage results": 2 runs in 14 on 2026-10-25. It is
+  older than the SDK adoption: the tree before it (f4890e8) failed 1 in 14 at
+  the same step. Measured and ruled out: a request sent before the mock VPS's
+  reader matched (0 in 15 either way) and servers blocking on an undrained
+  pipe (8-20 KB written). Cause unknown; re-run once, and treat a second
+  failure in a row as something else. The harness prints the bridge's error
+  body, so the next one says more.
 - `idlc -l py` writes nothing for `ar_demo/spatialdds.idl` and ignores `-o`, and
   there's no C++ backend in the image. See `ar_demo/DOCKER_GUIDE.md` for the
   commands that do work.
