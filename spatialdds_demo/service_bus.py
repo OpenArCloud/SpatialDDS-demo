@@ -25,16 +25,11 @@ from __future__ import annotations
 import time
 from typing import Callable, Dict, List, Optional
 
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
 
-import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
-from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.topics import (
-    TOPIC_BOOTSTRAP_QUERY_V1,
-    TOPIC_BOOTSTRAP_RESPONSE_V1,
-    TOPIC_DISCOVERY_QUERY_V1,
-    TOPIC_VPS_QUERY_V1,
-    TOPIC_VPS_RESULT_V1,
+from spatialdds_demo.lanes import (
+    COVERAGE_REPLY, TOPIC_BOOTSTRAP_QUERY, TOPIC_BOOTSTRAP_RESPONSE,
+    TOPIC_VPS_QUERY, TOPIC_VPS_RESULT,
 )
 from spatialdds_demo_idl18.oarc_demo import (
     BootstrapQuery,
@@ -50,9 +45,14 @@ from spatialdds.dds.types.spatial.disco import CoverageQuery, CoverageResponse
 # why it is a parameter rather than a constant in four loops.
 DEFAULT_POLL_INTERVAL = 0.02
 
-# Registered QoS profiles for these lanes (3.3.3).
-VPS_REQ_PROFILE = "VPS_REQ"
-VPS_RESP_PROFILE = "VPS_RESP"
+# The VPS lanes' profiles are their §3.3.2 rows' own, VPS_REQ and VPS_RESP,
+# which the SDK applies by default. Their names are spatialdds/vps/*, which the
+# spec gives only by example (spatialdds-py candidates 9.5), so they are opened
+# with `topic=`.
+
+
+def _samples(reader: "sd.dds.Reader") -> list:
+    return [ev.data for ev in reader.take() if isinstance(ev, sd.Sample)]
 
 
 def service_id_base(service_id: str) -> str:
@@ -70,11 +70,10 @@ def service_id_base(service_id: str) -> str:
 class VpsService:
     """Server side of the localization exchange."""
 
-    def __init__(self, participant: DomainParticipant, service_id: str = ""):
-        self._reader = tt.make_reader(
-            participant, TOPIC_VPS_QUERY_V1, VpsRequest, VPS_REQ_PROFILE)
-        self._writer = tt.make_writer(
-            participant, TOPIC_VPS_RESULT_V1, VpsResponse, VPS_RESP_PROFILE)
+    def __init__(self, participant: "sd.dds.Participant", service_id: str = ""):
+        self._reader = participant.reader("vps_query", topic=TOPIC_VPS_QUERY)
+        self._writer = participant.writer("vps_response",
+                                          topic=TOPIC_VPS_RESULT)
         self._service_id = service_id_base(service_id)
 
     def addressed_to_us(self, service_id: str) -> bool:
@@ -100,7 +99,7 @@ class VpsService:
         return service_id_base(service_id) == self._service_id
 
     def take_requests(self) -> List[VpsRequest]:
-        return [request for request in tt.take_samples(self._reader)
+        return [request for request in _samples(self._reader)
                 if self.addressed_to_us(getattr(request, "service_id", ""))]
 
     def reply(self, response: VpsResponse) -> None:
@@ -110,11 +109,10 @@ class VpsService:
 class VpsClient:
     """Client side: publish a request, wait for the reply that matches it."""
 
-    def __init__(self, participant: DomainParticipant):
-        self._writer = tt.make_writer(
-            participant, TOPIC_VPS_QUERY_V1, VpsRequest, VPS_REQ_PROFILE)
-        self._reader = tt.make_reader(
-            participant, TOPIC_VPS_RESULT_V1, VpsResponse, VPS_RESP_PROFILE)
+    def __init__(self, participant: "sd.dds.Participant"):
+        self._writer = participant.writer("vps_query", topic=TOPIC_VPS_QUERY)
+        self._reader = participant.reader("vps_response",
+                                          topic=TOPIC_VPS_RESULT)
 
     def request(self, request: VpsRequest, timeout: float = 10.0,
                 poll_interval: float = DEFAULT_POLL_INTERVAL
@@ -145,7 +143,7 @@ class VpsClient:
         expected = service_id_base(expect_service_id)
         deadline = time.time() + timeout
         while time.time() < deadline:
-            for response in tt.take_samples(self._reader):
+            for response in _samples(self._reader):
                 if response.query_id != query_id:
                     continue
                 if expected and service_id_base(
@@ -162,49 +160,66 @@ class VpsClient:
 # going to a topic the query names. Results are compact `ServiceSummary` rows —
 # a consumer selects on the summary and takes detail from the retained
 # Announce it already holds, or by resolving `manifest_uri`.
-COVERAGE_QUERY_PROFILE = "ZONE_META"
-COVERAGE_RESP_PROFILE = "ZONE_META"
+# The query is the spec's well-known topic, opened by its message name, so its
+# QoS is the spec's (RELIABLE + VOLATILE + KEEP_ALL). Replies go to the lane
+# the asker names, on lanes.COVERAGE_REPLY. Both were ZONE_META,
+# TRANSIENT_LOCAL, until the SDK adoption, which latched queries for services
+# that joined later.
 
 
 class CoverageService:
     """Server side: read queries on the well-known topic, reply where asked."""
 
-    def __init__(self, participant: DomainParticipant):
+    def __init__(self, participant: "sd.dds.Participant"):
         self._participant = participant
-        self._reader = tt.make_reader(
-            participant, TOPIC_DISCOVERY_QUERY_V1, CoverageQuery,
-            COVERAGE_QUERY_PROFILE)
+        self._reader = participant.reader("CoverageQuery")
         self._reply_writers: Dict[str, object] = {}
 
-    def take_queries(self) -> List[CoverageQuery]:
-        return tt.take_samples(self._reader)
+    @property
+    def topic(self) -> str:
+        """The well-known query topic this service reads."""
+        return self._reader.topic
 
-    def reply(self, reply_topic: str, response: CoverageResponse) -> None:
+    def take_queries(self) -> List[CoverageQuery]:
+        return _samples(self._reader)
+
+    def reply(self, reply_topic: str, response: CoverageResponse) -> bool:
+        """Answer on the lane the asker named. False if it cannot be named.
+
+        The name is the asker's, so it is held to §3.3.1 when the writer is
+        opened: a malformed one is refused there, with the reason, rather
+        than becoming a topic nobody else would recognise. One asker's bad
+        name is that asker's problem, so it is reported and the service keeps
+        serving everyone else.
+        """
         writer = self._reply_writers.get(reply_topic)
         if writer is None:
-            writer = tt.make_writer(
-                self._participant, reply_topic, CoverageResponse,
-                COVERAGE_RESP_PROFILE)
+            try:
+                writer = self._participant.writer(
+                    CoverageResponse, type_name="coverage_response",
+                    topic=reply_topic, qos_profile=COVERAGE_REPLY)
+            except sd.dds.ParticipantRefused as refused:
+                print(f"coverage: not replying to {reply_topic!r}: {refused}")
+                return False
             self._reply_writers[reply_topic] = writer
         writer.write(response)
+        return True
 
 
 class CoverageClient:
     """Client side: ask on the well-known topic, listen on a private reply topic."""
 
-    def __init__(self, participant: DomainParticipant, reply_topic: str):
+    def __init__(self, participant: "sd.dds.Participant", reply_topic: str):
         self._reply_topic = reply_topic
-        self._writer = tt.make_writer(
-            participant, TOPIC_DISCOVERY_QUERY_V1, CoverageQuery,
-            COVERAGE_QUERY_PROFILE)
+        self._writer = participant.writer("CoverageQuery")
         # KEEP_ALL, not the profile's KEEP_LAST(1): every service that covers
         # the queried area answers this one topic, and `CoverageResponse` has
         # no `@key`, so all of their replies share a single instance. At depth
         # 1 the last writer wins and the querier concludes one service exists
         # where several do — with nothing to indicate loss.
-        self._reader = tt.make_reader(
-            participant, reply_topic, CoverageResponse, COVERAGE_RESP_PROFILE,
-            keep_all=True)
+        self._reader = participant.reader(
+            CoverageResponse, type_name="coverage_response", topic=reply_topic,
+            qos_profile=COVERAGE_REPLY, history="KEEP_ALL")
 
     @property
     def reply_topic(self) -> str:
@@ -216,7 +231,7 @@ class CoverageClient:
         self._writer.write(query)
         deadline = time.time() + timeout
         while time.time() < deadline:
-            for response in tt.take_samples(self._reader):
+            for response in _samples(self._reader):
                 if response.query_id == query.query_id:
                     return response
             time.sleep(poll_interval)
@@ -243,7 +258,7 @@ class CoverageClient:
         seen_services: set = set()
         deadline = time.time() + window
         while time.time() < deadline:
-            for response in tt.take_samples(self._reader):
+            for response in _samples(self._reader):
                 if response.query_id != query.query_id:
                     continue
                 # A service that re-announces mid-window could answer twice.
@@ -260,22 +275,27 @@ class CoverageClient:
 # Demo-owned. 1.7 has no bootstrap exchange — a participant is assumed to
 # already know its domain id and QoS profile, which is exactly what a fresh
 # device does not. Catalogued in ar_demo/SPEC_COMPLIANCE.md.
-BOOTSTRAP_PROFILE = "MAP_META"
+# MAP_META, registered: RELIABLE + TRANSIENT_LOCAL + KEEP_LAST(1). The types
+# are this repository's `oarc.bootstrap_*` extensions, so the profile object is
+# given explicitly, and each keyed lane says what a clean stop does to it.
+BOOTSTRAP_PROFILE = sd.dds.registry.profile("MAP_META")
 
 
 class BootstrapService:
     """Server side: answer a client asking how to join."""
 
-    def __init__(self, participant: DomainParticipant):
-        self._reader = tt.make_reader(
-            participant, TOPIC_BOOTSTRAP_QUERY_V1, BootstrapQuery,
-            BOOTSTRAP_PROFILE)
-        self._writer = tt.make_writer(
-            participant, TOPIC_BOOTSTRAP_RESPONSE_V1, BootstrapResponse,
-            BOOTSTRAP_PROFILE)
+    def __init__(self, participant: "sd.dds.Participant"):
+        self._reader = participant.reader(
+            "oarc.bootstrap_query", topic=TOPIC_BOOTSTRAP_QUERY,
+            qos_profile=BOOTSTRAP_PROFILE)
+        # A clean stop keeps the answers: a client that asked is told how to
+        # join whether or not the server is still up.
+        self._writer = participant.writer(
+            "oarc.bootstrap_response", topic=TOPIC_BOOTSTRAP_RESPONSE,
+            qos_profile=BOOTSTRAP_PROFILE, on_exit="keep")
 
     def take_queries(self) -> List[BootstrapQuery]:
-        return tt.take_samples(self._reader)
+        return _samples(self._reader)
 
     def reply(self, response: BootstrapResponse) -> None:
         self._writer.write(response)
@@ -284,13 +304,15 @@ class BootstrapService:
 class BootstrapClient:
     """Client side: ask, and wait for the answer addressed to us."""
 
-    def __init__(self, participant: DomainParticipant):
-        self._writer = tt.make_writer(
-            participant, TOPIC_BOOTSTRAP_QUERY_V1, BootstrapQuery,
-            BOOTSTRAP_PROFILE)
-        self._reader = tt.make_reader(
-            participant, TOPIC_BOOTSTRAP_RESPONSE_V1, BootstrapResponse,
-            BOOTSTRAP_PROFILE)
+    def __init__(self, participant: "sd.dds.Participant"):
+        # A clean stop withdraws the question: a client that left is no longer
+        # asking.
+        self._writer = participant.writer(
+            "oarc.bootstrap_query", topic=TOPIC_BOOTSTRAP_QUERY,
+            qos_profile=BOOTSTRAP_PROFILE, on_exit="withdraw")
+        self._reader = participant.reader(
+            "oarc.bootstrap_response", topic=TOPIC_BOOTSTRAP_RESPONSE,
+            qos_profile=BOOTSTRAP_PROFILE)
 
     def request(self, query: BootstrapQuery, timeout: float = 5.0,
                 retry_every: float = 1.0,
@@ -310,7 +332,7 @@ class BootstrapClient:
             if now >= next_send:
                 self._writer.write(query)
                 next_send = now + retry_every
-            for response in tt.take_samples(self._reader):
+            for response in _samples(self._reader):
                 if response.client_id == query.client_id:
                     return response
             time.sleep(poll_interval)

@@ -8,20 +8,16 @@ import threading
 import time
 from typing import Any, Dict, List
 
-from cyclonedds.domain import DomainParticipant
-
-import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
-from spatialdds_demo.dds_transport import require_dds_env
+import spatialdds as sd
 from spatialdds.dds import from_json, to_json
+
+from spatialdds_demo.lanes import (
+    SCENE, TOPIC_BOOTSTRAP_QUERY, TOPIC_BOOTSTRAP_RESPONSE,
+    TOPIC_SOURCE_REQUEST, TOPIC_SOURCE_SPEC,
+)
 from spatialdds_demo.service_bus import BootstrapService
 from spatialdds_demo.discovery_http import BOOTSTRAP_SCHEMA
 from spatialdds_demo_idl18.oarc_demo import BootstrapResponse as TypedBootstrapResponse
-from spatialdds_demo.topics import (
-    TOPIC_BOOTSTRAP_QUERY_V1,
-    TOPIC_BOOTSTRAP_RESPONSE_V1,
-    TOPIC_SOURCE_REQUEST,
-    TOPIC_SOURCE_SPEC,
-)
 from spatialdds_test import SpatialDDSLogger
 from spatialdds_validation import SpatialDDSValidator
 
@@ -43,7 +39,6 @@ def _mapping_for_site(site: str, default_domain: int, manifests: List[str]) -> D
 def run_server(
     site: str, dds_domain: int, manifests: List[str], show_message_content: bool, detailed: bool
 ) -> int:
-    require_dds_env()
     logger = SpatialDDSLogger()
     logger.detailed_content = detailed
 
@@ -51,8 +46,8 @@ def run_server(
     ttl_sec = int(os.getenv("SPATIALDDS_BOOTSTRAP_TTL", "300"))
 
     print("🧭 Bootstrap Server (v1) starting...")
-    print(f"- subscribe: {TOPIC_BOOTSTRAP_QUERY_V1}")
-    print(f"- respond:   {TOPIC_BOOTSTRAP_RESPONSE_V1}")
+    print(f"- subscribe: {TOPIC_BOOTSTRAP_QUERY}")
+    print(f"- respond:   {TOPIC_BOOTSTRAP_RESPONSE}")
     print(f"- site: {mapping['site']} domain: {mapping['dds_domain']} ttl_sec: {ttl_sec}")
     if mapping["manifest_uris"]:
         print(f"- manifest_uris: {', '.join(mapping['manifest_uris'])}")
@@ -67,7 +62,7 @@ def run_server(
                 data.get("client_id", "Client"),
                 "BootstrapService",
                 data,
-                TOPIC_BOOTSTRAP_QUERY_V1,
+                TOPIC_BOOTSTRAP_QUERY,
                 TOPIC_SOURCE_SPEC,
                 show_message_content,
             )
@@ -92,12 +87,17 @@ def run_server(
                 "BootstrapService",
                 query.client_id or "Client",
                 response,
-                TOPIC_BOOTSTRAP_RESPONSE_V1,
+                TOPIC_BOOTSTRAP_RESPONSE,
                 TOPIC_SOURCE_REQUEST,
                 show_message_content,
             )
 
-    bootstrap = BootstrapService(DomainParticipant(0))
+    # Domain 0, explicitly: it is the bootstrap domain, the one every client
+    # asks on before it knows the deployment's own (`--domain` is the answer
+    # it is given, not where this server listens).
+    participant = sd.participant(SCENE, domain=0,
+                                 service_id="svc:bootstrap:demo")
+    bootstrap = BootstrapService(participant)
 
     # SIGTERM as well as SIGINT: `docker stop` and most supervisors send
     # SIGTERM, and a background process from a non-interactive shell ignores
@@ -109,6 +109,7 @@ def run_server(
     while not stopping.is_set():
         serve(bootstrap)
         time.sleep(0.05)
+    participant.close(reason="the bootstrap server stopped")
     return 0
 
 

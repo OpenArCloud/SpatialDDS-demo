@@ -32,7 +32,7 @@ class _Response:
 
 
 class _Client(VpsClient):
-    """A VpsClient without a bus; `tt.take_samples` is patched per test."""
+    """A VpsClient without a bus; `_samples` is patched per test."""
 
     def __init__(self):
         self._reader = object()
@@ -76,27 +76,27 @@ class Addressing(unittest.TestCase):
 class ReplyMatching(unittest.TestCase):
     def test_a_reply_from_another_service_is_not_accepted(self):
         wrong = _Response("q1", "svc:vps:demo/austin-downtown")
-        with mock.patch("spatialdds_demo.service_bus.tt.take_samples",
+        with mock.patch("spatialdds_demo.service_bus._samples",
                         return_value=[wrong]):
             self.assertIsNone(_Client().await_reply(
                 "q1", timeout=0.2, expect_service_id="svc:vps:oarc/aws-test"))
 
     def test_the_addressed_services_reply_is_accepted(self):
         right = _Response("q1", "svc:vps:oarc/aws-test;v=map-9")
-        with mock.patch("spatialdds_demo.service_bus.tt.take_samples",
+        with mock.patch("spatialdds_demo.service_bus._samples",
                         return_value=[right]):
             self.assertIs(_Client().await_reply(
                 "q1", timeout=0.2, expect_service_id="svc:vps:oarc/aws-test"), right)
 
     def test_without_an_expectation_any_responder_answers(self):
         any_one = _Response("q1", "svc:vps:whoever/it-is")
-        with mock.patch("spatialdds_demo.service_bus.tt.take_samples",
+        with mock.patch("spatialdds_demo.service_bus._samples",
                         return_value=[any_one]):
             self.assertIs(_Client().await_reply("q1", timeout=0.2), any_one)
 
     def test_a_reply_to_another_query_is_ignored(self):
         other = _Response("q2", "svc:vps:oarc/aws-test")
-        with mock.patch("spatialdds_demo.service_bus.tt.take_samples",
+        with mock.patch("spatialdds_demo.service_bus._samples",
                         return_value=[other]):
             self.assertIsNone(_Client().await_reply("q1", timeout=0.2))
 

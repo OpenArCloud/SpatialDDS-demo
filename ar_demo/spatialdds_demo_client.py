@@ -7,35 +7,24 @@ import time
 import uuid
 from typing import Any, Dict, Optional
 
-from cyclonedds.domain import DomainParticipant
-
-import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
-from spatialdds_demo import topic_types, typed_transport as tt
-from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.service_bus import BootstrapClient, CoverageClient
-from spatialdds_demo_idl18.oarc_demo import BootstrapQuery as TypedBootstrapQuery
-from spatialdds.dds.types.spatial.disco import CoverageQuery as TypedCoverageQuery
-from spatialdds_demo.discovery_bus import AnnounceSubscriber
+import spatialdds as sd
 from spatialdds.dds import from_json, to_json
-from spatialdds_demo.content_catalogue import filter_inventory
-from spatialdds_demo.discovery_bus import ContentInventory
-from spatialdds_demo.service_bus import VpsClient
 from spatialdds.dds.types.spatial.argeo import VpsRequest as TypedVpsRequest
-from spatialdds_demo.topics import (
-    TOPIC_ANCHORS_DELTA,
-    TOPIC_BOOTSTRAP_QUERY_V1,
-    TOPIC_BOOTSTRAP_RESPONSE_V1,
-    TOPIC_DISCOVERY_CONTENT_V1,
-    TOPIC_DISCOVERY_ANNOUNCE_V1,
-    TOPIC_DISCOVERY_QUERY_V1,
-    TOPIC_SOURCE_ANNOUNCE_PREVIEW,
-    TOPIC_SOURCE_FALLBACK,
-    TOPIC_SOURCE_MANIFEST,
-    TOPIC_SOURCE_REQUEST,
-    TOPIC_SOURCE_SPEC,
-    TOPIC_VPS_QUERY_V1,
-    TOPIC_VPS_RESULT_V1,
+from spatialdds.dds.types.spatial.disco import CoverageQuery as TypedCoverageQuery
+
+from spatialdds_demo.content_catalogue import filter_inventory
+from spatialdds_demo.lanes import (
+    SCENE, TOPIC_BOOTSTRAP_QUERY, TOPIC_BOOTSTRAP_RESPONSE,
+    TOPIC_SOURCE_ANNOUNCE_PREVIEW, TOPIC_SOURCE_FALLBACK,
+    TOPIC_SOURCE_MANIFEST, TOPIC_SOURCE_REQUEST, TOPIC_SOURCE_SPEC,
+    TOPIC_VPS_QUERY, TOPIC_VPS_RESULT, anchors_delta,
 )
+from spatialdds_demo.service_bus import BootstrapClient, CoverageClient, VpsClient
+from spatialdds_demo_idl18.oarc_demo import BootstrapQuery as TypedBootstrapQuery
+
+ANNOUNCE_TOPIC = sd.dds.registry.well_known("Announce").topic
+CONTENT_TOPIC = sd.dds.registry.well_known("ContentAnnounce").topic
+QUERY_TOPIC = sd.dds.registry.well_known("CoverageQuery").topic
 from spatialdds_test import (
     SpatialDDSClientV15,
     SpatialDDSLogger,
@@ -49,7 +38,7 @@ from spatialdds_validation import SpatialDDSValidator
 def _topic_source_for(manifest_topics: Dict[str, str], role: str, logical_topic: str) -> str:
     if manifest_topics.get(role) == logical_topic:
         return TOPIC_SOURCE_MANIFEST
-    if logical_topic in (TOPIC_VPS_QUERY_V1, TOPIC_VPS_RESULT_V1):
+    if logical_topic in (TOPIC_VPS_QUERY, TOPIC_VPS_RESULT):
         return TOPIC_SOURCE_FALLBACK
     return TOPIC_SOURCE_SPEC
 
@@ -73,18 +62,21 @@ def _bootstrap_domain(logger: SpatialDDSLogger, show_message_content: bool) -> O
 
     # Bootstrap runs on domain 0 by convention: it is what a participant
     # does before it knows which domain it belongs on.
-    bootstrap = BootstrapClient(DomainParticipant(0))
+    bootstrap_participant = sd.participant(SCENE, domain=0,
+                                           service_id=client_id)
+    bootstrap = BootstrapClient(bootstrap_participant)
     logger.log_message(
         "BOOTSTRAP_QUERY",
         "SEND",
         client_id,
         "BootstrapService",
         query,
-        TOPIC_BOOTSTRAP_QUERY_V1,
+        TOPIC_BOOTSTRAP_QUERY,
         TOPIC_SOURCE_SPEC,
         show_message_content,
     )
     typed = bootstrap.request(from_json(TypedBootstrapQuery, query), timeout=8.0)
+    bootstrap_participant.close(reason="bootstrapped")
     if typed is None:
         print("Client timed out waiting for BOOTSTRAP_RESPONSE.")
         return None
@@ -96,7 +88,7 @@ def _bootstrap_domain(logger: SpatialDDSLogger, show_message_content: bool) -> O
         "BootstrapService",
         client_id,
         response,
-        TOPIC_BOOTSTRAP_RESPONSE_V1,
+        TOPIC_BOOTSTRAP_RESPONSE,
         TOPIC_SOURCE_REQUEST,
         show_message_content,
     )
@@ -132,7 +124,6 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     logger = SpatialDDSLogger()
     logger.detailed_content = detailed_content
 
-    require_dds_env()
     print("🧭 Bootstrap phase: querying DDS domain on bootstrap domain 0")
     domain_id = _bootstrap_domain(logger, show_message_content)
     if domain_id is None:
@@ -142,18 +133,21 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
 
     # Typed announces on their own keyed topic. TRANSIENT_LOCAL means this
     # client sees services that announced before it started.
-    announce_participant = DomainParticipant(domain_id)
-    announce_sub = AnnounceSubscriber(announce_participant)
-    print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")
+    announce_participant = sd.participant(SCENE, domain=domain_id,
+                                          service_id="svc:client:ar-demo")
+    announce_sub = announce_participant.reader("Announce", settle_s=0.3)
+    print(f"announce topic: {ANNOUNCE_TOPIC}")
     print("announce qos: DISCOVERY_ANNOUNCE "
           "(RELIABLE + TRANSIENT_LOCAL + KEEP_LAST(1), keyed on service_id)")
 
     announce = None
     deadline = time.time() + 10
     while time.time() < deadline and announce is None:
-        for event in announce_sub.poll():
-            if event.alive and event.announce is not None:
-                candidate = to_json(event.announce)
+        for ev in announce_sub.take():
+            # A departure or a lost writer is never a candidate; the SDK's
+            # reader reports both, as events of their own.
+            if isinstance(ev, sd.Sample):
+                candidate = to_json(ev.data)
                 if _announce_fresh(candidate):
                     announce = candidate
                     break
@@ -169,7 +163,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         f"VPS:{announce.get('name', 'unknown')}",
         "Client",
         announce,
-        TOPIC_DISCOVERY_ANNOUNCE_V1,
+        ANNOUNCE_TOPIC,
         TOPIC_SOURCE_ANNOUNCE_PREVIEW,
         show_message_content,
     )
@@ -191,7 +185,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         "Client",
         "DDS_NETWORK",
         coverage_query,
-        TOPIC_DISCOVERY_QUERY_V1,
+        QUERY_TOPIC,
         TOPIC_SOURCE_SPEC,
         show_message_content,
     )
@@ -240,7 +234,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
 
     loc_request = client.create_localize_request(service_id)
     loc_request_topic, loc_request_source = _select_topic(
-        manifest_topics, "vps_query", TOPIC_VPS_QUERY_V1
+        manifest_topics, "vps_query", TOPIC_VPS_QUERY
     )
     vps = VpsClient(announce_participant)
     logger.log_message(
@@ -266,8 +260,8 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         f"VPS:{announce.get('name', 'unknown')}",
         "Client",
         loc_response,
-        TOPIC_VPS_RESULT_V1,
-        _topic_source_for(manifest_topics, "geopose", TOPIC_VPS_RESULT_V1),
+        TOPIC_VPS_RESULT,
+        _topic_source_for(manifest_topics, "geopose", TOPIC_VPS_RESULT),
         show_message_content,
     )
 
@@ -280,12 +274,26 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         # the demo's own CatalogQuery and wait for a reply; 1.8 has no content
         # query, and does not need one at this scale.
         geopose = loc_response.get("node_geo", {}).get("geopose", {})
-        inventory = ContentInventory(announce_participant)
+        inventory_reader = announce_participant.reader("ContentAnnounce",
+                                                       settle_s=0.3)
+        held: dict = {}
+
+        def inventory() -> list:
+            # A withdrawn item leaves the inventory; a catalogue whose writer
+            # was lost does not take its items with it (§2.14: no purge on
+            # liveliness loss alone).
+            for ev in inventory_reader.take():
+                if isinstance(ev, sd.Sample):
+                    held[ev.key] = to_json(ev.data)
+                elif isinstance(ev, sd.Dispose):
+                    held.pop(ev.key, None)
+            return list(held.values())
+
         deadline = time.time() + 5.0
-        items = inventory.items()
+        items = inventory()
         while not items and time.time() < deadline:
             time.sleep(0.1)
-            items = inventory.items()
+            items = inventory()
         found = filter_inventory(
             items,
             geopose={"lat_deg": geopose.get("lat_deg", 37.7749),
@@ -295,7 +303,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
         for item in found[:1]:
             logger.log_message(
                 "CONTENT_ANNOUNCE", "RECV", "Catalog:MockCatalog-v1", "Client",
-                item, TOPIC_DISCOVERY_CONTENT_V1, TOPIC_SOURCE_SPEC,
+                item, CONTENT_TOPIC, TOPIC_SOURCE_SPEC,
                 show_message_content,
             )
         if not items:
@@ -307,18 +315,15 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     anchor_delta = client.create_anchor_delta(
         loc_response["node_geo"], loc_response["confidence"]
     )
-    anchor_topic = (
-        TOPIC_ANCHORS_DELTA(anchor_delta.get("set_id"))
-        if anchor_delta.get("set_id")
-        else TOPIC_ANCHORS_DELTA("unknown")
-    )
-    # AnchorDelta is a stable 1.7 type that 3.3.2 gives no registered name
-    # and 3.3.3 no profile, so the demo names it `oarc.anchor_delta` and puts
-    # it on the latched map-metadata lane — an anchor set is state, not an
-    # event, and a late joiner needs the current one.
-    anchor_writer = tt.TypedDictWriter(
-        announce_participant, anchor_topic,
-        topic_types.resolve("anchor_delta"), "MAP_META")
+    anchor_topic = anchors_delta(anchor_delta.get("set_id") or "unknown")
+    # `anchor_delta` is registered (§3.3.2), on the anchor set's own lane. The
+    # row names ANCHOR_DELTA, a volatile event profile; the demo puts it on
+    # the latched map-metadata profile on purpose -- an anchor set is state,
+    # not an event, and a late joiner needs the current one. A clean stop
+    # keeps it, for the same reason.
+    anchor_writer = announce_participant.writer(
+        "anchor_delta", topic=anchor_topic, qos_profile="MAP_META",
+        on_exit="keep")
     anchor_writer.write(anchor_delta)
     logger.log_message(
         "ANCHOR_DELTA",
@@ -332,6 +337,7 @@ def run_client(show_message_content: bool, detailed_content: bool) -> int:
     )
 
     time.sleep(0.2)
+    announce_participant.close(reason="the AR client finished")
     logger.print_summary()
     return 0
 

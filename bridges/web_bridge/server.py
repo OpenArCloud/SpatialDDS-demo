@@ -43,9 +43,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from spatialdds_demo.dds_transport import require_dds_env
+import spatialdds as sd
+
 from spatialdds_demo import content_catalogue
-from spatialdds_demo.discovery_bus import AnnounceSubscriber, ContentInventory
+from spatialdds_demo.dds_transport import require_dds_env  # the stream pump's, until the bridges commit
+from spatialdds_demo.lanes import SCENE, blob_writer
 from spatialdds_demo.discovery_http import (
     normalize_search_request,
     record_from_announce,
@@ -54,16 +56,12 @@ from spatialdds_demo.discovery_http import (
     search as discovery_search,
 )
 from spatialdds.dds import from_json, to_json
-from spatialdds_demo import blob
-from spatialdds_demo.blob import BlobPublisher
 from spatialdds_demo.service_bus import CoverageClient, VpsClient
 from spatialdds.dds.types.spatial.argeo import VpsRequest as TypedVpsRequest
 from spatialdds.dds.types.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.manifest_resolver import resolve_manifest
-from spatialdds_demo.topics import (
-    TOPIC_DISCOVERY_CONTENT_V1,
-    TOPIC_DISCOVERY_QUERY_V1,
-)
+TOPIC_DISCOVERY_CONTENT_V1 = sd.dds.registry.well_known("ContentAnnounce").topic
+TOPIC_DISCOVERY_QUERY_V1 = sd.dds.registry.well_known("CoverageQuery").topic
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 from spatialdds_test import MockSensorData
 
@@ -97,12 +95,18 @@ class SpatialDDSBridge:
     def __init__(self) -> None:
         self._domain_id: Optional[int] = None
         self._last_announce: Optional[Dict[str, Any]] = None
-        self._announce_sub: Optional[AnnounceSubscriber] = None
+        self._announce_sub = None
+        self._depart_sub = None
         self._announce_participant = None
         self._coverage = None
         self._blobs = None
         self._vps: Optional[VpsClient] = None
-        self._content: Optional[ContentInventory] = None
+        self._content = None
+        #: The content inventory as read off the bus: content_id -> N.1 item.
+        self._items: Dict[str, Dict[str, Any]] = {}
+        #: What the inventory's reader has been told, by kind of event:
+        #: withdrawals remove an item, a lost writer removes nothing.
+        self.content_events = {"samples": 0, "withdrawn": 0, "writers_lost": 0}
         # Kept, not created per request: the command lane is VOLATILE, so a
         # fresh writer would drop its own first sample while discovery caught
         # up -- and that sample is somebody's tap on the map.
@@ -128,12 +132,34 @@ class SpatialDDSBridge:
         # the streaming fanout. The envelope transport that used to sit here
         # existed to correlate replies; VpsClient does that on its own typed
         # topics now, correlating on the query_id the reply mirrors.
-        from cyclonedds.domain import DomainParticipant
-        self._announce_participant = DomainParticipant(domain_id)
-        self._announce_sub = AnnounceSubscriber(self._announce_participant)
+        self._announce_participant = sd.participant(
+            SCENE, domain=domain_id, service_id="svc:bridge:demo/web")
+        self._announce_sub = self._announce_participant.reader(
+            "Announce", settle_s=0.3)
+        # VOLATILE, as the spec makes the Depart lane: a departure is an event.
+        # The demo's own readers asked for TRANSIENT_LOCAL here, which a
+        # conformant (volatile) Depart writer never matches, so they heard no
+        # spec-conformant departure at all (census finding 4).
+        self._depart_sub = self._announce_participant.reader("Depart")
         # Opened with the transport, not on first query: the topic is latched,
         # so the inventory is already here by the time a browser asks.
-        self._content = ContentInventory(self._announce_participant)
+        self._content = self._announce_participant.reader(
+            "ContentAnnounce", settle_s=0.3)
+
+    def content_items(self) -> List[Dict[str, Any]]:
+        """The inventory as of now. A withdrawn item leaves it; a catalogue
+        whose writer was lost does not take its items with it (§2.14, census
+        finding 2)."""
+        for ev in self._content.take():
+            if isinstance(ev, sd.Sample):
+                self._items[ev.key] = to_json(ev.data)
+                self.content_events["samples"] += 1
+            elif isinstance(ev, sd.Dispose):
+                self._items.pop(ev.key, None)
+                self.content_events["withdrawn"] += 1
+            elif isinstance(ev, sd.Liveliness) and not ev.alive:
+                self.content_events["writers_lost"] += 1
+        return list(self._items.values())
 
     def _announce_fresh(self, announce: Dict[str, Any]) -> bool:
         ttl_sec = announce.get("ttl_sec")
@@ -157,11 +183,11 @@ class SpatialDDSBridge:
             self.ensure_transport()
         if not self._announce_sub:
             return 0
-        events = self._announce_sub.poll()
+        events = self._announce_sub.take() + self._depart_sub.take()
         changed = self._announces.apply_events(events)
-        for event in events:
-            if event.alive and event.announce is not None:
-                self._last_announce = to_json(event.announce)
+        for ev in events:
+            if isinstance(ev, sd.Sample) and type(ev.data).__name__ == "Announce":
+                self._last_announce = to_json(ev.data)
         return changed
 
     def announce_records(self):
@@ -334,14 +360,14 @@ class SpatialDDSBridge:
         ergonomics is the spec-side question.
         """
         self.ensure_transport()
-        items = self._content.items()
+        items = self.content_items()
         # A bridge that has just started may not have been handed the latched
         # samples yet; a short wait is the difference between "nothing here"
         # and "not yet".
         deadline = time.time() + 2.0
         while not items and time.time() < deadline:
             time.sleep(0.05)
-            items = self._content.items()
+            items = self.content_items()
         found = content_catalogue.filter_inventory(
             items, geopose=geopose,
             kind_in=list(kind_in if kind_in is not None else DEFAULT_CATALOG_KINDS),
@@ -386,10 +412,13 @@ class SpatialDDSBridge:
             f"MOCK_IMAGE_{self._frame_seq}".encode("utf-8"))
         blob_id = str(uuid.uuid4())
         if self._blobs is None:
-            self._blobs = BlobPublisher(self._announce_participant)
-        written = self._blobs.publish(blob_id, payload)
+            self._blobs = blob_writer(self._announce_participant)
+        written = 0
+        for piece in sd.dds.chunk(blob_id, payload):
+            self._blobs.write(piece)
+            written += 1
         print(f"localize: query image {len(payload)} bytes in {written} chunk(s)")
-        query_image_ref = blob.blob_ref(blob_id, "vps/query-image", payload)
+        query_image_ref = sd.dds.blob_ref(blob_id, "vps/query-image", payload)
         request = {
             "query_id": query_id,
             "service_id": service_id,

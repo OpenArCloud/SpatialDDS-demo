@@ -118,6 +118,12 @@ else
     run "MCAP live record→replay" in_image bash -lc \
       'python3 -m pip install -U pip certifi -q 2>/dev/null; python3 -m pip install -q mcap zstandard 2>/dev/null; python3 bridges/mcap_bridge/test_live.py'
     run "web bridge HTTP"         bash scripts/run_bridge_http_tests_docker.sh
+    # The three departure defects, by the probes that found them; exits
+    # non-zero if a shipped verdict fails or a control stops reproducing.
+    # On the host: its subject is the web bridge's module, which needs
+    # fastapi, and the image has none (the HTTP lane installs it per run).
+    # Each participant is still a process of its own.
+    run "departure probes"        python3 tools/probe_departures.py
 
     if [ "$TIER" = "full" ]; then
       # ── full: slow tiers. ROS 2 emulates amd64 on Apple Silicon. ─────────

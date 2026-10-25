@@ -23,7 +23,7 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_demo import blob  # noqa: E402
+from spatialdds.dds import blob  # noqa: E402
 from spatialdds.dds import from_json  # noqa: E402
 from spatialdds.dds.types.spatial.argeo import VpsRequest  # noqa: E402
 from spatialdds.dds.types.spatial.core import BlobChunk  # noqa: E402
@@ -48,11 +48,10 @@ class BlobLane(unittest.TestCase):
         own imagery — so the lane has to be both reliable and TRANSIENT_LOCAL
         for a reader that opens late to still receive every chunk.
         """
-        from spatialdds_demo import qos_profiles
+        from spatialdds_demo.lanes import BLOB_PROFILE
 
-        profile = qos_profiles.get(blob.BLOB_PROFILE)
-        self.assertTrue(profile.reliable)
-        self.assertTrue(profile.latched)
+        self.assertEqual(BLOB_PROFILE.reliability, "RELIABLE")
+        self.assertTrue(BLOB_PROFILE.latched)
 
     def test_chunks_reassemble_to_the_advertised_checksum(self):
         blob_id = "11111111-2222-3333-4444-555555555555"

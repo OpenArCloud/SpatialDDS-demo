@@ -16,6 +16,12 @@ Removal paths, and one limitation worth stating plainly:
     instance means "this service is gone" and the cache evicts exactly it.
     This is what the unkeyed envelope could not express: every announce was a
     sample on one instance, so NOT_ALIVE_DISPOSED referred to the topic.
+
+**A lost writer is not a departure.** §2.14: consumers MUST NOT purge a
+durable keyed instance on liveliness loss alone. Since the SDK adoption the
+reader reports the two separately (`Dispose` and `Liveliness`), and only the
+first evicts. A service whose process died stays cached until its TTL lapses,
+which is the backstop that exists for exactly that case.
 """
 
 from __future__ import annotations
@@ -53,6 +59,8 @@ class AnnounceCache:
         self.admitted = 0
         self.departed = 0
         self.expired = 0
+        # Writers lost without a departure: seen, and deliberately not acted on.
+        self.writers_lost = 0
         # When each service's announce last arrived. See _is_expired.
         self._seen: Dict[str, float] = {}
 
@@ -91,17 +99,25 @@ class AnnounceCache:
 
     def apply_events(self, events) -> int:
         """
-        Fold a batch of AnnounceEvents in: admit the living, evict the departed.
+        Fold a batch of the SDK reader's events in: admit an announce, evict a
+        service that was withdrawn (its `Dispose`) or departed (a `Depart`
+        message, from the depart reader).
 
-        Returns how many entries changed.
+        Returns how many entries changed. `Liveliness` changes nothing, on
+        purpose: see the module docstring.
         """
+        import spatialdds as sd
         changed = 0
-        for event in events:
-            if event.alive and event.announce is not None:
-                if self.admit_typed(event.announce):
+        for ev in events:
+            if isinstance(ev, sd.Sample):
+                if type(ev.data).__name__ == "Depart":
+                    changed += self.depart(ev.data.service_id)
+                elif self.admit_typed(ev.data):
                     changed += 1
-            elif event.service_id and self.depart(event.service_id):
-                changed += 1
+            elif isinstance(ev, sd.Dispose):
+                changed += self.depart(ev.key)
+            elif isinstance(ev, sd.Liveliness) and not ev.alive:
+                self.writers_lost += 1
         return changed
 
     def depart(self, service_id: str) -> bool:

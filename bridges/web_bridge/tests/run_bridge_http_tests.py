@@ -18,7 +18,11 @@ import urllib.parse
 import urllib.request
 from typing import Dict, Optional, List
 
-from spatialdds_demo.topics import TOPIC_DISCOVERY_QUERY_V1, TOPIC_DISCOVERY_RESPONSE
+import spatialdds as sd
+
+from spatialdds_demo.lanes import SCENE, reply_topic as reply_lane
+
+TOPIC_DISCOVERY_QUERY_V1 = sd.dds.registry.well_known("CoverageQuery").topic
 from spatialdds_validation import SpatialDDSValidator, create_coverage_bbox_earth_fixed
 
 # repo root is three levels up: tests -> web_bridge -> bridges -> root.
@@ -97,15 +101,14 @@ def _coverage_query(domain_id: int = 1) -> Dict[str, object]:
     reply should come back on, so a reply reaches one asker rather than
     every client on the bus.
     """
-    from cyclonedds.domain import DomainParticipant
-
     from spatialdds.dds import from_json, to_json
     from spatialdds_demo.service_bus import CoverageClient
     from spatialdds.dds.types.spatial.disco import CoverageQuery
 
     query_id = "bridge-test-coverage"
-    reply_topic = TOPIC_DISCOVERY_RESPONSE(query_id)
-    client = CoverageClient(DomainParticipant(domain_id), reply_topic)
+    reply_topic = reply_lane(query_id)
+    asker = sd.participant(SCENE, domain=domain_id, service_id="svc:test:coverage-asker")
+    client = CoverageClient(asker, reply_topic)
 
     coverage_frame_ref, coverage_elem = create_coverage_bbox_earth_fixed(
         -97.75, 30.27, -97.72, 30.29

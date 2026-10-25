@@ -9,27 +9,21 @@ from typing import Any, Dict
 
 from cyclonedds.domain import DomainParticipant
 
-from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo import blob
-from spatialdds_demo.discovery_bus import AnnouncePublisher
+import spatialdds as sd
 from spatialdds.dds import from_json, to_json
-from spatialdds_demo.service_bus import CoverageService, VpsService
 from spatialdds.dds.types.spatial.argeo import VpsRequest, VpsResponse
 from spatialdds.dds.types.spatial.disco import (
     Announce as TypedAnnounce,
     CoverageResponse as TypedCoverageResponse,
 )
-from spatialdds_demo.topics import (
-    TOPIC_DISCOVERY_ANNOUNCE_V1,
-    TOPIC_DISCOVERY_QUERY_V1,
-    TOPIC_SOURCE_ANNOUNCE_PREVIEW,
-    TOPIC_SOURCE_FALLBACK,
-    TOPIC_SOURCE_MANIFEST,
-    TOPIC_SOURCE_REQUEST,
-    TOPIC_SOURCE_SPEC,
-    TOPIC_VPS_QUERY_V1,
-    TOPIC_VPS_RESULT_V1,
+
+from spatialdds_demo.discovery_bus import AnnouncePublisher
+from spatialdds_demo.lanes import (
+    SCENE, TOPIC_SOURCE_ANNOUNCE_PREVIEW, TOPIC_SOURCE_FALLBACK,
+    TOPIC_SOURCE_MANIFEST, TOPIC_SOURCE_REQUEST, TOPIC_SOURCE_SPEC,
+    TOPIC_VPS_QUERY, TOPIC_VPS_RESULT, blob_reader,
 )
+from spatialdds_demo.service_bus import CoverageService, VpsService
 from spatialdds_validation import SpatialDDSValidator
 from spatialdds_test import (
     SpatialDDSLogger,
@@ -43,13 +37,40 @@ from spatialdds_test import (
 def _topic_source_for(manifest_topics: Dict[str, str], role: str, logical_topic: str) -> str:
     if manifest_topics.get(role) == logical_topic:
         return TOPIC_SOURCE_MANIFEST
-    if logical_topic in (TOPIC_VPS_QUERY_V1, TOPIC_VPS_RESULT_V1):
+    if logical_topic in (TOPIC_VPS_QUERY, TOPIC_VPS_RESULT):
         return TOPIC_SOURCE_FALLBACK
     return TOPIC_SOURCE_SPEC
 
 
+class _BlobInbox:
+    """The blob lane, read continuously and reassembled: the last few whole
+    blobs, by id. Chunk CRC32s are checked as they arrive."""
+
+    def __init__(self, participant: "sd.dds.Participant", keep: int = 8):
+        self._reader = blob_reader(participant)
+        self._reassembler = sd.dds.Reassembler()
+        self._done: Dict[str, bytes] = {}
+        self._keep = keep
+
+    def poll(self) -> None:
+        for ev in self._reader.take():
+            if not isinstance(ev, sd.Sample):
+                continue
+            try:
+                whole = self._reassembler.feed(ev.data)
+            except sd.dds.CorruptChunk as error:
+                print(f"blob lane: {error}")
+                continue
+            if whole is not None:
+                self._done[ev.data.blob_id] = whole
+                while len(self._done) > self._keep:
+                    self._done.pop(next(iter(self._done)))
+
+    def get(self, blob_id: str):
+        return self._done.get(blob_id)
+
+
 def run_server(show_message_content: bool, detailed_content: bool) -> int:
-    domain_id = require_dds_env()
     logger = SpatialDDSLogger()
     logger.detailed_content = detailed_content
 
@@ -65,7 +86,7 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
             logger.log_message(
                 "COVERAGE_QUERY", "RECV", "Client",
                 f"VPS:{service.service_name}", data,
-                TOPIC_DISCOVERY_QUERY_V1, TOPIC_SOURCE_SPEC,
+                coverage.topic, TOPIC_SOURCE_SPEC,
                 show_message_content,
             )
             response = service.handle_coverage_query(data)
@@ -108,7 +129,7 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
                 print(f"query image {blob_id}: NOT RECEIVED "
                       f"(role={ref.get('role')})")
                 continue
-            actual = blob.checksum(payload)
+            actual = sd.dds.blob.checksum(payload)
             ok = actual == ref.get("checksum")
             print(f"query image {blob_id}: {len(payload)} bytes, "
                   f"sha256 {'ok' if ok else 'MISMATCH'} (role={ref.get('role')})")
@@ -120,33 +141,38 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
             _check_query_image(data)
             logger.log_message(
                 "LOCALIZE_REQUEST", "RECV", "Client", f"VPS:{service.service_name}",
-                data, TOPIC_VPS_QUERY_V1,
-                _topic_source_for(manifest_topics, "vps_query", TOPIC_VPS_QUERY_V1),
+                data, TOPIC_VPS_QUERY,
+                _topic_source_for(manifest_topics, "vps_query", TOPIC_VPS_QUERY),
                 show_message_content,
             )
             response = service.process_localize_request(data)
             vps.reply(from_json(VpsResponse, response))
             logger.log_message(
                 "LOCALIZE_RESPONSE", "SEND", f"VPS:{service.service_name}", "Client",
-                response, TOPIC_VPS_RESULT_V1,
-                _topic_source_for(manifest_topics, "vps_response", TOPIC_VPS_RESULT_V1),
+                response, TOPIC_VPS_RESULT,
+                _topic_source_for(manifest_topics, "vps_response", TOPIC_VPS_RESULT),
                 show_message_content,
             )
 
-    # Typed, keyed Announce on its own topic. The instance is disposed on the
-    # way out, so a consumer learns this service left rather than waiting for
-    # its TTL to lapse.
-    participant = DomainParticipant(domain_id)
-    announcer = AnnouncePublisher(participant)
+    participant = sd.participant(SCENE, service_id=service.service_id)
     # Reads the blob lane continuously, so query imagery is in hand by the
     # time the request that references it is processed.
-    blobs = blob.BlobSubscriber(participant)
+    blobs = _BlobInbox(participant)
     # Named, so a request addressed to another VPS on the same well-known topic
     # is left for that service to answer.
     vps = VpsService(participant, service.service_id)
     coverage = CoverageService(participant)
+    # **Labelled workaround, until spatialdds 0.7.3.** The announce is still
+    # this repository's own AnnouncePublisher, on a raw participant of its
+    # own, because the SDK's p.announce() lists only the lanes a participant
+    # writes. A VPS *reads* its query lane, and has to announce where
+    # requests go, as the real OpenVPS does (its announce lists both lanes).
+    # It also passes no auth_hint. Filed against spatialdds-py; both go when
+    # the release that adds them does.
+    announce_participant = DomainParticipant(participant.domain)
+    announcer = AnnouncePublisher(announce_participant)
     announcer.publish(from_json(TypedAnnounce, announce))
-    print(f"announce topic: {TOPIC_DISCOVERY_ANNOUNCE_V1}")
+    print(f"announce topic: {sd.dds.registry.well_known('Announce').topic}")
     print("announce qos: DISCOVERY_ANNOUNCE "
           "(RELIABLE + TRANSIENT_LOCAL + KEEP_LAST(1), keyed on service_id)")
     logger.log_message(
@@ -155,7 +181,7 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
         f"VPS:{service.service_name}",
         "DDS_NETWORK",
         announce,
-        TOPIC_DISCOVERY_ANNOUNCE_V1,
+        sd.dds.registry.well_known("Announce").topic,
         TOPIC_SOURCE_ANNOUNCE_PREVIEW,
         show_message_content,
     )
@@ -197,6 +223,7 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
 
     # Graceful shutdown: dispose the instance (spec MUST) and publish Depart.
     announcer.close()
+    participant.close(reason="the mock VPS stopped")
     return 0
 
 

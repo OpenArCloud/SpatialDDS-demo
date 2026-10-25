@@ -150,8 +150,9 @@ class TypedRoundTrip:
     """
 
     def __init__(self, domain_id: int) -> None:
-        from cyclonedds.domain import DomainParticipant
+        import spatialdds as sd
 
+        from spatialdds_demo.lanes import SCENE
         from spatialdds_demo.service_bus import VpsClient, VpsService
         from spatialdds_test import SpatialDDSClientV15, SpatialDDSLogger, VPSServiceV15
 
@@ -164,8 +165,10 @@ class TypedRoundTrip:
         self._reply_template = VPSServiceV15(
             SpatialDDSLogger()).create_localize_response_template()
         self._stop = threading.Event()
-        self._client = VpsClient(DomainParticipant(domain_id))
-        self._service = VpsService(DomainParticipant(domain_id))
+        self._client = VpsClient(sd.participant(
+            SCENE, domain=domain_id, service_id="svc:bench:vps-client"))
+        self._service = VpsService(sd.participant(
+            SCENE, domain=domain_id, service_id="svc:bench:vps"))
         self._thread = threading.Thread(target=self._server_loop, daemon=True)
         self._thread.start()
         # Let request/reply discovery settle before the first timed write.

@@ -62,11 +62,23 @@ MODEL_COMMAND = sd.dds.Profile("MODEL_COMMAND", reliability="RELIABLE",
                                durability="VOLATILE", history="KEEP_LAST",
                                depth=1)
 
+#: Where an asker's coverage replies arrive. `CoverageResponse` has no §3.3.2
+#: row, so the reply lane is the deployment's. RELIABLE + VOLATILE: a reply
+#: answers one query, and a late joiner has no business being handed it. The
+#: asker's reader keeps every reply (`history="KEEP_ALL"`), because every
+#: service covering the area answers on the one topic and the type has no
+#: key. Until the SDK adoption both lanes were ZONE_META, TRANSIENT_LOCAL: a
+#: service that joined later was handed old queries to answer.
+COVERAGE_REPLY = sd.dds.Profile("COVERAGE_REPLY", reliability="RELIABLE",
+                                durability="VOLATILE", history="KEEP_LAST",
+                                depth=1)
+
 #: The deployment's profiles by name, for a program that reads a profile name
 #: from an announce (`TopicMeta.qos_profile`) and has to open a matching
 #: reader. Registered §3.3.3 names come from `sd.dds.registry.profile`.
 PROFILES: Dict[str, sd.dds.Profile] = {
-    p.name: p for p in (MODEL_LATCHED, MODEL_FAST, MODEL_COMMAND)}
+    p.name: p for p in (MODEL_LATCHED, MODEL_FAST, MODEL_COMMAND,
+                        COVERAGE_REPLY)}
 
 
 def profile(name: str) -> sd.dds.Profile:
@@ -109,6 +121,37 @@ def class_for(type_name: str) -> type:
         if type_name in DEPLOYMENT_NAMES:
             return sd.dds.class_for(DEPLOYMENT_NAMES[type_name])
         raise
+
+
+# -- the blob lane ------------------------------------------------------------
+# 1.8 defines BlobChunk and the rule (heavy bytes by reference, never inlined)
+# and names no lane, registry row or profile for it (spatialdds-py candidates
+# 9.6). This deployment's lane is `blob_chunk` on GEOM_TILE, on the
+# four-segment name it has always had, opened with `topic=`.
+#
+# **Not renamed, deliberately.** The name is a contract with OpenVPS: its
+# maplocalizer reads query imagery from exactly this topic
+# (`maplocalizer/server/spatialdds/service.py:65` there) and fails a request
+# whose image never arrives. The web bridge is what sends it. A scene-shaped
+# name here would break localization in the OpenVPS demo, so the rename moves
+# when OpenVPS moves with it, in its own adoption.
+
+BLOB_TOPIC = "spatialdds/blob/chunk/v1"
+BLOB_PROFILE = sd.dds.registry.profile("GEOM_TILE")
+
+
+def blob_writer(p: "sd.dds.Participant"):
+    """A writer for chunks. A clean stop keeps them: a late reader of a request
+    that named a blob still gets its bytes."""
+    from spatialdds.dds.types.spatial.core import BlobChunk
+    return p.writer(BlobChunk, type_name="blob_chunk", topic=BLOB_TOPIC,
+                    qos_profile=BLOB_PROFILE, on_exit="keep")
+
+
+def blob_reader(p: "sd.dds.Participant", **kw):
+    from spatialdds.dds.types.spatial.core import BlobChunk
+    return p.reader(BlobChunk, type_name="blob_chunk", topic=BLOB_TOPIC,
+                    qos_profile=BLOB_PROFILE, **kw)
 
 
 # -- lanes outside the scene (opened with topic=) -----------------------------
