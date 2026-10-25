@@ -313,56 +313,61 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
     announce = _catalog_announce(dataset)
     participant = sd.participant(SCENE, service_id=announce["service_id"],
                                  manifest_uri=announce["manifest_uri"])
-    coverage = CoverageService(participant)
-
-    # The inventory: one ContentAnnounce per item, latched and keyed on
-    # content_id. A clean stop withdraws each item (its terminal sample, then
-    # its dispose, with the reason), so a consumer learns the catalogue left
-    # rather than waiting for the TTL to lapse. The floor re-publishes each one
-    # with a fresh stamp inside its TTL window: an announce is a lease, not a
-    # birth certificate, and this service once vanished from every cache ten
-    # minutes in because it published once and never again.
-    ttl_sec = int(announce.get("ttl_sec", 300))
-    content = participant.writer("ContentAnnounce", on_exit="withdraw",
-                                 floor_hz=3.0 / ttl_sec)
-
-    # **Labelled workaround, until spatialdds 0.7.3.** The announce is still
-    # this repository's own AnnouncePublisher, on a raw participant of its
-    # own. The SDK's p.announce() carries the catalogue's placement
-    # transforms (0.7.1), but takes no coverage_frame_ref: it writes its own
-    # earth-fixed FrameRef, whose uuid is empty, and Appendix G makes the uuid
-    # the identity key. This repository's discovery core refuses it, so the
-    # catalogue would vanish from /search. Filed against spatialdds-py (S11's
-    # passthrough, S14's empty uuid); this goes when the release does.
-    announce_participant = DomainParticipant(participant.domain)
-    announcer = AnnouncePublisher(announce_participant)
-    announcer.publish(from_json(TypedAnnounce, announce))
-    print(f"announce topic: {sd.dds.registry.well_known('Announce').topic}")
-    print(f"announce service_id: {announce['service_id']} (kind=CONTENT)")
-    logger.log_message(
-        "ANNOUNCE", "SEND", f"Catalog:{announce['name']}", "DDS_NETWORK",
-        announce, sd.dds.registry.well_known("Announce").topic,
-        TOPIC_SOURCE_ANNOUNCE_PREVIEW, show_message_content,
-    )
-
-    # A placed item's frame anchor rides with it, so a client holding only
-    # this sample can place it.
-    anchors = {t["from"]["fqn"]: t for t in _frame_transforms(dataset)}
-    for row in dataset:
-        frame = (row.get("frame_ref") or {}).get("fqn", "")
-        content.write(cc.content_announce(
-            row, provider_id=announce["service_id"],
-            frame_anchor=anchors.get(frame) if row.get("has_pose") else None,
-            ttl_sec=ttl_sec))
-    print(f"content: {len(dataset)} item(s) announced on {content.topic}")
-    resolver = _start_resolver(dataset)
-    print("resolver: http://%s:%d/.well-known/spatialdds/resolver" % resolver.server_address)
-
-    # An Announce is a lease, not a birth certificate: re-published well
-    # inside its TTL, as the inventory's floor re-publishes each item.
-    refresh_every = max(10.0, ttl_sec / 3.0)
-    next_refresh = time.time() + refresh_every
+    # Everything after the participant exists is inside the try, so a stop
+    # that arrives while the inventory is still being written withdraws
+    # what was written. It used to begin at the loop, and a SIGTERM during
+    # startup left without withdrawing anything (exit 130).
+    resolver = announcer = None
     try:
+        coverage = CoverageService(participant)
+
+        # The inventory: one ContentAnnounce per item, latched and keyed on
+        # content_id. A clean stop withdraws each item (its terminal sample, then
+        # its dispose, with the reason), so a consumer learns the catalogue left
+        # rather than waiting for the TTL to lapse. The floor re-publishes each one
+        # with a fresh stamp inside its TTL window: an announce is a lease, not a
+        # birth certificate, and this service once vanished from every cache ten
+        # minutes in because it published once and never again.
+        ttl_sec = int(announce.get("ttl_sec", 300))
+        content = participant.writer("ContentAnnounce", on_exit="withdraw",
+                                     floor_hz=3.0 / ttl_sec)
+
+        # **Labelled workaround, until spatialdds 0.7.3.** The announce is still
+        # this repository's own AnnouncePublisher, on a raw participant of its
+        # own. The SDK's p.announce() carries the catalogue's placement
+        # transforms (0.7.1), but takes no coverage_frame_ref: it writes its own
+        # earth-fixed FrameRef, whose uuid is empty, and Appendix G makes the uuid
+        # the identity key. This repository's discovery core refuses it, so the
+        # catalogue would vanish from /search. Filed against spatialdds-py (S11's
+        # passthrough, S14's empty uuid); this goes when the release does.
+        announce_participant = DomainParticipant(participant.domain)
+        announcer = AnnouncePublisher(announce_participant)
+        announcer.publish(from_json(TypedAnnounce, announce))
+        print(f"announce topic: {sd.dds.registry.well_known('Announce').topic}")
+        print(f"announce service_id: {announce['service_id']} (kind=CONTENT)")
+        logger.log_message(
+            "ANNOUNCE", "SEND", f"Catalog:{announce['name']}", "DDS_NETWORK",
+            announce, sd.dds.registry.well_known("Announce").topic,
+            TOPIC_SOURCE_ANNOUNCE_PREVIEW, show_message_content,
+        )
+
+        # A placed item's frame anchor rides with it, so a client holding only
+        # this sample can place it.
+        anchors = {t["from"]["fqn"]: t for t in _frame_transforms(dataset)}
+        for row in dataset:
+            frame = (row.get("frame_ref") or {}).get("fqn", "")
+            content.write(cc.content_announce(
+                row, provider_id=announce["service_id"],
+                frame_anchor=anchors.get(frame) if row.get("has_pose") else None,
+                ttl_sec=ttl_sec))
+        print(f"content: {len(dataset)} item(s) announced on {content.topic}")
+        resolver = _start_resolver(dataset)
+        print("resolver: http://%s:%d/.well-known/spatialdds/resolver" % resolver.server_address)
+
+        # An Announce is a lease, not a birth certificate: re-published well
+        # inside its TTL, as the inventory's floor re-publishes each item.
+        refresh_every = max(10.0, ttl_sec / 3.0)
+        next_refresh = time.time() + refresh_every
         while True:
             if time.time() >= next_refresh:
                 announce["stamp"] = SpatialDDSValidator.now_time()
@@ -375,9 +380,11 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
     except KeyboardInterrupt:
         pass
     finally:
-        resolver.shutdown()
+        if resolver is not None:
+            resolver.shutdown()
         participant.close(reason="the catalogue stopped")
-        announcer.close()
+        if announcer is not None:
+            announcer.close()
 
     return 0
 
