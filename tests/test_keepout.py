@@ -33,11 +33,11 @@ from spatialdds_demo.model_service import seed_entities, venue_frame  # noqa: E4
 # reads `.extent` and `.pose` off whatever it is handed, so the mismatch
 # could not fail. It was still a file holding two type systems at once, and
 # the next person to add a serializing assertion here would have inherited it.
-from spatialdds_idl18.builtin import Time  # noqa: E402
-from spatialdds_idl18.spatial.owm import (  # noqa: E402
+from spatialdds.dds.types.builtin import Time  # noqa: E402
+from spatialdds.dds.types.spatial.owm import (  # noqa: E402
     Basis, Entity, LifecycleState, ModelLayer,
 )
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3  # noqa: E402
+from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3  # noqa: E402
 
 ROBOT_ID = "ent:robot:tb3"
 

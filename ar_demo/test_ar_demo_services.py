@@ -39,7 +39,7 @@ from spatialdds.dds import from_json  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
     TOPIC_DISCOVERY_CONTENT_V1, TOPIC_VPS_QUERY_V1,
 )
-from spatialdds_idl18.spatial.disco import Announce  # noqa: E402
+from spatialdds.dds.types.spatial.disco import Announce  # noqa: E402
 from spatialdds_validation import SpatialDDSValidator  # noqa: E402
 from spatialdds_demo import content_catalogue as cc  # noqa: E402
 

@@ -29,22 +29,22 @@ from sensor_types import (
     VisionFrame,
     VisionMeta,
 )
-from spatialdds_idl18.spatial.core import CovMatrix, TileKey  # noqa: E402
-from spatialdds_idl18.spatial.sensing.common import MODULE_ID as COMMON_MODULE_ID  # noqa: E402
-from spatialdds_idl18.spatial.sensing.lidar import MODULE_ID as LIDAR_MODULE_ID  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import MODULE_ID as VISION_MODULE_ID  # noqa: E402
-from spatialdds_idl18.spatial.common import CoordConvention  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import CamModel  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import RigRole  # noqa: E402
-from spatialdds_idl18.spatial.sensing.rad import RadDynProp  # noqa: E402
-from spatialdds_idl18.spatial.sensing.lidar import CloudEncoding  # noqa: E402
-from spatialdds_idl18.spatial.sensing.common import Codec  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import ColorSpace  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import Distortion  # noqa: E402
-from spatialdds_idl18.spatial.sensing.common import Health  # noqa: E402
-from spatialdds_idl18.spatial.sensing.lidar import LidarType  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import PixFormat  # noqa: E402
-from spatialdds_idl18.spatial.sensing.lidar import PointLayout  # noqa: E402
+from spatialdds.dds.types.spatial.core import CovMatrix, TileKey  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.common import MODULE_ID as COMMON_MODULE_ID  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.lidar import MODULE_ID as LIDAR_MODULE_ID  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import MODULE_ID as VISION_MODULE_ID  # noqa: E402
+from spatialdds.dds.types.spatial.common import CoordConvention  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import CamModel  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import RigRole  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.rad import RadDynProp  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.lidar import CloudEncoding  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.common import Codec  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import ColorSpace  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import Distortion  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.common import Health  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.lidar import LidarType  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import PixFormat  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.lidar import PointLayout  # noqa: E402
 from spatialdds_demo.absent import ABSENT_SCALE, absent_detection3d  # noqa: E402
 
 

@@ -63,7 +63,7 @@ from spatialdds_demo.qos_profiles import (  # noqa: E402
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED)
 from spatialdds_demo.topics import (  # noqa: E402
     SCENE, TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1)
-from spatialdds_idl18.spatial.owm import (  # noqa: E402
+from spatialdds.dds.types.spatial.owm import (  # noqa: E402
     Entity, ModelCommand, ModelPose)
 
 IDL_DIR = REPO / "idl" / "v1.8"

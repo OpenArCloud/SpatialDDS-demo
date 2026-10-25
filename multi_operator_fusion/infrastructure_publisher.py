@@ -276,8 +276,8 @@ def _lidar_frame_and_blob(frame_seq: int, points):
     from spatialdds_demo import blob
     from deepsense.deepsense_to_spatialdds import _frame_header, _frame_quality
     from sensor_types import BlobRef, LidarFrame, Time
-    from spatialdds_idl18.spatial.sensing.common import Codec
-    from spatialdds_idl18.spatial.sensing.lidar import CloudEncoding, PointLayout
+    from spatialdds.dds.types.spatial.sensing.common import Codec
+    from spatialdds.dds.types.spatial.sensing.lidar import CloudEncoding, PointLayout
 
     stamp = _stamp_from_index(frame_seq)
     raw = points.astype("float32").tobytes()

@@ -26,25 +26,25 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from spatialdds_idl18.spatial.semantics import (  # noqa: E402
+from spatialdds.dds.types.spatial.semantics import (  # noqa: E402
     Detection2D,
     Detection2DSet,
 )
-from spatialdds_idl18.spatial.sensing.common import (  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.common import (  # noqa: E402
     AxisSpec,
     FrameHeader,
     FrameQuality,
     StreamMeta,
 )
-from spatialdds_idl18.spatial.sensing.rad import (  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.rad import (  # noqa: E402
     RadTensorFrame,
     RadTensorMeta,
 )
-from spatialdds_idl18.spatial.sensing.rf_beam import (  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.rf_beam import (  # noqa: E402
     RfBeamFrame,
     RfBeamMeta,
 )
-from spatialdds_idl18.builtin import Time  # noqa: E402
+from spatialdds.dds.types.builtin import Time  # noqa: E402
 
 __all__ = [
     "AxisSpec", "Detection2D", "Detection2DSet", "FrameHeader",

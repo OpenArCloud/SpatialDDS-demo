@@ -16,7 +16,7 @@ from spatialdds_demo import content_catalogue as cc
 from spatialdds_demo.discovery_bus import AnnouncePublisher, ContentAnnouncePublisher
 from spatialdds.dds import from_json, to_json
 from spatialdds_demo.service_bus import CoverageService
-from spatialdds_idl18.spatial.disco import (
+from spatialdds.dds.types.spatial.disco import (
     Announce as TypedAnnounce,
     ContentAnnounce as TypedContentAnnounce,
     CoverageResponse as TypedCoverageResponse,

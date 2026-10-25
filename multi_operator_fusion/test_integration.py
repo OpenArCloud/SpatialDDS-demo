@@ -35,7 +35,7 @@ from infrastructure_publisher import (  # noqa: E402
 )
 import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
 from spatialdds.dds import from_json
-from spatialdds_idl18.spatial.semantics import (  # noqa: E402
+from spatialdds.dds.types.spatial.semantics import (  # noqa: E402
     Detection3DSet, FusedTrackSet,
 )
 from spatialdds_demo_idl18.oarc_demo import FusionCoverage  # noqa: E402

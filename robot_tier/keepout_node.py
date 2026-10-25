@@ -62,7 +62,7 @@ from spatialdds_demo.qos_profiles import MODEL_LATCHED  # noqa: E402
 # the cost of staging was visible in source rather than discovered as silence;
 # docs/robot-1.8-census.md is the field-level check that took the pin out.
 from spatialdds_demo.topics import TOPIC_MODEL_ENTITY_V1  # noqa: E402
-from spatialdds_idl18.spatial.owm import Entity  # noqa: E402
+from spatialdds.dds.types.spatial.owm import Entity  # noqa: E402
 
 # The robot's own entity, excluded from its own keep-out. Named here rather
 # than imported from robot_bridge so this file's imports stay readable.

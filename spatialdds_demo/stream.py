@@ -32,7 +32,7 @@ import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types w
 from spatialdds_demo import topic_types, typed_transport as tt
 from spatialdds_demo.discovery_bus import AnnouncePublisher, AnnounceSubscriber
 from spatialdds.dds import from_json, to_json
-from spatialdds_idl18.spatial.disco import Announce
+from spatialdds.dds.types.spatial.disco import Announce
 
 
 class UndeclaredTopic(KeyError):

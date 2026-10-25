@@ -40,8 +40,8 @@ from spatialdds_demo_idl18.oarc_demo import (
     BootstrapQuery,
     BootstrapResponse,
 )
-from spatialdds_idl18.spatial.argeo import VpsRequest, VpsResponse
-from spatialdds_idl18.spatial.disco import CoverageQuery, CoverageResponse
+from spatialdds.dds.types.spatial.argeo import VpsRequest, VpsResponse
+from spatialdds.dds.types.spatial.disco import CoverageQuery, CoverageResponse
 
 # How often a waiting client re-checks its reply reader. 20 ms is a fine
 # default for a demo at demo rates, and it is also a hard latency floor: a

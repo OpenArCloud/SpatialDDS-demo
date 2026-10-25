@@ -33,7 +33,7 @@ from cyclonedds.domain import DomainParticipant
 from spatialdds_demo import content_catalogue as cc
 from spatialdds_demo.discovery_bus import ContentAnnouncePublisher, ContentInventory
 from spatialdds.dds import from_json
-from spatialdds_idl18.spatial.disco import ContentAnnounce
+from spatialdds.dds.types.spatial.disco import ContentAnnounce
 from spatialdds_validation import create_coverage_bbox_earth_fixed
 
 from common import DDS_DOMAIN_MAIN, Stats, WARMUP_ITERATIONS, log, parse_csv_ints, write_csv

@@ -33,7 +33,7 @@ from frame_mapping import FrameMapper
 # written down, so an era bump cannot leave one behind. They were literals
 # until 1.8, and the migration found three copies of them.
 from spatialdds_demo.payloads import SCHEMA_CORE, SCHEMA_SEMANTICS  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import MODULE_ID as SCHEMA_VISION  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import MODULE_ID as SCHEMA_VISION  # noqa: E402
 
 
 # ---------- Wire-format msg_type strings -------------------------------------

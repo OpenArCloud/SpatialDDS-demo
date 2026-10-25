@@ -68,8 +68,8 @@ class DeadlineIsLoadBearing(unittest.TestCase):
         from cyclonedds.topic import Topic
 
         from spatialdds_demo import qos_profiles
-        from spatialdds_idl18.builtin import Time
-        from spatialdds_idl18.spatial.core import CovMatrix, GeoPose
+        from spatialdds.dds.types.builtin import Time
+        from spatialdds.dds.types.spatial.core import CovMatrix, GeoPose
 
         pub, sub = DomainParticipant(DOMAIN + 1), DomainParticipant(DOMAIN + 1)
         writer = DataWriter(pub, Topic(pub, topic, GeoPose), qos=writer_qos)

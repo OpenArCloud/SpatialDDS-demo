@@ -93,12 +93,12 @@ from spatialdds_demo.tempo import Tempo
 # the cost of staging was visible in source rather than discovered as silence;
 # docs/robot-1.8-census.md is the field-level check that took the pin out.
 from spatialdds_demo.topics import SCENE, TOPIC_MODEL_ENTITY_V1
-from spatialdds_idl18.builtin import Time
-from spatialdds_idl18.spatial.owm import (
+from spatialdds.dds.types.builtin import Time
+from spatialdds.dds.types.spatial.owm import (
     Basis, Entity, LifecycleState, ModelLayer, ModelPose,
 )
-from spatialdds_idl18.spatial.common import KV
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
+from spatialdds.dds.types.spatial.common import KV
+from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
 
 ENTITY_ID = "ent:robot:tb3"
 SOURCE_ID = "svc:robot:demo/tb3"

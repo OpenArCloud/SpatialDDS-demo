@@ -55,7 +55,7 @@ def _service(domain: int, seconds: float) -> None:
     from spatialdds_demo.model_service import ModelPublisher, seed_entities
     from spatialdds_demo.qos_profiles import MODEL_COMMAND
     from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1
-    from spatialdds_idl18.spatial.owm import ModelCommand
+    from spatialdds.dds.types.spatial.owm import ModelCommand
 
     participant = DomainParticipant(domain)
     publisher = ModelPublisher(participant)
@@ -100,9 +100,9 @@ def _one_command(domain: int) -> None:
     from spatialdds_demo.model_service import POND_MIN, POND_MAX
     from spatialdds_demo.qos_profiles import MODEL_COMMAND
     from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1
-    from spatialdds_idl18.builtin import Time
-    from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
-    from spatialdds_idl18.spatial.owm import ModelCommand
+    from spatialdds.dds.types.builtin import Time
+    from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
+    from spatialdds.dds.types.spatial.owm import ModelCommand
 
     participant = DomainParticipant(domain)
     writer = tt.make_writer(participant, TOPIC_MODEL_COMMAND_V1, ModelCommand,

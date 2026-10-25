@@ -20,7 +20,7 @@ These are not neutral-looking zeros. Each is the value the spec defines as
 from __future__ import annotations
 
 from spatialdds_demo import payloads as _payloads
-from spatialdds_idl18.spatial.common import ScaleStatus
+from spatialdds.dds.types.spatial.common import ScaleStatus
 
 #: FrameRef, appended in 1.8, typed. Derived from
 #: ``payloads.ABSENT_SCALE`` -- the plain-data source -- rather than written
@@ -65,17 +65,17 @@ def _typed(cls, plain: dict) -> dict:
 
 def absent_detection3d() -> dict:
     """Detection3D's 1.8 Batch 2 members, typed; see payloads."""
-    from spatialdds_idl18.spatial.semantics import Detection3D
+    from spatialdds.dds.types.spatial.semantics import Detection3D
     return _typed(Detection3D, _payloads.absent_detection3d())
 
 
 def absent_fused_track_observer() -> dict:
     """FusedTrack's 1.8 Batch 2 members, typed; see payloads."""
-    from spatialdds_idl18.spatial.semantics import FusedTrack
+    from spatialdds.dds.types.spatial.semantics import FusedTrack
     return _typed(FusedTrack, _payloads.absent_fused_track_observer())
 
 
 def absent_crossing() -> dict:
     """SpatialEvent's 1.8 crossing members, typed; see payloads."""
-    from spatialdds_idl18.spatial.events import SpatialEvent
+    from spatialdds.dds.types.spatial.events import SpatialEvent
     return _typed(SpatialEvent, _payloads.ABSENT_CROSSING)

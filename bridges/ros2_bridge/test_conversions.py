@@ -540,7 +540,7 @@ class TestUnionCaseNamesAreChecked(unittest.TestCase):
 
     def _cov_matrix(self):
         try:
-            from spatialdds_idl18.spatial.core import CovMatrix
+            from spatialdds.dds.types.spatial.core import CovMatrix
         except Exception as exc:                       # pragma: no cover
             self.skipTest(f"generated bindings unavailable: {exc}")
         return CovMatrix

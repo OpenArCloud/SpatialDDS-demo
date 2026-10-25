@@ -124,8 +124,8 @@ def _lidar_frame_and_blob(row, points):
     """A LidarFrame plus the chunks carrying its sweep."""
     from deepsense_to_spatialdds import _frame_header, _frame_quality
     from sensor_types import BlobRef, LidarFrame
-    from spatialdds_idl18.spatial.sensing.common import Codec
-    from spatialdds_idl18.spatial.sensing.lidar import CloudEncoding, PointLayout
+    from spatialdds.dds.types.spatial.sensing.common import Codec
+    from spatialdds.dds.types.spatial.sensing.lidar import CloudEncoding, PointLayout
 
     index = int(row["index"])
     stamp = {"sec": index // 10, "nanosec": (index % 10) * 100_000_000}

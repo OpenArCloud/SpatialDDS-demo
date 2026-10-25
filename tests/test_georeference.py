@@ -148,7 +148,7 @@ class TheVenueDeclaresWhereItIs(unittest.TestCase):
         self.assertEqual(venue_georeference().cov.discriminator.name, "COV_NONE")
 
     def test_the_record_survives_the_wire(self):
-        from spatialdds_idl18.spatial.core import FrameTransform
+        from spatialdds.dds.types.spatial.core import FrameTransform
         ft = venue_georeference()
         back = FrameTransform.deserialize(ft.serialize())
         self.assertEqual(back.child_ref.fqn, VENUE_FRAME_FQN)

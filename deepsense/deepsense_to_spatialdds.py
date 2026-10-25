@@ -18,26 +18,26 @@ from sensor_types import (
     BlobRef, CamIntrinsics, FrameHeader, FrameQuality, FrameRef, GeoPose,
     PoseSE3, QuaternionXYZW, StreamMeta, Time, Vec3, VisionFrame, VisionMeta,
 )
-from spatialdds_idl18.spatial.core import CovMatrix
-from spatialdds_idl18.spatial.sensing.common import Axis, AxisSpec, Linspace
-from spatialdds_idl18.spatial.sensing.common import MODULE_ID as COMMON_MODULE_ID  # noqa: E402
-from spatialdds_idl18.spatial.sensing.rad import MODULE_ID as RAD_MODULE_ID  # noqa: E402
-from spatialdds_idl18.spatial.sensing.rf_beam import MODULE_ID as RF_BEAM_MODULE_ID  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import MODULE_ID as VISION_MODULE_ID  # noqa: E402
-from spatialdds_idl18.spatial.common import CoordConvention  # noqa: E402
-from spatialdds_idl18.spatial.sensing.rf_beam import BeamSweepType  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import CamModel  # noqa: E402
-from spatialdds_idl18.spatial.sensing.common import Codec  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import ColorSpace  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import Distortion  # noqa: E402
-from spatialdds_idl18.spatial.sensing.common import Health  # noqa: E402
-from spatialdds_idl18.spatial.sensing.common import PayloadKind  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import PixFormat  # noqa: E402
-from spatialdds_idl18.spatial.sensing.rf_beam import PowerUnit  # noqa: E402
-from spatialdds_idl18.spatial.sensing.rad import RadSensorType  # noqa: E402
-from spatialdds_idl18.spatial.sensing.rad import RadTensorLayout  # noqa: E402
-from spatialdds_idl18.spatial.sensing.vision import RigRole  # noqa: E402
-from spatialdds_idl18.spatial.sensing.common import SampleType  # noqa: E402
+from spatialdds.dds.types.spatial.core import CovMatrix
+from spatialdds.dds.types.spatial.sensing.common import Axis, AxisSpec, Linspace
+from spatialdds.dds.types.spatial.sensing.common import MODULE_ID as COMMON_MODULE_ID  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.rad import MODULE_ID as RAD_MODULE_ID  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.rf_beam import MODULE_ID as RF_BEAM_MODULE_ID  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import MODULE_ID as VISION_MODULE_ID  # noqa: E402
+from spatialdds.dds.types.spatial.common import CoordConvention  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.rf_beam import BeamSweepType  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import CamModel  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.common import Codec  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import ColorSpace  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import Distortion  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.common import Health  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.common import PayloadKind  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import PixFormat  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.rf_beam import PowerUnit  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.rad import RadSensorType  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.rad import RadTensorLayout  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.vision import RigRole  # noqa: E402
+from spatialdds.dds.types.spatial.sensing.common import SampleType  # noqa: E402
 from spatialdds_demo.absent import ABSENT_SCALE  # noqa: E402
 
 BLOCKAGE_THRESHOLD = 0.12

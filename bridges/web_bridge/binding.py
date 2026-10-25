@@ -70,8 +70,8 @@ from spatialdds_demo.qos_profiles import (                     # noqa: E402
 from spatialdds_demo.topics import (                           # noqa: E402
     SCENE, TOPIC_FRAME_TRANSFORM_V1, TOPIC_MODEL_COMMAND_V1,
     TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1)
-from spatialdds_idl18.spatial.core import FrameTransform        # noqa: E402
-from spatialdds_idl18.spatial.owm import (                      # noqa: E402
+from spatialdds.dds.types.spatial.core import FrameTransform        # noqa: E402
+from spatialdds.dds.types.spatial.owm import (                      # noqa: E402
     Entity, ModelCommand, ModelPose)
 
 IDL_DIR = REPO / "idl" / "v1.8"
@@ -325,8 +325,8 @@ class CommandLane:
         self.sent = 0
 
     def handle(self, record: dict) -> commands.Outcome:
-        from spatialdds_idl18.builtin import Time
-        from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
+        from spatialdds.dds.types.builtin import Time
+        from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
         try:
             pose = record.get("pose") or {}
             extent = record.get("extent") or {}

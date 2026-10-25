@@ -170,7 +170,7 @@ class WhomYouTrustChangesTheWorld(unittest.TestCase):
         from spatialdds_demo.topics import (
             TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1,
         )
-        from spatialdds_idl18.spatial.owm import Entity, ModelCommand
+        from spatialdds.dds.types.spatial.owm import Entity, ModelCommand
 
         participant = self._participant(domain)
         publisher = ModelPublisher(participant)
@@ -210,7 +210,7 @@ class WhomYouTrustChangesTheWorld(unittest.TestCase):
         move_duck.py made in P3.3.
         """
         from spatialdds_demo.model_service import IDLE_FLUSH_S
-        from spatialdds_idl18.spatial.core import PoseSE3
+        from spatialdds.dds.types.spatial.core import PoseSE3
 
         publisher.move("ent:duck:west", PoseSE3(t=list(start), q=[0, 0, 0, 1]))
         time.sleep(IDLE_FLUSH_S + 0.1)
@@ -254,7 +254,7 @@ class WhomYouTrustChangesTheWorld(unittest.TestCase):
 
     def test_trusting_the_venue_pulls_a_duck_in_that_the_observer_would_leave(self):
         from spatialdds_demo.duck_mover import BOUNDS_ENTITIES, INSET_M
-        from spatialdds_idl18.spatial.core import PoseSE3
+        from spatialdds.dds.types.spatial.core import PoseSE3
 
         participant, publisher, commands, observed = self._stack(self.DOMAIN)
         try:

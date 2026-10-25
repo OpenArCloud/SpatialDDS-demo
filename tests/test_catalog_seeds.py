@@ -28,7 +28,7 @@ if str(REPO) not in sys.path:
 
 from spatialdds_demo import content_catalogue as cc  # noqa: E402
 from spatialdds.dds import from_json  # noqa: E402
-from spatialdds_idl18.spatial.disco import ContentAnnounce  # noqa: E402
+from spatialdds.dds.types.spatial.disco import ContentAnnounce  # noqa: E402
 
 SEEDS = sorted(
     p for p in REPO.rglob("catalog_seed*.json")

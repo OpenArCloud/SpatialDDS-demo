@@ -24,7 +24,7 @@ import zlib
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Optional
 
-from spatialdds_idl18.spatial.core import BlobChunk
+from spatialdds.dds.types.spatial.core import BlobChunk
 
 # cyclonedds-python's ceiling, not a choice. Keeping the constant here means
 # the one place that has to change if the binding's limit moves is here.

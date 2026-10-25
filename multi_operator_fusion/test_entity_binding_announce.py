@@ -35,7 +35,7 @@ from synthetic_publisher import (  # noqa: E402
 )
 from spatialdds.dds import from_json  # noqa: E402
 from spatialdds_demo.topics import validate_topic_meta  # noqa: E402
-from spatialdds_idl18.spatial.disco import Announce, ServiceKind  # noqa: E402
+from spatialdds.dds.types.spatial.disco import Announce, ServiceKind  # noqa: E402
 
 
 class _RecordingTransport:
@@ -141,7 +141,7 @@ class TestEntityBindingPublish(unittest.TestCase):
         well-formed EntityBinding — from_json refuses a partial one.
         """
         from spatialdds.dds import from_json
-        from spatialdds_idl18.spatial.core import EntityBinding
+        from spatialdds.dds.types.spatial.core import EntityBinding
 
         track = _make_fused_track("fused-1", {"operator_a": "det_1"})
         self.svc._publish_entity_bindings([track], t=10.0)
@@ -168,7 +168,7 @@ class TestEntityBindingPublish(unittest.TestCase):
         """The join reverses the encoding on the typed EntityBinding too, not
         just the builder dict."""
         from spatialdds.dds import from_json
-        from spatialdds_idl18.spatial.core import EntityBinding
+        from spatialdds.dds.types.spatial.core import EntityBinding
         from fusion_service import operator_dets_from_binding, track_id_from_binding
 
         track = _make_fused_track("fused-7",

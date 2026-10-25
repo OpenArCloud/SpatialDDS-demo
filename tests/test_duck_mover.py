@@ -37,8 +37,8 @@ from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED  # noqa: E
 from spatialdds_demo.topics import (  # noqa: E402
     TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1,
 )
-from spatialdds_idl18.spatial.owm import Entity, ModelCommand  # noqa: E402
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3  # noqa: E402
+from spatialdds.dds.types.spatial.owm import Entity, ModelCommand  # noqa: E402
+from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3  # noqa: E402
 
 DOMAIN = 56
 POND = Aabb3(min_xyz=[9.5, -18.0, -2.0], max_xyz=[20.0, -10.0, -1.0])
@@ -98,7 +98,7 @@ class Geometry(unittest.TestCase):
         import math
 
         from spatialdds_demo.duck_mover import TURN_RADIANS
-        from spatialdds_idl18.spatial.core import PoseSE3
+        from spatialdds.dds.types.spatial.core import PoseSE3
 
         mover = DuckMover.__new__(DuckMover)      # geometry only; no bus.
         mover._rng = random.Random(9)
@@ -136,7 +136,7 @@ class Geometry(unittest.TestCase):
         mover._heading = {"ent:duck:west": 0.0}       # due east, at the edge
 
         duck = next(e for e in seed_entities() if e.entity_id == "ent:duck:west")
-        from spatialdds_idl18.spatial.core import PoseSE3
+        from spatialdds.dds.types.spatial.core import PoseSE3
         duck.pose = PoseSE3(t=[POND.max_xyz[0] - INSET_M, -14.0, -1.423],
                             q=[0, 0, 0, 1])
         mover.step_for(duck, POND)

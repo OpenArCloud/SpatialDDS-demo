@@ -76,7 +76,7 @@ from mcap.reader import make_reader  # noqa: E402
 from spatialdds_demo.duck_mover import (  # noqa: E402
     AVOID_ENTITY_ID, AVOID_RADIUS_M, AVOID_STALE_S, DEFAULT_BOUNDS_ENTITY,
     farthest_corner)
-from spatialdds_idl18.spatial.owm import Entity, ModelPose  # noqa: E402
+from spatialdds.dds.types.spatial.owm import Entity, ModelPose  # noqa: E402
 
 #: Below this, a percentage is noise dressed as a measurement.
 MIN_PER_ARM = 20

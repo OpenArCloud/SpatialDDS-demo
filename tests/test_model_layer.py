@@ -28,7 +28,7 @@ if str(REPO) not in sys.path:
 
 from spatialdds_demo import typed_transport as tt  # noqa: E402
 from spatialdds.dds import to_json  # noqa: E402
-from spatialdds_idl18.builtin import Time  # noqa: E402
+from spatialdds.dds.types.builtin import Time  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
     DUCK_CONTENT_ID, IDLE_FLUSH_S, LATCH_EVERY_N_MOVES, ModelPublisher,
     POND_MIN, seed_entities,
@@ -37,7 +37,7 @@ from spatialdds_demo.qos_profiles import MODEL_LATCHED  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
     TOPIC_MODEL_ENTITY_V1,
 )
-from spatialdds_idl18.spatial.owm import Entity  # noqa: E402
+from spatialdds.dds.types.spatial.owm import Entity  # noqa: E402
 
 # High enough to stay clear of the demo stack's own domains.
 DOMAIN = 43
@@ -58,8 +58,8 @@ def _participant(domain_id: int):
 
 def _command(verb, entity_id="", reason="", pose=None, extent=None):
     """A ModelCommand, with the guarded pose left empty unless one is given."""
-    from spatialdds_idl18.spatial.owm import ModelCommand
-    from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
+    from spatialdds.dds.types.spatial.owm import ModelCommand
+    from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
     now = time.time()
     return ModelCommand(
         command_id=f"cmd-{verb}", verb=verb, subject_id=entity_id, reason=reason,
@@ -297,7 +297,7 @@ class SetExtent(unittest.TestCase):
         return participant, publisher
 
     def test_bounds_change_and_nothing_else_does(self):
-        from spatialdds_idl18.spatial.core import Aabb3
+        from spatialdds.dds.types.spatial.core import Aabb3
         participant, publisher = self._publisher(DOMAIN + 13)
         smaller = Aabb3(min_xyz=[11.0, -16.0, -2.0], max_xyz=[15.0, -12.0, -1.0])
         try:
@@ -337,7 +337,7 @@ class SetExtent(unittest.TestCase):
             publisher.close()
 
     def test_set_extent_for_somebody_else_s_entity_is_left_alone(self):
-        from spatialdds_idl18.spatial.core import Aabb3
+        from spatialdds.dds.types.spatial.core import Aabb3
         participant, publisher = self._publisher(DOMAIN + 15)
         try:
             self.assertIsNone(publisher.handle_command(_command(
@@ -516,7 +516,7 @@ class Mover(unittest.TestCase):
 
     @staticmethod
     def _command(entity_id, x, y, q):
-        from spatialdds_idl18.spatial.core import PoseSE3
+        from spatialdds.dds.types.spatial.core import PoseSE3
         return _command("move", entity_id,
                         pose=PoseSE3(t=[x, y, -1.423], q=list(q)))
 

@@ -25,8 +25,8 @@ if str(REPO) not in sys.path:
 
 from spatialdds_demo import blob  # noqa: E402
 from spatialdds.dds import from_json  # noqa: E402
-from spatialdds_idl18.spatial.argeo import VpsRequest  # noqa: E402
-from spatialdds_idl18.spatial.core import BlobChunk  # noqa: E402
+from spatialdds.dds.types.spatial.argeo import VpsRequest  # noqa: E402
+from spatialdds.dds.types.spatial.core import BlobChunk  # noqa: E402
 from spatialdds_test import SpatialDDSClientV15, SpatialDDSLogger  # noqa: E402
 
 

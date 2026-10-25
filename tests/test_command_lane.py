@@ -27,9 +27,9 @@ if str(REPO) not in sys.path:
 from spatialdds_demo import typed_transport as tt  # noqa: E402
 from spatialdds_demo.qos_profiles import MODEL_COMMAND  # noqa: E402
 from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1  # noqa: E402
-from spatialdds_idl18.builtin import Time  # noqa: E402
-from spatialdds_idl18.spatial.owm import ModelCommand  # noqa: E402
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3  # noqa: E402
+from spatialdds.dds.types.builtin import Time  # noqa: E402
+from spatialdds.dds.types.spatial.owm import ModelCommand  # noqa: E402
+from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3  # noqa: E402
 
 DOMAIN = 52
 

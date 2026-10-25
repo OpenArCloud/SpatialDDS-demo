@@ -32,7 +32,7 @@ if str(REPO) not in sys.path:
 
 from spatialdds_demo import content_catalogue as cc               # noqa: E402
 from spatialdds.dds import from_json, to_json        # noqa: E402
-from spatialdds_idl18.spatial.disco import ContentAnnounce         # noqa: E402
+from spatialdds.dds.types.spatial.disco import ContentAnnounce         # noqa: E402
 from spatialdds_validation import SpatialDDSValidator              # noqa: E402
 
 BASELINE = REPO / "tests" / "fixtures" / "catalogue-1.7-baseline.json"

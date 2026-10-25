@@ -161,7 +161,7 @@ class Subscriber:
 
     def handle_blob(self, payload: Dict[str, Any]) -> None:
         from spatialdds.dds import from_json
-        from spatialdds_idl18.spatial.core import BlobChunk
+        from spatialdds.dds.types.spatial.core import BlobChunk
 
         try:
             data = self._blobs.feed(from_json(BlobChunk, payload))

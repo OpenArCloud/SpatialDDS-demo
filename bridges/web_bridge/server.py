@@ -57,8 +57,8 @@ from spatialdds.dds import from_json, to_json
 from spatialdds_demo import blob
 from spatialdds_demo.blob import BlobPublisher
 from spatialdds_demo.service_bus import CoverageClient, VpsClient
-from spatialdds_idl18.spatial.argeo import VpsRequest as TypedVpsRequest
-from spatialdds_idl18.spatial.disco import CoverageQuery as TypedCoverageQuery
+from spatialdds.dds.types.spatial.argeo import VpsRequest as TypedVpsRequest
+from spatialdds.dds.types.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.manifest_resolver import resolve_manifest
 from spatialdds_demo.topics import (
     TOPIC_DISCOVERY_CONTENT_V1,

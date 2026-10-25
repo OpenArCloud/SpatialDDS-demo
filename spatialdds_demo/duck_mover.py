@@ -63,9 +63,9 @@ from spatialdds_demo.qos_profiles import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED)
 from spatialdds_demo.topics import (
     TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1)
-from spatialdds_idl18.builtin import Time
-from spatialdds_idl18.spatial.owm import Entity, ModelCommand, ModelPose
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
+from spatialdds.dds.types.builtin import Time
+from spatialdds.dds.types.spatial.owm import Entity, ModelCommand, ModelPose
+from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "svc:mover:demo/ducks"
 

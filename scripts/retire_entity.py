@@ -35,9 +35,9 @@ from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.qos_profiles import MODEL_COMMAND, MODEL_LATCHED
 from spatialdds_demo.topics import TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1
-from spatialdds_idl18.builtin import Time
-from spatialdds_idl18.spatial.owm import Entity, ModelCommand
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
+from spatialdds.dds.types.builtin import Time
+from spatialdds.dds.types.spatial.owm import Entity, ModelCommand
+from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "tool:retire_entity"
 

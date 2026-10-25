@@ -248,7 +248,7 @@ class TestEnvelopeRoundtrip(unittest.TestCase):
         self._wait_for(blob.BLOB_TYPE, before + len(chunks), timeout_s=10.0)
 
         from spatialdds.dds import from_json
-        from spatialdds_idl18.spatial.core import BlobChunk
+        from spatialdds.dds.types.spatial.core import BlobChunk
 
         reassembler = blob.Reassembler()
         data = None

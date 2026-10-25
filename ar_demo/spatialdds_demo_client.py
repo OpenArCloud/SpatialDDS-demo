@@ -14,13 +14,13 @@ from spatialdds_demo import topic_types, typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.service_bus import BootstrapClient, CoverageClient
 from spatialdds_demo_idl18.oarc_demo import BootstrapQuery as TypedBootstrapQuery
-from spatialdds_idl18.spatial.disco import CoverageQuery as TypedCoverageQuery
+from spatialdds.dds.types.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.discovery_bus import AnnounceSubscriber
 from spatialdds.dds import from_json, to_json
 from spatialdds_demo.content_catalogue import filter_inventory
 from spatialdds_demo.discovery_bus import ContentInventory
 from spatialdds_demo.service_bus import VpsClient
-from spatialdds_idl18.spatial.argeo import VpsRequest as TypedVpsRequest
+from spatialdds.dds.types.spatial.argeo import VpsRequest as TypedVpsRequest
 from spatialdds_demo.topics import (
     TOPIC_ANCHORS_DELTA,
     TOPIC_BOOTSTRAP_QUERY_V1,

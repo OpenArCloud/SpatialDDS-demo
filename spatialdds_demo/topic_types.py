@@ -21,12 +21,12 @@ from spatialdds_demo_idl18.oarc_demo import (
     BootstrapResponse,
     FusionCoverage,
 )
-from spatialdds_idl18.spatial.anchors import AnchorDelta
-from spatialdds_idl18.spatial.argeo import VpsRequest, VpsResponse
-from spatialdds_idl18.spatial.semantics import (
+from spatialdds.dds.types.spatial.anchors import AnchorDelta
+from spatialdds.dds.types.spatial.argeo import VpsRequest, VpsResponse
+from spatialdds.dds.types.spatial.semantics import (
     Detection2DSet, Detection3DSet, FusedTrackSet,
 )
-from spatialdds_idl18.spatial.core import (
+from spatialdds.dds.types.spatial.core import (
     BlobChunk,
     EntityBinding,
     FramedPose,
@@ -34,18 +34,18 @@ from spatialdds_idl18.spatial.core import (
     NavSatStatus,
     PlannedTrajectory,
 )
-from spatialdds_idl18.spatial.disco import (
+from spatialdds.dds.types.spatial.disco import (
     Announce, ContentAnnounce, CoverageQuery, CoverageResponse, Depart,
 )
-from spatialdds_idl18.spatial.events import CrossingLine, SpatialEvent
-from spatialdds_idl18.spatial.owm import Entity as ModelEntity
-from spatialdds_idl18.spatial.vio import ImuSample
-from spatialdds_idl18.spatial.sensing.lidar import LidarFrame, LidarMeta
-from spatialdds_idl18.spatial.sensing.rad import (
+from spatialdds.dds.types.spatial.events import CrossingLine, SpatialEvent
+from spatialdds.dds.types.spatial.owm import Entity as ModelEntity
+from spatialdds.dds.types.spatial.vio import ImuSample
+from spatialdds.dds.types.spatial.sensing.lidar import LidarFrame, LidarMeta
+from spatialdds.dds.types.spatial.sensing.rad import (
     RadDetectionSet, RadTensorFrame, RadTensorMeta,
 )
-from spatialdds_idl18.spatial.sensing.rf_beam import RfBeamFrame, RfBeamMeta
-from spatialdds_idl18.spatial.sensing.vision import VisionFrame, VisionMeta
+from spatialdds.dds.types.spatial.sensing.rf_beam import RfBeamFrame, RfBeamMeta
+from spatialdds.dds.types.spatial.sensing.vision import VisionFrame, VisionMeta
 
 # --- §3.3.2 registered types -----------------------------------------------
 REGISTERED: Dict[str, Type] = {

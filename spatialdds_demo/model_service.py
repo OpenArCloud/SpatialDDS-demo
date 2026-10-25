@@ -54,13 +54,13 @@ from spatialdds_demo.topics import (
     TOPIC_FRAME_TRANSFORM_V1,
     TOPIC_MODEL_COMMAND_V1, TOPIC_MODEL_ENTITY_V1, TOPIC_MODEL_POSE_V1,
 )
-from spatialdds_idl18.builtin import Time
-from spatialdds_idl18.spatial.owm import (
+from spatialdds.dds.types.builtin import Time
+from spatialdds.dds.types.spatial.owm import (
     Basis, Entity, LifecycleState, ModelCommand, ModelLayer, ModelPose,
 )
-from spatialdds_idl18.spatial.common import (
+from spatialdds.dds.types.spatial.common import (
     CoordConvention, FrameRef, KV, ScaleStatus)
-from spatialdds_idl18.spatial.core import (
+from spatialdds.dds.types.spatial.core import (
     Aabb3, CovMatrix, FrameTransform, PoseSE3)
 
 # The frame the venue model is expressed in — the same one the client

@@ -77,7 +77,7 @@ def _prewarm_idl():
     from cyclonedds.domain import DomainParticipant
 
     from spatialdds_demo import typed_transport as tt
-    from spatialdds_idl18.spatial.semantics import Detection3DSet
+    from spatialdds.dds.types.spatial.semantics import Detection3DSet
 
     tt.make_writer(DomainParticipant(DDS_DOMAIN), "spatialdds/prewarm/v1",
                    Detection3DSet, "DET_RT")
@@ -301,7 +301,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
 
         from bridge import MqttDdsBridge
         from spatialdds_demo import typed_transport as tt
-        from spatialdds_idl18.spatial.semantics import FusedTrackSet
+        from spatialdds.dds.types.spatial.semantics import FusedTrackSet
 
         topic = "spatialdds/platform/fusion/track/v1"
         cfg = _make_config("outbound_only", bridge_id="bridge-out",
@@ -424,7 +424,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
 
         from bridge import MqttDdsBridge
         from spatialdds_demo import typed_transport as tt
-        from spatialdds_idl18.spatial.semantics import Detection3DSet
+        from spatialdds.dds.types.spatial.semantics import Detection3DSet
 
         topic = "spatialdds/operator_a/sensing/detection3d/v1"   # not outbound
         cfg = _make_config("outbound_only", bridge_id="bridge-filter",

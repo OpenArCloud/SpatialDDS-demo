@@ -26,12 +26,12 @@ if str(REPO) not in sys.path:
 
 from spatialdds.dds import from_json, to_json  # noqa: E402
 from spatialdds_demo.model_service import venue_frame  # noqa: E402
-from spatialdds_idl18.builtin import Time  # noqa: E402
-from spatialdds_idl18.spatial.owm import (  # noqa: E402
+from spatialdds.dds.types.builtin import Time  # noqa: E402
+from spatialdds.dds.types.spatial.owm import (  # noqa: E402
     Basis, Entity, LifecycleState, ModelLayer,
 )
-from spatialdds_idl18.spatial.common import KV  # noqa: E402
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3  # noqa: E402
+from spatialdds.dds.types.spatial.common import KV  # noqa: E402
+from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3  # noqa: E402
 
 STAMP = Time(sec=1788300000, nanosec=250000000)
 # The service's own frame rather than a hand-written copy of it. 1.8's

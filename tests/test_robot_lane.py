@@ -35,9 +35,9 @@ from spatialdds_ros.frames import yaw_quaternion                  # noqa: E402
 from spatialdds_demo.keepout import build_mask                    # noqa: E402
 from spatialdds_demo.model_service import venue_frame             # noqa: E402
 from spatialdds_demo.robot_bridge import ENTITY_ID, PlazaSim      # noqa: E402
-from spatialdds_idl18.builtin import Time                         # noqa: E402
-from spatialdds_idl18.spatial.core import Aabb3, PoseSE3          # noqa: E402
-from spatialdds_idl18.spatial.owm import (                        # noqa: E402
+from spatialdds.dds.types.builtin import Time                         # noqa: E402
+from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3          # noqa: E402
+from spatialdds.dds.types.spatial.owm import (                        # noqa: E402
     Basis, Entity, LifecycleState, ModelLayer,
 )
 
@@ -224,9 +224,9 @@ class OneCommandIsHandledExactlyOnce(unittest.TestCase):
 
     @staticmethod
     def _command(verb: str, subject: str):
-        from spatialdds_idl18.builtin import Time
-        from spatialdds_idl18.spatial.core import Aabb3, PoseSE3
-        from spatialdds_idl18.spatial.owm import ModelCommand
+        from spatialdds.dds.types.builtin import Time
+        from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
+        from spatialdds.dds.types.spatial.owm import ModelCommand
         return ModelCommand(
             command_id="cmd:test:1", verb=verb, subject_id=subject,
             reason="", requester_id="test", has_pose=True,
