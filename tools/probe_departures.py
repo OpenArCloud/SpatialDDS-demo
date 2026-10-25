@@ -11,9 +11,20 @@ SDK's reader. This re-runs each finding's probe with two subjects side by side:
 * **shipped:** the web bridge's own `SpatialDDSBridge`, the consumer the
   browser and the gateway read discovery through, exercised through its own
   readers and its own `AnnounceCache.apply_events` / `content_items`;
-* **control:** `spatialdds_demo.discovery_bus`, the readers the census
-  measured, unchanged. They show each probe still sees its defect. A probe
-  that reported "fixed" with nothing able to fail would prove nothing.
+* **control:** the same input, read with the finding's defect planted back
+  in. A probe that reported "fixed" with nothing able to fail would prove
+  nothing, so each arm shows it still tells the defect from the fix:
+  - arm 1: the bridge's own `AnnounceCache`, fed the same events with the
+    `Dispose` dropped, which is finding 3 (a dispose that arrives on a valid
+    sample read as the sample alone);
+  - arm 2: a Depart reader with the TRANSIENT_LOCAL QoS the census found,
+    raw cyclonedds, which is finding 4;
+  - arm 3: a second inventory reader that purges on lost liveliness, which is
+    finding 2.
+  Until `discovery_bus` was retired the control was its readers, the ones the
+  census measured. Keeping that stack alive only to show old defects would
+  have been two stacks in the tree; the planted controls show the same three,
+  and each is the shipped code but for the one thing the finding is about.
 
 The arms:
 
@@ -71,9 +82,56 @@ def bridge_for(domain: int):
     return bridge
 
 
-def control_participant(domain: int):
+def planted_cache():
+    """Finding 3, planted: the bridge's AnnounceCache, with each Dispose
+    dropped before it is read, so a dispose that arrives on a valid sample is
+    read as the sample alone."""
+    from announce_cache import AnnounceCache
+
+    class Planted(AnnounceCache):
+        def apply_events(self, events) -> int:
+            return super().apply_events(
+                [ev for ev in events if not isinstance(ev, sd.Dispose)])
+    return Planted()
+
+
+def planted_depart_reader(domain: int):
+    """Finding 4, planted: a Depart reader with the QoS the census found
+    (RELIABLE, TRANSIENT_LOCAL), raw cyclonedds, since the SDK refuses to open
+    one. Returns it with its participant, to keep both alive."""
+    from cyclonedds.core import Policy, Qos
     from cyclonedds.domain import DomainParticipant
-    return DomainParticipant(domain)
+    from cyclonedds.sub import DataReader
+    from cyclonedds.topic import Topic
+    from cyclonedds.util import duration
+
+    wk = sd.dds.registry.well_known("Depart")
+    dp = DomainParticipant(domain)
+    topic = Topic(dp, wk.topic, sd.dds.class_for("Depart"))
+    qos = Qos(Policy.Reliability.Reliable(duration(seconds=1)),
+              Policy.Durability.TransientLocal,
+              Policy.History.KeepLast(1))
+    return DataReader(dp, topic, qos=qos), dp
+
+
+class PlantedInventory:
+    """Finding 2, planted: an inventory reader that purges every item when its
+    writer is lost, as the old ContentInventory did. Otherwise the shipped
+    content_items()."""
+
+    def __init__(self, participant) -> None:
+        self._reader = participant.reader("ContentAnnounce", settle_s=0.3)
+        self._items: dict = {}
+
+    def items(self) -> list:
+        for ev in self._reader.take():
+            if isinstance(ev, sd.Sample):
+                self._items[ev.key] = ev.data
+            elif isinstance(ev, sd.Dispose):
+                self._items.pop(ev.key, None)
+            elif isinstance(ev, sd.Liveliness) and not ev.alive:
+                self._items.clear()                 # the defect
+        return list(self._items.values())
 
 
 def child(code: str, domain: int, **env) -> subprocess.Popen:
@@ -97,29 +155,19 @@ def wait_for(predicate, timeout: float, step: float = 0.1):
 
 # Arm 1's service writes the wire condition finding 3 is about: a final
 # announce and then its dispose, back to back, so the reader's last sample
-# arrives already carrying NOT_ALIVE_DISPOSED. (The census measured it with an
-# SDK participant, whose close() writes exactly that. 0.7.2 cannot publish an
-# announce this bridge admits: p.announce() gives FrameRef.uuid empty, which
-# the discovery core refuses, Appendix G making the uuid the identity key, and
-# a hand-opened Announce writer is refused. spatialdds-py S11/S14. So the
-# writer here is this repository's own AnnouncePublisher, writing the same two
-# events.) Its Depart goes to a lane arm 1 never reads.
+# arrives already carrying NOT_ALIVE_DISPOSED. An SDK participant writes
+# exactly that: announce() re-publishes, and close() disposes. (Until
+# spatialdds 0.7.3 its announce could not pass the bridge's discovery core,
+# S14, and this was the demo's old AnnouncePublisher.) Its Depart goes to a
+# lane arm 1 never reads, so arm 1 measures the Announce door alone.
 WITHDRAWING = f"""
-import sys
-from cyclonedds.domain import DomainParticipant
-from spatialdds.dds import from_json
-from spatialdds.dds.types.spatial.disco import Announce
-from spatialdds_demo.discovery_bus import AnnouncePublisher
-from spatialdds_demo.lanes import SCENE
-from spatialdds_test import VPSServiceV15, SpatialDDSLogger
-doc = VPSServiceV15(SpatialDDSLogger()).create_announce()
-doc["service_id"] = {SID!r}
-pub = AnnouncePublisher(DomainParticipant(int(__import__("os").environ["SPATIALDDS_DDS_DOMAIN"])))
-pub.publish(from_json(Announce, doc))
+import sys, spatialdds as sd
+p = sd.participant({SCENE!r}, service_id={SID!r}, authority="probe.example.com")
+p.announce("VPS", coverage=sd.circle(30.27, -97.74, 500), ttl_sec=300)
 print("announced", flush=True)
 sys.stdin.readline()
-pub.publish(from_json(Announce, doc))   # the last sample ...
-pub.close()                             # ... and its dispose, untaken between
+p.announce("VPS", coverage=sd.circle(30.27, -97.74, 500), ttl_sec=300)  # the last sample ...
+p.close(reason="the probe asked it to stop")   # ... and its dispose, untaken between
 print("closed", flush=True)
 """
 
@@ -143,44 +191,27 @@ def stop(service: subprocess.Popen) -> None:
     time.sleep(1.0)            # every sample of the stop has arrived
 
 
-class _NoDepartDoor:
-    """A Depart reader that hears nothing: arm 1's control reads its Announce
-    door alone, as the shipped subject does here. Without this its latched
-    Depart reader hears the writer's latched Depart, and the control reports
-    the departure through the door arm 2 measures."""
-
-    def take(self, N=100):
-        return []
-
-
 def arm_1(domain: int) -> None:
-    from spatialdds_demo.discovery_bus import AnnounceSubscriber
-
     print("arm 1: the departure that arrives on a valid sample")
     bridge = bridge_for(domain)
-    control = AnnounceSubscriber(control_participant(domain))
-    control._depart_reader = _NoDepartDoor()
+    control = planted_cache()
     service = child(WITHDRAWING, domain)
     try:
         assert service.stdout.readline().strip() == "announced"
 
-        def bridge_sees():
-            bridge._announces.apply_events(bridge._announce_sub.take())
-            return SID in {r.service_id for r in bridge._announces.records()}
+        def cached(cache):
+            return SID in {r.service_id for r in cache.records()}
 
-        control_alive: dict = {}
+        def both_see():
+            events = bridge._announce_sub.take()
+            bridge._announces.apply_events(events)
+            control.apply_events(events)
+            return cached(bridge._announces) and cached(control)
 
-        def control_sees():
-            for ev in control.poll():
-                if ev.service_id == SID or (ev.announce is not None
-                                            and ev.announce.service_id == SID):
-                    control_alive[SID] = ev.alive
-            return control_alive.get(SID)
-
-        seen_shipped = wait_for(bridge_sees, 8.0)
-        seen_control = wait_for(control_sees, 8.0)
-        print(f"  before the stop: shipped caches it={bool(seen_shipped)}, "
-              f"control alive={bool(seen_control)}")
+        wait_for(both_see, 8.0)
+        seen_shipped, seen_control = cached(bridge._announces), cached(control)
+        print(f"  before the stop: shipped caches it={seen_shipped}, "
+              f"control caches it={seen_control}")
         if not (seen_shipped and seen_control):
             print("  setup failed: a subject never saw the service alive, so "
                   "this arm can say nothing about its departure")
@@ -192,16 +223,16 @@ def arm_1(domain: int) -> None:
         # and its dispose, neither taken before.
         events = bridge._announce_sub.take()
         bridge._announces.apply_events(events)
+        control.apply_events(events)
         kinds = [type(ev).__name__ for ev in events]
-        gone = SID not in {r.service_id for r in bridge._announces.records()}
+        gone = not cached(bridge._announces)
         verdict("1", "shipped", "a clean stop evicts the service", gone,
                 f"Announce reader events {kinds} -> "
                 f"{'evicted' if gone else 'STILL CACHED'}")
-        control_sees()
-        still = control_alive.get(SID) is True
+        still = cached(control)
         verdict("1", "control", "reproduces finding 3 (reports it alive)",
-                still, f"AnnounceSubscriber says "
-                       f"{'alive' if still else 'departed'}")
+                still, f"the same events with the Dispose dropped -> "
+                       f"{'still cached' if still else 'evicted'}")
     finally:
         if service.poll() is None:
             service.kill()
@@ -209,19 +240,16 @@ def arm_1(domain: int) -> None:
 
 
 def arm_2(domain: int) -> None:
-    from spatialdds_demo.discovery_bus import AnnounceSubscriber
-
     print("\narm 2: the Depart lane")
     bridge = bridge_for(domain)
-    control = AnnounceSubscriber(control_participant(domain))
+    control, _control_dp = planted_depart_reader(domain)
     service = child(DEPARTING, domain)
     try:
         assert service.stdout.readline().strip() == "announced"
         wait_for(lambda: bridge._depart_sub.matched() > 0, 8.0)
         time.sleep(0.5)        # the same settle for the control's reader
         matched = bridge._depart_sub.matched()
-        matched_control = (control._depart_reader
-                           .get_subscription_matched_status().current_count)
+        matched_control = control.get_subscription_matched_status().current_count
         stop(service)
         departs = [ev for ev in bridge._depart_sub.take()
                    if isinstance(ev, sd.Sample)
@@ -252,7 +280,6 @@ def catalogue(domain: int, port: int) -> subprocess.Popen:
 
 def arm_3(domain: int, port: int) -> None:
     from spatialdds_demo import content_catalogue as cc
-    from spatialdds_demo.discovery_bus import ContentInventory
 
     # The whole inventory, counted from the seed the server publishes. The
     # first draft waited for "any items" and compared partial counts: 7 of a
@@ -261,7 +288,8 @@ def arm_3(domain: int, port: int) -> None:
 
     print("\narm 3: the catalogue is kill -9ed")
     bridge = bridge_for(domain)
-    control = ContentInventory(control_participant(domain))
+    control_participant = sd.participant(SCENE, domain=domain)
+    control = PlantedInventory(control_participant)
     server = catalogue(domain, port)
     try:
         wait_for(lambda: len(bridge.content_items()) == seed, 20.0)

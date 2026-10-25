@@ -34,8 +34,30 @@ import spatialdds_bootstrap_server as bootstrap  # noqa: E402
 import spatialdds_catalog_server as catalog  # noqa: E402
 import spatialdds_demo_client as client  # noqa: E402
 import spatialdds_demo_server as vps  # noqa: E402
-from spatialdds_demo.discovery_bus import validate_announce  # noqa: E402
+import spatialdds as sd  # noqa: E402
 from spatialdds.dds import from_json  # noqa: E402
+from spatialdds_demo import lanes  # noqa: E402
+from spatialdds_demo.discovery_http import record_from_announce  # noqa: E402
+
+
+def validate_announce(announce) -> None:
+    """What a writer and a reader of this announce hold it to.
+
+    The SDK validates it on write (its published schema), this repository's
+    discovery core must admit it (that is what refused SDK announces before
+    spatialdds 0.7.3, S14), and each TopicMeta row must be a lane this
+    deployment can open: a section 3.3.1 name, a type that resolves and a
+    profile registered or declared (lanes.endpoint, the one way a row becomes
+    an SDK endpoint here). Until the SDK adoption this was
+    discovery_bus.validate_announce and topics.validate_topic_meta.
+    """
+    sd.dds.validate(announce)
+    doc = sd.dds.to_json(announce)
+    record_from_announce(doc)
+    for row in doc["topics"]:
+        assert row["version"], f"{row['name']}: TopicMeta.version is required"
+        sd.dds.registry.check_topic(row["name"], row["type"])
+        lanes.endpoint(row["type"], row["qos_profile"])
 from spatialdds_demo.topics import (  # noqa: E402
     TOPIC_DISCOVERY_CONTENT_V1, TOPIC_VPS_QUERY_V1,
 )

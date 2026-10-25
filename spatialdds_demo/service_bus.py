@@ -15,7 +15,7 @@ Type ownership:
   VPS copies are retired.
 * **Catalogue** — no longer request/reply, and no longer here. It moved onto
   1.8's own shape: a latched `ContentAnnounce` per item
-  (`discovery_bus.ContentAnnouncePublisher` / `ContentInventory`) naming a
+  (the SDK's `ContentAnnounce` writer and reader since its adoption) naming a
   content manifest behind the resolver. Its demo-owned query pair retired;
   what 1.8 has no field for is in docs/final-migration-census.md §1.
 """

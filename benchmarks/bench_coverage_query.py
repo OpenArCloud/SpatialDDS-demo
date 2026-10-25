@@ -28,12 +28,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
 
 from spatialdds_demo import content_catalogue as cc
-from spatialdds_demo.discovery_bus import ContentAnnouncePublisher, ContentInventory
-from spatialdds.dds import from_json
-from spatialdds.dds.types.spatial.disco import ContentAnnounce
+from spatialdds_demo.lanes import SCENE
 from spatialdds_validation import create_coverage_bbox_earth_fixed
 
 from common import DDS_DOMAIN_MAIN, Stats, WARMUP_ITERATIONS, log, parse_csv_ints, write_csv
@@ -93,30 +91,33 @@ class Catalogue:
     """N items on the latched inventory topic, as the catalogue server publishes them."""
 
     def __init__(self, domain_id: int, entries: List[Dict[str, Any]]) -> None:
-        self._participant = DomainParticipant(domain_id)
-        self._publisher = ContentAnnouncePublisher(self._participant)
+        self._participant = sd.participant(
+            SCENE, domain=domain_id, service_id="svc:content:bench/catalog")
+        writer = self._participant.writer("ContentAnnounce", on_exit="withdraw")
         for entry in entries:
-            self._publisher.publish(from_json(ContentAnnounce, cc.content_announce(
-                entry, provider_id="svc:content:bench/catalog")))
+            writer.write(cc.content_announce(
+                entry, provider_id="svc:content:bench/catalog"))
 
     def close(self) -> None:
-        self._publisher.close()
+        self._participant.close(reason="the benchmark finished")
 
 
 def run_once(domain_id: int, num_entries: int, geopose: Dict[str, float]) -> int:
     """One late joiner: open a reader, receive all N, filter. Elapsed ns."""
-    participant = DomainParticipant(domain_id)
-    start = time.perf_counter_ns()
-    inventory = ContentInventory(participant)
-    deadline = time.monotonic() + DELIVERY_TIMEOUT_S
-    items = inventory.items()
-    while len(items) < num_entries:
-        if time.monotonic() > deadline:
-            raise TimeoutError(f"received {len(items)} of {num_entries} items")
-        time.sleep(0.0005)
-        items = inventory.items()
-    cc.filter_inventory(items, geopose=geopose)
-    return time.perf_counter_ns() - start
+    with sd.participant(SCENE, domain=domain_id) as participant:
+        start = time.perf_counter_ns()
+        reader = participant.reader("ContentAnnounce")
+        deadline = time.monotonic() + DELIVERY_TIMEOUT_S
+        items: Dict[str, Dict[str, Any]] = {}
+        while len(items) < num_entries:
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"received {len(items)} of {num_entries} items")
+            for ev in reader.take():
+                if isinstance(ev, sd.Sample):
+                    items[ev.key] = sd.dds.to_json(ev.data)
+            time.sleep(0.0005)
+        cc.filter_inventory(list(items.values()), geopose=geopose)
+        return time.perf_counter_ns() - start
 
 
 def benchmark(args: argparse.Namespace) -> None:
