@@ -102,7 +102,7 @@ class MessageRouting(unittest.TestCase):
         """
         svc, _ = self._make_service()
         svc.on_message("video_frame",
-                       "spatialdds/operator_a/vision/CAM_FRONT/frame/v1",
+                       "spatialdds/operator_a/CAM_FRONT/video_frame/v1",
                        {"source_operator": "operator_a"}, 0)
         self.assertEqual(svc._fuser.tick(t=0.0), [])
 
@@ -146,7 +146,7 @@ class MessageRouting(unittest.TestCase):
         svc._publish_tracks(svc._fuser.tick(t=123.5), t=123.5)
         self.assertEqual(len(transport.sent), 1)
         topic, payload = transport.sent[0]
-        self.assertEqual(topic, "spatialdds/platform/fusion/track/v1")
+        self.assertEqual(topic, "spatialdds/platform/fusion/fused_track/v1")
         track_set = from_json(FusedTrackSet, payload)
         # Spec FusedTrackSet is keyed by the fusion stream, not a source operator.
         self.assertEqual(track_set.stream_id, "platform-fusion")
@@ -170,7 +170,7 @@ class MessageRouting(unittest.TestCase):
                         "dets": [self._det(10, 20)]}, 0)
         svc._publish_coverage(svc._fuser.tick(t=0.0), t=0.0)
         topic, payload = transport.sent[0]
-        self.assertEqual(topic, "spatialdds/platform/fusion/coverage/v1")
+        self.assertEqual(topic, "spatialdds/platform/fusion/oarc.fusion_coverage/v1")
         coverage = from_json(FusionCoverage, payload)
         self.assertEqual(coverage.track_count, 1)
         self.assertEqual(
@@ -192,7 +192,7 @@ class MessageRouting(unittest.TestCase):
         svc._publish_trajectory_conflicts(t=1.0)
         self.assertTrue(transport.sent, "no conflict published")
         topic, payload = transport.sent[0]
-        self.assertEqual(topic, "spatialdds/platform/events/trajectory_conflict/v1")
+        self.assertEqual(topic, "spatialdds/platform/events/spatial_event/v1")
         event = from_json(SpatialEvent, payload)
         self.assertTrue(event.has_measured_distance_m)
         # MetaKV is a JSON string, so nothing rides in `attributes`.

@@ -28,20 +28,20 @@ from publisher import (  # noqa: E402
 class TopicNaming(unittest.TestCase):
     def test_detection3d_topic(self):
         self.assertEqual(
-            _topic("operator_a", "sensing", "detection3d", "v1"),
+            _topic("operator_a", "sensing", "detection3d"),
             "spatialdds/operator_a/sensing/detection3d/v1",
         )
 
     def test_vision_topic_includes_channel(self):
         self.assertEqual(
-            _topic("operator_b", "vision", "CAM_FRONT", "frame", "v1"),
-            "spatialdds/operator_b/vision/CAM_FRONT/frame/v1",
+            _topic("operator_b", "CAM_FRONT", "video_frame"),
+            "spatialdds/operator_b/CAM_FRONT/video_frame/v1",
         )
 
     def test_ego_topic(self):
         self.assertEqual(
-            _topic("operator_c", "ego", "pose", "v1"),
-            "spatialdds/operator_c/ego/pose/v1",
+            _topic("operator_c", "ego", "framed_pose"),
+            "spatialdds/operator_c/ego/framed_pose/v1",
         )
 
 
@@ -55,11 +55,11 @@ class OperatorIdentity(unittest.TestCase):
     """
 
     def test_operator_is_in_every_topic(self):
-        for parts, _type_name, _profile in (
+        for stream, type_name, _profile in (
                 lane for lane in LANES.values() if lane is not None):
-            with self.subTest(lane="/".join(parts)):
+            with self.subTest(lane=f"{stream}/{type_name}"):
                 self.assertTrue(
-                    _topic("operator_a", *parts).startswith(
+                    _topic("operator_a", stream, type_name).startswith(
                         "spatialdds/operator_a/"))
 
 

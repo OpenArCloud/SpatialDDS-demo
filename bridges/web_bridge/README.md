@@ -259,7 +259,7 @@ JSON messages over WebSocket, identified by a `type` field.
 {
   "type": "publish",
   "msg_type": "framed_pose",
-  "logical_topic": "spatialdds/web_client/ego/pose/v1",
+  "logical_topic": "spatialdds/web_client/ego/framed_pose/v1",
   "payload": { "pose": { "t": {"x": 1, "y": 2, "z": 0}, "q": {"x": 0, "y": 0, "z": 0, "w": 1} } }
 }
 

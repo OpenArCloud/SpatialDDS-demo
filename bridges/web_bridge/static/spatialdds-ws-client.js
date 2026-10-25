@@ -12,7 +12,7 @@
  *   );
  *   sdds.publish(
  *     "ROS2_FRAMED_POSE",
- *     "spatialdds/web_client/ego/pose/v1",
+ *     "spatialdds/web_client/ego/framed_pose/v1",
  *     { pose: { t: { x: 1, y: 2, z: 0 }, q: { x: 0, y: 0, z: 0, w: 1 } } }
  *   );
  */

@@ -66,11 +66,11 @@ class TypedWriterRouting(unittest.TestCase):
 
     def test_resolves_the_type_and_its_registered_lane(self):
         writers = bridge_node._TypedWriters(participant=None)
-        writers.write("spatialdds/op/ego/pose/v1", "framed_pose", {"any": "payload"})
+        writers.write("spatialdds/op/ego/framed_pose/v1", "framed_pose", {"any": "payload"})
 
         self.assertEqual(len(_RecordingWriter.made), 1)
         made = _RecordingWriter.made[0]
-        self.assertEqual(made.topic, "spatialdds/op/ego/pose/v1")
+        self.assertEqual(made.topic, "spatialdds/op/ego/framed_pose/v1")
         # §3.3.3 assigns framed_pose to POSE_RT; taking it from the shared
         # table is what stops this bridge drifting from the others.
         self.assertEqual(made.qos_profile, "POSE_RT")
@@ -79,13 +79,13 @@ class TypedWriterRouting(unittest.TestCase):
     def test_one_writer_per_topic_not_per_message(self):
         writers = bridge_node._TypedWriters(participant=None)
         for i in range(3):
-            writers.write("spatialdds/op/ego/pose/v1", "framed_pose", {"n": i})
+            writers.write("spatialdds/op/ego/framed_pose/v1", "framed_pose", {"n": i})
         self.assertEqual(len(_RecordingWriter.made), 1, "writer rebuilt per message")
         self.assertEqual(len(_RecordingWriter.made[0].written), 3)
 
     def test_distinct_topics_get_distinct_writers(self):
         writers = bridge_node._TypedWriters(participant=None)
-        writers.write("spatialdds/op/ego/pose/v1", "framed_pose", {})
+        writers.write("spatialdds/op/ego/framed_pose/v1", "framed_pose", {})
         writers.write("spatialdds/op/sensing/detection3d/v1", "detection3d", {})
         self.assertEqual([w.qos_profile for w in _RecordingWriter.made],
                          ["POSE_RT", "DET_RT"])

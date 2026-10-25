@@ -48,38 +48,47 @@ RADAR_CHANNELS = [
 LIDAR_CHANNEL = "LIDAR_TOP"
 
 
+def _lane_topic(stream: str, lane) -> str:
+    """`spatialdds/nuscenes/<stream>/<type>/v1` (§3.3.1), the type segment
+    taken from the lane itself, so a name cannot say one type and carry
+    another. The sensor channel is the stream. Until the SDK adoption the
+    sensor lanes had six segments (`…/vision/<cam>/frame/v1`), which §3.3.1
+    does not have."""
+    return f"spatialdds/nuscenes/{stream}/{lane[0]}/v1"
+
+
 def _topic_vision(cam: str) -> str:
-    return f"spatialdds/nuscenes/vision/{cam}/frame/v1"
+    return _lane_topic(cam, TYPE_VISION)
 
 
 def _topic_lidar() -> str:
-    return "spatialdds/nuscenes/lidar/LIDAR_TOP/frame/v1"
+    return _lane_topic(LIDAR_CHANNEL, TYPE_LIDAR)
 
 
 def _topic_radar(ch: str) -> str:
-    return f"spatialdds/nuscenes/rad/{ch}/frame/v1"
+    return _lane_topic(ch, TYPE_RAD_DET)
 
 
 def _topic_det3d() -> str:
-    return "spatialdds/nuscenes/semantics/det3d/v1"
+    return _lane_topic("semantics", TYPE_DET3D)
 
 
 def _topic_ego() -> str:
-    return "spatialdds/nuscenes/ego/pose/v1"
+    return _lane_topic("ego", TYPE_EGO_POSE)
 
 
 def _topic_geo() -> str:
-    return "spatialdds/nuscenes/geo/ego/pose/v1"
+    return _lane_topic("ego", TYPE_GEO_POSE)
 
 
 def _topic_vision_meta(cam: str) -> str:
     # Metadata is its own lane: a different type, and a latched one, so a
     # late joiner gets the calibration without waiting for a republish.
-    return f"spatialdds/nuscenes/vision/{cam}/meta/v1"
+    return _lane_topic(cam, TYPE_VISION_META)
 
 
 def _topic_lidar_meta() -> str:
-    return "spatialdds/nuscenes/lidar/LIDAR_TOP/meta/v1"
+    return _lane_topic(LIDAR_CHANNEL, TYPE_LIDAR_META)
 
 
 def _iter_scene_samples(nusc: NuScenes, scene_name: str):

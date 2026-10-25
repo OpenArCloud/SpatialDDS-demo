@@ -84,12 +84,13 @@ class TestDashboardRoutes(unittest.TestCase):
         body = self.client.get("/").text
         for needle in (
             "/sensing/detection3d/v1",
-            "/ego/pose/v1",
+            "/ego/framed_pose/v1",
             "/plan/",
             "/trajectory/v1",
-            "/platform/fusion/track/v1",
-            "/platform/events/trajectory_conflict/v1",
+            "/platform/fusion/fused_track/v1",
+            "/platform/events/spatial_event/v1",
             "/platform/entity/binding/v1",
+            "/platform/fusion/oarc.fusion_coverage/v1",
             "/discovery/announce/v1",
         ):
             self.assertIn(needle, body, f"missing subscription pattern: {needle}")

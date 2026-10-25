@@ -9,12 +9,12 @@ operator observations.
 
 Fixed operator name: ``infrastructure``. Topics:
 
-  spatialdds/infrastructure/rf_beam/unit1_60ghz/frame/v1
-  spatialdds/infrastructure/rad/unit1_radar/tensor/v1
-  spatialdds/infrastructure/vision/unit1_cam/frame/v1
-  spatialdds/infrastructure/lidar/unit1_lidar/frame/v1
-  spatialdds/infrastructure/geo/unit1/pose/v1
-  spatialdds/infrastructure/geo/unit2/pose/v1
+  spatialdds/infrastructure/unit1_60ghz/rf_beam/v1
+  spatialdds/infrastructure/unit1_radar/radar_tensor/v1
+  spatialdds/infrastructure/unit1_cam/video_frame/v1
+  spatialdds/infrastructure/unit1_lidar/lidar_frame/v1
+  spatialdds/infrastructure/unit1/geopose/v1
+  spatialdds/infrastructure/unit2/geopose/v1
   spatialdds/infrastructure/sensing/detection3d/v1
 """
 
@@ -124,18 +124,26 @@ def _stamp_from_index(idx: int) -> Dict[str, int]:
 
 # (topic suffix, §3.3.2 type, §3.3.3 QoS profile) per raw sensor lane. The
 # announce and the writers are both built from this.
+# (stream, §3.3.2 type, profile): the topic is
+# `spatialdds/<operator>/<stream>/<type>/v1` (§3.3.1), the stream being the
+# sensor instance. Six segments (`…/rf_beam/unit1_60ghz/meta/v1`) until the
+# SDK adoption, which §3.3.1 does not have.
 RAW_LANES = {
-    "beam_meta":    ("rf_beam/unit1_60ghz/meta/v1", "rf_beam_meta", "MAP_META"),
-    "beam_frame":   ("rf_beam/unit1_60ghz/frame/v1", "rf_beam", "RF_BEAM_RT"),
-    "radar_meta":   ("rad/unit1_radar/meta/v1", "radar_tensor_meta", "MAP_META"),
-    "radar_tensor": ("rad/unit1_radar/tensor/v1", "radar_tensor", "RADAR_RT"),
-    "vision_meta":  ("vision/unit1_cam/meta/v1", "video_meta", "MAP_META"),
-    "vision_frame": ("vision/unit1_cam/frame/v1", "video_frame", "VIDEO_LIVE"),
-    "lidar_frame":  ("lidar/unit1_lidar/frame/v1", "lidar_frame", "GEOM_TILE"),
-    "unit1_geo":    ("geo/unit1/pose/v1", "geopose", "POSE_RT"),
-    "unit2_geo":    ("geo/unit2/pose/v1", "geopose", "POSE_RT"),
-    "detection3d":  ("sensing/detection3d/v1", "detection3d", "RADAR_RT"),
+    "beam_meta":    ("unit1_60ghz", "rf_beam_meta", "MAP_META"),
+    "beam_frame":   ("unit1_60ghz", "rf_beam", "RF_BEAM_RT"),
+    "radar_meta":   ("unit1_radar", "radar_tensor_meta", "MAP_META"),
+    "radar_tensor": ("unit1_radar", "radar_tensor", "RADAR_RT"),
+    "vision_meta":  ("unit1_cam", "video_meta", "MAP_META"),
+    "vision_frame": ("unit1_cam", "video_frame", "VIDEO_LIVE"),
+    "lidar_frame":  ("unit1_lidar", "lidar_frame", "GEOM_TILE"),
+    "unit1_geo":    ("unit1", "geopose", "POSE_RT"),
+    "unit2_geo":    ("unit2", "geopose", "POSE_RT"),
+    "detection3d":  ("sensing", "detection3d", "RADAR_RT"),
 }
+
+
+def lane_topic(stream: str, type_name: str) -> str:
+    return f"{TOPIC_PREFIX}/{stream}/{type_name}/v1"
 
 
 def run(args: argparse.Namespace) -> int:
@@ -155,9 +163,9 @@ def run(args: argparse.Namespace) -> int:
     participant = DomainParticipant(args.domain)
     writers = {
         key: tt.TypedDictWriter(
-            participant, f"{TOPIC_PREFIX}/{suffix}",
+            participant, lane_topic(stream, type_name),
             topic_types.resolve(type_name), profile)
-        for key, (suffix, type_name, profile) in RAW_LANES.items()
+        for key, (stream, type_name, profile) in RAW_LANES.items()
     }
     writers["blob"] = tt.TypedDictWriter(
         participant, blob.BLOB_TOPIC, topic_types.resolve(blob.BLOB_TYPE),

@@ -111,13 +111,13 @@ on that type's §3.3.3 QoS profile.
 ```
 # Per-operator (each publisher → fuser + viewer)
 spatialdds/{operator}/sensing/detection3d/v1         detection3d         DET_RT
-spatialdds/{operator}/ego/pose/v1                    framed_pose         POSE_RT
+spatialdds/{operator}/ego/framed_pose/v1                    framed_pose         POSE_RT
 spatialdds/{operator}/plan/{agent}/trajectory/v1     planned_trajectory  EVENT_RT
 
 # Platform (fuser → viewer)
-spatialdds/platform/fusion/track/v1                  fused_track           DET_RT
-spatialdds/platform/fusion/coverage/v1               oarc.fusion_coverage  MAP_META
-spatialdds/platform/events/trajectory_conflict/v1    spatial_event         EVENT_RT
+spatialdds/platform/fusion/fused_track/v1                  fused_track           DET_RT
+spatialdds/platform/fusion/oarc.fusion_coverage/v1               oarc.fusion_coverage  MAP_META
+spatialdds/platform/events/spatial_event/v1    spatial_event         EVENT_RT
 spatialdds/platform/entity/binding/v1                entity_binding        MAP_META
 
 # Discovery — one well-known topic, keyed on service_id

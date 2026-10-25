@@ -99,11 +99,11 @@ class TestDispatch(unittest.TestCase):
 
     def test_dispatch_routes_only_to_matching_clients(self):
         self.cm.handle_subscribe(self.s_a,
-                                  {"id": "a1", "pattern": "spatialdds/*/ego/pose/v1"})
+                                  {"id": "a1", "pattern": "spatialdds/*/ego/framed_pose/v1"})
         self.cm.handle_subscribe(self.s_b,
                                   {"id": "b1", "pattern": "spatialdds/*/sensing/*"})
         sent = _run(self.cm.dispatch(
-            "spatialdds/op/ego/pose/v1", "FramedPose",
+            "spatialdds/op/ego/framed_pose/v1", "FramedPose",
             {"x": 1}, 1_000_000_000))
         self.assertEqual(sent, 1)
         self.assertEqual(len(self.rec_a.messages), 1)

@@ -6,9 +6,9 @@ well-known discovery topic, runs :class:`fusion.TrackFusion`, and publishes
 its own four typed streams — which it announces the same way, so a consumer
 finds the platform exactly as it finds an operator:
 
-    spatialdds/platform/fusion/track/v1              fused_track
-    spatialdds/platform/fusion/coverage/v1           oarc.fusion_coverage
-    spatialdds/platform/events/trajectory_conflict/v1  spatial_event
+    spatialdds/platform/fusion/fused_track/v1              fused_track
+    spatialdds/platform/fusion/oarc.fusion_coverage/v1           oarc.fusion_coverage
+    spatialdds/platform/events/spatial_event/v1  spatial_event
     spatialdds/platform/entity/binding/v1            entity_binding
 
 Detection sets are recognised by the announced type on the topic they arrive
@@ -66,9 +66,16 @@ PLAN_TYPE = "planned_trajectory"
 DET3D_TOPIC_SUFFIX = "sensing/detection3d/v1"
 DET3D_TOPIC_FMT = "spatialdds/{operator}/sensing/detection3d/v1"
 PLAN_TOPIC_SUFFIX = "trajectory/v1"
-TRACK_TOPIC = "spatialdds/platform/fusion/track/v1"
-COVERAGE_TOPIC = "spatialdds/platform/fusion/coverage/v1"
-TRAJ_CONFLICT_TOPIC = "spatialdds/platform/events/trajectory_conflict/v1"
+# §3.3.1, `spatialdds/<scene>/<stream>/<type>/v1`, the type segment being the
+# lane's registered type. Until the SDK adoption the first three were
+# …/fusion/track, …/fusion/coverage and …/events/trajectory_conflict, names
+# that did not say what they carried. The binding lane keeps the name §2
+# gives it: EntityBinding "SHOULD be advertised on the topic
+# spatialdds/<scene>/entity/binding/v1", and a profile's own template is
+# normative where it is defined (§3.3.1).
+TRACK_TOPIC = "spatialdds/platform/fusion/fused_track/v1"
+COVERAGE_TOPIC = "spatialdds/platform/fusion/oarc.fusion_coverage/v1"
+TRAJ_CONFLICT_TOPIC = "spatialdds/platform/events/spatial_event/v1"
 ENTITY_BINDING_TOPIC = "spatialdds/platform/entity/binding/v1"
 SCENE_FRAME_FQN = "scene/intersection"
 

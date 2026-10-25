@@ -243,7 +243,7 @@ def coverage_metrics(tracks: List[FusedTrack]) -> Dict[str, float]:
     """Compute per-tick metrics for the coverage dashboard.
 
     Returns a plain dict suitable for JSON publication on
-    ``spatialdds/platform/fusion/coverage/v1``.
+    ``spatialdds/platform/fusion/oarc.fusion_coverage/v1``.
 
     multi_source_pct is the fraction of confirmed tracks seen by 2+
     independent operators — the headline "no single source could build

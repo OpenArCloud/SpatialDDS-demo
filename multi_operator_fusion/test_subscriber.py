@@ -33,13 +33,13 @@ class OperatorFromTopic(unittest.TestCase):
 
     def test_vision_topic(self):
         self.assertEqual(
-            operator_from_topic("spatialdds/operator_b/vision/CAM_FRONT/frame/v1"),
+            operator_from_topic("spatialdds/operator_b/CAM_FRONT/video_frame/v1"),
             "operator_b",
         )
 
     def test_platform_topic(self):
         self.assertEqual(
-            operator_from_topic("spatialdds/platform/fusion/track/v1"),
+            operator_from_topic("spatialdds/platform/fusion/fused_track/v1"),
             "platform",
         )
 

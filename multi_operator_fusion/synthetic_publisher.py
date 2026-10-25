@@ -11,7 +11,7 @@ What goes on the wire, per operator:
 
     spatialdds/{operator}/sensing/detection3d/v1
         oarc.detection3d_velocity   (Detection3DSet)      RADAR_RT
-    spatialdds/{operator}/ego/pose/v1
+    spatialdds/{operator}/ego/framed_pose/v1
         framed_pose                 (spatial::core::FramedPose)  POSE_RT
     spatialdds/{operator}/plan/{operator}_ego/trajectory/v1
         planned_trajectory          (PlannedTrajectory)          EVENT_RT
@@ -84,9 +84,13 @@ DET_TYPE, DET_QOS = "detection3d", "RADAR_RT"
 TOPIC_FMT = "spatialdds/{operator}/sensing/detection3d/v1"
 
 EGO_POSE_TYPE, EGO_POSE_QOS = "framed_pose", "POSE_RT"
-EGO_POSE_TOPIC_FMT = "spatialdds/{operator}/ego/pose/v1"
+EGO_POSE_TOPIC_FMT = "spatialdds/{operator}/ego/framed_pose/v1"
 
 PLAN_TYPE, PLAN_QOS = "planned_trajectory", "EVENT_RT"
+# The name §2 gives a PlannedTrajectory, `spatialdds/<scene>/plan/<agent_id>/
+# trajectory/v1`: a profile's own template, normative where it is defined, and
+# allowed its extra segment (§3.3.1). (`ego/pose` above was `framed_pose`'s
+# lane under a name that did not say so, until the SDK adoption.)
 PLAN_TOPIC_FMT = "spatialdds/{operator}/plan/{operator}_ego/trajectory/v1"
 
 # ── Infrastructure (radar-plausible) detection stream ──────────────────

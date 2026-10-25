@@ -11,11 +11,11 @@ This demo maps nuScenes mini split to SpatialDDS-style typed payloads and publis
 
 ## Topics
 
-- `spatialdds/nuscenes/vision/<cam>/frame/v1`
-- `spatialdds/nuscenes/lidar/LIDAR_TOP/frame/v1`
-- `spatialdds/nuscenes/rad/<radar>/frame/v1`
-- `spatialdds/nuscenes/semantics/det3d/v1`
-- `spatialdds/nuscenes/ego/pose/v1`
+- `spatialdds/nuscenes/<cam>/video_frame/v1`
+- `spatialdds/nuscenes/LIDAR_TOP/lidar_frame/v1`
+- `spatialdds/nuscenes/<radar>/radar_detection/v1`
+- `spatialdds/nuscenes/semantics/detection3d/v1`
+- `spatialdds/nuscenes/ego/framed_pose/v1`
 
 ## Types (§3.3.2 registry names, and their QoS profiles)
 

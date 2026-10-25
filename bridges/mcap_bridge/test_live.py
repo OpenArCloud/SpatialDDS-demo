@@ -76,14 +76,14 @@ def _samples() -> List[Tuple[str, str, dict]]:
         timestamp=1700000001.0, track_age=1.0)
 
     return [
-        (POSE_TYPE, "spatialdds/operator_x/ego/pose/v1", pose("operator_x", 1)),
+        (POSE_TYPE, "spatialdds/operator_x/ego/framed_pose/v1", pose("operator_x", 1)),
         (DET_TYPE, "spatialdds/operator_x/sensing/detection3d/v1",
          det_set("operator_x", "d1", 1)),
         (DET_TYPE, "spatialdds/operator_y/sensing/detection3d/v1",
          det_set("operator_y", "d2", 1)),
-        (TRACK_TYPE, "spatialdds/platform/fusion/track/v1",
+        (TRACK_TYPE, "spatialdds/platform/fusion/fused_track/v1",
          make_fused_track_set([track], timestamp_s=1700000001.0)),
-        (POSE_TYPE, "spatialdds/operator_x/ego/pose/v1", pose("operator_x", 2)),
+        (POSE_TYPE, "spatialdds/operator_x/ego/framed_pose/v1", pose("operator_x", 2)),
         (DET_TYPE, "spatialdds/operator_x/sensing/detection3d/v1",
          det_set("operator_x", "d3", 2)),
     ]

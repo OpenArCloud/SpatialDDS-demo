@@ -38,11 +38,11 @@ A minimal config:
     spatialdds_to_ros2:
       - spatialdds_pattern: spatialdds/*/sensing/detection3d/v1
         ros2_topic_template: /{source_operator}/detections_3d
-      - spatialdds_pattern: spatialdds/platform/fusion/track/v1
+      - spatialdds_pattern: spatialdds/platform/fusion/fused_track/v1
         ros2_topic: /fused/detections_3d
-      - spatialdds_pattern: spatialdds/*/ego/pose/v1
+      - spatialdds_pattern: spatialdds/*/ego/framed_pose/v1
         ros2_topic_template: /{source_operator}/pose
-      - spatialdds_pattern: spatialdds/*/geo/*/pose/v1
+      - spatialdds_pattern: spatialdds/*/*/geopose/v1
         ros2_topic_template: /{source_operator}/gps/fix
 
 The two domains are intentionally separate. ``rclpy`` participates in the

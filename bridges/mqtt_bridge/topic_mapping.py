@@ -21,52 +21,62 @@ Pure-Python, no MQTT or DDS dependencies — easy to unit-test.
 from __future__ import annotations
 
 import fnmatch
-from typing import Iterable, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 
-# ── msg_type inference table ────────────────────────────────────────────────
-# Order matters: the FIRST pattern that matches wins. More-specific
-# patterns should come before more-general ones.
-TOPIC_TYPE_MAP: List[Tuple[str, str]] = [
-    ("*/sensing/detection3d/*",   "detection3d"),
-    ("*/ego/pose/*",              "framed_pose"),
-    ("*/geo/*/pose/*",            "geopose"),
-    ("*/vision/*/frame/*",        "video_frame"),
-    ("*/vision/*/meta/*",         "video_meta"),
-    ("*/lidar/*/frame/*",         "lidar_frame"),
-    ("*/lidar/*/meta/*",          "lidar_meta"),
-    ("*/rad/*/frame/*",           "radar_detection"),
-    ("*/rad/*/tensor/*",          "radar_tensor"),
-    ("*/rad/*/meta/*",            "radar_tensor_meta"),
-    ("*/rf_beam/*/frame/*",       "rf_beam"),
-    ("*/rf_beam/*/meta/*",        "rf_beam_meta"),
-    ("*/fusion/track/*",          "fused_track"),
-    ("*/fusion/coverage/*",       "oarc.fusion_coverage"),
-    ("*/plan/*/trajectory/*",     "planned_trajectory"),
-    ("*/entity/binding/*",        "entity_binding"),
-    ("*/events/*",                "spatial_event"),
-    # Discovery is not a TopicMeta lane, so it has no registry name; the
-    # bridge handles it as its own case.
-    ("*/discovery/announce/*",    "spatialdds/discovery/announce"),
+# ── msg_type inference ──────────────────────────────────────────────────────
+# §3.3.1 names a lane `spatialdds/<scene>/<stream>/<type>/<version>`, and this
+# deployment puts the lane's registered type in the type segment, so the type
+# is read off the name rather than guessed from it. Until the SDK adoption the
+# names did not say what they carried (`…/vision/<cam>/frame/v1`,
+# `…/fusion/track/v1`), and this module kept a table of glob patterns that
+# guessed; a name the table did not know was "Unknown".
+#
+# Two kinds of name are not read that way:
+#
+# * the lane templates §2 gives two profiles, which §3.3.1 makes normative
+#   where they are defined (and allows an extra segment): a PlannedTrajectory
+#   "SHOULD be advertised on the topic spatialdds/<scene>/plan/<agent_id>/
+#   trajectory/v1", an EntityBinding on spatialdds/<scene>/entity/binding/v1;
+# * announces: on MQTT each service's announce has a topic of its own
+#   (`spatialdds/<name>/discovery/announce/v1`), which is the bridges' edge
+#   convention, not a lane, and the bridge handles them as their own case.
+ANNOUNCE_MSG_TYPE = "spatialdds/discovery/announce"
+SPEC_TEMPLATES: List[Tuple[str, str]] = [
+    ("spatialdds/*/plan/*/trajectory/v*", "planned_trajectory"),
+    ("spatialdds/*/entity/binding/v*", "entity_binding"),
 ]
+
+
+def _fits(topic: str, template: str) -> bool:
+    """Segment by segment, so a `*` never spans a `/`."""
+    have, want = topic.split("/"), template.split("/")
+    return len(have) == len(want) and all(
+        h and fnmatch.fnmatchcase(h, w) for h, w in zip(have, want))
+
+
+def _segments(topic: str) -> List[str]:
+    parts = topic.split("/")
+    if len(parts) == 5 and parts[0] == "spatialdds" and all(parts):
+        return parts
+    return []
 
 
 def infer_msg_type(topic: str) -> str:
     """
-    Best-effort type inference for ``topic``. ``"Unknown"`` if nothing
-    matches.
+    The type a topic's name says it carries. ``"Unknown"`` if the name is not
+    a five-segment §3.3.1 lane.
 
-    Note what dropped out of this table in the typed migration: 2D
-    detections, IMU samples, radio scans. Each had an invented name here and
-    no §3.3.2 registration, so a consumer could not have turned any of them
-    into a reader; the entries were labels this bridge told itself. Where a
-    real type exists but the registry does not name it, the demo's own
-    ``oarc.*`` extension name is used and the gap is on the findings list.
+    The type is not checked here (this module stays free of the registry);
+    the writer refuses a name that resolves to nothing, with the reason.
     """
-    for pattern, msg_type in TOPIC_TYPE_MAP:
-        if fnmatch.fnmatchcase(topic, pattern):
-            return msg_type
-    return "Unknown"
+    if fnmatch.fnmatchcase(topic, "*/discovery/announce/*"):
+        return ANNOUNCE_MSG_TYPE
+    for template, type_name in SPEC_TEMPLATES:
+        if _fits(topic, template):
+            return type_name
+    parts = _segments(topic)
+    return parts[3] if parts else "Unknown"
 
 
 # ── QoS / retain mapping ─────────────────────────────────────────────────────
@@ -75,30 +85,25 @@ def infer_msg_type(topic: str) -> str:
 #   QoS 1 = at-least-once (RELIABLE-ish; decisions, plans, fused output)
 #   retain=True for latched-meta semantics (TRANSIENT_LOCAL on DDS) so
 #   late-joining MQTT subscribers immediately receive the latest snapshot.
-QOS_MAP: List[Tuple[str, Tuple[int, bool]]] = [
-    ("*/meta/*",          (1, True)),
-    ("*/binding/*",       (1, True)),
-    ("*/discovery/*",     (1, True)),
-    ("*/detection3d/*",   (1, False)),
-    ("*/detection2d/*",   (1, False)),
-    ("*/track/*",         (1, False)),
-    ("*/trajectory/*",    (1, False)),
-    ("*/events/*",        (1, False)),
-    ("*/pose/*",          (0, False)),
-    ("*/frame/*",         (0, False)),
-    ("*/tensor/*",        (0, False)),
-    ("*/scan/*",          (0, False)),
-    ("*/sample/*",        (0, False)),
-    ("*/coverage/*",      (0, False)),
-]
+# By the type a name carries, for the same reason as above.
+QOS_BY_TYPE: Dict[str, Tuple[int, bool]] = {
+    "video_meta": (1, True),
+    "lidar_meta": (1, True),
+    "radar_tensor_meta": (1, True),
+    "rf_beam_meta": (1, True),
+    "entity_binding": (1, True),
+    ANNOUNCE_MSG_TYPE: (1, True),
+    "detection3d": (1, False),
+    "detection2d": (1, False),
+    "fused_track": (1, False),
+    "planned_trajectory": (1, False),
+    "spatial_event": (1, False),
+}
 DEFAULT_QOS: Tuple[int, bool] = (0, False)
 
 
 def get_qos(topic: str) -> Tuple[int, bool]:
-    for pattern, qos_retain in QOS_MAP:
-        if fnmatch.fnmatchcase(topic, pattern):
-            return qos_retain
-    return DEFAULT_QOS
+    return QOS_BY_TYPE.get(infer_msg_type(topic), DEFAULT_QOS)
 
 
 # ── MQTT-style topic-pattern matching ───────────────────────────────────────

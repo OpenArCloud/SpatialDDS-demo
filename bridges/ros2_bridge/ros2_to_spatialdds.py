@@ -98,20 +98,25 @@ def _topic(operator: str, *segments: str) -> str:
     return "/".join(["spatialdds", operator, *segments])
 
 
+# Each `spatialdds/<operator>/<stream>/<type>/v1` (§3.3.1): the operator is the
+# scene, the sensor the stream, and the type segment the registered type the
+# lane carries. Six segments (`…/geo/<sensor>/pose/v1`) until the SDK
+# adoption, which §3.3.1 does not have.
+
 def topic_for_pose(operator: str) -> str:
-    return _topic(operator, "ego/pose/v1")
+    return _topic(operator, f"ego/{MSG_TYPE_FRAMED_POSE}/v1")
 
 
 def topic_for_geo_pose(operator: str, sensor_id: str) -> str:
-    return _topic(operator, "geo", sensor_id, "pose/v1")
+    return _topic(operator, sensor_id, f"{MSG_TYPE_GEO_POSE}/v1")
 
 
 def topic_for_imu(operator: str, sensor_id: str) -> str:
-    return _topic(operator, "imu", sensor_id, "sample/v1")
+    return _topic(operator, sensor_id, f"{MSG_TYPE_IMU_SAMPLE}/v1")
 
 
 def topic_for_vision_frame(operator: str, sensor_id: str) -> str:
-    return _topic(operator, "vision", sensor_id, "frame/v1")
+    return _topic(operator, sensor_id, f"{MSG_TYPE_VISION_FRAME}/v1")
 
 
 def topic_for_detection3d(operator: str) -> str:

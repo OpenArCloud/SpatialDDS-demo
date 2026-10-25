@@ -237,7 +237,7 @@ class TestAnnounceBuilder(unittest.TestCase):
         a = _build_operator_announce(op_idx=1, t_wall=0.0)
         self.assertEqual({t["name"] for t in a["topics"]}, {
             "spatialdds/operator_b/sensing/detection3d/v1",
-            "spatialdds/operator_b/ego/pose/v1",
+            "spatialdds/operator_b/ego/framed_pose/v1",
             "spatialdds/operator_b/plan/operator_b_ego/trajectory/v1",
         })
         by_name = {t["name"]: t for t in a["topics"]}

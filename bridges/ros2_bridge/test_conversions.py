@@ -108,7 +108,7 @@ class TestPoseStamped(unittest.TestCase):
         msg = make_test_pose_stamped(x=1.0, y=2.0, z=3.0)
         topic, msg_type, payload = encode_pose_stamped(msg, "op_a",
                                                        FrameMapper("op_a"))
-        self.assertEqual(topic, "spatialdds/op_a/ego/pose/v1")
+        self.assertEqual(topic, "spatialdds/op_a/ego/framed_pose/v1")
         self.assertEqual(msg_type, MSG_TYPE_FRAMED_POSE)
         # FramedPose is (pose, frame_ref, cov, stamp) and nothing else. The
         # old payload also carried schema_version and source_operator, which
@@ -143,7 +143,7 @@ class TestNavSatFix(unittest.TestCase):
     def test_encode(self):
         msg = make_test_nav_sat_fix(lat=37.7749, lon=-122.4194, alt=15.0)
         topic, msg_type, payload = encode_nav_sat_fix(msg, "op_a")
-        self.assertEqual(topic, "spatialdds/op_a/geo/gnss/pose/v1")
+        self.assertEqual(topic, "spatialdds/op_a/gnss/geopose/v1")
         self.assertEqual(msg_type, MSG_TYPE_GEO_POSE)
         # GeoPose is lat/lon/alt + orientation + stamp + cov. It has no
         # frame_ref, no sensor_id, and no fix status.
@@ -187,7 +187,7 @@ class TestImu(unittest.TestCase):
         msg = make_test_imu(ax=0.1, ay=0.2, az=9.81, gx=0.01, gy=0.02, gz=0.03)
         topic, msg_type, payload = encode_imu(msg, "op_a", "imu0",
                                               FrameMapper("op_a"))
-        self.assertEqual(topic, "spatialdds/op_a/imu/imu0/sample/v1")
+        self.assertEqual(topic, "spatialdds/op_a/imu0/imu_sample/v1")
         self.assertEqual(msg_type, MSG_TYPE_IMU_SAMPLE)
         # ImuSample is (imu_id, accel, gyro, stamp, source_id, seq). The old
         # payload used ROS 2's field names — linear_acceleration,
@@ -232,7 +232,7 @@ class TestCompressedImage(unittest.TestCase):
         msg = make_test_compressed_image(fmt="jpeg", data=b"\xff\xd8\xff\xe0")
         topic, msg_type, payload = encode_compressed_image(
             msg, "op_a", "cam0", FrameMapper("op_a"), frame_seq=7)
-        self.assertEqual(topic, "spatialdds/op_a/vision/cam0/frame/v1")
+        self.assertEqual(topic, "spatialdds/op_a/cam0/video_frame/v1")
         self.assertEqual(msg_type, MSG_TYPE_VISION_FRAME)
         self.assertEqual(payload["codec"], "JPEG")
         self.assertEqual(payload["frame_seq"], 7)

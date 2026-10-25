@@ -679,14 +679,14 @@ function resubscribeAll() {
   // 30+ Hz comfortably; let it all through.
   sdds.subscribe("spatialdds/*/sensing/detection3d/v1", onDetections,
                   { id: "dets" });
-  sdds.subscribe("spatialdds/*/ego/pose/v1", onEgoPose, { id: "ego" });
-  sdds.subscribe("spatialdds/platform/fusion/track/v1", onFusedTracks,
+  sdds.subscribe("spatialdds/*/ego/framed_pose/v1", onEgoPose, { id: "ego" });
+  sdds.subscribe("spatialdds/platform/fusion/fused_track/v1", onFusedTracks,
                   { id: "fused" });
   sdds.subscribe("spatialdds/*/plan/*/trajectory/v1", onTrajectory,
                   { id: "plan" });
-  sdds.subscribe("spatialdds/platform/events/trajectory_conflict/v1",
+  sdds.subscribe("spatialdds/platform/events/spatial_event/v1",
                   onConflict, { id: "conflict" });
-  sdds.subscribe("spatialdds/platform/fusion/coverage/v1", onCoverage,
+  sdds.subscribe("spatialdds/platform/fusion/oarc.fusion_coverage/v1", onCoverage,
                   { id: "coverage" });
   sdds.subscribe("spatialdds/platform/entity/binding/v1", onBinding,
                   { id: "binding" });

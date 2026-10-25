@@ -61,6 +61,41 @@ measures the shrink with the same tool, against the tree as it is then.
   no N.1 conversion, key, class lookup or recorded schema in 0.7.1. The
   probes here tested pinned types only. That is spatialdds-py's finding 69.
   0.7.2 fixed it with `sd.dds.extend()`, and this repository pins 0.7.2.
+- **One approved rename row is withdrawn: `spatialdds/blob/chunk/v1` keeps its
+  name.** The census did not list OpenVPS as a reader of the blob lane. Its
+  maplocalizer reads query imagery from exactly that topic
+  (`maplocalizer/server/spatialdds/service.py:65` there) and fails a request
+  whose image never arrives, and the web bridge is what sends it. The
+  scene-shaped name would have broken localization in the OpenVPS demo. The
+  lane is opened with `topic=`, and the rename moves with OpenVPS's own
+  adoption. Measured: the demo-shaped `BlobSubscriber` OpenVPS vendors
+  receives an SDK writer's blob whole on that name.
+- **Two more approved rows are withdrawn, on the spec's word: the plan and
+  binding lanes keep §2's names.** §2 gives both a lane template: a
+  PlannedTrajectory "SHOULD be advertised on the topic
+  `spatialdds/<scene>/plan/<agent_id>/trajectory/v1`", an EntityBinding on
+  `spatialdds/<scene>/entity/binding/v1`. §3.3.1 makes a profile's own
+  template "normative as specified where [it is] defined", allows it
+  "additional path segments", and calls the `<type>` segment "a
+  human-readable hint". The census read only §3.3.1's pattern. Renaming
+  these two would have moved them off a SHOULD. The SDK's check refuses
+  the six-segment plan template as of 0.7.2, stricter than §3.3.1 allows
+  (spatialdds-py S15, new), so the bridges, whose announce-driven reader
+  opens the plan lane, wait for 0.7.3.
+- **The rename table is incomplete; the rule is not.** It missed the ROS
+  bridge's operator lanes (`<op>/geo/<sensor>/pose`, `<op>/imu/<sensor>/sample`,
+  `<op>/vision/<cam>/frame`), the infrastructure publisher's (`rf_beam`,
+  `rad`, `lidar`, `geo`) and DeepSense's `semantics/det2d`. The one rule
+  covers each, and the rename commit lists them all.
+  `tests/test_topic_names.py` holds every publisher's lanes to it.
+- **The SDK's announce cannot carry this deployment's frame (S14, new).**
+  `p.announce()` writes its own earth-fixed `FrameRef`, whose `uuid` is empty.
+  Appendix G makes the uuid the identity key, and this repository's discovery
+  core refuses the record, so a service announcing through the SDK is
+  invisible to `/.well-known/spatialdds/search`. With S11 (no
+  `coverage_frame_ref` or `auth_hint` passthrough, and topics that list only
+  written lanes), it keeps the mock VPS's and the catalogue's announces on
+  `discovery_bus` until 0.7.3, each labelled where it is.
 
 ## The headline
 

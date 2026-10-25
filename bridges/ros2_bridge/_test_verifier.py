@@ -36,9 +36,9 @@ from spatialdds.dds import to_json  # noqa: E402
 # CLI-flag defaults for sensor ids.
 OPERATOR = "test_fleet"
 LANES = [
-    ("pose", f"spatialdds/{OPERATOR}/ego/pose/v1", "framed_pose", "POSE_RT"),
-    ("geo", f"spatialdds/{OPERATOR}/geo/gnss/pose/v1", "geopose", "POSE_RT"),
-    ("imu", f"spatialdds/{OPERATOR}/imu/imu_0/sample/v1", "imu_sample",
+    ("pose", f"spatialdds/{OPERATOR}/ego/framed_pose/v1", "framed_pose", "POSE_RT"),
+    ("geo", f"spatialdds/{OPERATOR}/gnss/geopose/v1", "geopose", "POSE_RT"),
+    ("imu", f"spatialdds/{OPERATOR}/imu_0/imu_sample/v1", "imu_sample",
      "IMU_RT"),
 ]
 

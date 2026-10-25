@@ -162,10 +162,10 @@ def _check_fusion() -> None:
     def fused_topic():
         topics = _get("/api/topics?stale_threshold_s=120")["topics"]
         fused = [t for t in topics
-                 if t["logical_topic"] == "spatialdds/platform/fusion/track/v1"]
+                 if t["logical_topic"] == "spatialdds/platform/fusion/fused_track/v1"]
         return fused[0] if fused else None
 
-    track_topic = _wait(fused_topic, "platform/fusion/track/v1 to appear",
+    track_topic = _wait(fused_topic, "platform/fusion/fused_track/v1 to appear",
                         timeout_s=TIMEOUT_S * 2)
     print(f"[smoke] fused tracks: {track_topic['message_count']} messages "
           f"@ {track_topic['rate_hz']:.1f} Hz", flush=True)

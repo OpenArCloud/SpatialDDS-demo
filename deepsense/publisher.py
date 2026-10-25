@@ -28,27 +28,26 @@ from cyclonedds.domain import DomainParticipant
 from spatialdds_demo import blob, topic_types, typed_transport as tt
 
 # (topic, §3.3.2 type, §3.3.3 QoS profile) for every lane this publisher owns.
+# Each topic is `spatialdds/deepsense/<stream>/<type>/v1` (§3.3.1), the stream
+# being the sensor unit and the type segment the lane's own type. Six segments
+# (`…/rf_beam/unit1_60ghz/meta/v1`) until the SDK adoption.
+
+
+def _lane(stream: str, type_name: str, profile: str):
+    return (f"spatialdds/deepsense/{stream}/{type_name}/v1", type_name, profile)
+
+
 LANES = {
-    "beam_meta":    ("spatialdds/deepsense/rf_beam/unit1_60ghz/meta/v1",
-                     "rf_beam_meta", "MAP_META"),
-    "beam_frame":   ("spatialdds/deepsense/rf_beam/unit1_60ghz/frame/v1",
-                     "rf_beam", "RF_BEAM_RT"),
-    "radar_meta":   ("spatialdds/deepsense/rad/unit1_radar/meta/v1",
-                     "radar_tensor_meta", "MAP_META"),
-    "radar_tensor": ("spatialdds/deepsense/rad/unit1_radar/tensor/v1",
-                     "radar_tensor", "RADAR_RT"),
-    "vision_meta":  ("spatialdds/deepsense/vision/unit1_cam/meta/v1",
-                     "video_meta", "MAP_META"),
-    "vision_frame": ("spatialdds/deepsense/vision/unit1_cam/frame/v1",
-                     "video_frame", "VIDEO_LIVE"),
-    "unit1_geo":    ("spatialdds/deepsense/geo/unit1/pose/v1",
-                     "geopose", "POSE_RT"),
-    "unit2_geo":    ("spatialdds/deepsense/geo/unit2/pose/v1",
-                     "geopose", "POSE_RT"),
-    "lidar_frame":  ("spatialdds/deepsense/lidar/unit1_lidar/frame/v1",
-                     "lidar_frame", "GEOM_TILE"),
-    "detection2d":  ("spatialdds/deepsense/semantics/det2d/v1",
-                     "detection2d", "RADAR_RT"),
+    "beam_meta":    _lane("unit1_60ghz", "rf_beam_meta", "MAP_META"),
+    "beam_frame":   _lane("unit1_60ghz", "rf_beam", "RF_BEAM_RT"),
+    "radar_meta":   _lane("unit1_radar", "radar_tensor_meta", "MAP_META"),
+    "radar_tensor": _lane("unit1_radar", "radar_tensor", "RADAR_RT"),
+    "vision_meta":  _lane("unit1_cam", "video_meta", "MAP_META"),
+    "vision_frame": _lane("unit1_cam", "video_frame", "VIDEO_LIVE"),
+    "unit1_geo":    _lane("unit1", "geopose", "POSE_RT"),
+    "unit2_geo":    _lane("unit2", "geopose", "POSE_RT"),
+    "lidar_frame":  _lane("unit1_lidar", "lidar_frame", "GEOM_TILE"),
+    "detection2d":  _lane("semantics", "detection2d", "RADAR_RT"),
     "blob":         (blob.BLOB_TOPIC, blob.BLOB_TYPE, blob.BLOB_PROFILE),
 }
 

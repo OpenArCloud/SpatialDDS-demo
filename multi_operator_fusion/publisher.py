@@ -43,8 +43,13 @@ SENSOR_FILTERS: Dict[str, set] = {
 }
 
 
-def _topic(operator: str, *parts: str) -> str:
-    return "/".join(("spatialdds", operator, *parts))
+def _topic(operator: str, stream: str, type_name: str) -> str:
+    """`spatialdds/<operator>/<stream>/<type>/v1` (§3.3.1): the operator is
+    the scene, the stream is the sensor or lane instance, and the type
+    segment is the lane's registered type, so the name says what it carries.
+    Until the SDK adoption the sensor lanes had six segments
+    (`…/vision/<cam>/frame/v1`), which §3.3.1 does not have."""
+    return f"spatialdds/{operator}/{stream}/{type_name}/v1"
 
 
 def _offset_vec(payload: Dict, path: Iterable[str],
@@ -78,16 +83,13 @@ def _offset_vec(payload: Dict, path: Iterable[str],
 # the old payloads stamped a `source_operator` field onto every message,
 # including spec types that have no such field.
 LANES = {
-    "ego_pose":    (("ego", "pose", "v1"), "framed_pose", "POSE_RT"),
-    "geo_pose":    (("geo", "ego", "pose", "v1"), "geopose", "POSE_RT"),
+    "ego_pose":    ("ego", "framed_pose", "POSE_RT"),
+    "geo_pose":    ("ego", "geopose", "POSE_RT"),
     "vision_meta": None,   # per-camera, built below
     "vision_frame": None,
-    "lidar_meta":  (("lidar", LIDAR_CHANNEL, "meta", "v1"),
-                    "lidar_meta", "MAP_META"),
-    "lidar_frame": (("lidar", LIDAR_CHANNEL, "frame", "v1"),
-                    "lidar_frame", "GEOM_TILE"),
-    "detection3d": (("sensing", "detection3d", "v1"),
-                    "detection3d", "RADAR_RT"),
+    "lidar_meta":  (LIDAR_CHANNEL, "lidar_meta", "MAP_META"),
+    "lidar_frame": (LIDAR_CHANNEL, "lidar_frame", "GEOM_TILE"),
+    "detection3d": ("sensing", "detection3d", "RADAR_RT"),
 }
 VISION_META_TYPE = ("video_meta", "MAP_META")
 VISION_FRAME_TYPE = ("video_frame", "VIDEO_LIVE")
@@ -166,10 +168,10 @@ def run(args: argparse.Namespace) -> int:
     participant = DomainParticipant(args.domain)
     writers: Dict[str, tt.TypedDictWriter] = {}
 
-    def publish(topic_parts, lane, payload) -> None:
+    def publish(stream, lane, payload) -> None:
         """Write one sample, building it into the lane's announced type."""
         type_name, profile = lane
-        topic = _topic(operator, *topic_parts)
+        topic = _topic(operator, stream, type_name)
         writer = writers.get(topic)
         if writer is None:
             writer = tt.TypedDictWriter(
@@ -215,11 +217,10 @@ def run(args: argparse.Namespace) -> int:
                         # gets the calibration without waiting for a
                         # republish. It used to share the frame topic, which
                         # meant two types on one topic.
-                        publish(("vision", cam, "meta", "v1"),
-                                VISION_META_TYPE,
+                        publish(cam, VISION_META_TYPE,
                                 to_dict(camera_to_vision_meta(sd, cs)))
                         sent_meta.add(cam)
-                    publish(("vision", cam, "frame", "v1"), VISION_FRAME_TYPE,
+                    publish(cam, VISION_FRAME_TYPE,
                             to_dict(sample_data_to_vision_frame(sd, frame_seq)))
 
             if "lidar" in enabled and LIDAR_CHANNEL in sample["data"]:
@@ -246,7 +247,7 @@ def run(args: argparse.Namespace) -> int:
                         radar_to_detection_set(sd, radar_pc.points, frame_seq))
                     for det in det_set.get("dets", []):
                         _offset_vec(det, ("xyz_m",), offset)
-                    publish(("rad", radar, "frame", "v1"), RADAR_TYPE, det_set)
+                    publish(radar, RADAR_TYPE, det_set)
 
             # This lane feeds the fusion service, which gates association on
             # velocity — so it carries oarc.detection3d_velocity, not a bare

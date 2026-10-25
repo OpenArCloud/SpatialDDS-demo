@@ -132,7 +132,7 @@ class TestEntityBinding(unittest.TestCase):
 
     def test_binding_minimal(self):
         components = [
-            make_component_ref("spatialdds/platform/fusion/track/v1", "t1"),
+            make_component_ref("spatialdds/platform/fusion/fused_track/v1", "t1"),
             make_component_ref("spatialdds/op_a/sensing/detection3d/v1", "det_3"),
         ]
         b = make_entity_binding(entity_id="ent_t1", entity_class="vehicle.car",
@@ -143,7 +143,7 @@ class TestEntityBinding(unittest.TestCase):
         self.assertEqual(b["entity_class"], "vehicle.car")
         self.assertEqual(len(b["components"]), 2)
         self.assertEqual(b["components"][0]["topic"],
-                          "spatialdds/platform/fusion/track/v1")
+                          "spatialdds/platform/fusion/fused_track/v1")
         self.assertFalse(b["has_pose"])
         self.assertEqual(b["source_id"], "fusion")
         self.assertEqual(b["stamp"]["sec"], 42)

@@ -1,9 +1,9 @@
 {
- "$comment": "One /ws data frame from the gateway, captured live on 2026-10-21 from the local fusion stack (deploy/aws/docker-compose.local.yaml: synthetic_publisher + fusion_service + web_bridge). What fusion_service actually publishes on spatialdds/platform/events/trajectory_conflict/v1. Frozen; read by fusion-dashboard.spec.ts. Re-derived 2026-10-24 at the SDK adoption: the captured payload, put through the SDK's N.1 codec (sd.dds.from_json then to_json), because /ws carries N.1 since then. Not a live recapture; the acceptance run replaces it with one.",
+ "$comment": "One /ws data frame from the gateway, captured live on 2026-10-21 from the local fusion stack (deploy/aws/docker-compose.local.yaml: synthetic_publisher + fusion_service + web_bridge). What fusion_service actually publishes on spatialdds/platform/events/trajectory_conflict/v1. Frozen; read by fusion-dashboard.spec.ts. Re-derived 2026-10-24 at the SDK adoption: the captured payload, put through the SDK's N.1 codec (sd.dds.from_json then to_json), because /ws carries N.1 since then. Not a live recapture; the acceptance run replaces it with one. Its logical_topic renamed at the topic-rename commit (2026-10-25) to the name the service publishes since: spatialdds/platform/events/spatial_event/v1, the type segment being the registered type. The payload is unchanged.",
  "type": "data",
  "sub_id": "conflict",
  "msg_type": "spatial_event",
- "logical_topic": "spatialdds/platform/events/trajectory_conflict/v1",
+ "logical_topic": "spatialdds/platform/events/spatial_event/v1",
  "timestamp_ns": 1792629400371278800,
  "payload": {
   "event_id": "conflict:operator_a_ego|operator_b_ego",

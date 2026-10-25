@@ -12,10 +12,10 @@ multi-operator fusion service's reverse-direction case:
 
 | Direction | ROS 2 type | SpatialDDS type | QoS | SpatialDDS topic |
 |---|---|---|---|---|
-| ROS 2 → SpatialDDS | `geometry_msgs/PoseStamped` | `framed_pose` | `POSE_RT` | `spatialdds/{op}/ego/pose/v1` |
-| ROS 2 → SpatialDDS | `sensor_msgs/NavSatFix` | `geopose` + `navsat_status` | `POSE_RT` | `spatialdds/{op}/geo/{sensor}/pose/v1` |
-| ROS 2 → SpatialDDS | `sensor_msgs/Imu` | `imu_sample` | `IMU_RT` | `spatialdds/{op}/imu/{sensor}/sample/v1` |
-| ROS 2 → SpatialDDS | `sensor_msgs/CompressedImage` | `video_frame` + `blob_chunk` | `VIDEO_LIVE` | `spatialdds/{op}/vision/{sensor}/frame/v1` |
+| ROS 2 → SpatialDDS | `geometry_msgs/PoseStamped` | `framed_pose` | `POSE_RT` | `spatialdds/{op}/ego/framed_pose/v1` |
+| ROS 2 → SpatialDDS | `sensor_msgs/NavSatFix` | `geopose` + `navsat_status` | `POSE_RT` | `spatialdds/{op}/{sensor}/geopose/v1` |
+| ROS 2 → SpatialDDS | `sensor_msgs/Imu` | `imu_sample` | `IMU_RT` | `spatialdds/{op}/{sensor}/imu_sample/v1` |
+| ROS 2 → SpatialDDS | `sensor_msgs/CompressedImage` | `video_frame` + `blob_chunk` | `VIDEO_LIVE` | `spatialdds/{op}/{sensor}/video_frame/v1` |
 | ROS 2 → SpatialDDS | `vision_msgs/Detection3DArray` | `detection3d` | `DET_RT` | `spatialdds/{op}/sensing/detection3d/v1` |
 | SpatialDDS → ROS 2 | `detection3d` / `fused_track` | (decoded) | | → `vision_msgs/Detection3DArray` |
 | SpatialDDS → ROS 2 | `framed_pose` | (decoded) | | → `geometry_msgs/PoseStamped` |
@@ -124,7 +124,7 @@ ros2_to_spatialdds:
   - ros2_topic: /detections_3d
     ros2_type: vision_msgs/msg/Detection3DArray
 spatialdds_to_ros2:
-  - spatialdds_pattern: spatialdds/platform/fusion/track/v1
+  - spatialdds_pattern: spatialdds/platform/fusion/fused_track/v1
     ros2_topic: /fused/detections_3d
   - spatialdds_pattern: spatialdds/*/sensing/detection3d/v1
     ros2_topic_template: /{source_operator}/detections_3d

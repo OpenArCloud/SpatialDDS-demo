@@ -107,7 +107,7 @@ def _conflict_payload():
 def _binding_payload():
     return _wire(EntityBinding, make_entity_binding(
         "entity_fused-1", "vehicle.car",
-        [make_component_ref("spatialdds/platform/fusion/track/v1", "fused-1"),
+        [make_component_ref("spatialdds/platform/fusion/fused_track/v1", "fused-1"),
          make_component_ref("spatialdds/operator_a/sensing/detection3d/v1",
                             "obj_00")],
         position=(0.0, 0.0, 0.0), frame_ref_fqn=SCENE, timestamp_s=1.0))
@@ -116,7 +116,7 @@ def _binding_payload():
 def _announce_payload(operator: str):
     return _wire(Announce, make_announce(
         operator=operator, service_kind="SENSING",
-        topics=[topic_meta(f"spatialdds/{operator}/ego/pose/v1",
+        topics=[topic_meta(f"spatialdds/{operator}/ego/framed_pose/v1",
                            "framed_pose", "POSE_RT")],
         coverage=circle_coverage(0.0, 0.0, 50.0), timestamp_s=1.0))
 
@@ -159,7 +159,7 @@ class TestSubscriberRerun(unittest.TestCase):
 
     def test_ego_pose(self):
         self._drive("framed_pose",
-                     "spatialdds/operator_a/ego/pose/v1",
+                     "spatialdds/operator_a/ego/framed_pose/v1",
                      _ego_payload("operator_a"))
 
     def test_detection3d_set(self):
@@ -175,7 +175,7 @@ class TestSubscriberRerun(unittest.TestCase):
 
     def test_fused_tracks(self):
         self._drive("fused_track",
-                     "spatialdds/platform/fusion/track/v1",
+                     "spatialdds/platform/fusion/fused_track/v1",
                      _fused_tracks_payload(),
                      operator="platform")
 
@@ -186,7 +186,7 @@ class TestSubscriberRerun(unittest.TestCase):
 
     def test_spatial_event_conflict(self):
         self._drive("spatial_event",
-                     "spatialdds/platform/events/trajectory_conflict/v1",
+                     "spatialdds/platform/events/spatial_event/v1",
                      _conflict_payload(),
                      operator="platform")
 
@@ -195,7 +195,7 @@ class TestSubscriberRerun(unittest.TestCase):
         from unittest import mock
         with mock.patch.object(rr, "log", wraps=rr.log) as log:
             self._drive("spatial_event",
-                        "spatialdds/platform/events/trajectory_conflict/v1",
+                        "spatialdds/platform/events/spatial_event/v1",
                         payload, operator="platform")
         return [(c.args[0], str(getattr(c.args[1], "level", "")))
                 for c in log.call_args_list]
@@ -242,7 +242,7 @@ class TestSubscriberRerun(unittest.TestCase):
 
     def test_coverage_metrics(self):
         self._drive("oarc.fusion_coverage",
-                     "spatialdds/platform/fusion/coverage/v1",
+                     "spatialdds/platform/fusion/oarc.fusion_coverage/v1",
                      _coverage_payload(),
                      operator="platform")
 
@@ -274,7 +274,7 @@ class TestSubscriberRerun(unittest.TestCase):
         self.sub._trail_max = 5
         for i in range(20):
             self._drive("framed_pose",
-                         "spatialdds/operator_a/ego/pose/v1",
+                         "spatialdds/operator_a/ego/framed_pose/v1",
                          _ego_payload("operator_a", x=float(i), y=0.0))
         self.assertLessEqual(len(self.sub._trails["operator_a"]), 5)
 

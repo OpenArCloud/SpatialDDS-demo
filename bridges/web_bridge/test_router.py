@@ -22,9 +22,9 @@ class TestGlobMatching(unittest.TestCase):
                             max_rate_hz=max_rate_hz)
 
     def test_exact_match(self):
-        sub = self._sub("spatialdds/op_a/ego/pose/v1")
-        self.assertTrue(self.r.match("spatialdds/op_a/ego/pose/v1", "FramedPose", sub, 0))
-        self.assertFalse(self.r.match("spatialdds/op_b/ego/pose/v1", "FramedPose", sub, 0))
+        sub = self._sub("spatialdds/op_a/ego/framed_pose/v1")
+        self.assertTrue(self.r.match("spatialdds/op_a/ego/framed_pose/v1", "FramedPose", sub, 0))
+        self.assertFalse(self.r.match("spatialdds/op_b/ego/framed_pose/v1", "FramedPose", sub, 0))
 
     def test_wildcard_segment(self):
         sub = self._sub("spatialdds/*/sensing/detection3d/v1")
@@ -33,7 +33,7 @@ class TestGlobMatching(unittest.TestCase):
         self.assertTrue(self.r.match(
             "spatialdds/platform/sensing/detection3d/v1", "Detection3DSet", sub, 0))
         self.assertFalse(self.r.match(
-            "spatialdds/operator_a/ego/pose/v1", "FramedPose", sub, 0))
+            "spatialdds/operator_a/ego/framed_pose/v1", "FramedPose", sub, 0))
 
     def test_wildcard_all(self):
         sub = self._sub("*")

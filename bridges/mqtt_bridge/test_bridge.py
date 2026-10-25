@@ -303,7 +303,7 @@ class TestMqttBridgeIntegration(unittest.TestCase):
         from spatialdds_demo import typed_transport as tt
         from spatialdds.dds.types.spatial.semantics import FusedTrackSet
 
-        topic = "spatialdds/platform/fusion/track/v1"
+        topic = "spatialdds/platform/fusion/fused_track/v1"
         cfg = _make_config("outbound_only", bridge_id="bridge-out",
                            client_id="bridge-out-mqtt")
         bridge = MqttDdsBridge(cfg)

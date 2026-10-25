@@ -12,8 +12,6 @@ if str(_HERE) not in sys.path:
 
 from topic_mapping import (  # noqa: E402
     DEFAULT_QOS,
-    QOS_MAP,
-    TOPIC_TYPE_MAP,
     get_qos,
     infer_msg_type,
     matches_any,
@@ -23,26 +21,27 @@ from topic_mapping import (  # noqa: E402
 
 class TestMsgTypeInference(unittest.TestCase):
     """
-    Inferred names are §3.3.2 registry names, so a consumer can resolve one
-    into a reader. The old table returned invented labels like
-    ``"Detection3DSet"`` that no registry knew.
+    The type is the name's type segment (§3.3.1), which this deployment makes
+    the lane's registered type. The table of guessing globs this replaced
+    returned "Unknown" for any name it had not been taught.
     """
 
     CASES = [
-        ("spatialdds/op_a/sensing/detection3d/v1", "detection3d"),
-        ("spatialdds/op_a/ego/pose/v1",            "framed_pose"),
-        ("spatialdds/op_a/geo/gnss_0/pose/v1",     "geopose"),
-        ("spatialdds/infra/vision/cam_0/frame/v1", "video_frame"),
-        ("spatialdds/infra/vision/cam_0/meta/v1",  "video_meta"),
-        ("spatialdds/infra/rf_beam/unit1/frame/v1", "rf_beam"),
-        ("spatialdds/op/plan/robot_1/trajectory/v1", "planned_trajectory"),
-        ("spatialdds/platform/fusion/track/v1",    "fused_track"),
-        ("spatialdds/platform/fusion/coverage/v1", "oarc.fusion_coverage"),
+        ("spatialdds/op_a/sensing/detection3d/v1",        "detection3d"),
+        ("spatialdds/op_a/ego/framed_pose/v1",            "framed_pose"),
+        ("spatialdds/op_a/gnss_0/geopose/v1",             "geopose"),
+        ("spatialdds/infra/cam_0/video_frame/v1",         "video_frame"),
+        ("spatialdds/infra/cam_0/video_meta/v1",          "video_meta"),
+        ("spatialdds/infra/unit1/rf_beam/v1",             "rf_beam"),
+        ("spatialdds/op/plan/robot_1/trajectory/v1",   "planned_trajectory"),
+        ("spatialdds/platform/fusion/fused_track/v1",     "fused_track"),
+        ("spatialdds/platform/fusion/oarc.fusion_coverage/v1",
+         "oarc.fusion_coverage"),
         ("spatialdds/platform/entity/binding/v1",  "entity_binding"),
-        ("spatialdds/platform/events/conflict/v1", "spatial_event"),
+        ("spatialdds/platform/events/spatial_event/v1",   "spatial_event"),
     ]
 
-    def test_inferred_names_are_registry_names(self):
+    def test_the_type_is_the_type_segment(self):
         for topic, expected in self.CASES:
             with self.subTest(topic=topic):
                 self.assertEqual(infer_msg_type(topic), expected)
@@ -63,48 +62,62 @@ class TestMsgTypeInference(unittest.TestCase):
 
     def test_announce_is_its_own_case(self):
         # Discovery is not a TopicMeta lane, so it has no registry name.
-        self.assertEqual(infer_msg_type("spatialdds/discovery/announce/v1"),
-                         "spatialdds/discovery/announce")
+        for topic in ("spatialdds/discovery/announce/v1",
+                      "spatialdds/svc_a/discovery/announce/v1"):
+            with self.subTest(topic=topic):
+                self.assertEqual(infer_msg_type(topic),
+                                 "spatialdds/discovery/announce")
 
-    def test_unmatched_topic_is_unknown(self):
-        self.assertEqual(infer_msg_type("spatialdds/op/some/other/v1"),
-                         "Unknown")
+    def test_the_spec_templates_name_their_own_types(self):
+        """§2 gives PlannedTrajectory and EntityBinding lane templates of
+        their own; their type is not their type segment."""
+        self.assertEqual(
+            infer_msg_type("spatialdds/op/plan/robot_1/trajectory/v1"),
+            "planned_trajectory")
+        self.assertEqual(
+            infer_msg_type("spatialdds/platform/entity/binding/v1"),
+            "entity_binding")
+        # A `*` in a template is one segment, never several.
+        self.assertEqual(
+            infer_msg_type("spatialdds/a/b/plan/c/trajectory/v1"), "Unknown")
+
+    def test_a_name_that_is_not_a_lane_is_unknown(self):
+        # Six segments, the pre-adoption sensor lanes' shape: not §3.3.1.
+        for topic in ("spatialdds/op/vision/cam_0/frame/v1",
+                      "spatialdds/x/y/z", "totally/random/topic/x/v1"):
+            with self.subTest(topic=topic):
+                self.assertEqual(infer_msg_type(topic), "Unknown")
 
 
 class TestQosMapping(unittest.TestCase):
     def test_meta_retained(self):
-        qos, retain = get_qos("spatialdds/op/vision/cam_0/meta/v1")
-        self.assertEqual(qos, 1)
-        self.assertTrue(retain)
+        self.assertEqual(get_qos("spatialdds/op/cam_0/video_meta/v1"), (1, True))
 
     def test_binding_retained(self):
-        qos, retain = get_qos("spatialdds/platform/entity/binding/v1")
-        self.assertEqual(qos, 1)
-        self.assertTrue(retain)
+        self.assertEqual(
+            get_qos("spatialdds/platform/entity/binding/v1"), (1, True))
+
+    def test_announce_retained(self):
+        self.assertEqual(
+            get_qos("spatialdds/svc_a/discovery/announce/v1"), (1, True))
 
     def test_detection3d_reliable(self):
-        qos, retain = get_qos("spatialdds/op/sensing/detection3d/v1")
-        self.assertEqual(qos, 1)
-        self.assertFalse(retain)
+        self.assertEqual(
+            get_qos("spatialdds/op/sensing/detection3d/v1"), (1, False))
 
     def test_pose_best_effort(self):
-        qos, retain = get_qos("spatialdds/op/ego/pose/v1")
-        self.assertEqual(qos, 0)
-        self.assertFalse(retain)
+        self.assertEqual(get_qos("spatialdds/op/ego/framed_pose/v1"), (0, False))
 
     def test_frame_best_effort(self):
-        qos, retain = get_qos("spatialdds/infra/vision/cam_0/frame/v1")
-        self.assertEqual(qos, 0)
-        self.assertFalse(retain)
+        self.assertEqual(get_qos("spatialdds/infra/cam_0/video_frame/v1"),
+                         (0, False))
 
     def test_track_reliable(self):
-        qos, retain = get_qos("spatialdds/platform/fusion/track/v1")
-        self.assertEqual(qos, 1)
-        self.assertFalse(retain)
+        self.assertEqual(
+            get_qos("spatialdds/platform/fusion/fused_track/v1"), (1, False))
 
     def test_default(self):
-        qos, retain = get_qos("totally/random/topic")
-        self.assertEqual((qos, retain), DEFAULT_QOS)
+        self.assertEqual(get_qos("totally/random/topic"), DEFAULT_QOS)
 
 
 class TestPatternMatching(unittest.TestCase):
@@ -120,13 +133,13 @@ class TestPatternMatching(unittest.TestCase):
             ["spatialdds/operator_a/#"],
         ))
         self.assertTrue(matches_any(
-            "spatialdds/operator_a/ego/pose/v1",
+            "spatialdds/operator_a/ego/framed_pose/v1",
             ["spatialdds/operator_a/#"],
         ))
 
     def test_non_matching(self):
         self.assertFalse(matches_any(
-            "spatialdds/platform/fusion/track/v1",
+            "spatialdds/platform/fusion/fused_track/v1",
             ["spatialdds/operator_+/sensing/#"],
         ))
 
@@ -144,9 +157,9 @@ class TestPatternMatching(unittest.TestCase):
         self.assertTrue(matches_any(
             "spatialdds/operator_a/sensing/detection3d/v1", patterns))
         self.assertTrue(matches_any(
-            "spatialdds/operator_b/ego/pose/v1", patterns))
+            "spatialdds/operator_b/ego/framed_pose/v1", patterns))
         self.assertFalse(matches_any(
-            "spatialdds/infrastructure/rad/unit1/frame/v1", patterns))
+            "spatialdds/infrastructure/unit1/radar_detection/v1", patterns))
 
     def test_outbound_pattern(self):
         patterns = [
@@ -154,9 +167,9 @@ class TestPatternMatching(unittest.TestCase):
             "spatialdds/infrastructure/#",
         ]
         self.assertTrue(matches_any(
-            "spatialdds/platform/fusion/track/v1", patterns))
+            "spatialdds/platform/fusion/fused_track/v1", patterns))
         self.assertTrue(matches_any(
-            "spatialdds/infrastructure/rf_beam/unit1/frame/v1", patterns))
+            "spatialdds/infrastructure/unit1/rf_beam/v1", patterns))
         self.assertFalse(matches_any(
             "spatialdds/operator_a/sensing/detection3d/v1", patterns))
 
@@ -190,19 +203,9 @@ class TestBrokerFilterCoarsening(unittest.TestCase):
     def test_multiple_mixed_segments(self):
         # Both segments coarsened independently
         self.assertEqual(
-            to_broker_filter("spatialdds/op_+/cam_+/frame/v1"),
-            "spatialdds/+/+/frame/v1",
+            to_broker_filter("spatialdds/op_+/cam_+/video_frame/v1"),
+            "spatialdds/+/+/video_frame/v1",
         )
-
-
-class TestPriorityOrdering(unittest.TestCase):
-    """First-match wins — verify the table is ordered specific→general."""
-
-    def test_more_specific_meta_beats_generic_pose(self):
-        # `*/meta/*` retains; `*/pose/*` does not. A topic ending in /meta/
-        # should hit /meta/ even if /pose/ also matches.
-        qos, retain = get_qos("spatialdds/op/vision/cam_0/meta/v1")
-        self.assertTrue(retain)
 
 
 if __name__ == "__main__":
