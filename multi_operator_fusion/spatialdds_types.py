@@ -413,7 +413,7 @@ def make_trajectory_conflict_event(conflict: Dict, *, timestamp_s: float,
 
     The type is ``PREDICTED_CONFLICT``, the registered EventType for "a
     predicted future conflict/collision (event_start > stamp)": value 13 in
-    idl/v1.8/events.idl, and already value 13 in 1.7 (check
+    the SDK's vendored events.idl, and already value 13 in 1.7 (check
     tests/cross_era/spatialdds_idl/spatial/events/enums/event_type_enum/_events.py).
     This docstring used to say 1.7 had no predicted-conflict type and
     ``PROXIMITY_ALERT`` was the closest fit. The code had moved to

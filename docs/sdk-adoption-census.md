@@ -96,6 +96,17 @@ measures the shrink with the same tool, against the tree as it is then.
   `coverage_frame_ref` or `auth_hint` passthrough, and topics that list only
   written lanes), it keeps the mock VPS's and the catalogue's announces on
   `discovery_bus` until 0.7.3, each labelled where it is.
+- **Resolved in spatialdds 0.7.3 (2026-10-25; spatialdds-py finding 70).**
+  S11, S14 and S15 shipped, with S12 (`from_json(strict=True)`) and S13
+  (`WireError` a `ValueError`). The pin moved to 0.7.3, the bridges moved
+  onto the SDK (the plan lane opens), and the mock VPS's and the
+  catalogue's announces are their participants' own `p.announce`; both
+  labels are gone. Two more were found after it, for spatialdds-py's next
+  filing (on James's word): S16, `sd.stamp` does not normalise (`sd.stamp(5.9999999999)` has
+  `nanosec` 1000000000, and `sd.stamp(-0.25)` is +0.75 s; this repository's
+  `payloads.stamp` stays, labelled); and S17, the SDK's `close()` raises when
+  an ack wait times out, through cyclonedds-python 11.0.1's `wait_for_acks`
+  (a labelled workaround in `spatialdds_demo.lanes`).
 
 ## The headline
 

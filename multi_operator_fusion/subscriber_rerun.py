@@ -570,7 +570,7 @@ class RerunMultiOpSubscriber:
                   file=sys.stderr)
         _set_time(payload.get("stamp", {}), frame_num)
         # PREDICTED_CONFLICT is a registered EventType: value 13 in
-        # idl/v1.8/events.idl, and already 13 in 1.7 -- check
+        # the SDK's vendored events.idl, and already 13 in 1.7 -- check
         # tests/cross_era/spatialdds_idl/spatial/events/enums/event_type_enum/_events.py.
         # This handler used to say 1.7 had no such type and draw only
         # PROXIMITY_ALERT, so every conflict fusion_service published became

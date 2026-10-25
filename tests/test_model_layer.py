@@ -1,7 +1,7 @@
 """
 The world model on a bus — late join, asset-vs-instance, and the mover.
 
-`spatial.owm/0.1`, 1.8's provisional module (idl/v1.8/provisional/owm.idl).
+`spatial.owm/0.1`, 1.8's provisional module (`provisional/owm.idl` in the IDL the SDK vendors).
 Prototyped here first as the demo-local `oarc_model`, retired 2026-10-21.
 
 These need a DDS domain and skip loudly without one. What they pin is the

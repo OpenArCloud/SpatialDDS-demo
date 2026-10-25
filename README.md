@@ -5,18 +5,21 @@
 Reference demos for **SpatialDDS 1.8** on CycloneDDS: a browser that finds
 its positioning service on the bus, and a venue running as a live model a robot
 plans against. The first runs in two commands,
-the second in three. The IDL is vendored verbatim at a pinned spec commit —
+the second in three. The spec types, topic registry and QoS table come from
+the published SDK, `spatialdds[dds]`, generated at a pinned spec tag —
 [conformance](#conformance) says which, and how that is checked.
 
 ## How the pieces fit
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ecosystem-dark.svg">
-  <img alt="Ecosystem map: native participants above the SpatialDDS DDS bus (venue services, OpenVPS, a ROS 2 robot running spatialdds_ros, the SceneScape sidecar); bridges below it (web gateway embedding the spatialdds package, ros2_bridge, mcap_bridge, mqtt_bridge) connecting browsers, ROS 2 sensor graphs, MCAP files and MQTT brokers" src="docs/images/ecosystem-light.svg">
+  <img alt="Ecosystem map: native participants above the SpatialDDS DDS bus (venue services, OpenVPS, a ROS 2 robot running spatialdds_ros, the SceneScape sidecar); bridges below it (web gateway embedding the spatialdds package, ros2_bridge, mcap_bridge, mqtt_bridge) connecting browsers, ROS 2 sensor graphs, MCAP files and MQTT brokers. The venue services and all four bridges open the bus through the native SDK, spatialdds[dds], a PyPI package" src="docs/images/ecosystem-light.svg">
 </picture>
 
-Libraries make things native: a robot runs `spatialdds_ros` on the bus it
-already rides. Bridges convert, for the worlds that will never be participants.
+Libraries make things native: the venue services and every bridge here open
+the bus through the native SDK, [`spatialdds[dds]`](https://pypi.org/project/spatialdds/),
+and a robot runs `spatialdds_ros` on the bus it already rides. Bridges
+convert, for the worlds that will never be participants.
 
 ## The two ISMAR demos
 

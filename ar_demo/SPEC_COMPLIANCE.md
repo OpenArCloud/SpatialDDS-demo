@@ -1,10 +1,10 @@
 # SpatialDDS 1.8 Compliance Notes
 
-**Conformant to:** SpatialDDS 1.8 at spec commit `9c3e1f2` — the revision the
-validating gateway in `spatialdds-web` pins, so the demo's types and the
-validator's come from the same bytes. `idl/v1.8/` is vendored verbatim from
-that commit. The spec carries no `v1.8` tag, which is why the pin is a commit;
-see `scripts/generate_types.py` for the reasoning and the resync command.
+**Conformant to:** SpatialDDS 1.8 at the spec's `v1.8` tag, through the SDK:
+`spatialdds[dds]` generates the types, the topic registry and the QoS table
+from that tag's text and IDL, and its gateway validates against the same
+bytes. Until the SDK adoption this repository vendored `idl/v1.8` from spec
+commit `9c3e1f2`, before the tag existed.
 
 **Not tracking `main`.** The demo moves eras only under a deliberate migration
 brief, as it did from 1.7 (`docs/final-migration-census.md`).
@@ -12,7 +12,7 @@ brief, as it did from 1.7 (`docs/final-migration-census.md`).
 ## The wire
 
 **Types on the bus, JSON only at the edges.** Every demo flow publishes a
-generated `idl/v1.8` type on a spec-named topic with its §3.3.3 QoS profile.
+generated 1.8 type (the SDK's) on a spec-named topic with its §3.3.3 QoS profile.
 Nothing serialises a payload into a string any more; the JSON envelope that
 used to carry everything on one unkeyed topic is deleted.
 
@@ -285,7 +285,7 @@ carry a connection block.
 - `Aabb3` keeps `min_xyz` / `max_xyz` — only `TileMeta`'s loose pair was
   removed. The demo publishes no tilesets, so nothing needed folding.
 - The `coverage_window_*` fields are still not emitted; see
-  `idl/v1.8/discovery.idl`.
+  `discovery.idl` in the IDL the SDK vendors.
 
 ## Placing content, and what coverage is not
 

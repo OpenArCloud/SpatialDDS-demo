@@ -199,7 +199,7 @@ function onConflict(msg) {
   //     trajectories meet some seconds ahead. Dashed red ring, ETA.
   //   PROXIMITY_ALERT -- two objects too close now. Solid amber ring.
   // PREDICTED_CONFLICT is a registered EventType: value 13 in
-  // idl/v1.8/events.idl, and already 13 in 1.7 -- check
+  // the SDK's vendored events.idl (spatialdds/artifacts/idl), and already 13 in 1.7 -- check
   // tests/cross_era/spatialdds_idl/spatial/events/enums/event_type_enum/_events.py.
   // This handler used to say 1.7 had no such type and keep only
   // PROXIMITY_ALERT, so every conflict the service published was dropped

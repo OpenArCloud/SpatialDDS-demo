@@ -72,13 +72,22 @@
   <text class="lab" x="950" y="282">(publish only)</text>
 
   <!-- the bus -->
+  <!-- the SDK, where it is consumed: above the bus by the venue services
+       (OpenVPS, SceneScape and the robot's spatialdds_ros are not on it),
+       below it by all four bridges. Solid, in the PyPI style: it is a
+       published package, and dashed means "its own repo". -->
+  <rect class="pypi" x="45" y="300" width="235" height="26" rx="4"/>
+  <text class="ta" x="162" y="317" text-anchor="middle">spatialdds[dds] · native SDK</text>
   <rect class="bus" x="40" y="330" width="1000" height="46" rx="8"/>
   <text class="t" x="540" y="350" text-anchor="middle">SpatialDDS bus</text>
   <text class="s" x="540" y="366" text-anchor="middle">DDS (CycloneDDS) · typed 1.8 IDL topics, pinned to the spec</text>
+  <rect class="pypi" x="40" y="380" width="1000" height="24" rx="4"/>
+  <text class="ta" x="311" y="396" text-anchor="middle">spatialdds[dds] · native SDK</text>
+
 
   <!-- bottom row: bridges -->
   <line class="flow" x1="172" y1="378" x2="172" y2="438" marker-start="url(#as)" marker-end="url(#ae)"/>
-  <text class="lab" x="180" y="412">typed samples</text>
+  <text class="lab" x="180" y="422">typed samples</text>
   <rect class="node" x="45" y="440" width="255" height="130" rx="6"/>
   <text class="t" x="172" y="464" text-anchor="middle">Web gateway · web_bridge</text>
   <text class="s" x="172" y="479" text-anchor="middle">this repo</text>
@@ -94,7 +103,7 @@
   <text class="s" x="172" y="664" text-anchor="middle">+ conformance suite</text>
 
   <line class="flow" x1="450" y1="378" x2="450" y2="438" marker-start="url(#as)" marker-end="url(#ae)"/>
-  <text class="lab" x="458" y="412">typed spec topics</text>
+  <text class="lab" x="458" y="422">typed spec topics</text>
   <rect class="node" x="340" y="440" width="220" height="130" rx="6"/>
   <text class="t" x="450" y="464" text-anchor="middle">ros2_bridge</text>
   <text class="s" x="450" y="479" text-anchor="middle">this repo</text>
@@ -108,7 +117,7 @@
   <text class="s" x="450" y="664" text-anchor="middle">nuScenes · DeepSense · fusion</text>
 
   <line class="flow" x1="695" y1="378" x2="695" y2="438" marker-start="url(#as)" marker-end="url(#ae)"/>
-  <text class="lab" x="703" y="412">record / replay</text>
+  <text class="lab" x="703" y="422">record / replay</text>
   <rect class="node" x="595" y="440" width="200" height="130" rx="6"/>
   <text class="t" x="695" y="464" text-anchor="middle">mcap_bridge</text>
   <text class="s" x="695" y="479" text-anchor="middle">this repo</text>
@@ -122,7 +131,7 @@
   <text class="s" x="695" y="664" text-anchor="middle">open in Foxglove</text>
 
   <line class="flow" x1="940" y1="378" x2="940" y2="438" marker-start="url(#as)" marker-end="url(#ae)"/>
-  <text class="lab" x="948" y="412">typed on the bus</text>
+  <text class="lab" x="948" y="422">typed on the bus</text>
   <rect class="node" x="840" y="440" width="200" height="130" rx="6"/>
   <text class="t" x="940" y="464" text-anchor="middle">mqtt_bridge</text>
   <text class="s" x="940" y="479" text-anchor="middle">this repo</text>

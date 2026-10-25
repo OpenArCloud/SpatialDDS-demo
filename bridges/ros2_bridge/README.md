@@ -63,8 +63,8 @@ bridges/ros2_bridge/
 ├── frame_mapping.py            # tf2 frame_id ↔ FrameRef (deterministic UUIDv5)
 ├── ros2_to_spatialdds.py       # encoders: 5 ROS 2 types → payload dicts (NO ros2 imports)
 ├── spatialdds_to_ros2.py       # decoders: payload dicts → mock ROS 2 dataclasses (NO ros2 imports)
-├── ../../spatialdds_demo/       # typed_transport, payloads, blob, qos_profiles
-│                               # (RELIABLE+KEEP_ALL, reuses MCAP bridge factories)
+├── ../../spatialdds_demo/       # lanes (opens each lane on the SDK), payloads
+│                               # (the SDK's chunk/Reassembler for blobs)
 ├── bridge_node.py              # rclpy node — only file with ROS 2 imports
 ├── test_mocks.py               # Mock ROS 2 message classes (no ros2 imports)
 ├── test_conversions.py         # Tier-1 pytest, no ROS 2, no DDS  →  31 tests

@@ -2,7 +2,7 @@
 """
 SpatialDDS 1.8 Validation Utilities
 Lightweight helpers for Time/FrameRef/Coverage/GeoPose/ServiceSummary
-validation aligned with the 1.8 IDL shapes under idl/v1.8.
+validation aligned with the 1.8 IDL shapes (the IDL the SDK vendors).
 
 Each era is a hard cutover (pre-adoption instability clause, spec 3.1): the
 previous era's identifiers are rejected outright, not tolerated. Several
