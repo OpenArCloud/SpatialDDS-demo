@@ -96,17 +96,23 @@ docker run --rm -p 9000:9000 cyclonedds-python python3 http_binding.py 9000
 ### IDL Compilation
 
 `/app/spatialdds.idl` is a convenience aggregator: it defines no types of its
-own, it only `#include`s the profile files under `idl/v1.8/`. The demo itself
-does not compile through it — `scripts/generate_types.py` runs `idlc -l py`
-over the profile files directly and writes `spatialdds_idl18/` (plus the
-demo-owned `spatialdds_demo_idl18/`), which is what every process imports. The aggregator is for downstream consumers who want
-one file to point a compiler at.
+own, it only `#include`s the profile files of the IDL the SDK ships
+(`spatialdds[dds]`, at the spec's `v1.8` tag), so it compiles with `-I`
+pointed at that directory. The demo itself does not compile through it: its
+spec types are the SDK's own generated `spatialdds.dds.types`, and
+`scripts/generate_types.py` generates only the demo-owned
+`spatialdds_demo_idl18/`. The aggregator is for downstream consumers who want
+one file to point a compiler at. (Until the SDK adoption the profile files
+were vendored here as `idl/v1.8/`.)
+
+The commands below find the SDK's IDL directory with
+`python3 -c 'from spatialdds.server import pin; print(pin.IDL_DIR)'`.
 
 **C** — the aggregator works, and `-o` is honoured:
 
 ```bash
-docker run --rm -v $(pwd):/output cyclonedds-python \
-  idlc -l c -o /output /app/spatialdds.idl
+docker run --rm -v $(pwd):/output cyclonedds-python bash -lc \
+  'IDL=$(python3 -c "from spatialdds.server import pin; print(pin.IDL_DIR)") && idlc -l c -o /output -I "$IDL" /app/spatialdds.idl'
 # -> spatialdds.c, spatialdds.h
 ```
 
@@ -123,12 +129,12 @@ docker run --rm -v $(pwd):/output cyclonedds-python \
 ```bash
 # One profile
 docker run --rm -v $(pwd)/output:/output cyclonedds-python bash -lc \
-  'cd /output && idlc -l py -I /app/idl/v1.8 /app/idl/v1.8/discovery.idl'
+  'cd /output && IDL=$(python3 -c "from spatialdds.server import pin; print(pin.IDL_DIR)") && idlc -l py -I "$IDL" "$IDL/discovery.idl"'
 # -> output/spatial/disco/_discovery.py
 
 # Every profile
 docker run --rm -v $(pwd)/output:/output cyclonedds-python bash -lc \
-  'cd /output && for f in /app/idl/v1.8/*.idl; do idlc -l py -I /app/idl/v1.8 "$f"; done'
+  'cd /output && IDL=$(python3 -c "from spatialdds.server import pin; print(pin.IDL_DIR)") && for f in "$IDL"/*.idl; do idlc -l py -I "$IDL" "$f"; done'
 ```
 
 **C++** — not available in this image. `idlc -l cpp` fails with
@@ -153,8 +159,9 @@ ddsperf --help
 idlc --help
 
 # Compile IDL (C from the aggregator; Python from a profile file — see above)
-idlc -l c spatialdds.idl
-idlc -l py -I idl/v1.8 idl/v1.8/discovery.idl   # writes ./spatial/... (ignores -o)
+IDL=$(python3 -c 'from spatialdds.server import pin; print(pin.IDL_DIR)')
+idlc -l c -I "$IDL" spatialdds.idl
+idlc -l py -I "$IDL" "$IDL/discovery.idl"   # writes ./spatial/... (ignores -o)
 
 # Check Python packages
 pip3 list | grep cyclone
@@ -186,7 +193,7 @@ docker run --rm -v $(pwd):/data cyclonedds-python python3 /data/my_test.py
 ### Mount Output Directory
 ```bash
 docker run --rm -v $(pwd)/output:/output cyclonedds-python bash -lc \
-  'cd /output && idlc -l py -I /app/idl/v1.8 /app/idl/v1.8/discovery.idl'
+  'cd /output && IDL=$(python3 -c "from spatialdds.server import pin; print(pin.IDL_DIR)") && idlc -l py -I "$IDL" "$IDL/discovery.idl"'
 ```
 
 ## Docker Compose
@@ -316,8 +323,8 @@ docker run --rm --network host \
 | Validation test | `docker run --rm cyclonedds-python python3 spatialdds_validation.py` |
 | HTTP server | `docker run --rm -p 8080:8080 cyclonedds-python python3 http_binding.py` |
 | Interactive shell | `docker run --rm -it --network host cyclonedds-python bash` |
-| Compile IDL (C) | `docker run --rm -v $(pwd):/out cyclonedds-python idlc -l c -o /out /app/spatialdds.idl` |
-| Compile IDL (Python) | `docker run --rm -v $(pwd):/out cyclonedds-python bash -lc 'cd /out && idlc -l py -I /app/idl/v1.8 /app/idl/v1.8/discovery.idl'` |
+| Compile IDL (C) | `docker run --rm -v $(pwd):/out cyclonedds-python bash -lc 'IDL=$(python3 -c "from spatialdds.server import pin; print(pin.IDL_DIR)") && idlc -l c -o /out -I "$IDL" /app/spatialdds.idl'` |
+| Compile IDL (Python) | `docker run --rm -v $(pwd):/out cyclonedds-python bash -lc 'cd /out && IDL=$(python3 -c "from spatialdds.server import pin; print(pin.IDL_DIR)") && idlc -l py -I "$IDL" "$IDL/discovery.idl"'` |
 
 ## Notes
 
