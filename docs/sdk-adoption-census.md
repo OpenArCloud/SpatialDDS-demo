@@ -24,6 +24,44 @@ here drift from the tree.
 the consumers was done file by file, and each claim cites its line. The
 claims that change a verdict were re-checked here before they were used.
 
+## Amended after the ruling (2026-10-24)
+
+Corrections found while building 0.7.1 and 0.7.2, and at the start of the
+migration. The verdicts and the tables below are unchanged. The tables are
+the snapshot at `1ec933d` they say they are. The batch's last commit
+measures the shrink with the same tool, against the tree as it is then.
+
+- **`model_service`'s retire flow is not "the SDK settling on
+  acknowledgements".** `withdraw()` writes the terminal sample and the
+  dispose back to back, so nothing settles between them. The demo's flow
+  writes the RETIRED tombstone, waits 1.5 s so a person can see why the
+  entity went, and then disposes. That gap is compliant. N.5.2's
+  "immediately followed" is about adjacency in the event stream, not wall
+  clock: a terminal sample, a pause, then the dispose with no intervening
+  event on that key, is a removal as N.5.2 describes it. The port keeps the
+  gap: it writes the tombstone, waits, then calls `withdraw()`, which
+  re-writes the terminal sample and disposes. Do not read the 1.5 s as a
+  violation.
+- **The command lane is keyed. This census said, and its author repeated,
+  that it was not.**
+  - **The type:** `ModelCommand` carries `@key string command_id`, in
+    `idl/v1.8/provisional/owm.idl` and in the generated class. Every writer
+    gives each command its own id: a uuid in the scripts, a counter in the
+    mover, a millisecond stamp in the browser.
+    `tests/test_command_lane.py` already asserts the key.
+  - **Where "unkeyed" came from:** `qos_profiles.MODEL_COMMAND`'s comment,
+    "KEEP_LAST(16), unkeyed -- a request", which predates the key. It was
+    taken as fact without reading the type.
+  - **Against the spec:** §3.3.2 spells `model_command` KEEP_LAST(1). That is
+    per instance, and every command is its own instance, so depth 1 loses
+    nothing by construction. The lane commit measures that with a burst at
+    depth 1 on the SDK, and files a depth erratum only if keyed-at-depth-1
+    loses commands.
+- **The census missed one blocker.** A deployment's own types (`oarc.*`) had
+  no N.1 conversion, key, class lookup or recorded schema in 0.7.1. The
+  probes here tested pinned types only. That is spatialdds-py's finding 69.
+  0.7.2 fixed it with `sd.dds.extend()`, and this repository pins 0.7.2.
+
 ## The headline
 
 **The venue's plumbing has an SDK equivalent for almost everything, and 0.7.0
