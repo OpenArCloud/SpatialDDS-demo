@@ -442,6 +442,21 @@ Each is fixed in the migration commit that touches its file, and named there.
 3,813 (`spatialdds_idl18`) and 120 (`spatialdds_demo_idl18`). The "after"
 number is measured the same way, by this tool, in the batch's last commit.
 
+## The shrink, after
+
+Measured the same way, by `tools/sdk_adoption_census.py --shrink`, on the
+working tree; `--check-doc` holds this block to it, as it holds the tables
+below to the tree at the census.
+
+<!-- census:shrink -->
+- `spatialdds_demo/` at f4890e8: 24 modules, 6744 lines
+- `spatialdds_demo/` now: 16 modules, 5122 lines (-1622, -24%)
+- `spatialdds_idl18`: 3813 -> 0 lines
+- `spatialdds_demo_idl18`: 120 -> 120 lines
+- gone: blob (184), dds_transport (264), discovery_bus (256), json_mapping (267), qos_profiles (210), tempo (120), topic_types (189), topics (266), typed_transport (356)
+- new: lanes (345)
+<!-- /census:shrink -->
+
 ## Rulings requested
 
 1. **The STAYS list:** the venue programs and modules, `service_bus`,

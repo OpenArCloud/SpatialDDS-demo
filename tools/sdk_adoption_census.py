@@ -13,11 +13,20 @@ git-tracked `.py` file with `ast` and records, per file:
 Usage:
     python3 tools/sdk_adoption_census.py              # the tables, as Markdown
     python3 tools/sdk_adoption_census.py --json       # the raw inventory
+    python3 tools/sdk_adoption_census.py --at REV     # ... of the tree at REV
     python3 tools/sdk_adoption_census.py --write-doc  # into the census doc
     python3 tools/sdk_adoption_census.py --check-doc  # fail if it drifted
+    python3 tools/sdk_adoption_census.py --shrink     # before, and now
     python3 tools/sdk_adoption_census.py --check-sdk  # needs spatialdds[dds]:
                                                       # every named equivalent
                                                       # exists in the release
+
+The census doc's tables are a ruled record of the tree at the commit the
+census was taken at (`CENSUS_AT`), so `--write-doc` and `--check-doc` read
+that commit's tree, not the working one. Against the working tree they could
+only ever drift, which is how the check first broke: it met `lanes.py`, a
+module the census never saw, and raised. `--shrink` measures the package and
+the generated trees the same way at that commit and now.
 """
 from __future__ import annotations
 
@@ -36,7 +45,11 @@ TREES = ("spatialdds_idl18", "spatialdds_demo_idl18")
 #: vendored pre-1.8 bindings.
 FIXTURE_TREES = ("tests/cross_era/spatialdds_idl/",)
 DOC = ROOT / "docs" / "sdk-adoption-census.md"
+#: The commit the census was taken at, and its tables describe.
+CENSUS_AT = "f4890e8"
 BEGIN, END = "<!-- census:tables -->", "<!-- /census:tables -->"
+#: The "after" block: the shrink, measured on the working tree.
+SHRINK_BEGIN, SHRINK_END = "<!-- census:shrink -->", "<!-- /census:shrink -->"
 
 #: The verdicts, as ruled data. A module's verdict covers every symbol of it a
 #: consumer uses, unless SYMBOLS overrides that symbol. Each REPLACED entry
@@ -82,6 +95,9 @@ MODULES: dict[str, dict] = {
     "typed_transport": {"v": "RETIRED", "sdk": "spatialdds.dds.Participant.writer",
                         "needs": ["S1", "S4", "S5"],
                         "why": "p.writer() / p.reader()"},
+    # After the census: not a verdict it ruled on, so marked as such. The
+    # deployment's own part of the lanes, which the migration consolidated.
+    "lanes": {"v": "NEW", "why": "this deployment's own part of the lanes (added after the census)"},
 }
 SYMBOLS: dict[str, dict] = {
     "dds_transport.require_dds_env": {"v": "RETIRED", "sdk": "spatialdds.dds.DOMAIN_ENV", "needs": [],
@@ -176,10 +192,28 @@ def check_sdk() -> list[str]:
     return bad
 
 
-def tracked() -> list[Path]:
-    out = subprocess.run(["git", "ls-files", "*.py"], cwd=ROOT, check=True,
-                         capture_output=True, text=True).stdout.split()
-    return [ROOT / p for p in out]
+class Tree:
+    """The tracked `.py` files of the working tree, or of a git revision."""
+
+    def __init__(self, rev: str | None = None) -> None:
+        self.rev = rev
+
+    def _git(self, *args: str) -> str:
+        return subprocess.run(["git", *args], cwd=ROOT, check=True,
+                              capture_output=True, text=True).stdout
+
+    def files(self, under: str = "") -> list[str]:
+        if self.rev is None:
+            out = self._git("ls-files", "--", f"{under}*.py" if under else "*.py")
+        else:
+            out = self._git("ls-tree", "-r", "--name-only", self.rev,
+                            "--", under or ".")
+        return sorted(f for f in out.split() if f.endswith(".py"))
+
+    def read(self, rel: str) -> str:
+        if self.rev is None:
+            return (ROOT / rel).read_text()
+        return self._git("show", f"{self.rev}:{rel}")
 
 
 def area(rel: str) -> str:
@@ -187,10 +221,10 @@ def area(rel: str) -> str:
     return parts[0] if len(parts) > 1 else "(root)"
 
 
-def walk(path: Path) -> dict:
-    rel = str(path.relative_to(ROOT))
+def walk(src: "Tree", rel: str) -> dict:
+    text = src.read(rel)
     try:
-        tree = ast.parse(path.read_text(), filename=rel)
+        tree = ast.parse(text, filename=rel)
     except SyntaxError as e:
         return {"file": rel, "error": str(e)}
     uses: dict[str, set[str]] = defaultdict(set)   # module -> symbols
@@ -230,25 +264,54 @@ def walk(path: Path) -> dict:
               and n.value.value.id == PKG):
             uses[f"{PKG}.{n.value.attr}"].add(n.attr)
     return {"file": rel, "area": area(rel),
-            "lines": len(path.read_text().splitlines()),
+            "lines": len(text.splitlines()),
             "uses": {m: sorted(s) for m, s in sorted(uses.items())},
             "cyclonedds": sorted(cyclone), "trees": sorted(trees)}
 
 
-def inventory() -> dict:
-    files = [walk(p) for p in tracked()]
+def inventory(src: "Tree" = None) -> dict:
+    src = src or Tree()
+    files = [walk(src, rel) for rel in src.files()]
     modules = {}
-    for p in sorted((ROOT / PKG).glob("*.py")):
-        name = f"{PKG}.{p.stem}"
+    for rel in src.files(PKG + "/"):
+        if rel.count("/") != 1:
+            continue
+        name = f"{PKG}.{Path(rel).stem}"
         users = [f["file"] for f in files
-                 if name in f.get("uses", {}) and f["file"] != str(
-                     p.relative_to(ROOT))]
-        modules[name] = {"lines": len(p.read_text().splitlines()),
+                 if name in f.get("uses", {}) and f["file"] != rel]
+        modules[name] = {"lines": len(src.read(rel).splitlines()),
                          "users": users}
-    tree_lines = {t: sum(len(p.read_text().splitlines())
-                         for p in (ROOT / t).rglob("*.py"))
+    tree_lines = {t: sum(len(src.read(rel).splitlines())
+                         for rel in src.files(t + "/"))
                   for t in TREES}
     return {"files": files, "modules": modules, "tree_lines": tree_lines}
+
+
+def shrink(now_at: str | None = None) -> str:
+    """The package and the generated trees at the census and now (or at
+    `now_at`), counted the same way, with every module that went and every
+    one that is new."""
+    before, now = inventory(Tree(CENSUS_AT)), inventory(Tree(now_at))
+    label = now_at or "now"
+
+    def total(inv):
+        # Counted as markdown() counts them, `__init__` included, so the
+        # "before" is the census's own figure.
+        mods = inv["modules"]
+        return mods, sum(v["lines"] for v in mods.values())
+    (bm, bl), (nm, nl) = total(before), total(now)
+    out = [f"`{PKG}/` at {CENSUS_AT}: {len(bm)} modules, {bl} lines",
+           f"`{PKG}/` {'at ' + label if now_at else label}: {len(nm)} modules, {nl} lines "
+           f"({nl - bl:+d}, {100 * (nl - bl) / bl:+.0f}%)"]
+    for t in TREES:
+        out.append(f"`{t}`: {before['tree_lines'][t]} -> {now['tree_lines'][t]} lines")
+    gone = sorted(set(bm) - set(nm))
+    new = sorted(set(nm) - set(bm))
+    out.append("gone: " + ", ".join(f"{m.split('.')[1]} ({bm[m]['lines']})"
+                                    for m in gone))
+    out.append("new: " + (", ".join(f"{m.split('.')[1]} ({nm[m]['lines']})"
+                                    for m in new) or "none"))
+    return "\n".join(out)
 
 
 def markdown(inv: dict) -> str:
@@ -265,7 +328,7 @@ def markdown(inv: dict) -> str:
         short = name.split('.')[1]
         if short == "__init__":
             continue
-        v = MODULES[short]
+        v = MODULES.get(short, {"v": "NEW (after the census)"})
         areas = sorted({area(u) for u in m["users"]})
         out.append(f"| `{short}` | {m['lines']} | {len(m['users'])} | "
                    f"{v['v']} | {', '.join(v.get('needs', [])) or '–'} | "
@@ -333,7 +396,15 @@ def main() -> int:
     ap.add_argument("--write-doc", action="store_true",
                     help="write the tables between the census doc's markers")
     ap.add_argument("--check-doc", action="store_true",
-                    help="fail if the census doc's tables differ from the tree")
+                    help="fail if the census doc's tables differ from the tree at "
+                         "the census, or its shrink block from the working tree")
+    ap.add_argument("--at", metavar="REV",
+                    help="read the tree at a git revision, not the working one")
+    ap.add_argument("--shrink", action="store_true",
+                    help="the package and the generated trees at the census "
+                         "and now (or at --now)")
+    ap.add_argument("--now", metavar="REV",
+                    help="with --shrink: measure the after side at REV")
     ap.add_argument("--check-sdk", action="store_true",
                     help="import every named SDK equivalent from the "
                          "installed spatialdds; fail on any that is missing")
@@ -346,12 +417,20 @@ def main() -> int:
         for b in bad:
             print("  " + b)
         return 1 if bad else 0
-    inv = inventory()
+    if a.shrink:
+        print(shrink(a.now))
+        return 0
     if a.write_doc or a.check_doc:
+        inv = inventory(Tree(a.at or CENSUS_AT))
         text = DOC.read_text()
         head, rest = text.split(BEGIN, 1)
         _, tail = rest.split(END, 1)
         want = f"{head}{BEGIN}\n{markdown(inv)}\n{END}{tail}"
+        if SHRINK_BEGIN in want:
+            head, rest = want.split(SHRINK_BEGIN, 1)
+            _, tail = rest.split(SHRINK_END, 1)
+            block = "\n".join(f"- {line}" for line in shrink().splitlines())
+            want = f"{head}{SHRINK_BEGIN}\n{block}\n{SHRINK_END}{tail}"
         if a.check_doc:
             ok = want == text
             print(f"{DOC.relative_to(ROOT)}: "
@@ -360,6 +439,7 @@ def main() -> int:
         DOC.write_text(want)
         print(f"wrote the tables into {DOC.relative_to(ROOT)}")
         return 0
+    inv = inventory(Tree(a.at))
     print(json.dumps(inv, indent=1) if a.json else markdown(inv))
     return 0
 
