@@ -147,9 +147,11 @@ def lane_topic(stream: str, type_name: str) -> str:
 
 
 def run(args: argparse.Namespace) -> int:
-    from cyclonedds.domain import DomainParticipant  # noqa: E402
+    import spatialdds as sd  # noqa: E402
 
-    from spatialdds_demo import blob, topic_types, typed_transport as tt  # noqa: E402
+    from spatialdds_demo import lanes  # noqa: E402
+    from spatialdds_demo.stream import StreamPublisher  # noqa: E402
+    from spatialdds_types import make_announce, topic_meta  # noqa: E402
     from sensor_types import to_dict  # noqa: E402
     from deepsense.deepsense_to_spatialdds import (  # noqa: E402
         iter_sequence, load_rows,
@@ -160,16 +162,20 @@ def run(args: argparse.Namespace) -> int:
 
     dataroot = Path(args.dataroot)
     rows = list(iter_sequence(load_rows(dataroot / "scenario9.csv"), args.sequence))
-    participant = DomainParticipant(args.domain)
-    writers = {
-        key: tt.TypedDictWriter(
-            participant, lane_topic(stream, type_name),
-            topic_types.resolve(type_name), profile)
-        for key, (stream, type_name, profile) in RAW_LANES.items()
-    }
-    writers["blob"] = tt.TypedDictWriter(
-        participant, blob.BLOB_TOPIC, topic_types.resolve(blob.BLOB_TYPE),
-        blob.BLOB_PROFILE)
+    # Announced, and the writers opened from the announce, so the
+    # announce-driven fusion service and viewer find these lanes. Until the
+    # SDK adoption nothing here was announced. The blob lane is not one of
+    # the service's lanes: its chunks are found by the reference a
+    # LidarFrame carries (lanes.BLOB_TOPIC).
+    participant = sd.participant(SOURCE_OPERATOR, domain=args.domain,
+                                 service_id=f"svc:{SOURCE_OPERATOR}")
+    transport = StreamPublisher(participant)
+    transport.announce(make_announce(
+        operator=SOURCE_OPERATOR, service_kind="SENSING",
+        topics=[topic_meta(lane_topic(stream, type_name), type_name, profile)
+                for stream, type_name, profile in RAW_LANES.values()],
+        timestamp_s=time.time()))
+    blobs = lanes.blob_writer(participant)
 
     offset = (args.offset_x, args.offset_y, args.offset_z)
     delay = 0.1 / max(args.speed, 0.01)
@@ -177,7 +183,11 @@ def run(args: argparse.Namespace) -> int:
     prev_enu: Optional[Tuple[float, float, int]] = None
 
     def publish(lane: str, payload) -> None:
-        writers[lane].write(payload)
+        if lane == "blob":
+            blobs.write(payload)
+            return
+        stream, type_name, _profile = RAW_LANES[lane]
+        transport.publish(lane_topic(stream, type_name), payload)
 
     # Track which optional raw streams have already warned, so a missing
     # subset doesn't spam every frame.
@@ -247,7 +257,7 @@ def run(args: argparse.Namespace) -> int:
                 break
             time.sleep(delay)
     finally:
-        pass
+        transport.close()
     return 0
 
 
@@ -281,7 +291,7 @@ def detection_step(frame_seq, stamp, bs_geo, veh_geo, prev_enu, offset):
 
 def _lidar_frame_and_blob(frame_seq: int, points):
     """A LidarFrame plus the chunks carrying its sweep."""
-    from spatialdds_demo import blob
+    from spatialdds.dds import blob
     from deepsense.deepsense_to_spatialdds import _frame_header, _frame_quality
     from sensor_types import BlobRef, LidarFrame, Time
     from spatialdds.dds.types.spatial.sensing.common import Codec

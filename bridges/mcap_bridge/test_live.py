@@ -149,7 +149,7 @@ def _announce_lanes(domain: int, samples):
     Returns the publisher; the caller keeps it alive, since closing it
     disposes each instance and tells consumers the services left.
     """
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds as sd
 
     from spatialdds_demo.stream import StreamPublisher
     from spatialdds_types import circle_coverage, make_announce, topic_meta
@@ -161,7 +161,8 @@ def _announce_lanes(domain: int, samples):
         service = topic.split("/")[1]
         by_service.setdefault(service, {})[topic] = type_name
 
-    publisher = StreamPublisher(DomainParticipant(domain))
+    publisher = StreamPublisher(sd.participant(
+        "mcap-live", domain=domain, service_id="svc:mcap-live:announcer"))
     for service, lanes in by_service.items():
         publisher.announce(make_announce(
             operator=service, service_kind="SENSING",

@@ -59,7 +59,7 @@ if str(_HERE) in sys.path:
     sys.path.remove(str(_HERE))
 sys.path.insert(0, str(_HERE))
 
-from cyclonedds.domain import DomainParticipant  # noqa: E402
+import spatialdds as sd  # noqa: E402
 
 from spatialdds_demo.stream import StreamPublisher  # noqa: E402
 
@@ -476,7 +476,11 @@ def main() -> int:
         print("--rate must be > 0", file=sys.stderr)
         return 1
 
-    participant = DomainParticipant(args.domain)
+    # One participant speaks for every operator and the infrastructure, each
+    # announced as its own service with its own lanes (spatialdds 0.7.1's
+    # multi-service announce). The participant's own id names this process.
+    participant = sd.participant("synthetic", domain=args.domain,
+                                 service_id="svc:synthetic-publisher")
     transport = StreamPublisher(participant)
     infra_rng = random.Random(args.seed)
 

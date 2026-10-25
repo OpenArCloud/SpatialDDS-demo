@@ -24,16 +24,12 @@ MQTT). The conversion happens here, at the edge, and the bus carries types.
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable, Dict, List, Optional, Tuple
-
-from cyclonedds.domain import DomainParticipant
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import spatialdds as sd
 
-from spatialdds_demo import lanes, topic_types, typed_transport as tt
-from spatialdds_demo.discovery_bus import AnnouncePublisher
-from spatialdds.dds import from_json, to_json
-from spatialdds.dds.types.spatial.disco import Announce
+from spatialdds_demo import lanes
+from spatialdds.dds import to_json
 
 
 class UndeclaredTopic(KeyError):
@@ -42,53 +38,73 @@ class UndeclaredTopic(KeyError):
 
 class StreamPublisher:
     """
-    Typed writers for the lanes an announce declares.
+    Typed writers for the lanes an announce declares, and the announce itself.
 
     ``publish`` takes the dict the demo's builders already produce and writes a
     real sample. A payload that does not build into the announced type raises
     here, at the publisher — which is the whole point: under the envelope a
     malformed payload was a well-formed string, and only the consumer found
     out, one process and one transport hop later.
+
+    On the SDK since the adoption. The announce is the participant's own
+    (`p.announce`), so its topic rows are the writers' own `TopicMeta` and its
+    departure is the SDK's: both doors on `close()`. One participant may speak
+    for several services (a synthetic publisher's operators); each announce
+    names its own lanes.
     """
 
-    def __init__(self, participant: DomainParticipant, *, validate: bool = True):
+    def __init__(self, participant: "sd.dds.Participant"):
         self._participant = participant
-        self._announcer = AnnouncePublisher(participant, validate=validate)
-        self._writers: Dict[str, tt.TypedDictWriter] = {}
+        self._writers: Dict[str, "sd.dds.Writer"] = {}
         self._lock = threading.Lock()
 
-    def announce(self, announce: Any) -> Announce:
+    def announce(self, announce: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Publish an announce and open a writer for each lane it declares.
+        Open a writer for each lane an announce declares, then announce them.
 
         Declaring from the announce rather than beside it is deliberate: the
         announce is the contract, so it is also the thing that creates the
-        endpoints.
-
-        Accepts the dict the demo's builders produce, or a typed ``Announce``.
+        endpoints. Takes the N.1 dict the demo's builders produce; returns what
+        was announced, as the SDK built it.
         """
-        if not isinstance(announce, Announce):
-            announce = from_json(Announce, announce)
-        self._announcer.publish(announce)
-        for row in announce.topics or []:
-            self._declare(row.name, row.type, row.qos_profile)
-        return announce
+        writers = [self._declare(row["name"], row["type"], row["qos_profile"])
+                   for row in announce.get("topics") or []]
+        return self._participant.announce(
+            announce["kind"], coverage=announce.get("coverage") or [],
+            ttl_sec=int(announce.get("ttl_sec") or 300),
+            name=announce.get("name", ""), org=announce.get("org", ""),
+            version=announce.get("version", ""),
+            hints={h["key"]: h["value"] for h in announce.get("hints") or []},
+            caps=announce.get("caps"),
+            manifest_uri=announce.get("manifest_uri") or None,
+            transforms=announce.get("transforms") or [],
+            service_id=announce["service_id"], topics=writers,
+            auth_hint=announce.get("auth_hint", ""),
+            coverage_frame_ref=announce.get("coverage_frame_ref"))
 
-    def _declare(self, topic: str, type_name: str, qos_profile: str) -> None:
+    def announce_lanes(self, service_id: str, kind: str,
+                       lanes_: Sequence[Tuple[str, str, str]], *,
+                       coverage: Any = (), manifest_uri: Optional[str] = None,
+                       **announce_kw: Any) -> Dict[str, Any]:
+        """Announce a service by its (topic, type, profile) rows, opening a
+        writer for each: for a publisher whose lanes are a table rather than
+        an announce document. `announce_kw` is `p.announce`'s own."""
+        writers = [self._declare(*lane) for lane in lanes_]
+        return self._participant.announce(
+            kind, coverage=list(coverage), service_id=service_id,
+            topics=writers, manifest_uri=manifest_uri, **announce_kw)
+
+    def _declare(self, topic: str, type_name: str, qos_profile: str):
         with self._lock:
             if topic in self._writers:
-                return
-        datatype = topic_types.try_resolve(type_name)
-        if datatype is None:
-            # Refused rather than skipped: a publisher announcing a type it
-            # cannot itself resolve has nothing to write, and the announce
-            # would promise a lane that never carries a sample.
-            raise topic_types.UnknownTopicType(
-                f"{topic}: announced type {type_name!r} resolves to no class"
-            )
-        writer = tt.TypedDictWriter(self._participant, topic, datatype, qos_profile)
+                return self._writers[topic]
+        # Refused rather than skipped: a publisher announcing a lane it cannot
+        # open has nothing to write, and the announce would promise a lane
+        # that never carries a sample. The SDK says why.
+        writer = lanes.open_writer(self._participant, type_name, topic,
+                                   qos_profile=qos_profile)
         with self._lock:
-            self._writers[topic] = writer
+            return self._writers.setdefault(topic, writer)
 
     def publish(self, topic: str, payload: Any) -> None:
         with self._lock:
@@ -106,8 +122,9 @@ class StreamPublisher:
             return sorted(self._writers)
 
     def close(self) -> None:
-        """Depart every announced service, disposing its instance."""
-        self._announcer.close()
+        """Depart every announced service: the participant's close does it,
+        with both of §2.14's doors, and withdraws what its writers published."""
+        self._participant.close()
 
 
 # ``(type_name, topic, payload_dict, stamp_ns)`` — the shape the demo's
@@ -224,7 +241,3 @@ class StreamSubscriber:
                     delivered += 1
         return delivered
 
-
-def build(datatype_name: str, payload: Any) -> Any:
-    """Build a payload dict into its announced type. Raises on a bad payload."""
-    return from_json(topic_types.resolve(datatype_name), payload)

@@ -24,9 +24,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from deepsense.radar_processing import radar_cube_to_range_angle, radar_cube_to_range_doppler, render_beam_polar
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
 
-from spatialdds_demo import blob as blob_transfer, topic_types, typed_transport as tt
+from spatialdds_demo import lanes as demo_lanes
+from spatialdds.dds import blob as blob_transfer
 from spatialdds.dds import to_json
 
 
@@ -50,7 +51,7 @@ class Subscriber:
     def __init__(self, dataroot: Path, domain: int) -> None:
         self.dataroot = dataroot
         self.inbox: "queue.Queue[tuple]" = queue.Queue()
-        self._participant = DomainParticipant(domain)
+        self._participant = sd.participant("deepsense-viewer", domain=domain)
         self._readers = {}
         self._blobs = blob_transfer.Reassembler()
         self._lidar_blobs: Dict[str, Dict[str, Any]] = {}
@@ -62,8 +63,8 @@ class Subscriber:
         self.lanes = dict(LANES)
         for key, (topic, type_name, profile) in self.lanes.items():
             self._readers[key] = (
-                tt.make_reader(self._participant, topic,
-                               topic_types.resolve(type_name), profile),
+                demo_lanes.open_reader(self._participant, type_name, topic,
+                                       qos_profile=profile),
                 topic,
             )
 
@@ -75,12 +76,14 @@ class Subscriber:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=2)
+        self._participant.close()
 
     def _poll(self) -> None:
         while not self._stop.is_set():
             for key, (reader, _topic) in self._readers.items():
-                for sample in tt.take_samples(reader):
-                    self.inbox.put((key, to_json(sample)))
+                for ev in reader.take():
+                    if isinstance(ev, sd.Sample):
+                        self.inbox.put((key, to_json(ev.data)))
             self._stop.wait(0.02)
 
     def spin(self, max_frames: int = 0) -> None:

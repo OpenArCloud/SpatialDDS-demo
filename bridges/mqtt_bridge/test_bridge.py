@@ -161,13 +161,14 @@ def _announce_lane(topic: str, type_name: str, qos_profile: str,
     Returns the publisher; keep it alive for as long as the lane matters,
     since closing it disposes the instance and signals a departure.
     """
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds as sd
 
     sys.path.insert(0, str(_REPO_ROOT / "multi_operator_fusion"))
     from spatialdds_demo.stream import StreamPublisher
     from spatialdds_types import circle_coverage, make_announce, topic_meta
 
-    publisher = StreamPublisher(DomainParticipant(DDS_DOMAIN))
+    publisher = StreamPublisher(sd.participant(
+        service, domain=DDS_DOMAIN, service_id=f"svc:{service}"))
     publisher.announce(make_announce(
         operator=service, service_kind="SENSING",
         topics=[topic_meta(topic, type_name, qos_profile)],

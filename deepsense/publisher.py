@@ -23,9 +23,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from deepsense.deepsense_to_spatialdds import iter_sequence, load_rows, make_beam_meta, make_radar_meta, make_vision_meta, row_to_beam_frame, row_to_detection2d, row_to_geoposes, row_to_lidar_points, row_to_radar_tensor, row_to_vision_frame, to_dict
-from cyclonedds.domain import DomainParticipant
+import spatialdds as sd
+from spatialdds.dds import blob
 
-from spatialdds_demo import blob, topic_types, typed_transport as tt
+from spatialdds_demo import lanes
+from spatialdds_demo.stream import StreamPublisher
 
 # (topic, §3.3.2 type, §3.3.3 QoS profile) for every lane this publisher owns.
 # Each topic is `spatialdds/deepsense/<stream>/<type>/v1` (§3.3.1), the stream
@@ -48,7 +50,8 @@ LANES = {
     "unit2_geo":    _lane("unit2", "geopose", "POSE_RT"),
     "lidar_frame":  _lane("unit1_lidar", "lidar_frame", "GEOM_TILE"),
     "detection2d":  _lane("semantics", "detection2d", "RADAR_RT"),
-    "blob":         (blob.BLOB_TOPIC, blob.BLOB_TYPE, blob.BLOB_PROFILE),
+    # Not announced: chunks are found by the reference a LidarFrame carries.
+    "blob":         (lanes.BLOB_TOPIC, "blob_chunk", lanes.BLOB_PROFILE.name),
 }
 
 
@@ -66,15 +69,21 @@ def main() -> int:
     args = parse_args()
     dataroot = Path(args.dataroot)
     rows = list(iter_sequence(load_rows(dataroot / "scenario9.csv"), args.sequence))
-    participant = DomainParticipant(args.domain)
-    writers = {
-        key: tt.TypedDictWriter(participant, topic,
-                                topic_types.resolve(type_name), profile)
-        for key, (topic, type_name, profile) in LANES.items()
-    }
+    participant = sd.participant("deepsense", domain=args.domain,
+                                 service_id="svc:deepsense")
+    transport = StreamPublisher(participant)
+    transport.announce_lanes(
+        "svc:deepsense", "SENSING",
+        [lane for key, lane in LANES.items() if key != "blob"],
+        name="deepsense",
+        manifest_uri="spatialdds://oarc.demo/deepsense/service/deepsense")
+    blobs = lanes.blob_writer(participant)
 
     def publish(key: str, payload) -> None:
-        writers[key].write(payload)
+        if key == "blob":
+            blobs.write(payload)
+        else:
+            transport.publish(LANES[key][0], payload)
 
     sent_meta = False
     delay = 0.1 / max(args.speed, 0.01)
@@ -115,7 +124,7 @@ def main() -> int:
                 break
             time.sleep(delay)
     finally:
-        pass
+        transport.close()
     return 0
 
 

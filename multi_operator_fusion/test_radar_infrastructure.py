@@ -90,7 +90,7 @@ class TestInfraSet(unittest.TestCase):
         # Detection3DSet has no frame_seq: a set is identified by `set_id`
         # and ordered by `stamp`. The demo's wrapper type used to add one.
         self.assertTrue(s["set_id"])
-        self.assertEqual(s["stamp"], {"sec": 1, "nanosec": 0})
+        self.assertEqual(s["stamp"], {"sec": "1", "nanosec": 0})   # int64: N.1 string
         # Detection3DSet mirrors semantics::Detection3DSet: the sequence
         # is `dets`, and each element composes the spec Detection3D rather than
         # flattening it, so the spec fields stay exactly where the spec puts

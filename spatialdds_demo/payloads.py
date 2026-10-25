@@ -23,7 +23,7 @@ Two conventions the IDL enforces and these follow:
 from __future__ import annotations
 
 import uuid as _uuid
-from typing import Dict, List, Sequence
+from typing import Any, Dict, List, Sequence
 
 SCHEMA_CORE = "spatial.core/1.8"
 SCHEMA_SEMANTICS = "spatial.semantics/1.8"
@@ -37,8 +37,14 @@ SCHEMA_DISCOVERY = "spatial.discovery/1.8"
 COV_NONE = {"type": "COV_NONE"}
 
 
-def stamp(timestamp_s: float) -> Dict[str, int]:
-    """Float epoch seconds as a ``builtin::Time``."""
+def stamp(timestamp_s: float) -> Dict[str, Any]:
+    """Float epoch seconds as a ``builtin::Time``, in N.1: `sec` is int64, so a
+    decimal string.
+
+    The census has this REPLACED by `sd.stamp`, and it stays, labelled, until
+    that normalises: in spatialdds 0.7.3, `sd.stamp(5.9999999999)` has
+    `nanosec` 1000000000 and `sd.stamp(-0.25)` is +0.75 s (spatialdds-py S16).
+    This one carries both into range."""
     sec = int(timestamp_s)
     nsec = int(round((timestamp_s - sec) * 1_000_000_000))
     if nsec >= 1_000_000_000:
@@ -47,7 +53,7 @@ def stamp(timestamp_s: float) -> Dict[str, int]:
     elif nsec < 0:
         sec -= 1
         nsec += 1_000_000_000
-    return {"sec": sec, "nanosec": nsec}
+    return {"sec": str(sec), "nanosec": nsec}
 
 
 def vec(value, keys: Sequence[str] = ("x", "y", "z"),

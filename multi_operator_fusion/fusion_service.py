@@ -435,8 +435,6 @@ class FusionService:
 
 
 def run(args: argparse.Namespace) -> int:
-    from cyclonedds.domain import DomainParticipant
-
     from spatialdds_demo.stream import StreamPublisher, StreamSubscriber
 
     fuser = TrackFusion(
@@ -455,12 +453,12 @@ def run(args: argparse.Namespace) -> int:
 
     import spatialdds as sd
 
-    participant = DomainParticipant(args.domain)
+    # One participant reads the operators and writes the platform's lanes.
+    # ignore_local keeps it from reading its own fused output back as input.
+    participant = sd.participant("platform", domain=args.domain,
+                                 service_id="svc:platform")
     publisher = StreamPublisher(participant)
-    # The reading side is on the SDK; the writing side moves with
-    # StreamPublisher, onto this same participant.
-    reader_participant = sd.participant("platform", domain=args.domain)
-    subscriber = StreamSubscriber(reader_participant, on_msg)
+    subscriber = StreamSubscriber(participant, on_msg, ignore_local=True)
 
     # The platform announces itself before writing, like any other service —
     # its outputs are discoverable rather than a set of topic names a
@@ -497,7 +495,6 @@ def run(args: argparse.Namespace) -> int:
     finally:
         svc.stop()
         publisher.close()
-        reader_participant.close()
     return 0
 
 

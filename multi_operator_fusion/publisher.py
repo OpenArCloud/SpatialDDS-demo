@@ -14,7 +14,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, List, Tuple
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # annotations only; nuScenes is an optional dependency
@@ -96,6 +96,27 @@ VISION_FRAME_TYPE = ("video_frame", "VIDEO_LIVE")
 RADAR_TYPE = ("radar_detection", "RADAR_RT")
 
 
+def operator_lanes(operator: str, enabled) -> List[Tuple[str, str, str]]:
+    """Every (topic, type, profile) an operator with these sensors publishes.
+
+    The announce is built from this, and so are the writers, so a lane cannot
+    be written without being announced. Until the SDK adoption the writers
+    were opened lazily and nothing was announced, so the announce-driven
+    fusion service and viewer never found an operator's lanes.
+    """
+    rows = [(LANES[k][0], LANES[k][1], LANES[k][2])
+            for k in ("ego_pose", "geo_pose", "detection3d")]
+    if "camera" in enabled:
+        rows += [(cam, *VISION_META_TYPE) for cam in CAM_CHANNELS]
+        rows += [(cam, *VISION_FRAME_TYPE) for cam in CAM_CHANNELS]
+    if "lidar" in enabled:
+        rows += [LANES["lidar_meta"], LANES["lidar_frame"]]
+    if "radar" in enabled:
+        rows += [(radar, *RADAR_TYPE) for radar in RADAR_CHANNELS]
+    return [(_topic(operator, stream, type_name), type_name, profile)
+            for stream, type_name, profile in rows]
+
+
 def _detections_with_velocity(nusc, sample, frame_seq: int, operator: str,
                               offset: Tuple[float, float, float]) -> Dict:
     """
@@ -143,9 +164,11 @@ def _iter_scene_samples(nusc: NuScenes, scene_name: str):
 def run(args: argparse.Namespace) -> int:
     from nuscenes.nuscenes import NuScenes
     from nuscenes.utils.data_classes import RadarPointCloud
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds
 
-    from spatialdds_demo import payloads, topic_types, typed_transport as tt
+    from spatialdds_demo import payloads
+    from spatialdds_demo.stream import StreamPublisher
+    from spatialdds_types import make_announce, topic_meta
     from sensor_types import to_dict
     from nuscenes_to_spatialdds import (
         camera_to_vision_meta,
@@ -165,19 +188,16 @@ def run(args: argparse.Namespace) -> int:
     enabled = SENSOR_FILTERS[args.sensor_filter]
 
     nusc = NuScenes(version=args.version, dataroot=str(dataroot), verbose=not args.quiet)
-    participant = DomainParticipant(args.domain)
-    writers: Dict[str, tt.TypedDictWriter] = {}
+    transport = StreamPublisher(spatialdds.participant(
+        operator, domain=args.domain, service_id=f"svc:{operator}"))
+    transport.announce(make_announce(
+        operator=operator, service_kind="SENSING",
+        topics=[topic_meta(*lane) for lane in operator_lanes(operator, enabled)],
+        timestamp_s=time.time()))
 
     def publish(stream, lane, payload) -> None:
-        """Write one sample, building it into the lane's announced type."""
-        type_name, profile = lane
-        topic = _topic(operator, stream, type_name)
-        writer = writers.get(topic)
-        if writer is None:
-            writer = tt.TypedDictWriter(
-                participant, topic, topic_types.resolve(type_name), profile)
-            writers[topic] = writer
-        writer.write(payload)
+        """Write one sample on an announced lane, built into its type."""
+        transport.publish(_topic(operator, stream, lane[0]), payload)
 
     sent_meta: set = set()
     frame_seq = 0
@@ -266,7 +286,7 @@ def run(args: argparse.Namespace) -> int:
             if args.max_samples > 0 and frame_seq >= args.max_samples:
                 break
     finally:
-        pass
+        transport.close()
     return 0
 
 

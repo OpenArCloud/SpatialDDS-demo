@@ -116,6 +116,18 @@ TYPE_RAD_DET     = ("radar_detection", "RADAR_RT")
 TYPE_DET3D       = ("detection3d", "RADAR_RT")
 
 
+def lanes_announced() -> List[tuple]:
+    """Every (topic, type, profile) this publisher writes: what it announces."""
+    rows = [(_topic_ego(), *TYPE_EGO_POSE), (_topic_geo(), *TYPE_GEO_POSE),
+            (_topic_lidar_meta(), *TYPE_LIDAR_META), (_topic_lidar(), *TYPE_LIDAR),
+            (_topic_det3d(), *TYPE_DET3D)]
+    for cam in CAM_CHANNELS:
+        rows += [(_topic_vision_meta(cam), *TYPE_VISION_META),
+                 (_topic_vision(cam), *TYPE_VISION)]
+    rows += [(_topic_radar(radar), *TYPE_RAD_DET) for radar in RADAR_CHANNELS]
+    return rows
+
+
 def run(args: argparse.Namespace) -> int:
     dataroot = Path(args.dataroot)
     if not dataroot.exists():
@@ -123,22 +135,21 @@ def run(args: argparse.Namespace) -> int:
 
     nusc = NuScenes(version=args.version, dataroot=str(dataroot), verbose=not args.quiet)
 
-    from cyclonedds.domain import DomainParticipant
+    import spatialdds
 
-    from spatialdds_demo import topic_types, typed_transport as tt
+    from spatialdds_demo.stream import StreamPublisher
 
-    participant = DomainParticipant(args.domain)
-    writers: Dict[str, tt.TypedDictWriter] = {}
+    # Announced, and the writers opened from the announce. Until the SDK
+    # adoption they were opened lazily and nothing was announced.
+    transport = StreamPublisher(spatialdds.participant(
+        "nuscenes", domain=args.domain, service_id="svc:nuscenes"))
+    transport.announce_lanes(
+        "svc:nuscenes", "SENSING", lanes_announced(), name="nuscenes",
+        manifest_uri="spatialdds://oarc.demo/nuscenes/service/nuscenes")
 
     def publish(topic: str, lane, payload: Dict) -> None:
-        """Write one sample on `topic`, building it into the lane's type."""
-        type_name, profile = lane
-        writer = writers.get(topic)
-        if writer is None:
-            writer = tt.TypedDictWriter(
-                participant, topic, topic_types.resolve(type_name), profile)
-            writers[topic] = writer
-        writer.write(payload)
+        """Write one sample on an announced lane, built into its type."""
+        transport.publish(topic, payload)
 
     sent_meta = set()
     frame_seq = 0
@@ -211,7 +222,7 @@ def run(args: argparse.Namespace) -> int:
             if args.max_samples > 0 and frame_seq >= args.max_samples:
                 break
     finally:
-        pass
+        transport.close()
 
     return 0
 

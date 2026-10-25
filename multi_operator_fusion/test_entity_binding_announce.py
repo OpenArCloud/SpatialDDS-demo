@@ -214,7 +214,7 @@ class TestAnnounceBuilder(unittest.TestCase):
         # findings-batch-2 revision; these used to map to OTHER with the
         # real role hidden in a hint.
         self.assertEqual(a["kind"], "SENSING")
-        self.assertEqual(a["stamp"]["sec"], 42)
+        self.assertEqual(a["stamp"]["sec"], "42")   # int64: N.1 string
         self.assertTrue(a["manifest_uri"])
         # ServiceKind cannot express "sensor fleet", so the role is a hint.
         self.assertIn({"key": "role", "value": "SENSING"}, a["hints"])

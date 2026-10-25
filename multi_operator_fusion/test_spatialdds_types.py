@@ -39,7 +39,7 @@ class TestPlannedWaypoint(unittest.TestCase):
         # Vec3 is an IDL array, not an {x,y,z} object.
         self.assertEqual(wp["pose"]["t"], [1.0, 2.0, 3.0])
         self.assertEqual(wp["pose"]["q"], [0.0, 0.0, 0.0, 1.0])
-        self.assertEqual(wp["stamp"], {"sec": 10, "nanosec": 500_000_000})
+        self.assertEqual(wp["stamp"], {"sec": "10", "nanosec": 500_000_000})
         self.assertFalse(wp["has_velocity"])
         self.assertFalse(wp["has_uncertainty"])
         self.assertFalse(wp["has_confidence"])
@@ -61,11 +61,11 @@ class TestPlannedWaypoint(unittest.TestCase):
 
     def test_stamp_carries_fractional_seconds(self):
         wp = make_planned_waypoint(0, 0, 0, timestamp_s=10.25)
-        self.assertEqual(wp["stamp"], {"sec": 10, "nanosec": 250_000_000})
+        self.assertEqual(wp["stamp"], {"sec": "10", "nanosec": 250_000_000})
 
     def test_stamp_zero_nsec(self):
         wp = make_planned_waypoint(0, 0, 0, timestamp_s=42.0)
-        self.assertEqual(wp["stamp"], {"sec": 42, "nanosec": 0})
+        self.assertEqual(wp["stamp"], {"sec": "42", "nanosec": 0})
 
     def test_serialisable(self):
         wp = make_planned_waypoint(1, 2, 3, timestamp_s=0.5,
@@ -146,7 +146,7 @@ class TestEntityBinding(unittest.TestCase):
                           "spatialdds/platform/fusion/fused_track/v1")
         self.assertFalse(b["has_pose"])
         self.assertEqual(b["source_id"], "fusion")
-        self.assertEqual(b["stamp"]["sec"], 42)
+        self.assertEqual(b["stamp"]["sec"], "42")   # int64: N.1 decimal string
 
     def test_binding_with_pose(self):
         b = make_entity_binding("e", "vehicle", [], position=(1.0, 2.0, 0.0),
