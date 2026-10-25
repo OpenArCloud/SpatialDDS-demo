@@ -22,6 +22,7 @@ is the deployment's part alone:
   `spatialdds/<scene>/...`.
 * **The web bridge's provenance labels**, which name where a topic name came
   from and are not lanes at all.
+* **One labelled workaround**, for cyclonedds-python's `wait_for_acks` (below).
 """
 from __future__ import annotations
 
@@ -34,6 +35,45 @@ from spatialdds_demo_idl18.oarc_demo import (
     BootstrapQuery, BootstrapResponse, FusionCoverage)
 
 SCENE = "ut-austin-littlefield"
+
+# -- a labelled workaround -----------------------------------------------------
+# **Until cyclonedds-python fixes `pub.py:325`.** `DataWriter.wait_for_acks`
+# is documented to return False when its timeout elapses. In 11.0.1 that branch
+# reads `Exception.DDS_RETCODE_TIMEOUT`, which does not exist, so every timeout
+# raises AttributeError instead. The SDK's `close()` awaits acks after writing
+# each dispose and Depart, so a clean stop with one slow peer exits with a
+# traceback and skips its remaining flushes. Measured: a reader whose process
+# is SIGSTOPped makes `close()` raise, every time. Filed against spatialdds-py
+# as S17. This restores the documented contract and nothing else, in one
+# place, for every process here that opens an SDK lane (they import this
+# module). tests/test_ack_timeout_workaround.py fails once cyclonedds no
+# longer has the bug, so this is removed rather than outliving it.
+
+def _ack_timeout_is_false() -> bool:
+    try:
+        from cyclonedds.pub import DataWriter
+    except ImportError:                       # no [dds]: nothing to wait on
+        return False
+    if getattr(DataWriter.wait_for_acks, "_oarc_workaround", False):
+        return True
+    broken = DataWriter.wait_for_acks
+
+    def wait_for_acks(self, timeout):
+        try:
+            return broken(self, timeout)
+        except AttributeError as error:
+            if "DDS_RETCODE_TIMEOUT" not in str(error):
+                raise
+            return False
+
+    wait_for_acks._oarc_workaround = True
+    wait_for_acks._oarc_broken = broken
+    wait_for_acks.__doc__ = broken.__doc__
+    DataWriter.wait_for_acks = wait_for_acks
+    return True
+
+
+ACK_TIMEOUT_WORKAROUND = _ack_timeout_is_false()
 
 # -- profiles ---------------------------------------------------------------
 
