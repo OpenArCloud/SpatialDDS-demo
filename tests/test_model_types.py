@@ -24,7 +24,7 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_demo.json_mapping import from_json, to_json  # noqa: E402
+from spatialdds.dds import from_json, to_json  # noqa: E402
 from spatialdds_demo.model_service import venue_frame  # noqa: E402
 from spatialdds_idl18.builtin import Time  # noqa: E402
 from spatialdds_idl18.spatial.owm import (  # noqa: E402

@@ -1,7 +1,7 @@
 """SpatialDDS payload-dict → ROS 2 message converters.
 
 Reverse direction of ``ros2_to_spatialdds``. Inputs are typed SpatialDDS
-samples serialised to dicts by ``json_mapping.to_json``; outputs are the
+samples serialised to N.1 dicts by ``sd.dds.to_json``; outputs are the
 mock dataclasses from ``test_mocks`` (which have the same field shapes as
 the real ``rclpy`` message classes — see ``verify_mocks.py``).
 
@@ -172,7 +172,7 @@ def _ros_fix_status(status: Optional[Dict[str, Any]]) -> int:
 
 def _cov3_from(cov: Any) -> tuple:
     """A ``CovMatrix`` union back to (9-element list, NavSatFix cov type)."""
-    if isinstance(cov, dict) and cov.get("discriminator") == "COV_POS3":
+    if isinstance(cov, dict) and cov.get("type") == "COV_POS3":
         values = [float(v) for v in (cov.get("pos") or [])]
         if len(values) == 9:
             return values, 3           # COVARIANCE_TYPE_KNOWN

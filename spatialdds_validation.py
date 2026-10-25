@@ -514,7 +514,7 @@ def demo_geo_pose(lat: float, lon: float, alt: float,
         "alt_m": alt,
         "q": q,
         "stamp": SpatialDDSValidator.now_time(),
-        "cov": "COV_NONE",
+        "cov": {"type": "COV_NONE"},
     }
 
 

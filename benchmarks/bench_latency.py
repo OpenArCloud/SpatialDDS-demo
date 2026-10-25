@@ -184,7 +184,7 @@ class TypedRoundTrip:
         -rolling the struct here would only be benchmarking a shape nothing
         publishes.
         """
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.argeo import VpsRequest
 
         request = self._builder.create_localize_request("bench-vps")
@@ -203,7 +203,7 @@ class TypedRoundTrip:
         return time.perf_counter_ns() - start_ns
 
     def _server_loop(self) -> None:
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.argeo import VpsResponse
 
         while not self._stop.is_set():

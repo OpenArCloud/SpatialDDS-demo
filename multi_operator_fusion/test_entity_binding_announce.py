@@ -33,7 +33,7 @@ from synthetic_publisher import (  # noqa: E402
     _build_operator_announce,
     _operator_coverage,
 )
-from spatialdds_demo.json_mapping import from_json  # noqa: E402
+from spatialdds.dds import from_json  # noqa: E402
 from spatialdds_demo.topics import validate_topic_meta  # noqa: E402
 from spatialdds_idl18.spatial.disco import Announce, ServiceKind  # noqa: E402
 
@@ -140,7 +140,7 @@ class TestEntityBindingPublish(unittest.TestCase):
         envelope could check; what counts is that the payload is a complete,
         well-formed EntityBinding — from_json refuses a partial one.
         """
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.core import EntityBinding
 
         track = _make_fused_track("fused-1", {"operator_a": "det_1"})
@@ -167,7 +167,7 @@ class TestEntityBindingPublish(unittest.TestCase):
     def test_reconstruction_works_on_the_wire_type(self):
         """The join reverses the encoding on the typed EntityBinding too, not
         just the builder dict."""
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.core import EntityBinding
         from fusion_service import operator_dets_from_binding, track_id_from_binding
 

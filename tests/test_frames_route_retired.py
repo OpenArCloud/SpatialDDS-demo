@@ -43,7 +43,7 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from spatialdds_demo.json_mapping import to_json                   # noqa: E402
+from spatialdds.dds import to_json                   # noqa: E402
 from spatialdds_demo.model_service import venue_georeference       # noqa: E402
 
 BASELINE = REPO / "tests" / "fixtures" / "frames-route-baseline.json"

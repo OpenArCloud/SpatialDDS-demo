@@ -226,18 +226,8 @@ def run(args: argparse.Namespace) -> int:
             publish("unit1_geo", to_dict(bs_geo))
             publish("unit2_geo", to_dict(veh_geo))
 
-            east, north = gps_to_enu(bs_geo.lat_deg, bs_geo.lon_deg,
-                                     veh_geo.lat_deg, veh_geo.lon_deg)
-            velocity = _velocity_from_history(prev_enu, (east, north, frame_seq))
-            prev_enu = (east, north, frame_seq)
-
-            det_payload = make_detection3d_payload(
-                frame_seq=frame_seq, stamp=stamp,
-                east=east, north=north, up=0.0,
-                velocity=velocity,
-            )
-            for det in det_payload["detections"]:
-                _apply_offset(det, offset)
+            det_payload, prev_enu, (east, north), velocity = detection_step(
+                frame_seq, stamp, bs_geo, veh_geo, prev_enu, offset)
             publish("detection3d", det_payload)
 
             if not args.quiet:
@@ -253,11 +243,41 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
+def detection_step(frame_seq, stamp, bs_geo, veh_geo, prev_enu, offset):
+    """
+    One frame's Detection3D set: the vehicle as the base station sees it.
+
+    A function, not inline in the loop, so a test runs the composition the
+    loop runs. Inline, it read `det_payload["detections"]` for two months after
+    the builder's key became the IDL's `dets` (403b793, 2026-08-22). Every
+    frame raised KeyError after the raw lanes and before this one, the
+    publisher died on its first frame, and `fusion_service` -- the only reader
+    of this lane -- received no infrastructure detection from it. The tests
+    called the builder and the offset themselves with the right key, so the
+    loop's own spelling never ran.
+
+    Returns (payload, the history for the next frame, (east, north), velocity).
+    """
+    east, north = gps_to_enu(bs_geo.lat_deg, bs_geo.lon_deg,
+                             veh_geo.lat_deg, veh_geo.lon_deg)
+    velocity = _velocity_from_history(prev_enu, (east, north, frame_seq))
+    payload = make_detection3d_payload(
+        frame_seq=frame_seq, stamp=stamp,
+        east=east, north=north, up=0.0,
+        velocity=velocity,
+    )
+    for det in payload["dets"]:
+        _apply_offset(det, offset)
+    return payload, (east, north, frame_seq), (east, north), velocity
+
+
 def _lidar_frame_and_blob(frame_seq: int, points):
     """A LidarFrame plus the chunks carrying its sweep."""
     from spatialdds_demo import blob
     from deepsense.deepsense_to_spatialdds import _frame_header, _frame_quality
     from sensor_types import BlobRef, LidarFrame, Time
+    from spatialdds_idl18.spatial.sensing.common import Codec
+    from spatialdds_idl18.spatial.sensing.lidar import CloudEncoding, PointLayout
 
     stamp = _stamp_from_index(frame_seq)
     raw = points.astype("float32").tobytes()
@@ -269,9 +289,9 @@ def _lidar_frame_and_blob(frame_seq: int, points):
             "unit1_lidar", frame_seq,
             Time(sec=stamp["sec"], nanosec=stamp["nanosec"]),
             [BlobRef(**blob.blob_ref(blob_id, "lidar", raw))]),
-        encoding="BIN_INTERLEAVED",
-        codec="CODEC_NONE",
-        layout="XYZ_I",
+        encoding=CloudEncoding.BIN_INTERLEAVED,
+        codec=Codec.CODEC_NONE,
+        layout=PointLayout.XYZ_I,
         has_per_point_timestamps=False,
         has_average_range_m=False,
         average_range_m=0.0,

@@ -205,7 +205,7 @@ async function seedPriorGeopose(): Promise<GeoPose> {
     alt_m: alt,
     q: START_Q,
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
-    cov: 'COV_NONE'
+    cov: { type: 'COV_NONE' }
   };
 }
 
@@ -318,7 +318,7 @@ function cameraGeoPose(activeViewer: Cesium.Viewer): GeoPose {
     alt_m: cartographic.height,
     q: [orientation.x, orientation.y, orientation.z, orientation.w],
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
-    cov: 'COV_NONE'
+    cov: { type: 'COV_NONE' }
   };
 }
 
@@ -646,7 +646,7 @@ function priorFromManifest(manifest: QueryFrameManifest): GeoPose {
     alt_m: manifest.anchor.alt_m ?? 0,
     q: [0, 0, 0, 1],
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
-    cov: 'COV_NONE'
+    cov: { type: 'COV_NONE' }
   };
 }
 
@@ -1258,7 +1258,7 @@ function applyFastPose(entityId: string, pose: { t: number[]; q: number[] }) {
       // frame convention, not the thing's facing.
       q: [0, 0, 0, 1],
       stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
-      cov: 'COV_NONE'
+      cov: { type: 'COV_NONE' }
     },
     orientation: placed.orientation
   };

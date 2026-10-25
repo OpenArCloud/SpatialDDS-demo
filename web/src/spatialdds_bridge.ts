@@ -953,7 +953,7 @@ export function modelEntityToItem(
       alt_m: resolved.placed.alt_m,
       q: [0, 0, 0, 1],
       stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
-      cov: 'COV_NONE'
+      cov: { type: 'COV_NONE' }
     },
     orientation: resolved.orientation,
     // The declared extent, resolved so a renderer can draw the volume the
@@ -1010,7 +1010,7 @@ export function catalogEntryToItem(
     alt_m: placed ? placed.alt_m : 5,
     q: [0, 0, 0, 1],
     stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },
-    cov: 'COV_NONE'
+    cov: { type: 'COV_NONE' }
   };
 
   // `asset.uri` is absolute and carries a hash; `href` is the older relative

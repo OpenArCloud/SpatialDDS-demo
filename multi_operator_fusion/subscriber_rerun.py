@@ -59,6 +59,7 @@ if str(_HERE) in sys.path:
     sys.path.remove(str(_HERE))
 sys.path.insert(0, str(_HERE))
 
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
 from routing import operator_from_topic  # noqa: E402
 
 # Announce is not a lane in TopicMeta — it *is* discovery — so it gets a

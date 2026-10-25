@@ -18,7 +18,7 @@ export type GeoPose = {
   alt_m: number;
   q: [number, number, number, number];
   stamp: TimeStamp;
-  cov: 'COV_NONE';
+  cov: { type: 'COV_NONE' };
 };
 
 export type LocalizeRequest = {

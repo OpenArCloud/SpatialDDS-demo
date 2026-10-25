@@ -47,11 +47,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -75,20 +75,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -229,11 +229,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -257,20 +257,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -410,11 +410,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -438,20 +438,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -591,11 +591,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -619,20 +619,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -773,11 +773,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -801,20 +801,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -955,11 +955,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -983,20 +983,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -1136,11 +1136,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -1164,20 +1164,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -1317,11 +1317,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -1345,20 +1345,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -1499,11 +1499,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -1527,20 +1527,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -1681,11 +1681,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -1709,20 +1709,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -1862,11 +1862,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -1890,20 +1890,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -2043,11 +2043,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -2071,20 +2071,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -2225,11 +2225,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -2253,20 +2253,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -2407,11 +2407,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -2435,20 +2435,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -2588,11 +2588,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -2616,20 +2616,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -2769,11 +2769,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -2797,20 +2797,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -2951,11 +2951,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -2979,20 +2979,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -3133,11 +3133,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -3161,20 +3161,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -3314,11 +3314,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -3342,20 +3342,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -3495,11 +3495,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -3523,20 +3523,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -3677,11 +3677,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -3705,20 +3705,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -3859,11 +3859,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -3887,20 +3887,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -4040,11 +4040,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -4068,20 +4068,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -4221,11 +4221,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -4249,20 +4249,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -4403,11 +4403,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -4431,20 +4431,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -4585,11 +4585,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -4613,20 +4613,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -4766,11 +4766,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -4794,20 +4794,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -4947,11 +4947,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -4975,20 +4975,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -5129,11 +5129,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -5157,20 +5157,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -5311,11 +5311,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -5339,20 +5339,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -5494,11 +5494,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -5522,20 +5522,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -5675,11 +5675,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -5703,20 +5703,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -5858,11 +5858,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -5886,7 +5886,7 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [
@@ -5925,13 +5925,13 @@
        ]
       },
       "stamp": {
-       "sec": 1769057000,
+       "sec": "1769057000",
        "nanosec": 0
       },
       "has_validity": false,
       "validity": {
        "from": {
-        "sec": 0,
+        "sec": "0",
         "nanosec": 0
        },
        "seconds": 0
@@ -5972,13 +5972,13 @@
        ]
       },
       "stamp": {
-       "sec": 1700000000,
+       "sec": "1700000000",
        "nanosec": 0
       },
       "has_validity": false,
       "validity": {
        "from": {
-        "sec": 0,
+        "sec": "0",
         "nanosec": 0
        },
        "seconds": 0
@@ -5986,15 +5986,15 @@
      }
     ],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300
@@ -6174,11 +6174,11 @@
       },
       "has_coverage_window": false,
       "coverage_window_start": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "coverage_window_end": {
-       "sec": 0,
+       "sec": "0",
        "nanosec": 0
       },
       "has_circle": false,
@@ -6202,20 +6202,20 @@
     },
     "has_coverage_eval_time": false,
     "coverage_eval_time": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "transforms": [],
     "available_from": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "available_until": {
-     "sec": 0,
+     "sec": "0",
      "nanosec": 0
     },
     "stamp": {
-     "sec": 1700000000,
+     "sec": "1700000000",
      "nanosec": 0
     },
     "ttl_sec": 300

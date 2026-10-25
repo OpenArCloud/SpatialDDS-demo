@@ -1,7 +1,7 @@
 """
 Canonical payload builders for the spec types more than one process emits.
 
-Every function returns a dict that ``json_mapping.from_json`` builds into its
+Every function returns an N.1 dict that ``sd.dds.from_json`` builds into its
 IDL type — a *complete* one: the spec has no absent fields, only values whose
 ``has_*`` flag says whether to read them, so a builder that omits a field
 produces something that is not its type.
@@ -30,7 +30,11 @@ SCHEMA_SEMANTICS = "spatial.semantics/1.8"
 SCHEMA_EVENTS = "spatial.events/1.8"
 SCHEMA_DISCOVERY = "spatial.discovery/1.8"
 
-COV_NONE = {"discriminator": "COV_NONE", "none": 0}
+#: A covariance that says nothing, in N.1's union form: the case label on
+#: "type", and no member, because COV_NONE's case carries none. It was
+#: `{"discriminator": "COV_NONE", "none": 0}` in the demo's own JSON dialect
+#: until the SDK adoption retired that dialect.
+COV_NONE = {"type": "COV_NONE"}
 
 
 def stamp(timestamp_s: float) -> Dict[str, int]:

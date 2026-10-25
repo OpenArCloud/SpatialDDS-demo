@@ -17,6 +17,7 @@ from pathlib import Path
 SELF_DIR = Path(__file__).resolve().parent
 if str(SELF_DIR) not in sys.path:
     sys.path.insert(0, str(SELF_DIR))
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
 
 from fusion import TrackFusion  # noqa: E402
 from fusion_service import (  # noqa: E402
@@ -134,7 +135,7 @@ class MessageRouting(unittest.TestCase):
         self.assertEqual(tracks[0].source_operators, ["infrastructure"])
 
     def test_publish_tracks_emits_a_real_fused_track_set(self):
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.semantics import FusedTrackSet
 
         svc, transport = self._make_service()
@@ -159,7 +160,7 @@ class MessageRouting(unittest.TestCase):
         each metric as a field, and the per-operator counts — which were a
         JSON object keyed by operator — become a typed sequence.
         """
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_demo_idl18.oarc_demo import FusionCoverage
 
         svc, transport = self._make_service()
@@ -177,7 +178,7 @@ class MessageRouting(unittest.TestCase):
             [("operator_a", 1)])
 
     def test_conflict_event_builds_into_a_spatial_event(self):
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.events import SpatialEvent
 
         svc, transport = self._make_service()

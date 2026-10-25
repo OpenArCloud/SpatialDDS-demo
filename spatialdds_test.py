@@ -424,7 +424,7 @@ class VPSServiceV15:
                 {
                     "pose": pose_local,
                     "frame_ref": self.map_frame_ref,
-                    "cov": "COV_NONE",
+                    "cov": {"type": "COV_NONE"},
                     "stamp": SpatialDDSValidator.now_time(),
                 }
             ],

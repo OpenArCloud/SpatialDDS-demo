@@ -49,7 +49,7 @@ const SUCCESS = {
     geopose: {
       lat_deg: FIX_LAT, lon_deg: FIX_LON, alt_m: 150.0,
       q: [0, 0, 0, 1], stamp: { sec: 0, nanosec: 0 },
-      cov: { discriminator: 'COV_NONE', none: 0 }
+      cov: { type: 'COV_NONE' }
     }
   },
   confidence: 0.91,

@@ -1,7 +1,7 @@
 """Unit tests for the payload builders.
 
 Pure-Python — no DDS, no FastAPI. Verifies that each builder produces a dict
-that ``json_mapping.from_json`` can build into its IDL type: complete, with
+that ``sd.dds.from_json`` can build into its IDL type: complete, with
 every presence flag beside its value. That check is what JSON-
 serialisability used to stand in for, and it is strictly stronger — a
 payload that is not a well-formed sample fails here rather than at some
@@ -162,7 +162,7 @@ class TestEntityBinding(unittest.TestCase):
         self.assertEqual(b["pose"]["pose"]["t"], [0.0, 0.0, 0.0])
 
     def test_builds_into_the_real_type(self):
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.core import EntityBinding
 
         b = make_entity_binding("e", "vehicle",
@@ -192,37 +192,53 @@ class TestBuildersMatchTheIdl(unittest.TestCase):
     """
 
     def _assert_no_unknown_fields(self, cls, payload, path=""):
+        # The SDK's N.1 lift accepts a member the type does not have and
+        # drops it, and the published schemas allow extra properties, so
+        # neither catches this. The walk is the generated class's own fields,
+        # with idlc's keyword rule (`_from` is `from` on the wire).
         import dataclasses
+        import keyword
+        import typing
 
-        from spatialdds_demo.json_mapping import _resolved_hints, _typename, _unwrap
+        def wire(name):
+            bare = name[1:] if name.startswith("_") else name
+            return bare if keyword.iskeyword(bare) else name
 
-        typename = _typename(cls)
-        known = {f.name for f in dataclasses.fields(cls)}
-        from spatialdds_demo.json_mapping import FIELD_ALIASES
-        known |= set(FIELD_ALIASES.get(typename, {}).values())
-        for key, value in payload.items():
+        def unwrap(hint):
+            # cyclonedds annotates members as Annotated / typedef / sequence
+            # wrappers; the class underneath is what a nested dict is.
+            for attr in ("__origin__", "subtype"):
+                inner = getattr(hint, attr, None)
+                if isinstance(inner, type):
+                    return inner
+            for arg in typing.get_args(hint):
+                if isinstance(arg, type):
+                    return arg
+            return hint
+
+        typename = cls.__name__
+        fields = {wire(f.name): f.name for f in dataclasses.fields(cls)}
+        for key in payload:
             where = f"{path}.{key}" if path else key
-            self.assertIn(key, known,
+            self.assertIn(key, fields,
                           f"{where}: {typename} has no field {key!r}")
-
-        hints = _resolved_hints(cls)
-        for field in dataclasses.fields(cls):
-            wire = FIELD_ALIASES.get(typename, {}).get(field.name, field.name)
-            if wire not in payload:
-                continue
-            target = _unwrap(hints.get(field.name))
-            value = payload[wire]
-            if isinstance(target, type) and dataclasses.is_dataclass(target) \
-                    and isinstance(value, dict):
-                self._assert_no_unknown_fields(target, value,
-                                               f"{path}.{wire}" if path else wire)
+        hints = typing.get_type_hints(cls, include_extras=True)
+        for key, value in payload.items():
+            hint = hints.get(fields[key])
+            target = unwrap(hint)
+            where = f"{path}.{key}" if path else key
+            if isinstance(value, dict) and isinstance(target, type) \
+                    and dataclasses.is_dataclass(target):
+                self._assert_no_unknown_fields(target, value, where)
             elif isinstance(value, list):
-                element = _unwrap(getattr(target, "subtype", None))
+                element = unwrap(getattr(hint, "subtype", None)
+                                 or next(iter(typing.get_args(hint)), None))
+                element = unwrap(getattr(element, "subtype", element))
                 if isinstance(element, type) and dataclasses.is_dataclass(element):
                     for i, item in enumerate(value):
                         if isinstance(item, dict):
                             self._assert_no_unknown_fields(
-                                element, item, f"{path}.{wire}[{i}]")
+                                element, item, f"{where}[{i}]")
 
     def test_detection_has_no_invented_fields(self):
         from spatialdds_idl18.spatial.semantics import Detection3D

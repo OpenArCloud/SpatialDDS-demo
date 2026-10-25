@@ -28,7 +28,7 @@ sys.path.insert(0, str(REPO))
 from cyclonedds.domain import DomainParticipant  # noqa: E402
 
 from spatialdds_demo import topic_types, typed_transport as tt  # noqa: E402
-from spatialdds_demo.json_mapping import to_json  # noqa: E402
+from spatialdds.dds import to_json  # noqa: E402
 
 # (lane, topic, §3.3.2 type, §3.3.3 QoS profile) — what the bridge's config
 # maps the ROS 2 publishers onto.

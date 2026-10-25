@@ -23,7 +23,8 @@ if str(_HERE) not in sys.path:
 
 import rerun as rr  # noqa: E402
 
-from spatialdds_demo.json_mapping import from_json, to_json  # noqa: E402
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
+from spatialdds.dds import from_json, to_json  # noqa: E402
 from spatialdds_idl18.spatial.semantics import (  # noqa: E402
     Detection3DSet, FusedTrackSet,
 )

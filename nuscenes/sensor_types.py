@@ -29,7 +29,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from spatialdds_demo.json_mapping import to_json as _to_json  # noqa: E402
+from spatialdds.dds import to_json as _to_json  # noqa: E402
 from spatialdds_idl18.spatial.common import (  # noqa: E402
     FrameRef,
     QuaternionXYZW,

@@ -22,7 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import topic_types, typed_transport as tt
-from spatialdds_demo.json_mapping import to_json
+from spatialdds.dds import to_json
 
 
 def _stamp_ns(stamp: Dict[str, Any]) -> int:

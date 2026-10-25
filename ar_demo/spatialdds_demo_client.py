@@ -9,13 +9,14 @@ from typing import Any, Dict, Optional
 
 from cyclonedds.domain import DomainParticipant
 
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
 from spatialdds_demo import topic_types, typed_transport as tt
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo.service_bus import BootstrapClient, CoverageClient
 from spatialdds_demo_idl18.oarc_demo import BootstrapQuery as TypedBootstrapQuery
 from spatialdds_idl18.spatial.disco import CoverageQuery as TypedCoverageQuery
 from spatialdds_demo.discovery_bus import AnnounceSubscriber
-from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds.dds import from_json, to_json
 from spatialdds_demo.content_catalogue import filter_inventory
 from spatialdds_demo.discovery_bus import ContentInventory
 from spatialdds_demo.service_bus import VpsClient

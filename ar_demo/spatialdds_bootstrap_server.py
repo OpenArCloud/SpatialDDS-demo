@@ -10,8 +10,9 @@ from typing import Any, Dict, List
 
 from cyclonedds.domain import DomainParticipant
 
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
 from spatialdds_demo.dds_transport import require_dds_env
-from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds.dds import from_json, to_json
 from spatialdds_demo.service_bus import BootstrapService
 from spatialdds_demo.discovery_http import BOOTSTRAP_SCHEMA
 from spatialdds_demo_idl18.oarc_demo import BootstrapResponse as TypedBootstrapResponse

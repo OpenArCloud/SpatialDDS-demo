@@ -28,9 +28,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from cyclonedds.domain import DomainParticipant
 
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
 from spatialdds_demo import topic_types, typed_transport as tt
 from spatialdds_demo.discovery_bus import AnnouncePublisher, AnnounceSubscriber
-from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds.dds import from_json, to_json
 from spatialdds_idl18.spatial.disco import Announce
 
 

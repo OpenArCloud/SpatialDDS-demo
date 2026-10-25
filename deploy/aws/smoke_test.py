@@ -236,7 +236,7 @@ def _check_ar_demo() -> None:
         "service_id": vps[0],
         "prior_geopose": {"lat_deg": 30.284996, "lon_deg": -97.739494,
                           "alt_m": 18.0, "q": [0.0, 0.0, 0.0, 1.0],
-                          "stamp": {"sec": 0, "nanosec": 0}, "cov": "COV_NONE"},
+                          "stamp": {"sec": 0, "nanosec": 0}, "cov": {"type": "COV_NONE"}},
     }
     if query_image:
         body["query_image"] = query_image

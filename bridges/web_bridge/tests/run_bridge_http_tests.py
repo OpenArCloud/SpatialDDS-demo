@@ -99,7 +99,7 @@ def _coverage_query(domain_id: int = 1) -> Dict[str, object]:
     """
     from cyclonedds.domain import DomainParticipant
 
-    from spatialdds_demo.json_mapping import from_json, to_json
+    from spatialdds.dds import from_json, to_json
     from spatialdds_demo.service_bus import CoverageClient
     from spatialdds_idl18.spatial.disco import CoverageQuery
 
@@ -209,7 +209,7 @@ def main() -> int:
             "alt_m": AUSTIN_ALT,
             "q": [0.0, 0.0, 0.0, 1.0],
             "stamp": SpatialDDSValidator.now_time(),
-            "cov": "COV_NONE",
+            "cov": {"type": "COV_NONE"},
         }
         localize = _post_json("/v1/localize", {"prior_geopose": prior})
         node_geo = localize.get("node_geo", {}) if isinstance(localize, dict) else {}

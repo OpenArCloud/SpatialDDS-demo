@@ -17,7 +17,7 @@ import type { GeoPose } from '../src/types';
 
 const AUSTIN: GeoPose = {
   lat_deg: 30.284996, lon_deg: -97.739494, alt_m: 18,
-  q: [0, 0, 0, 1], stamp: { sec: 0, nanosec: 0 }, cov: 'COV_NONE'
+  q: [0, 0, 0, 1], stamp: { sec: 0, nanosec: 0 }, cov: { type: 'COV_NONE' }
 };
 
 test.describe('geohash encoding', () => {

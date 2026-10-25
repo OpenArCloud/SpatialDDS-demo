@@ -27,6 +27,7 @@ from typing import Callable, Dict, List, Optional
 
 from cyclonedds.domain import DomainParticipant
 
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
 from spatialdds_demo import typed_transport as tt
 from spatialdds_demo.topics import (
     TOPIC_BOOTSTRAP_QUERY_V1,

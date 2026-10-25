@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
@@ -25,6 +24,20 @@ from spatialdds_idl18.spatial.sensing.common import MODULE_ID as COMMON_MODULE_I
 from spatialdds_idl18.spatial.sensing.rad import MODULE_ID as RAD_MODULE_ID  # noqa: E402
 from spatialdds_idl18.spatial.sensing.rf_beam import MODULE_ID as RF_BEAM_MODULE_ID  # noqa: E402
 from spatialdds_idl18.spatial.sensing.vision import MODULE_ID as VISION_MODULE_ID  # noqa: E402
+from spatialdds_idl18.spatial.common import CoordConvention  # noqa: E402
+from spatialdds_idl18.spatial.sensing.rf_beam import BeamSweepType  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import CamModel  # noqa: E402
+from spatialdds_idl18.spatial.sensing.common import Codec  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import ColorSpace  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import Distortion  # noqa: E402
+from spatialdds_idl18.spatial.sensing.common import Health  # noqa: E402
+from spatialdds_idl18.spatial.sensing.common import PayloadKind  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import PixFormat  # noqa: E402
+from spatialdds_idl18.spatial.sensing.rf_beam import PowerUnit  # noqa: E402
+from spatialdds_idl18.spatial.sensing.rad import RadSensorType  # noqa: E402
+from spatialdds_idl18.spatial.sensing.rad import RadTensorLayout  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import RigRole  # noqa: E402
+from spatialdds_idl18.spatial.sensing.common import SampleType  # noqa: E402
 from spatialdds_demo.absent import ABSENT_SCALE  # noqa: E402
 
 BLOCKAGE_THRESHOLD = 0.12
@@ -33,7 +46,15 @@ IMAGE_HEIGHT = 540
 
 
 def to_dict(obj: object) -> Dict:
-    return asdict(obj)
+    """One typed sample as its N.1 document, through the SDK's codec.
+
+    It was `dataclasses.asdict` until the SDK adoption: a dict of Python
+    field names (`_from`) and enum *objects*, which only the demo's own
+    tolerant mapper would lift back. The publisher fed that dict to its
+    writer, so every DeepSense payload relied on the tolerance.
+    """
+    import spatialdds.dds as sdds
+    return sdds.to_json(obj)
 
 
 def load_rows(index_csv: Path) -> List[Dict[str, str]]:
@@ -53,7 +74,7 @@ def _identity_pose() -> PoseSE3:
 
 def _frame_ref(uuid: str, fqn: str) -> FrameRef:
     return FrameRef(uuid=uuid, fqn=fqn, has_coord_convention=True,
-                    coord_convention="ENU", **ABSENT_SCALE)
+                    coord_convention=CoordConvention.ENU, **ABSENT_SCALE)
 
 
 def _stream_meta(stream_id: str, uuid: str, fqn: str,
@@ -69,7 +90,7 @@ def _stream_meta(stream_id: str, uuid: str, fqn: str,
 
 def _frame_quality() -> FrameQuality:
     return FrameQuality(has_snr_db=False, snr_db=0.0, percent_valid=100.0,
-                        health="OK", note="")
+                        health=Health.OK, note="")
 
 
 def _frame_header(stream_id: str, frame_seq: int, stamp: Time,
@@ -107,7 +128,7 @@ def make_beam_meta() -> RfBeamMeta:
         has_mimo_config=False,
         n_tx=1,
         n_rx=1,
-        power_unit="DBM",
+        power_unit=PowerUnit.DBM,
         schema_version=RF_BEAM_MODULE_ID,
     )
 
@@ -116,11 +137,11 @@ def make_radar_meta() -> RadTensorMeta:
     return RadTensorMeta(
         stream_id="unit1_radar",
         base=_stream_meta("unit1_radar", "unit1-radar", "unit1/fmcw_radar"),
-        sensor_type="MEDIUM_RANGE",
-        layout="CH_FAST_SLOW",
+        sensor_type=RadSensorType.MEDIUM_RANGE,
+        layout=RadTensorLayout.CH_FAST_SLOW,
         axes=[_axis("channel", "", 4), _axis("fast_time", "s", 256),
               _axis("slow_time", "s", 128)],
-        voxel_type="CF32",
+        voxel_type=SampleType.CF32,
         physical_meaning="raw ADC, pre-FFT",
         has_antenna_config=True,
         num_tx=1,
@@ -132,11 +153,15 @@ def make_radar_meta() -> RadTensorMeta:
         chirp_duration_s=0.0,
         samples_per_chirp=256,
         chirps_per_frame=128,
-        payload_kind="DENSE_TILES",
-        codec="CODEC_NONE",
+        payload_kind=PayloadKind.DENSE_TILES,
+        codec=Codec.CODEC_NONE,
         has_quant_scale=False,
         quant_scale=0.0,
-        tile_size=0,
+        # uint32[4], "for DENSE_TILES; unused dims = 1" (rad.idl). One tile is
+        # the whole cube, so it is the cube's three axes and a 1. It was the
+        # scalar 0 until the SDK adoption, which no uint32[4] can be: only the
+        # demo's own tolerant mapper ever accepted it.
+        tile_size=[4, 256, 128, 1],
         schema_version=RAD_MODULE_ID,
     )
 
@@ -148,26 +173,26 @@ def make_vision_meta() -> VisionMeta:
         # `K` — the camera matrix, named as it is in every calibration
         # convention. The old code called it `cam`.
         K=CamIntrinsics(
-            model="PINHOLE",
+            model=CamModel.PINHOLE,
             width=IMAGE_WIDTH,
             height=IMAGE_HEIGHT,
             fx=800.0,
             fy=800.0,
             cx=IMAGE_WIDTH / 2.0,
             cy=IMAGE_HEIGHT / 2.0,
-            dist="NONE",
+            dist=Distortion.NONE,
             dist_params=[],
             shutter_us=0.0,
             readout_us=0.0,
-            pix="RGB8",
-            color="SRGB",
+            pix=PixFormat.RGB8,
+            color=ColorSpace.SRGB,
             calib_version="deepsense-s9",
         ),
-        role="FRONT",
+        role=RigRole.FRONT,
         rig_id="unit1",
-        codec="JPEG",
-        pix="RGB8",
-        color="SRGB",
+        codec=Codec.JPEG,
+        pix=PixFormat.RGB8,
+        color=ColorSpace.SRGB,
         schema_version=VISION_MODULE_ID,
     )
 
@@ -182,7 +207,7 @@ def row_to_beam_frame(row: Dict[str, str], dataroot: Path) -> RfBeamFrame:
         stream_id="unit1_60ghz",
         frame_seq=int(row["index"]),
         hdr=_frame_header("unit1_60ghz", int(row["index"]), stamp, []),
-        sweep_type="EXHAUSTIVE",
+        sweep_type=BeamSweepType.EXHAUSTIVE,
         power=power.tolist(),
         # An exhaustive sweep walks the codebook in order, so the beam index
         # is the position in `power`; no explicit index list needed.
@@ -215,9 +240,9 @@ def row_to_radar_tensor(row: Dict[str, str], dataroot: Path) -> Tuple[RadTensorF
             BlobRef(blob_id=row["unit1_radar"].lstrip("./"),
                     role="radar_cube", checksum=""),
         ]),
-        payload_kind="DENSE_TILES",
-        codec="CODEC_NONE",
-        voxel_type_after_decode="CF32",
+        payload_kind=PayloadKind.DENSE_TILES,
+        codec=Codec.CODEC_NONE,
+        voxel_type_after_decode=SampleType.CF32,
         has_quant_scale=False,
         quant_scale=0.0,
         quality=_frame_quality(),
@@ -235,9 +260,9 @@ def row_to_vision_frame(row: Dict[str, str]) -> VisionFrame:
             BlobRef(blob_id=row["unit1_rgb"].lstrip("./"), role="image",
                     checksum=""),
         ]),
-        codec="JPEG",
-        pix="RGB8",
-        color="SRGB",
+        codec=Codec.JPEG,
+        pix=PixFormat.RGB8,
+        color=ColorSpace.SRGB,
         has_line_readout_us=False,
         line_readout_us=0.0,
         rectified=False,

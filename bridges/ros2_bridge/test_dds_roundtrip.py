@@ -125,7 +125,7 @@ class _Endpoints:
         self._endpoint_pair(topic, type_name).write(payload)
 
     def _run(self):
-        from spatialdds_demo.json_mapping import to_json
+        from spatialdds.dds import to_json
 
         while not self._stop.is_set():
             for topic, (reader, type_name) in list(self._readers.items()):
@@ -247,7 +247,7 @@ class TestEnvelopeRoundtrip(unittest.TestCase):
             self.endpoints.publish(blob.BLOB_TOPIC, blob.BLOB_TYPE, chunk)
         self._wait_for(blob.BLOB_TYPE, before + len(chunks), timeout_s=10.0)
 
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.core import BlobChunk
 
         reassembler = blob.Reassembler()

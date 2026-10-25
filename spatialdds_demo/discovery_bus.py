@@ -26,7 +26,7 @@ from typing import Dict, List, Optional
 from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import typed_transport as tt
-from spatialdds_demo.json_mapping import to_json
+from spatialdds.dds import to_json
 from spatialdds_demo.topics import (
     TOPIC_DISCOVERY_ANNOUNCE_V1,
     TOPIC_DISCOVERY_CONTENT_V1,

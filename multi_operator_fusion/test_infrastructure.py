@@ -90,8 +90,22 @@ class Detection3DPayload(unittest.TestCase):
         self.assertEqual(payload["dets"][0]["center"],
                          [100.0, 50.0, 0.0])
 
+    def test_the_loop_step_publishes_an_offset_detection_set(self):
+        """The composition the frame loop runs, not its pieces called by hand."""
+        from types import SimpleNamespace
+        from infrastructure_publisher import detection_step
+
+        bs = SimpleNamespace(lat_deg=33.42, lon_deg=-111.93)
+        veh = SimpleNamespace(lat_deg=33.4201, lon_deg=-111.93)
+        payload, history, (east, north), _v = detection_step(
+            7, _stamp_from_index(7), bs, veh, None, (100.0, 50.0, 0.0))
+        self.assertEqual(len(payload["dets"]), 1)
+        self.assertAlmostEqual(payload["dets"][0]["center"][0], east + 100.0)
+        self.assertAlmostEqual(payload["dets"][0]["center"][1], north + 50.0)
+        self.assertEqual(history, (east, north, 7))
+
     def test_payload_is_a_real_detection_set(self):
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.semantics import Detection3DSet
 
         payload = make_detection3d_payload(

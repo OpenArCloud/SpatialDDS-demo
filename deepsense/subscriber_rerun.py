@@ -27,7 +27,7 @@ from deepsense.radar_processing import radar_cube_to_range_angle, radar_cube_to_
 from cyclonedds.domain import DomainParticipant
 
 from spatialdds_demo import blob as blob_transfer, topic_types, typed_transport as tt
-from spatialdds_demo.json_mapping import to_json
+from spatialdds.dds import to_json
 
 
 def set_time(stamp: Dict[str, Any]) -> None:
@@ -160,7 +160,7 @@ class Subscriber:
         self._render_lidar(pending)
 
     def handle_blob(self, payload: Dict[str, Any]) -> None:
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.core import BlobChunk
 
         try:

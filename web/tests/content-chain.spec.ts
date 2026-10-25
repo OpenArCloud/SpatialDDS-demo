@@ -55,6 +55,10 @@ function contained(old: unknown, got: unknown, path = ''): string[] {
     }
     return old.flatMap((v, i) => contained(v, got[i], `${path}[${i}]`));
   }
+  // N.1 writes an int64 as a decimal string, and the oracle was captured in
+  // the demo's old dialect, which wrote an integer. The same value, so equal,
+  // and only that: a number against the string of itself.
+  if (typeof old === 'number' && typeof got === 'string' && got === String(old)) return [];
   return old === got ? [] : [`${path}: ${JSON.stringify(old)} != ${JSON.stringify(got)}`];
 }
 

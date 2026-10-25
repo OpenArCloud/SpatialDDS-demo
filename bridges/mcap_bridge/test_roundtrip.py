@@ -42,7 +42,7 @@ SCENE = "scene/intersection"
 
 def _wire(cls, payload):
     """The payload as recorded: built into its type, then serialised."""
-    from spatialdds_demo.json_mapping import from_json, to_json
+    from spatialdds.dds import from_json, to_json
 
     return to_json(from_json(cls, payload))
 
@@ -139,34 +139,43 @@ class RoundTripTests(unittest.TestCase):
         os.rmdir(self.tmp)
 
     def test_table_covers_every_registered_type(self) -> None:
-        from spatialdds_demo import topic_types
+        from spatialdds.dds import registry
+        from spatialdds_demo import lanes
 
         table = build_schema_table()
-        for name in topic_types.ALL:
+        for name in (set(registry.registrations()) | set(lanes.EXTENSIONS)
+                     | set(lanes.DEPLOYMENT_NAMES)):
             with self.subTest(type=name):
                 self.assertIn(name, table)
                 self.assertEqual(table[name]["type"], "object")
 
-    def test_schema_is_generated_from_the_idl_not_permissive(self) -> None:
+    def test_schema_is_the_published_n1_schema_not_permissive(self) -> None:
         """
-        The point of the migration for MCAP: a recording now says what is in
-        its messages, not just what they are called. Under the envelope every
+        The point of the migration for MCAP: a recording says what is in its
+        messages, not just what they are called. Under the envelope every
         schema was `{"type": "object", "additionalProperties": true}`.
+
+        Since the SDK adoption the payload is N.1 and the schema is the one
+        the gateway publishes for that type, not one generated here. One
+        thing it does not do that the generated one did is refuse an
+        unknown member: the published schemas allow additional properties
+        (filed against spatialdds-py). The demo's own builders are held to
+        their types' members by multi_operator_fusion/test_spatialdds_types.
         """
+        from spatialdds.server import webjson
+
         schema = schema_for("framed_pose")
         self.assertNotEqual(schema, default_schema("framed_pose"))
-        self.assertFalse(schema["additionalProperties"])
-        self.assertEqual(sorted(schema["properties"]),
+        published = webjson.schemas()["spatial.core.FramedPose"]
+        self.assertEqual(schema, dict(published, title="framed_pose"))
+        self.assertEqual(sorted(schema["required"]),
                          ["cov", "frame_ref", "pose", "stamp"])
-        # Vec3 is a fixed-length array of doubles, and the schema says so.
-        t = schema["properties"]["pose"]["properties"]["t"]
-        self.assertEqual(t["type"], "array")
-        self.assertEqual((t["minItems"], t["maxItems"]), (3, 3))
-        self.assertEqual(t["items"]["type"], "number")
-        # §2.8: enums are their identifier strings on the wire.
-        conv = schema["properties"]["frame_ref"]["properties"]["coord_convention"]
-        self.assertEqual(conv["type"], "string")
-        self.assertIn("ENU", conv["enum"])
+        self.assertIn("pose", schema["properties"])
+        # The deployment's name for a pinned type the registry does not
+        # register still gets that type's published schema.
+        self.assertEqual(schema_for("blob_chunk")["title"], "blob_chunk")
+        self.assertNotEqual(schema_for("blob_chunk"),
+                            default_schema("blob_chunk"))
 
     def test_recorded_payloads_validate_against_their_schema(self) -> None:
         """A generated schema that the recorder's own output fails is worse

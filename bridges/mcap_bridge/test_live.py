@@ -299,7 +299,16 @@ def main() -> int:
     SAMPLES.extend(_samples())
     lanes = _announce_lanes(domain, SAMPLES)      # keep alive for the run
 
-    expected = [_fingerprint(t, topic, payload)
+    # What was published, as it goes on the wire: the N.1 form of each payload
+    # through the SDK's codec. That is what the recorder writes and the
+    # subscriber hands back (an int64 is a decimal string in N.1, for one),
+    # so it is what "survived" is measured against.
+    # (`demo_lanes`, not `lanes`: that name above holds the announcing
+    # participants alive, and rebinding it let them be collected mid-run.)
+    import spatialdds.dds as sdds
+    from spatialdds_demo import lanes as demo_lanes
+    expected = [_fingerprint(t, topic, sdds.to_json(sdds.from_json(
+                    demo_lanes.class_for(t), payload)))
                 for (t, topic, payload) in SAMPLES]
     print(f"[live] domain={domain} expected={len(expected)} mcap={mcap_path}", flush=True)
 

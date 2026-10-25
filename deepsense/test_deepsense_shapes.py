@@ -75,7 +75,7 @@ class ConverterShapes(unittest.TestCase):
 
     def _check(self, lane_key, payload):
         from spatialdds_demo import topic_types
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
 
         type_name, _profile = LANES[lane_key]
         cls = topic_types.try_resolve(type_name)
@@ -206,7 +206,7 @@ class PublisherLanes(unittest.TestCase):
         import numpy as np
 
         from spatialdds_demo import blob
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.core import BlobChunk
         from spatialdds_idl18.spatial.sensing.lidar import LidarFrame
 

@@ -90,6 +90,27 @@ EXTENSIONS = {
 for _name, _cls in EXTENSIONS.items():
     sd.dds.extend(_name, _cls, OARC_IDL)
 
+#: Names this deployment gives pinned types that §3.3.2 does not register.
+#: `blob_chunk` is the blob lane's: the spec leaves that lane unnamed
+#: (spatialdds-py candidates 9.6), so its announced `TopicMeta.type` is ours.
+DEPLOYMENT_NAMES = {"blob_chunk": "spatial.core.BlobChunk"}
+
+
+def class_for(type_name: str) -> type:
+    """The generated class for any type name this deployment announces.
+
+    The SDK's `class_for` first: registered names, well-known messages,
+    dotted identities and the `oarc.*` extensions. Then this deployment's
+    names for pinned types the registry does not register.
+    """
+    try:
+        return sd.dds.class_for(type_name)
+    except sd.dds.RegistryError:
+        if type_name in DEPLOYMENT_NAMES:
+            return sd.dds.class_for(DEPLOYMENT_NAMES[type_name])
+        raise
+
+
 # -- lanes outside the scene (opened with topic=) -----------------------------
 
 TOPIC_VPS_QUERY = "spatialdds/vps/query/v1"

@@ -129,7 +129,7 @@ class _DdsObserver:
         from cyclonedds.domain import DomainParticipant
 
         from spatialdds_demo import topic_types, typed_transport as tt
-        from spatialdds_demo.json_mapping import to_json
+        from spatialdds.dds import to_json
 
         self._to_json = to_json
         self.datatype = topic_types.resolve(type_name)

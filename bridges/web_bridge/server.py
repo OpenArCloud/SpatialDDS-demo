@@ -53,7 +53,7 @@ from spatialdds_demo.discovery_http import (
     bootstrap_manifest,
     search as discovery_search,
 )
-from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds.dds import from_json, to_json
 from spatialdds_demo import blob
 from spatialdds_demo.blob import BlobPublisher
 from spatialdds_demo.service_bus import CoverageClient, VpsClient
@@ -300,7 +300,16 @@ class SpatialDDSBridge:
                 service_id, prior_geopose, query_image)
             if self._vps is None:
                 self._vps = VpsClient(self._announce_participant)
-            typed = self._vps.request(from_json(TypedVpsRequest, request), timeout=8)
+            try:
+                typed_request = from_json(TypedVpsRequest, request)
+            except Exception as exc:
+                # The caller's prior is part of this document, so a refusal
+                # here is the caller's to fix: N.1 is the one dialect since the
+                # SDK adoption, and a page still sending the old one (a union
+                # tagged `discriminator`, or a bare "COV_NONE") lands here.
+                raise LocalizeRequestInvalid(
+                    f"the localize request is not N.1 JSON: {exc}") from exc
+            typed = self._vps.request(typed_request, timeout=8)
             if typed is None:
                 raise RuntimeError("LOCALIZE_RESPONSE timeout")
             return to_json(typed)
@@ -440,7 +449,7 @@ def _default_prior_geopose() -> Dict[str, Any]:
         # 1.7 removed GeoPose.frame_kind / frame_ref: orientation is fixed to
         # the local ENU tangent frame at the encoded position.
         "stamp": stamp,
-        "cov": "COV_NONE",
+        "cov": {"type": "COV_NONE"},
     }
 
 
@@ -780,6 +789,10 @@ def health() -> Dict[str, Any]:
     }
 
 
+class LocalizeRequestInvalid(ValueError):
+    """A localize request the caller sent that is not a valid N.1 document."""
+
+
 @app.post("/v1/localize")
 def localize(payload: Dict[str, Any]) -> Dict[str, Any]:
     prior = payload.get("prior_geopose") if isinstance(payload, dict) else None
@@ -797,6 +810,8 @@ def localize(payload: Dict[str, Any]) -> Dict[str, Any]:
                 status_code=400, detail=f"query_image is not valid base64: {exc}")
     try:
         return bridge.localize(prior, service_id, query_image)
+    except LocalizeRequestInvalid as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

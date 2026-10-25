@@ -49,6 +49,7 @@ from fusion import (  # noqa: E402
     Velocity,
     coverage_metrics,
 )
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
 from spatialdds_types import (  # noqa: E402
     circle_coverage,
     make_announce,

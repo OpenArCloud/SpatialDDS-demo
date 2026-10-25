@@ -1,6 +1,6 @@
 """SpatialDDS 1.7 dict builders for the multi-operator demo.
 
-Each function returns a dict that ``spatialdds_demo.json_mapping.from_json``
+Each function returns an N.1 dict that ``sd.dds.from_json``
 can build into its IDL type — so these are payload *constructors* for typed
 topics, not a JSON wire format. The dicts exist because the demo's publishers
 have always assembled payloads as dicts and the dashboards still want them
@@ -289,7 +289,7 @@ def make_framed_pose(x: float, y: float, z: float, q: Sequence[float],
     return {
         "pose": {"t": [float(x), float(y), float(z)], "q": _vec(q, ("x", "y", "z", "w"))},
         "frame_ref": _frame_ref(frame_ref_fqn),
-        "cov": {"discriminator": "COV_NONE", "none": 0},
+        "cov": {"type": "COV_NONE"},
         "stamp": _stamp(timestamp_s),
     }
 

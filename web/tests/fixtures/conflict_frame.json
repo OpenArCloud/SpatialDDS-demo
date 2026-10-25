@@ -1,5 +1,5 @@
 {
- "$comment": "One /ws data frame from the gateway, captured live on 2026-10-21 from the local fusion stack (deploy/aws/docker-compose.local.yaml: synthetic_publisher + fusion_service + web_bridge). What fusion_service actually publishes on spatialdds/platform/events/trajectory_conflict/v1. Frozen; read by fusion-dashboard.spec.ts.",
+ "$comment": "One /ws data frame from the gateway, captured live on 2026-10-21 from the local fusion stack (deploy/aws/docker-compose.local.yaml: synthetic_publisher + fusion_service + web_bridge). What fusion_service actually publishes on spatialdds/platform/events/trajectory_conflict/v1. Frozen; read by fusion-dashboard.spec.ts. Re-derived 2026-10-24 at the SDK adoption: the captured payload, put through the SDK's N.1 codec (sd.dds.from_json then to_json), because /ws carries N.1 since then. Not a live recapture; the acceptance run replaces it with one.",
  "type": "data",
  "sub_id": "conflict",
  "msg_type": "spatial_event",
@@ -25,7 +25,7 @@
    "coord_convention": "ENU",
    "has_scale": false,
    "scale_status": "SCALE_UNKNOWN",
-   "meters_per_unit": 1,
+   "meters_per_unit": 1.0,
    "display_unit": "m"
   },
   "has_trigger_det_id": false,
@@ -36,14 +36,14 @@
   "has_secondary_det_id": false,
   "secondary_det_id": "",
   "has_measured_speed_mps": false,
-  "measured_speed_mps": 0,
+  "measured_speed_mps": 0.0,
   "has_measured_dwell_sec": false,
-  "measured_dwell_sec": 0,
+  "measured_dwell_sec": 0.0,
   "has_measured_distance_m": true,
   "measured_distance_m": 1.8530000448226929,
   "has_zone_occupancy": false,
   "zone_occupancy": 0,
-  "confidence": 1,
+  "confidence": 1.0,
   "has_evidence": false,
   "evidence": {
    "blob_id": "",
@@ -53,11 +53,11 @@
   "has_description": true,
   "description": "predicted conflict between operator_a_ego and operator_b_ego in 5.0s",
   "event_start": {
-   "sec": 1792629405,
+   "sec": "1792629405",
    "nanosec": 363418102
   },
   "stamp": {
-   "sec": 1792629400,
+   "sec": "1792629400",
    "nanosec": 363418102
   },
   "source_id": "platform-fusion",

@@ -120,7 +120,7 @@ class TestPoseStamped(unittest.TestCase):
         self.assertEqual(payload["frame_ref"]["coord_convention"], "ENU")
         # PoseStamped has no covariance, so COV_NONE rather than a zero
         # matrix pretending to be one.
-        self.assertEqual(payload["cov"]["discriminator"], "COV_NONE")
+        self.assertEqual(payload["cov"]["type"], "COV_NONE")
 
     def test_quaternion_passthrough_no_reorder(self):
         msg = make_test_pose_stamped(qx=0.1, qy=0.2, qz=0.3, qw=0.9)
@@ -362,7 +362,7 @@ class TestEncodersMatchTheIdl(unittest.TestCase):
     def _check(self, type_name, payload):
         try:
             from spatialdds_demo import topic_types
-            from spatialdds_demo.json_mapping import from_json
+            from spatialdds.dds import from_json
         except Exception as exc:                       # pragma: no cover
             self.skipTest(f"generated bindings unavailable: {exc}")
         cls = topic_types.try_resolve(type_name)
@@ -472,14 +472,14 @@ class TestNumpyArrayCovariance(unittest.TestCase):
         _t, _mt, payload = encode_nav_sat_fix(msg, "op")
         # GeoPose carries covariance as a CovMatrix union, not a bare list.
         # The position case is COV_POS3 carrying `pos`.
-        self.assertEqual(payload["cov"]["discriminator"], "COV_POS3")
+        self.assertEqual(payload["cov"]["type"], "COV_POS3")
         self.assertEqual(payload["cov"]["pos"][8], 4.0)
 
     def test_navsatfix_without_covariance_is_cov_none(self):
         msg = make_test_nav_sat_fix()
         msg.position_covariance_type = 0
         _t, _mt, payload = encode_nav_sat_fix(msg, "op")
-        self.assertEqual(payload["cov"]["discriminator"], "COV_NONE")
+        self.assertEqual(payload["cov"]["type"], "COV_NONE")
 
     def test_imu_with_numpy_arrays_does_not_raise(self):
         np = self._numpy()
@@ -527,10 +527,15 @@ class TestUnionCaseNamesAreChecked(unittest.TestCase):
     A union case name the type does not have must be refused.
 
     cyclonedds accepts one silently and yields a union with no active case,
-    which serialises to ``{"discriminator": None}`` — not a valid sample, and
-    indistinguishable downstream from a legitimately empty one. This bridge
-    wrote its covariance under an invented ``COV_FULL_3X3``/``full3x3`` for
-    exactly that reason, and the value simply disappeared.
+    not a valid sample, and indistinguishable downstream from a legitimately
+    empty one. This bridge wrote its covariance under an invented
+    ``COV_FULL_3X3``/``full3x3`` for exactly that reason, and the value simply
+    disappeared.
+
+    In N.1 (the SDK's one JSON dialect since the adoption) a union is the case
+    label on ``type``, and the case member beside it. ``COV_NONE``'s case
+    carries no member. The demo's old dialect tagged the label on
+    ``discriminator``, and a document in it is refused now, not misread.
     """
 
     def _cov_matrix(self):
@@ -541,25 +546,37 @@ class TestUnionCaseNamesAreChecked(unittest.TestCase):
         return CovMatrix
 
     def test_unknown_case_is_refused(self):
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
 
-        with self.assertRaises(ValueError):
+        # The SDK refuses with its gateway codec's WireError, which is not a
+        # ValueError and not exported by sd.dds (filed against spatialdds-py),
+        # so the refusal is held by what it says.
+        with self.assertRaisesRegex(Exception, "COV_FULL_3X3.*not a declared case"):
             from_json(self._cov_matrix(),
-                      {"discriminator": "COV_FULL_3X3", "full3x3": [0.0] * 9})
+                      {"type": "COV_FULL_3X3", "full3x3": [0.0] * 9})
 
     def test_real_case_round_trips(self):
-        from spatialdds_demo.json_mapping import from_json, to_json
+        from spatialdds.dds import from_json, to_json
 
         values = [1.0, 0, 0, 0, 1.0, 0, 0, 0, 4.0]
         out = to_json(from_json(self._cov_matrix(),
-                                {"discriminator": "COV_POS3", "pos": values}))
-        self.assertEqual(out["discriminator"], "COV_POS3")
+                                {"type": "COV_POS3", "pos": values}))
+        self.assertEqual(out["type"], "COV_POS3")
         self.assertEqual(out["pos"][8], 4.0)
 
-    def test_bare_discriminator_still_works(self):
+    def test_cov_none_carries_no_member(self):
         """The Cesium client and the demo's builders write COV_NONE this way."""
-        from spatialdds_demo.json_mapping import from_json, to_json
+        from spatialdds.dds import from_json, to_json
 
-        out = to_json(from_json(self._cov_matrix(),
-                                {"discriminator": "COV_NONE"}))
-        self.assertEqual(out["discriminator"], "COV_NONE")
+        out = to_json(from_json(self._cov_matrix(), {"type": "COV_NONE"}))
+        self.assertEqual(out, {"type": "COV_NONE"})
+
+    def test_the_old_dialect_is_refused_not_misread(self):
+        from spatialdds.dds import from_json
+
+        for old in ({"discriminator": "COV_NONE", "none": 0},
+                    {"discriminator": "COV_POS3", "pos": [0.0] * 9},
+                    "COV_NONE"):
+            with self.subTest(old=old):
+                with self.assertRaises(Exception):
+                    from_json(self._cov_matrix(), old)

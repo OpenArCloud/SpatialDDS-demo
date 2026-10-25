@@ -76,7 +76,7 @@ Environment overrides (handy for one-off runs / Docker):
 
 ```
 MQTT  topic:    spatialdds/<operator>/<family>/<sensor?>/<kind>/v1
-MQTT  payload:  the sample as JSON (json_mapping.to_json / from_json)
+MQTT  payload:  the sample as N.1 JSON (sd.dds.to_json / from_json)
 
 DDS   topic        = MQTT topic, verbatim
 DDS   type         = derived from topic by topic_mapping.infer_msg_type,

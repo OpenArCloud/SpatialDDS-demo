@@ -4,68 +4,70 @@
   "has_rmse_m": true,
   "node_geo": {
     "geopose": {
-      "alt_m": 0.6408869742746275,
+      "alt_m": -0.7846057766929257,
       "cov": {
-        "discriminator": "COV_NONE",
-        "none": 0
+        "type": "COV_NONE"
       },
-      "lat_deg": 3.491396556889078e-05,
-      "lon_deg": 4.2078220825889034e-05,
+      "lat_deg": -1.7678037589304298e-05,
+      "lon_deg": -4.235200842164472e-05,
       "q": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
+        -0.5,
+        -0.5,
+        0.5,
+        0.5
       ],
       "stamp": {
-        "nanosec": 696960926,
-        "sec": 1787522227
+        "nanosec": 107158899,
+        "sec": "1792901773"
       }
     },
-    "graph_epoch": 1,
+    "graph_epoch": "1",
     "has_geopose": true,
     "map_id": "sf-downtown-map",
     "node_id": "node-0001",
     "poses": [
       {
         "cov": {
-          "discriminator": "COV_NONE",
-          "none": 0
+          "type": "COV_NONE"
         },
         "frame_ref": {
           "coord_convention": "ENU",
+          "display_unit": "m",
           "fqn": "map/sf-downtown",
           "has_coord_convention": true,
+          "has_scale": false,
+          "meters_per_unit": 1.0,
+          "scale_status": "SCALE_UNKNOWN",
           "uuid": "163eb9bb-cc4d-5531-b4b6-052c13958cd3"
         },
         "pose": {
           "q": [
-            -0.03616055503101684,
-            -0.017617204034648934,
-            -0.006371523257027616,
-            0.9991703819035246
+            -0.0042020391967034,
+            -0.0052990056252050785,
+            0.03455678566192946,
+            0.9993798536946242
           ],
           "t": [
-            -0.6382182781275261,
-            -0.1295309154857356,
-            0.3657127379924916
+            1.8157432853511324,
+            1.085411031836315,
+            1.6646332377545623
           ]
         },
         "stamp": {
-          "nanosec": 696964979,
-          "sec": 1787522227
+          "nanosec": 107163906,
+          "sec": "1792901773"
         }
       }
     ],
-    "seq": 1,
+    "seq": "1",
     "source_id": "svc:vps:demo/sf-downtown"
   },
   "query_id": "fixture-query-0001",
   "rmse_m": 0.42,
   "service_id": "svc:vps:demo/sf-downtown",
   "stamp": {
-    "nanosec": 696966886,
-    "sec": 1787522227
+    "nanosec": 107166051,
+    "sec": "1792901773"
   },
   "status": "VPS_SUCCESS"
 }

@@ -33,6 +33,18 @@ from spatialdds_idl18.spatial.core import CovMatrix, TileKey  # noqa: E402
 from spatialdds_idl18.spatial.sensing.common import MODULE_ID as COMMON_MODULE_ID  # noqa: E402
 from spatialdds_idl18.spatial.sensing.lidar import MODULE_ID as LIDAR_MODULE_ID  # noqa: E402
 from spatialdds_idl18.spatial.sensing.vision import MODULE_ID as VISION_MODULE_ID  # noqa: E402
+from spatialdds_idl18.spatial.common import CoordConvention  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import CamModel  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import RigRole  # noqa: E402
+from spatialdds_idl18.spatial.sensing.rad import RadDynProp  # noqa: E402
+from spatialdds_idl18.spatial.sensing.lidar import CloudEncoding  # noqa: E402
+from spatialdds_idl18.spatial.sensing.common import Codec  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import ColorSpace  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import Distortion  # noqa: E402
+from spatialdds_idl18.spatial.sensing.common import Health  # noqa: E402
+from spatialdds_idl18.spatial.sensing.lidar import LidarType  # noqa: E402
+from spatialdds_idl18.spatial.sensing.vision import PixFormat  # noqa: E402
+from spatialdds_idl18.spatial.sensing.lidar import PointLayout  # noqa: E402
 from spatialdds_demo.absent import ABSENT_SCALE, absent_detection3d  # noqa: E402
 
 
@@ -62,7 +74,7 @@ def _identity_pose() -> PoseSE3:
 def _frame_quality() -> FrameQuality:
     """A "nothing measured" quality block. Every field, flags off."""
     return FrameQuality(has_snr_db=False, snr_db=0.0, percent_valid=100.0,
-                        health="OK", note="")
+                        health=Health.OK, note="")
 
 
 def _frame_header(channel: str, frame_seq: int, stamp: Time,
@@ -99,7 +111,7 @@ def ego_pose_to_spatialdds(ego_pose: Dict[str, Any]) -> Tuple[PoseSE3, GeoPose]:
 
 def _sensor_frame_ref(calibrated_sensor: Dict[str, Any], channel: str) -> FrameRef:
     return FrameRef(uuid=calibrated_sensor["token"], fqn=f"ego/{channel}",
-                    has_coord_convention=True, coord_convention="ENU", **ABSENT_SCALE)
+                    has_coord_convention=True, coord_convention=CoordConvention.ENU, **ABSENT_SCALE)
 
 
 def _stream_meta(sample_data: Dict[str, Any], calibrated_sensor: Dict[str, Any], rate_hz: float) -> StreamMeta:
@@ -125,7 +137,7 @@ def camera_to_vision_meta(sample_data: Dict[str, Any], calibrated_sensor: Dict[s
         # The field is `K`, not `cam` — the camera matrix, named as it is in
         # every calibration convention.
         K=CamIntrinsics(
-            model="PINHOLE",
+            model=CamModel.PINHOLE,
             width=width,
             height=height,
             fx=float(intr[0][0]),
@@ -133,21 +145,21 @@ def camera_to_vision_meta(sample_data: Dict[str, Any], calibrated_sensor: Dict[s
             cx=float(intr[0][2]),
             cy=float(intr[1][2]),
             # nuScenes ships rectified images, so no distortion model.
-            dist="NONE",
+            dist=Distortion.NONE,
             dist_params=[],
             shutter_us=0.0,
             readout_us=0.0,
-            pix="RGB8",
-            color="SRGB",
+            pix=PixFormat.RGB8,
+            color=ColorSpace.SRGB,
             calib_version="nuscenes-v1.0",
         ),
         # RigRole names a camera's position in a rig, not its lens type;
         # nuScenes CAM_FRONT and friends map straight onto it.
-        role=_RIG_ROLE.get(sample_data["channel"], "AUX"),
+        role=_RIG_ROLE.get(sample_data["channel"], RigRole.AUX),
         rig_id="ego",
-        codec="JPEG",
-        pix="RGB8",
-        color="SRGB",
+        codec=Codec.JPEG,
+        pix=PixFormat.RGB8,
+        color=ColorSpace.SRGB,
         schema_version=VISION_MODULE_ID,
     )
 
@@ -161,9 +173,9 @@ def sample_data_to_vision_frame(sample_data: Dict[str, Any], frame_seq: int) -> 
         hdr=_frame_header(channel, frame_seq, stamp, [
             BlobRef(blob_id=sample_data["filename"], role="image", checksum=""),
         ]),
-        codec="JPEG",
-        pix="RGB8",
-        color="SRGB",
+        codec=Codec.JPEG,
+        pix=PixFormat.RGB8,
+        color=ColorSpace.SRGB,
         has_line_readout_us=False,
         line_readout_us=0.0,
         rectified=True,
@@ -180,7 +192,7 @@ def lidar_to_meta_and_frame(
     meta = LidarMeta(
         stream_id=channel,
         base=_stream_meta(sample_data, calibrated_sensor, rate_hz=20.0),
-        type="MULTI_BEAM_3D",
+        type=LidarType.MULTI_BEAM_3D,
         n_rings=32,
         has_range_limits=True,
         min_range_m=0.9,
@@ -194,9 +206,9 @@ def lidar_to_meta_and_frame(
         has_wavelength=False,
         wavelength_nm=0.0,
         # nuScenes ships raw interleaved float32 (x, y, z, intensity, ring).
-        encoding="BIN_INTERLEAVED",
-        codec="CODEC_NONE",
-        layout="XYZ_I_R",
+        encoding=CloudEncoding.BIN_INTERLEAVED,
+        codec=Codec.CODEC_NONE,
+        layout=PointLayout.XYZ_I_R,
         schema_version=LIDAR_MODULE_ID,
     )
     frame = LidarFrame(
@@ -206,9 +218,9 @@ def lidar_to_meta_and_frame(
             BlobRef(blob_id=sample_data["filename"], role="lidar_bin",
                     checksum=""),
         ]),
-        encoding="BIN_INTERLEAVED",
-        codec="CODEC_NONE",
-        layout="XYZ_I_R",
+        encoding=CloudEncoding.BIN_INTERLEAVED,
+        codec=Codec.CODEC_NONE,
+        layout=PointLayout.XYZ_I_R,
         # nuScenes .bin sweeps carry no per-point timestamps.
         has_per_point_timestamps=False,
         has_average_range_m=False,
@@ -242,7 +254,7 @@ def radar_to_detection_set(
             intensity=0.0,
             quality=0.0,
             has_dyn_prop=True,
-            dyn_prop=_DYN_PROP[int(p[3])] if int(p[3]) < len(_DYN_PROP) else "UNKNOWN",
+            dyn_prop=_DYN_PROP[int(p[3])] if int(p[3]) < len(_DYN_PROP) else RadDynProp.UNKNOWN,
             has_pos_rms=False,
             x_rms_m=0.0, y_rms_m=0.0, z_rms_m=0.0,
             has_vel_rms=False,
@@ -260,7 +272,7 @@ def radar_to_detection_set(
         stream_id=channel,
         frame_seq=frame_seq,
         frame_ref=FrameRef(uuid="", fqn=f"ego/{channel}",
-                           has_coord_convention=True, coord_convention="ENU", **ABSENT_SCALE),
+                           has_coord_convention=True, coord_convention=CoordConvention.ENU, **ABSENT_SCALE),
         # `dets`, not `detections` — the sequence field is named the same way
         # in every *Set type in the spec.
         dets=detections,
@@ -275,18 +287,28 @@ def radar_to_detection_set(
 
 # nuScenes camera channels map onto RigRole positions.
 _RIG_ROLE = {
-    "CAM_FRONT": "FRONT",
-    "CAM_FRONT_LEFT": "FRONT_LEFT",
-    "CAM_FRONT_RIGHT": "FRONT_RIGHT",
-    "CAM_BACK": "BACK",
-    "CAM_BACK_LEFT": "BACK_LEFT",
-    "CAM_BACK_RIGHT": "BACK_RIGHT",
+    "CAM_FRONT": RigRole.FRONT,
+    "CAM_FRONT_LEFT": RigRole.FRONT_LEFT,
+    "CAM_FRONT_RIGHT": RigRole.FRONT_RIGHT,
+    "CAM_BACK": RigRole.BACK,
+    "CAM_BACK_LEFT": RigRole.BACK_LEFT,
+    "CAM_BACK_RIGHT": RigRole.BACK_RIGHT,
 }
 
 
 # nuScenes radar dyn_prop is an integer code; rad::RadDynProp is an enum.
-_DYN_PROP = ["MOVING", "STATIONARY", "ONCOMING", "STATIONARY_CANDIDATE",
-             "UNKNOWN", "CROSSING_STATIONARY", "CROSSING_MOVING", "STOPPED"]
+# Codes 0-7: moving, stationary, oncoming, stationary candidate, unknown,
+# crossing stationary, crossing moving, stopped. RadDynProp has no
+# "candidate", and its crossing members carry a direction (CROSSING_LEFT /
+# CROSSING_RIGHT) nuScenes does not give, so codes 3, 5 and 6 are UNKNOWN:
+# lossy, and the only mapping the type allows. Until the SDK adoption this
+# table named STATIONARY_CANDIDATE, CROSSING_STATIONARY and CROSSING_MOVING,
+# none of which RadDynProp has, so a detection with one of those codes was
+# never a valid sample.
+_DYN_PROP = [RadDynProp.MOVING, RadDynProp.STATIONARY, RadDynProp.ONCOMING,
+             RadDynProp.UNKNOWN, RadDynProp.UNKNOWN,
+             RadDynProp.UNKNOWN, RadDynProp.UNKNOWN,
+             RadDynProp.STOPPED]
 
 
 def annotation_to_detection3d(nusc: NuScenes, ann_token: str) -> Detection3D:
@@ -315,7 +337,7 @@ def annotation_to_detection3d(nusc: NuScenes, ann_token: str) -> Detection3D:
     return Detection3D(
         det_id=ann["token"],
         frame_ref=FrameRef(uuid="", fqn="nuscenes/map",
-                           has_coord_convention=True, coord_convention="ENU", **ABSENT_SCALE),
+                           has_coord_convention=True, coord_convention=CoordConvention.ENU, **ABSENT_SCALE),
         has_tile=False,
         tile_key=TileKey(x=0, y=0, z=0, level=0),
         class_id=str(ann["category_name"]),
@@ -351,7 +373,7 @@ def sample_annotations_to_set(nusc: NuScenes, sample: Dict[str, Any], frame_seq:
     return Detection3DSet(
         set_id=f"nuscenes-{frame_seq}",
         frame_ref=FrameRef(uuid="", fqn="nuscenes/map",
-                           has_coord_convention=True, coord_convention="ENU", **ABSENT_SCALE),
+                           has_coord_convention=True, coord_convention=CoordConvention.ENU, **ABSENT_SCALE),
         has_tile=False,
         tile_key=TileKey(x=0, y=0, z=0, level=0),
         dets=dets,

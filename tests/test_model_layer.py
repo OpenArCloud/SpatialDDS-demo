@@ -27,7 +27,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from spatialdds_demo import typed_transport as tt  # noqa: E402
-from spatialdds_demo.json_mapping import to_json  # noqa: E402
+from spatialdds.dds import to_json  # noqa: E402
 from spatialdds_idl18.builtin import Time  # noqa: E402
 from spatialdds_demo.model_service import (  # noqa: E402
     DUCK_CONTENT_ID, IDLE_FLUSH_S, LATCH_EVERY_N_MOVES, ModelPublisher,

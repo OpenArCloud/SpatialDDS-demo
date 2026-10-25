@@ -29,6 +29,7 @@ from cyclonedds.pub import DataWriter
 from cyclonedds.sub import DataReader
 from cyclonedds.topic import Topic
 
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
 from spatialdds_demo import qos_profiles
 
 # One Topic object per (participant, name) — CycloneDDS rejects a second Topic
@@ -332,14 +333,14 @@ class TypedDictWriter:
             participant, topic, datatype, qos_profile, lifespan_sec=lifespan_sec)
 
     def write(self, payload: Any) -> None:
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
 
         sample = payload if isinstance(payload, self.datatype) else from_json(
             self.datatype, payload)
         self._writer.write(sample)
 
     def dispose(self, payload: Any) -> None:
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
 
         sample = payload if isinstance(payload, self.datatype) else from_json(
             self.datatype, payload)
@@ -348,7 +349,7 @@ class TypedDictWriter:
 
 def samples_as_json(samples: List[TopicSample]) -> List[Tuple[str, str, Any]]:
     """``(topic, type_name, dict)`` for consumers that work in JSON."""
-    from spatialdds_demo.json_mapping import to_json
+    from spatialdds.dds import to_json
 
     return [
         (s.topic, s.type_name, to_json(s.data))

@@ -35,7 +35,7 @@ import spatialdds_catalog_server as catalog  # noqa: E402
 import spatialdds_demo_client as client  # noqa: E402
 import spatialdds_demo_server as vps  # noqa: E402
 from spatialdds_demo.discovery_bus import validate_announce  # noqa: E402
-from spatialdds_demo.json_mapping import from_json  # noqa: E402
+from spatialdds.dds import from_json  # noqa: E402
 from spatialdds_demo.topics import (  # noqa: E402
     TOPIC_DISCOVERY_CONTENT_V1, TOPIC_VPS_QUERY_V1,
 )

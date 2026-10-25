@@ -33,7 +33,8 @@ from infrastructure_publisher import (  # noqa: E402
     _stamp_from_index,
     make_detection3d_payload,
 )
-from spatialdds_demo.json_mapping import from_json
+import spatialdds_demo.lanes  # noqa: F401,E402  -- registers the oarc.* types with the SDK
+from spatialdds.dds import from_json
 from spatialdds_idl18.spatial.semantics import (  # noqa: E402
     Detection3DSet, FusedTrackSet,
 )

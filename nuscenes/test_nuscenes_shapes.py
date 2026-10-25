@@ -119,7 +119,7 @@ class ConverterShapes(unittest.TestCase):
 
     def _check(self, lane, payload):
         from spatialdds_demo import topic_types
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
 
         type_name, profile = lane
         cls = topic_types.try_resolve(type_name)

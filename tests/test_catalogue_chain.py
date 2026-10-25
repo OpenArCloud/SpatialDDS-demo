@@ -31,7 +31,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from spatialdds_demo import content_catalogue as cc               # noqa: E402
-from spatialdds_demo.json_mapping import from_json, to_json        # noqa: E402
+from spatialdds.dds import from_json, to_json        # noqa: E402
 from spatialdds_idl18.spatial.disco import ContentAnnounce         # noqa: E402
 from spatialdds_validation import SpatialDDSValidator              # noqa: E402
 
@@ -131,6 +131,12 @@ def contained(old, new, path="") -> list:
         for i, (a, b) in enumerate(zip(old, new)):
             out += contained(a, b, f"{path}[{i}]")
         return out
+    # N.1 writes an int64 as a decimal string, and the oracle was captured
+    # in the demo's old dialect, which wrote an integer. The same value, so
+    # equal, and only that: an int against the string of itself.
+    if isinstance(old, int) and not isinstance(old, bool) \
+            and isinstance(new, str) and new == str(old):
+        return []
     return [] if old == new else [f"{path}: {old!r} != {new!r}"]
 
 

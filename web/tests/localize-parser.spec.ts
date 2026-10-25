@@ -32,7 +32,7 @@ const PRIOR: GeoPose = {
   alt_m: 3.0,
   q: [0, 0, 0, 1],
   stamp: { sec: 0, nanosec: 0 },
-  cov: 'COV_NONE'
+  cov: { type: 'COV_NONE' }
 };
 
 test.describe('localize response parser', () => {

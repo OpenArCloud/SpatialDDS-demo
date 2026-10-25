@@ -563,7 +563,7 @@ def main():  # pragma: no cover - Tier-3 only
 
     def _on_blob_chunk(payload: dict) -> None:
         """Reassemble image bytes and release the frame that was waiting."""
-        from spatialdds_demo.json_mapping import from_json
+        from spatialdds.dds import from_json
         from spatialdds_idl18.spatial.core import BlobChunk
 
         try:

@@ -12,7 +12,7 @@ from cyclonedds.domain import DomainParticipant
 from spatialdds_demo.dds_transport import require_dds_env
 from spatialdds_demo import blob
 from spatialdds_demo.discovery_bus import AnnouncePublisher
-from spatialdds_demo.json_mapping import from_json, to_json
+from spatialdds.dds import from_json, to_json
 from spatialdds_demo.service_bus import CoverageService, VpsService
 from spatialdds_idl18.spatial.argeo import VpsRequest, VpsResponse
 from spatialdds_idl18.spatial.disco import (

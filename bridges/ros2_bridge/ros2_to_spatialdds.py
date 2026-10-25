@@ -138,7 +138,7 @@ def pose_stamped_to_framed_pose(msg: Any, operator: str,
         "pose": {"t": _as_array(_vec3(msg.pose.position)),
                  "q": _as_array(_quat(msg.pose.orientation), ("x", "y", "z", "w"))},
         "frame_ref": frame_mapper.frame_id_to_frame_ref(h.frame_id),
-        "cov": {"discriminator": "COV_NONE", "none": 0},
+        "cov": {"type": "COV_NONE"},
         "stamp": _ros_time_to_sdds(h.stamp),
     }
 
@@ -209,7 +209,10 @@ def nav_sat_fix_to_nav_sat_status(msg: Any, sensor_id: str = "gnss"
         "has_velocity": False,
         "speed_mps": 0.0, "course_deg": 0.0,
         "has_diff_age": False,
-        "diff_age_s": 0.0, "diff_station_id": "",
+        # A uint16, so 0 with has_diff_age False: "not reported". It was ""
+        # until the SDK adoption, which no uint16 is; only the demo's own
+        # tolerant mapper ever accepted it.
+        "diff_age_s": 0.0, "diff_station_id": 0,
         "stamp": _ros_time_to_sdds(msg.header.stamp),
         "schema_version": SCHEMA_CORE,
     }
@@ -225,8 +228,8 @@ def _cov3(values: List[float]) -> Dict[str, Any]:
     and the covariance vanished. `from_json` refuses an unknown case now.
     """
     if len(values) >= 9:
-        return {"discriminator": "COV_POS3", "pos": [float(v) for v in values[:9]]}
-    return {"discriminator": "COV_NONE", "none": 0}
+        return {"type": "COV_POS3", "pos": [float(v) for v in values[:9]]}
+    return {"type": "COV_NONE"}
 
 
 def imu_to_imu_sample(msg: Any, operator: str, sensor_id: str,

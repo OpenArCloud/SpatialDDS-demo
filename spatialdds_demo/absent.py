@@ -35,15 +35,32 @@ ABSENT_SCALE = {
 
 def _typed(cls, plain: dict) -> dict:
     """
-    The typed values for ``plain``'s members of ``cls``, coerced by
-    ``json_mapping`` itself -- so a typed constant here cannot disagree with
-    what the mapper builds from the plain-data source. Deriving rather than
+    The typed values for ``plain``'s members of ``cls``, each built by the
+    SDK's own N.1 lift -- so a typed constant here cannot disagree with what
+    the codec builds from the plain-data source. Deriving rather than
     restating is the whole point: the plain form is the claim, this is only
     its spelling in Python objects.
+
+    Member by member, because these are some of a type's members, not a
+    whole record, and the SDK lifts only whole records. A struct or union
+    member is lifted as its own record; an enum is looked up by name; the
+    rest are plain already.
     """
-    from spatialdds_demo import json_mapping
-    hints = json_mapping._resolved_hints(cls)
-    return {k: json_mapping._coerce(hints[k], v) for k, v in plain.items()}
+    import enum
+    import typing
+    import spatialdds.dds as sdds
+    hints = typing.get_type_hints(cls)
+    out = {}
+    for k, v in plain.items():
+        hint = hints[k]
+        target = getattr(hint, "__origin__", hint)
+        if isinstance(target, type) and issubclass(target, enum.Enum):
+            out[k] = target[v]
+        elif isinstance(v, dict) and isinstance(target, type):
+            out[k] = sdds.from_json(target, v)
+        else:
+            out[k] = v
+    return out
 
 
 def absent_detection3d() -> dict:

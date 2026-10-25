@@ -27,7 +27,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from spatialdds_demo import content_catalogue as cc  # noqa: E402
-from spatialdds_demo.json_mapping import from_json  # noqa: E402
+from spatialdds.dds import from_json  # noqa: E402
 from spatialdds_idl18.spatial.disco import ContentAnnounce  # noqa: E402
 
 SEEDS = sorted(

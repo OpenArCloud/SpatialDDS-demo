@@ -25,7 +25,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from spatialdds_demo.discovery_http import ServiceRecord, record_from_announce
-from spatialdds_demo.json_mapping import to_json
+from spatialdds.dds import to_json
 
 # Spec backstop: consumers should not use an announce beyond stamp + ttl_sec.
 # Doubling it tolerates modest clock skew between publisher and gateway, and
