@@ -230,15 +230,41 @@ class TheProseCountsComeFromTheSeeds(unittest.TestCase):
 
 
 class TheInventoryDropsWhatHasLapsed(unittest.TestCase):
-    """§3.3: discard an announce once ``now - stamp > 2 * ttl_sec``."""
+    """
+    §3.3: discard an announce once ``now - stamp > 2 * ttl_sec``.
 
-    def test_staleness_follows_the_announce_stamp(self):
-        from spatialdds_demo.discovery_bus import _stale
+    Held to the shipped reader, the web bridge's inventory. Until the SDK
+    adoption this tested `discovery_bus._stale`, a function of the reader
+    that adoption replaced, and it stayed green while the replacement
+    applied no lapse at all: a catalogue killed with -9 kept its items in
+    /search for good.
+    """
+
+    def _item(self, content_id: str, age_s: float) -> dict:
+        import time
         row = cc.load_seed(str(REPO / "bridges/web_bridge/tests/catalog_seed_fountain.json"))[0]
-        a = on_the_wire(cc.content_announce(row, provider_id=PROVIDER, ttl_sec=300,
-                                            stamp={"sec": 1000, "nanosec": 0}))
-        self.assertFalse(_stale(a, 1000 + 600))
-        self.assertTrue(_stale(a, 1000 + 601))
+        stamp = time.time() - age_s
+        doc = on_the_wire(cc.content_announce(
+            row, provider_id=PROVIDER, ttl_sec=300,
+            stamp={"sec": str(int(stamp)), "nanosec": 0}))
+        doc["content_id"] = content_id
+        return doc
+
+    def test_the_bridge_inventory_drops_an_item_past_twice_its_ttl(self):
+        sys.path.insert(0, str(REPO / "bridges" / "web_bridge"))
+        import server
+
+        class _Quiet:
+            def take(self):
+                return []
+
+        bridge = server.SpatialDDSBridge()
+        bridge._content = _Quiet()
+        bridge._items = {"old": self._item("old", 601),
+                         "edge": self._item("edge", 590)}
+        kept = sorted(item["content_id"] for item in bridge.content_items())
+        self.assertEqual(kept, ["edge"])
+        self.assertEqual(bridge.content_events["lapsed"], 1)
 
 
 class TheDocumentsAreConformant(unittest.TestCase):

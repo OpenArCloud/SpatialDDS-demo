@@ -49,6 +49,18 @@ def _stamp_seconds(payload: Dict[str, Any]) -> Optional[float]:
         return None
 
 
+def lapsed(doc: Dict[str, Any], now: float,
+           multiplier: float = TTL_MULTIPLIER) -> bool:
+    """§3.3's discard rule for a stamped, TTL'd record: `now - stamp >
+    multiplier * ttl_sec`. A record with no TTL or no stamp never lapses."""
+    ttl, stamp = doc.get("ttl_sec"), _stamp_seconds(doc)
+    try:
+        return bool(ttl) and stamp is not None and \
+            (now - stamp) > float(ttl) * multiplier
+    except (TypeError, ValueError):
+        return False
+
+
 class AnnounceCache:
     """Thread-safe, latest-wins-by-service_id cache of announces."""
 

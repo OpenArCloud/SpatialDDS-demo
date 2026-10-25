@@ -72,7 +72,7 @@ for p in (str(_HERE), str(_BRIDGES)):
         sys.path.insert(0, p)
 from topic_router import TopicRouter  # noqa: E402
 from client_manager import ClientManager  # noqa: E402
-from announce_cache import AnnounceCache  # noqa: E402
+from announce_cache import AnnounceCache, lapsed  # noqa: E402
 
 DEFAULT_LAT = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LAT", "30.284996"))
 DEFAULT_LON = float(os.getenv("SPATIALDDS_BRIDGE_DEFAULT_LON", "-97.739494"))
@@ -105,7 +105,8 @@ class SpatialDDSBridge:
         self._items: Dict[str, Dict[str, Any]] = {}
         #: What the inventory's reader has been told, by kind of event:
         #: withdrawals remove an item, a lost writer removes nothing.
-        self.content_events = {"samples": 0, "withdrawn": 0, "writers_lost": 0}
+        self.content_events = {"samples": 0, "withdrawn": 0, "writers_lost": 0,
+                               "lapsed": 0}
         # Kept, not created per request: the command lane is VOLATILE, so a
         # fresh writer would drop its own first sample while discovery caught
         # up -- and that sample is somebody's tap on the map.
@@ -148,7 +149,9 @@ class SpatialDDSBridge:
     def content_items(self) -> List[Dict[str, Any]]:
         """The inventory as of now. A withdrawn item leaves it; a catalogue
         whose writer was lost does not take its items with it (§2.14, census
-        finding 2)."""
+        finding 2), but each still lapses on §3.3's rule, `now - stamp > 2 *
+        ttl_sec`, since nothing will refresh it. (The old ContentInventory
+        applied that rule; this reader did not until it was found missing.)"""
         for ev in self._content.take():
             if isinstance(ev, sd.Sample):
                 self._items[ev.key] = to_json(ev.data)
@@ -158,6 +161,10 @@ class SpatialDDSBridge:
                 self.content_events["withdrawn"] += 1
             elif isinstance(ev, sd.Liveliness) and not ev.alive:
                 self.content_events["writers_lost"] += 1
+        now = time.time()
+        for key in [k for k, item in self._items.items() if lapsed(item, now)]:
+            del self._items[key]
+            self.content_events["lapsed"] += 1
         return list(self._items.values())
 
     def _announce_fresh(self, announce: Dict[str, Any]) -> bool:
