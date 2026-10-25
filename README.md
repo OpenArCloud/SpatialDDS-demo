@@ -92,22 +92,24 @@ are not interchangeable: [which one do I want?](docs/servers-and-uis.md)
 profiles.** JSON exists only at the edges — WebSocket clients, MQTT payloads,
 MCAP records.
 
-The repo vendors 1.8's IDL verbatim under [`idl/v1.8`](idl/v1.8) (spec commit
-`9c3e1f2`, the one the validating gateway pins), carries its manifest
-examples in [`manifests/v1.8`](manifests/v1.8), and generates the types its
-five runnable demos use from it.
+The spec types are the SDK's: [`spatialdds[dds]`](https://pypi.org/project/spatialdds/)
+(pinned in [`requirements.txt`](requirements.txt)) generates them, its topic
+registry and its QoS table from SpatialDDS-spec's `v1.8` tag, and ships that
+IDL. This repository carries its manifest examples in
+[`manifests/v1.8`](manifests/v1.8) and its own IDL for the types the spec has
+no struct for, generated against the SDK's IDL and checked byte for byte
+against it.
 
-> **The 1.8 pin is spec commit `9c3e1f2`, not the spec repo's `main`.**
-> Resyncing `idl/v1.8` from main would mix draft IDL into lanes that document
-> themselves as 1.8 conformant, and the drift gate would not catch it —
-> generated output always matches whatever is vendored, so it can only prove
-> the two agree, never that the right thing was vendored. Reasoning and resync
-> instructions are in [`scripts/generate_types.py`](scripts/generate_types.py).
+> **The pin is a spec tag, not the spec repo's `main`.** Main carries draft
+> IDL. Until the SDK adoption this repository vendored `idl/v1.8` from spec
+> commit `9c3e1f2` and generated its own spec tree; both are retired, and the
+> pin moves with the SDK's.
 
 | package | era | generated from | used by |
 | --- | --- | --- | --- |
-| `spatialdds_idl18` | **1.8**, including provisional `spatial.owm/0.1` | [`idl/v1.8`](idl/v1.8) | every demo: the AR demo and its mock VPS, discovery, the Open World Model, the MCAP / MQTT / ROS 2 bridges, fusion, and both web surfaces |
-| `spatialdds_demo_idl18` | **1.8** | [`idl/demo18`](idl/demo18) | the demo-owned types the spec has no struct for — bootstrap and fusion-coverage diagnostics — bound to `spatialdds_idl18` for every spec type |
+| `spatialdds.dds.types` (the SDK's) | **1.8**, including provisional `spatial.owm/0.1` | the IDL the SDK ships, from the `v1.8` tag | every demo: the AR demo and its mock VPS, discovery, the Open World Model, the MCAP / MQTT / ROS 2 bridges, fusion, and both web surfaces |
+| `spatialdds_demo_idl18` | **1.8** | [`idl/demo18`](idl/demo18) | the demo-owned types the spec has no struct for — bootstrap and fusion-coverage diagnostics — bound to the SDK's types for every spec type |
+| `spatialdds_idl18` (`spatialdds_ros`'s own) | **1.8** | spec commit `9c3e1f2` | the robot lane, through the library; held to the SDK's types on the wire by [`tests/test_idl_trees_agree.py`](tests/test_idl_trees_agree.py) |
 | `tests/cross_era/spatialdds_idl` | 1.7, **frozen** | the `v1.7` tag's IDL (retired from this repo) | nothing but the cross-era exhibit: 19 of the 1.7 tree's 29 modules<!-- exhibit-subset: modules=19 packages=23 -->, the closure of what its probe needs, checksummed. See [`tests/cross_era/README.md`](tests/cross_era/README.md) |
 
 The claim is verifiable rather than asserted.

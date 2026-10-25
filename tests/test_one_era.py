@@ -8,14 +8,18 @@ keeps a 1.7 participant on purpose (see its README). This gate is what makes
 one era: `tests/test_idl_trees_agree.py` compares two copies of *1.8*, and
 the era-claims gate checks the literals it knows the shape of.
 
-**What counts.** The era is the one vendored spec bundle, `idl/v<era>`;
-anything versioned below it is pre-era. Five properties:
+**What counts.** The era is the spec the SDK's registry and types were
+generated from (`sd.dds.registry.pin()`, the tag `v<era>`); anything
+versioned below it is pre-era. Until the SDK adoption it was this
+repository's one vendored bundle, `idl/v<era>`, which the adoption retired.
+Five properties:
 
 1. **No pre-era import.** No tracked Python file outside the exhibit imports
    the 1.7 package, statically or by string.
-2. **No pre-era artifact.** One `idl/v*` bundle and one `manifests/v*` set,
-   both the era; and every generated tree's `MODULE_ID`s are the era (or a
-   provisional module's own `0.x`).
+2. **No pre-era artifact.** No vendored `idl/v*` bundle (the spec IDL is the
+   SDK's) and one `manifests/v*` set, the era's; and every generated module's
+   `MODULE_ID` is the era (or a provisional module's own `0.x`), this
+   repository's tree and the SDK's types alike.
 3. **No live pre-era reference.** Nothing that would be *used* names a
    retired path or the 1.7 package: Python string literals other than
    docstrings, non-comment lines of shell, Dockerfiles, YAML, JSON, TypeScript
@@ -68,12 +72,12 @@ BUNDLE = re.compile(r"^v1\.(\d+)$")
 
 
 def era_minor() -> int:
-    bundles = [p.name for p in (REPO / "idl").iterdir()
-               if p.is_dir() and BUNDLE.match(p.name)]
-    if len(bundles) != 1:
-        raise AssertionError(f"expected one spec bundle under idl/, found "
-                             f"{sorted(bundles)}")
-    return int(BUNDLE.match(bundles[0]).group(1))
+    import spatialdds as sd
+    tag = sd.dds.registry.pin()["tag"]
+    match = BUNDLE.match(tag)
+    if not match:
+        raise AssertionError(f"the SDK's spec pin {tag!r} is not a v1.<n> tag")
+    return int(match.group(1))
 
 
 def retired_patterns(minor: int) -> list:
@@ -284,7 +288,11 @@ class TheRepositoryIsOneEra(unittest.TestCase):
     def test_no_live_pre_era_reference(self):
         self.assertEqual(self.found["references"], [])
 
-    def test_one_bundle_and_one_manifest_set(self):
+    def test_no_bundle_and_one_manifest_set(self):
+        self.assertEqual(
+            sorted(p.name for p in (REPO / "idl").iterdir()
+                   if p.is_dir() and BUNDLE.match(p.name)), [],
+            "a vendored spec bundle is back; the spec IDL is the SDK's")
         self.assertEqual(
             sorted(p.name for p in (REPO / "manifests").iterdir() if p.is_dir()),
             [f"v1.{self.minor}"])
@@ -301,6 +309,22 @@ class TheRepositoryIsOneEra(unittest.TestCase):
                 with self.subTest(file=f, module_id=m.group(1)):
                     self.assertTrue(major_minor == f"1.{self.minor}"
                                     or major_minor.startswith("0."))
+        # And the SDK's types, which this repository binds to and the venue
+        # runs on: imported, since they are not files here.
+        import importlib
+        import pkgutil
+        import spatialdds.dds.types as spec_types
+        for info in pkgutil.walk_packages(spec_types.__path__,
+                                          "spatialdds.dds.types."):
+            module_id = getattr(importlib.import_module(info.name),
+                                "MODULE_ID", None)
+            if not isinstance(module_id, str):
+                continue
+            seen += 1
+            major_minor = module_id.split("/")[-1]
+            with self.subTest(module=info.name, module_id=module_id):
+                self.assertTrue(major_minor == f"1.{self.minor}"
+                                or major_minor.startswith("0."))
         self.assertGreater(seen, 10, "found almost no MODULE_IDs to check")
 
     def test_no_stale_era_label_in_a_page(self):

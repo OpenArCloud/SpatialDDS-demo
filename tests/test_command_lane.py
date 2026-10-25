@@ -64,7 +64,11 @@ class CommandLane(unittest.TestCase):
         # 2026-10-18 -- the guard kept passing after the imports above moved
         # to `spatial.owm`, which made it a check on a file the subject no
         # longer came from. The property holds in both; the aim did not.
-        source = (REPO / "idl" / "v1.8" / "provisional" / "owm.idl").read_text()
+        # Since the SDK adoption `ModelCommand` is the SDK's, generated from
+        # the IDL it vendors, so that is the file read here (it was this
+        # repository's idl/v1.8 copy until the adoption retired it).
+        from spatialdds.server import pin
+        source = (Path(pin.IDL_DIR) / "provisional" / "owm.idl").read_text()
         block = source[source.index("struct ModelCommand"):]
         self.assertIn("@key string command_id", block,
                       "ModelCommand must be keyed or an exiting writer kills the reader")

@@ -38,7 +38,7 @@ REPO = Path(__file__).resolve().parent.parent
 # meaning only what it says --- a style checker is the wrong tool for
 # generated code --- and the property it was covering has a test instead of a
 # comment.
-SKIP_PREFIXES = ("spatialdds_idl18/", "spatialdds_demo_idl18/", "idl/",
+SKIP_PREFIXES = ("spatialdds_demo_idl18/", "idl/",
                  "web/public/", "tests/cross_era/spatialdds_idl/")
 
 #: The generator's own mark, which it writes at the top of every package root.
@@ -305,9 +305,12 @@ class GeneratedTypesIntrospect(unittest.TestCase):
     bindings at all --- a type system whose Python bindings cannot be read by
     standard means is smaller than it looks.
 
-    Checked over both trees and every module in them, because the defect was
-    uniform and a spot check would have passed on any file idlc happened to
-    emit without a nested member.
+    Checked over every module of this repository's generated tree and of the
+    spec tree it binds to, because the defect was uniform and a spot check
+    would have passed on any file idlc happened to emit without a nested
+    member. The spec tree is the SDK's (`spatialdds.dds.types`) since the
+    adoption retired this repository's `spatialdds_idl18`; the demo tree's
+    annotations name it, so it is checked here too.
     """
 
     def test_every_generated_dataclass_resolves_its_annotations(self):
@@ -317,13 +320,13 @@ class GeneratedTypesIntrospect(unittest.TestCase):
         import typing
 
         self.assertEqual(
-            GENERATED_TREES, ["spatialdds_demo_idl18", "spatialdds_idl18"],
-            f"expected the spec tree and the demo's, found {GENERATED_TREES} "
+            GENERATED_TREES, ["spatialdds_demo_idl18"],
+            f"expected the demo's tree alone, found {GENERATED_TREES} "
             f"-- the discovery is broken, not the code")
 
         checked = 0
         failures = []
-        for tree in GENERATED_TREES:
+        for tree in GENERATED_TREES + ["spatialdds.dds.types"]:
             pkg = importlib.import_module(tree)
             for mod in pkgutil.walk_packages(pkg.__path__, f"{tree}."):
                 try:

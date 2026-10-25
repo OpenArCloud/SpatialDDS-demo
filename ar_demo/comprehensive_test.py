@@ -60,9 +60,13 @@ def test_idl_compilation():
 
         print("Testing SpatialDDS IDL compilation (discovery profile, C binding)...")
         # Use discovery.idl directly to avoid duplicate-inclusion conflicts in the
-        # aggregator while still verifying idlc is functional.
+        # aggregator while still verifying idlc is functional. The spec IDL is
+        # the SDK's, the one its types were generated from; this repository
+        # vendored a copy in idl/v1.8 until the SDK adoption.
+        from spatialdds.server import pin
+        idl_dir = str(pin.IDL_DIR)
         result = subprocess.run(
-            [idlc_path, '-l', 'c', 'idl/v1.8/discovery.idl'],
+            [idlc_path, '-l', 'c', '-I', idl_dir, f'{idl_dir}/discovery.idl'],
             capture_output=True,
             text=True,
             timeout=30,

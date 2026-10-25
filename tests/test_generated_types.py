@@ -184,13 +184,11 @@ class GeneratorDrift(unittest.TestCase):
     #: drift gate here at all; it was clean when first checked, which is luck
     #: rather than coverage. The 1.7 tree was retired on 2026-10-21, and the
     #: bare command line is the 1.8 spec tree's now.
+    #: Since the SDK adoption there is one: the spec tree is the SDK's own
+    #: (`spatialdds.dds.types`), and the bare command line makes this one,
+    #: bound to it and compiled against the IDL it ships.
     TREES = {
-        "spatialdds_idl18": [],
-        # Bound to the SDK's types since the adoption, and compiled against
-        # the IDL the installed SDK ships (the generator checks that).
-        "spatialdds_demo_idl18": ["--demo-idl", "idl/demo18",
-                                  "--bind-to", "spatialdds.dds.types",
-                                  "--out", "spatialdds_demo_idl18"],
+        "spatialdds_demo_idl18": [],
     }
 
     def test_checked_in_output_matches_a_fresh_run(self):

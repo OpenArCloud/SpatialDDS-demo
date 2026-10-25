@@ -28,15 +28,16 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-import spatialdds_idl18                                   # noqa: E402
+import spatialdds.dds.types as spec_types                 # noqa: E402
 from spatialdds_demo import discovery_http, payloads      # noqa: E402
 from spatialdds_validation import SpatialDDSValidator     # noqa: E402
 
 
 def generated_module_ids() -> dict:
-    """{'spatial.core': 'spatial.core/1.8', ...} from the 1.8 tree itself."""
+    """{'spatial.core': 'spatial.core/1.8', ...} from the SDK's generated tree
+    (this repository's own spatialdds_idl18 until the SDK adoption)."""
     out = {}
-    for m in pkgutil.walk_packages(spatialdds_idl18.__path__, "spatialdds_idl18."):
+    for m in pkgutil.walk_packages(spec_types.__path__, "spatialdds.dds.types."):
         mod = importlib.import_module(m.name)
         mid = getattr(mod, "MODULE_ID", None)
         if isinstance(mid, str):

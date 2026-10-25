@@ -3,8 +3,8 @@
 Bootstrap → discovery → coverage query → localization → catalog → anchor.
 The cold-start flow an AR client follows: find a VPS that covers your
 area, get a 6DoF localisation, discover content, publish anchors.
-Exercised against the canonical IDL bundled at
-[`../idl/v1.8`](../idl/v1.8) and the manifests at
+Exercised against the 1.8 types the SDK (`spatialdds[dds]`) generates from
+the spec's `v1.8` tag, and the manifests at
 [`../manifests/v1.8`](../manifests/v1.8).
 
 ![Cesium web UI](../web/screenshot.png)

@@ -1,57 +1,37 @@
 #!/usr/bin/env python3
 """
-Generate Python bindings for the bundled SpatialDDS IDL.
+Generate Python bindings for this repository's own IDL, bound to the SDK's types.
 
-Runs ``idlc -l py`` over the vendored spec bundle (``idl/v1.8/``) and, for
-the demo's own package, over ``idl/demo18/`` (demo-owned structs for flows
-the spec has no type for), applies the fixes idlc's Python backend needs, and
-writes an importable package.
+Runs ``idlc -l py`` over ``idl/demo18/`` (demo-owned structs for flows the
+spec has no type for) together with the spec IDL the installed ``spatialdds``
+ships, applies the fixes idlc's Python backend needs, and writes the demo
+modules alone into ``spatialdds_demo_idl18/``, every spec type bound to
+``spatialdds.dds.types`` instead of carrying a copy::
+
+    python3 scripts/generate_types.py
 
 Spec provenance
 ---------------
 
-``idl/v1.8/`` is vendored verbatim from **SpatialDDS-spec commit
-``9c3e1f2``** (the 1.8 revision that added ``TopicMeta.durability``). Resync
-with::
+The spec half is the SDK's: the IDL ``spatialdds`` vendors (pinned to
+SpatialDDS-spec's ``v1.8`` tag), the IDL its own types were generated from.
+The generator checks that, byte for byte, before keeping anything, so the demo
+types cannot be bound to spec classes compiled from other bytes.
 
-    git -C ../SpatialDDS-spec archive 9c3e1f2 idl/v1.8 | tar -x -C .
+Until the SDK adoption this repository vendored ``idl/v1.8`` from
+SpatialDDS-spec commit ``9c3e1f2`` and generated a spec tree of its own,
+``spatialdds_idl18/``, byte-identical to the copy ``spatialdds_ros`` vendors.
+Both are retired: the robot lane imports the library's tree, and
+``tests/test_idl_trees_agree.py`` holds it to the SDK's types on the wire.
 
-The 1.8 pin is a **commit, not a tag**, which breaks this repository's own
-convention and does so deliberately: the spec carries no ``v1.8`` tag, and
-``9c3e1f2`` is the commit the validating toolchain was generated at --
-``spatialdds-web``'s vendored artifacts pin the same one. A demo whose types
-came from a different commit than the gateway that validates them would be
-comparing two type systems and calling it conformance.
+**Do not track the spec repo's ``main``.** The SDK pins a tag, and moves it
+only under a deliberate migration brief. Main carries unswept draft
+identifiers.
 
-Generated into ``spatialdds_idl18/``, spec types only -- the default::
-
-    python3 scripts/generate_types.py
-
-The demo-owned types for 1.8 (``idl/demo18``) are generated into their own
-package, ``spatialdds_demo_idl18``, which binds to ``spatialdds_idl18`` for
-every spec type instead of carrying a copy::
-
-    python3 scripts/generate_types.py --spec-idl idl/v1.8 \
-        --demo-idl idl/demo18 --bind-to spatialdds_idl18 \
-        --out spatialdds_demo_idl18
-
-They cannot go inside ``spatialdds_idl18``: that tree must stay
-byte-identical to the copy ``spatialdds_ros`` vendors, which
-``tests/test_idl_trees_agree.py`` enforces file by file. ``--bind-to`` also
-checks that the spec half it compiled matches the checked-in tree before
-keeping anything, so the demo types cannot be bound to different spec bytes
-than the ones they meet at import time.
-
-**Do not track the spec repo's ``main``.** Pin a commit or a tag, and move
-it only under a deliberate migration brief, the way this demo moved to each
-revision. Main carries unswept draft identifiers; resyncing from it would mix
-them in silently, and the drift gate would pass because the generated output
-would match whatever was vendored.
-
-**Earlier eras.** ``idl/v1.4``, ``idl/v1.6`` and ``idl/v1.7`` were vendored
-here, and ``idl/v1.7`` with ``idl/demo`` generated ``spatialdds_idl/``. All
-were retired on 2026-10-21 once nothing imported them; git history is the
-archive. The one deliberate exception is the frozen cross-era exhibit,
+**Earlier eras.** ``idl/v1.4``, ``idl/v1.6``, ``idl/v1.7`` and ``idl/v1.8``
+were vendored here, and generated ``spatialdds_idl/`` and ``spatialdds_idl18/``.
+All are retired (the last two at the SDK adoption) once nothing imported
+them; git history is the archive. The one deliberate exception is the frozen cross-era exhibit,
 ``tests/cross_era/``, which carries the subset of ``spatialdds_idl`` its 1.7
 probe needs and is not regenerated -- see its README.
 
@@ -59,7 +39,7 @@ The generated tree is checked in, so day-to-day work needs neither idlc nor
 Docker. ``--check`` re-runs the generator into a temp directory and diffs, so
 stale output is a test failure rather than a surprise.
 
-    python3 scripts/generate_types.py            # regenerate in place
+    python3 scripts/generate_types.py            # regenerate spatialdds_demo_idl18
     python3 scripts/generate_types.py --check    # fail if checked-in output is stale
 
 idlc is not usually installed on a host; run it in the demo image:
@@ -100,14 +80,10 @@ REPO = Path(__file__).resolve().parent.parent
 # The bundle and the demo IDL are module-level because every helper below reads
 # them, and `--spec-idl` / `--demo-idl` rebind them before anything runs. The
 # demo IDL is compiled only with `--bind-to`: a spec tree is spec types only.
-SPEC_IDL = REPO / "idl" / "v1.8"
-# Where `SPEC_IDL` came from, as the resync command above spells it. Constants
-# so a gate can read the pin rather than retype it: `tests/test_topic_registry.py`
-# reads the spec's topic registry at this same commit from this same checkout.
-SPEC_COMMIT = "9c3e1f2"
-SPEC_CHECKOUT = REPO.parent / "SpatialDDS-spec"
+SPEC_IDL: Path = None            # the SDK's, set in main(): see sdk_idl_dir()
 DEMO_IDL = REPO / "idl" / "demo18"
-DEFAULT_OUT = REPO / "spatialdds_idl18"
+DEFAULT_OUT = REPO / "spatialdds_demo_idl18"
+DEFAULT_BIND_TO = "spatialdds.dds.types"
 
 # Top-level packages idlc emits are discovered from its output rather than
 # hardcoded, so adding an IDL module (e.g. to idl/demo18/) needs no change here.
@@ -419,52 +395,37 @@ def generate(out_dir: Path, package: str) -> list[str]:
 
 
 def generate_bound(out_dir: Path, package: str, bind_to: str) -> list[str]:
-    """Demo modules only, binding every spec type to an existing tree.
+    """Demo modules only, binding every spec type to the SDK's types.
 
     Compiles spec + demo IDL as `bind_to` in staging -- so every dotted
     annotation already names `bind_to` -- then keeps only the modules the
     demo IDL added, and points their own-package imports at `package`.
 
-    **The spec half is checked, not trusted.** Before anything is kept, the
-    staged spec subtree has to be byte-identical to the checked-in `bind_to`
-    tree. Otherwise the demo types would be bound to spec classes that were
-    compiled from different bytes than the ones they will meet at import
-    time, which is two type systems presenting as one.
+    **The spec half is checked, not trusted.** `bind_to` is an installed
+    package (`spatialdds.dds.types`), whose generator is not this one, so the
+    spec half is checked by its source: the IDL compiled here has to be byte
+    for byte the IDL that package's distribution ships. Otherwise the demo
+    types would be bound to spec classes compiled from different bytes than
+    the ones they meet at import time, which is two type systems presenting
+    as one. (Until the SDK adoption the reference was a checked-in tree,
+    `spatialdds_idl18`, diffed module by module.)
     """
-    installed = "." in bind_to
-    if installed:
-        # An installed package (`spatialdds.dds.types`, the SDK's): there is
-        # no checked-in tree to diff, and its generator is not this one, so
-        # the spec half is checked by its source instead. The IDL compiled
-        # here has to be byte for byte the IDL that package's distribution
-        # ships, which is the invariant the tree diff stood in for.
-        import importlib
-        reference = Path(importlib.import_module(bind_to).__file__).parent
-        drift = _idl_diff(SPEC_IDL, sdk_idl_dir())
-        if drift:
-            raise SystemExit(
-                f"the spec IDL compiled here is not the IDL {bind_to} was "
-                f"generated from; refusing to bind demo types to it:\n  "
-                + "\n  ".join(drift))
-    else:
-        reference = REPO / bind_to
-        if not reference.is_dir():
-            raise SystemExit(f"--bind-to {bind_to}: no checked-in tree at "
-                             f"{reference}")
+    if "." not in bind_to:
+        raise SystemExit(f"--bind-to {bind_to}: expected an installed package "
+                         f"such as {DEFAULT_BIND_TO}")
+    import importlib
+    reference = Path(importlib.import_module(bind_to).__file__).parent
+    drift = _idl_diff(SPEC_IDL, sdk_idl_dir())
+    if drift:
+        raise SystemExit(
+            f"the spec IDL compiled here is not the IDL {bind_to} was "
+            f"generated from; refusing to bind demo types to it:\n  "
+            + "\n  ".join(drift))
     with tempfile.TemporaryDirectory() as tmp:
         staged = Path(tmp) / bind_to
         fixed = generate(staged, bind_to)
         spec_roots = sorted(p.name for p in reference.iterdir()
                             if p.is_dir() and p.name != "__pycache__")
-        drift = []
-        if not installed:
-            for root in spec_roots:
-                drift += _tree_diff(reference / root, staged / root)
-        if drift:
-            raise SystemExit(
-                f"the spec half compiled here differs from the checked-in "
-                f"{bind_to}; refusing to bind demo types to it:\n  "
-                + "\n  ".join(drift))
         demo_roots = sorted(p.name for p in staged.iterdir()
                             if p.is_dir() and p.name not in spec_roots
                             and p.name != "__pycache__")
@@ -545,24 +506,19 @@ def main() -> int:
     global SPEC_IDL, DEMO_IDL
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    parser.add_argument("--spec-idl", type=Path, default=SPEC_IDL,
-                        help="the vendored spec bundle to compile "
-                             "(default idl/v1.8)")
+    parser.add_argument("--spec-idl", type=Path, default=None,
+                        help="the spec IDL to compile (default: the IDL the "
+                             "installed spatialdds ships, and it is checked "
+                             "against that IDL all the same)")
     parser.add_argument("--demo-idl", type=Path, default=DEMO_IDL,
-                        help="the demo-owned IDL to compile with --bind-to "
-                             "(default idl/demo18)")
-    parser.add_argument("--bind-to", metavar="PACKAGE",
-                        help="write only the demo modules, binding every spec "
-                             "type to this checked-in tree instead of "
-                             "carrying a copy. How spatialdds_demo_idl18 is "
-                             "made, so spatialdds_idl18 stays byte-identical "
-                             "to the copy spatialdds_ros vendors")
+                        help="the demo-owned IDL (default idl/demo18)")
+    parser.add_argument("--bind-to", metavar="PACKAGE", default=DEFAULT_BIND_TO,
+                        help="the package every spec type is bound to "
+                             f"(default {DEFAULT_BIND_TO})")
     parser.add_argument("--check", action="store_true",
                         help="fail if the checked-in output differs from a fresh run")
     args = parser.parse_args()
-    if args.bind_to and "." in args.bind_to and args.spec_idl == SPEC_IDL:
-        # Bound to the SDK: its own IDL, unless told otherwise (and then
-        # checked against its own IDL all the same).
+    if args.spec_idl is None:
         args.spec_idl = sdk_idl_dir()
     # Both paths are accepted relative to the repository root, so the
     # command lines in the docstring work from anywhere inside it.
@@ -574,13 +530,10 @@ def main() -> int:
         raise SystemExit(f"no spec bundle at {SPEC_IDL}")
     DEMO_IDL = args.demo_idl if args.demo_idl.is_absolute() \
         else (REPO / args.demo_idl)
-    if not args.bind_to:
-        DEMO_IDL = SPEC_IDL / "__no_demo__"   # a path that does not exist
-    print(f"bundle   {spec_label()}"
-          f"{'  (spec only)' if not args.bind_to else ''}")
+    print(f"bundle   {spec_label()}")
 
-    make = (lambda out, pkg: generate_bound(out, pkg, args.bind_to)) \
-        if args.bind_to else generate
+    def make(out, pkg):
+        return generate_bound(out, pkg, args.bind_to)
     if not args.check:
         fixed = make(args.out, package)
         print(f"generated {args.out.relative_to(REPO)}")

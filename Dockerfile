@@ -14,7 +14,6 @@ WORKDIR /app
 # run_tests.sh), because an image built in August went on passing a lane for
 # two months against code that no longer existed. Rebuild after changing any
 # file below if you mean to run the baked copies.
-COPY spatialdds_idl18 ./spatialdds_idl18
 COPY spatialdds_demo_idl18 ./spatialdds_demo_idl18
 COPY spatialdds_test.py .
 COPY spatialdds_validation.py .
