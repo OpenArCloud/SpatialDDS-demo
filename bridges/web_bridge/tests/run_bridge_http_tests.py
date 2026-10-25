@@ -133,8 +133,23 @@ def _coverage_query(domain_id: int = 1) -> Dict[str, object]:
     return to_json(response)
 
 
+def _open(req, path: str):
+    """urlopen, but a refusal says what the bridge said, not only its status.
+
+    The bridge answers an upstream failure with a 502 whose `detail` names
+    it ("LOCALIZE_RESPONSE timeout", "No ANNOUNCE received", ...). This
+    harness used to print only "HTTP Error 502: Bad Gateway", which is how a
+    one-in-six failure of this lane went undiagnosed.
+    """
+    try:
+        return urllib.request.urlopen(req, timeout=10)
+    except urllib.error.HTTPError as error:
+        body = error.read().decode("utf-8", "replace")[:500]
+        raise AssertionError(f"{path}: HTTP {error.code}: {body}") from error
+
+
 def _get_json(path: str) -> Dict[str, object]:
-    with urllib.request.urlopen(f"{BRIDGE_URL}{path}", timeout=10) as response:
+    with _open(f"{BRIDGE_URL}{path}", path) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -146,7 +161,7 @@ def _post_json(path: str, payload: Dict[str, object]) -> Dict[str, object]:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=10) as response:
+    with _open(req, path) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
