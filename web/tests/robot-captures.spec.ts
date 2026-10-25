@@ -74,10 +74,14 @@ function lethalCells(): number {
   return match ? Number(match[1]) : -1;
 }
 
+// The tier's robot is `spatialdds_ros.robot_node` since the ROS adoption
+// (d6413d7). This probe looked for `spatialdds_demo.robot_bridge`, the
+// process that replaced, until 2026-10-25: it never matched again, and the
+// three tests below skipped as "robot tier not running" with the tier up.
 function tierRunning(): boolean {
   try {
     const out = execSync(
-      "docker exec robot_tier pgrep -c -f 'spatialdds_demo.robot_bridge' 2>/dev/null",
+      "docker exec robot_tier pgrep -c -f 'spatialdds_ros.robot_node' 2>/dev/null",
       { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
     return Number(out) > 0;
   } catch {
@@ -258,15 +262,19 @@ test('the venue changes its mind about the water, mid-journey',
       const p = await robotOnBus(request);
       if (p) {
         track.push(p);
-        // Halfway up the east walkway, heading north, with the whole
-        // northern leg of the detour still ahead of it. Rehearsed, because
-        // this trigger has been wrong twice before -- each time it was tuned
-        // to a route that later moved, and each time the failure was a
-        // capture that fired nothing and asserted nothing. It keys on the
-        // part of the route that is the same every run: the robot goes up
-        // x = 26 from the south plaza to the north terrace, or it does not
-        // go at all.
-        if (fired < 0 && p[0] > 25.0 && p[1] > -15.0) {
+        // Halfway up a side walkway, heading north, with the whole northern
+        // leg of the detour still ahead of it. Rehearsed, because this
+        // trigger has been wrong three times -- each time it was tuned to a
+        // route that later moved, and each time the failure was a capture
+        // that fired nothing and asserted nothing. The third: it keyed on the
+        // east walkway (x = 26), and the two detours are near enough equal
+        // that nav2 now takes the west one (x = -2.6) from where the robot
+        // stops short of START, measured 2026-10-25. So it keys on the part
+        // of the route that is the same every run whichever side: the robot
+        // passes the pond to the east or to the west on its way north, or it
+        // does not go at all. Shrinking the pond about its centre gives water
+        // back on both flanks, so the bend is there to see on either.
+        if (fired < 0 && (p[0] > 25.0 || p[0] < -1.5) && p[1] > -15.0) {
           await page.screenshot({ path: join(OUT, 'robot-3-declared.png') });
           inContainer(stack as string,
                       'python3 scripts/reshape_pond.py --shrink 0.4');
@@ -362,6 +370,19 @@ test('the sim dies, and both the watching tab and a late one are told',
    * from the live stream would show a late-joiner an empty plaza.
    */
   test.setTimeout(600_000);
+  // **Expected to fail, until spatialdds_ros reads TF with an age check.**
+  // Its nav2 node takes the robot's pose as the latest map->base transform
+  // (`lookup_transform(map, base, Time())`) with no check on how old that
+  // transform is. When the sim dies the buffer keeps answering with its last
+  // transform, so the adapter hears a pose every tick and never declares
+  // UNOBSERVED. Measured 2026-10-25 on 0.3.0: 40 s after `pkill
+  // plaza_sim_node.py`, the record is still ACTIVE, restamped every 5 s, at
+  // the sim's last pose. This test could not see it: its tier probe looked
+  // for the demo's own robot_bridge, which the ROS adoption replaced, so it
+  // had skipped ever since. Filed against spatialdds-ros. `test.fail` turns
+  // this red the day it starts passing, so the mark cannot outlive the defect.
+  test.fail(true, 'spatialdds_ros 0.3.0: a dead sim never goes UNOBSERVED '
+            + '(robot_node reads the latest TF with no age check)');
   const onBus = async () => (await venueEntities(request))
     .find((e: any) => e.entity_id === 'ent:robot:tb3');
   const drawnRobot = async (p: any) => {
