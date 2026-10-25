@@ -9,23 +9,20 @@ import sys
 import time
 from typing import Any, Dict, List
 
-from cyclonedds.domain import DomainParticipant
-
 import spatialdds as sd
 from spatialdds.dds import from_json, to_json
 from spatialdds.frames import enu_to_ecef_pose
 from spatialdds.dds.types.spatial.disco import (
-    Announce as TypedAnnounce,
     CoverageResponse as TypedCoverageResponse,
 )
 
 from spatialdds_demo import content_catalogue as cc
-from spatialdds_demo.discovery_bus import AnnouncePublisher
 from spatialdds_demo.lanes import (
     SCENE, TOPIC_SOURCE_ANNOUNCE_PREVIEW, TOPIC_SOURCE_REQUEST,
     TOPIC_SOURCE_SPEC,
 )
 from spatialdds_demo.service_bus import CoverageService
+from spatialdds_demo.stream import announce_document
 from spatialdds_test import SpatialDDSLogger
 from spatialdds_validation import (
     SpatialDDSValidator,
@@ -317,7 +314,7 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
     # that arrives while the inventory is still being written withdraws
     # what was written. It used to begin at the loop, and a SIGTERM during
     # startup left without withdrawing anything (exit 130).
-    resolver = announcer = None
+    resolver = None
     try:
         coverage = CoverageService(participant)
 
@@ -332,17 +329,12 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
         content = participant.writer("ContentAnnounce", on_exit="withdraw",
                                      floor_hz=3.0 / ttl_sec)
 
-        # **Labelled workaround, until spatialdds 0.7.3.** The announce is still
-        # this repository's own AnnouncePublisher, on a raw participant of its
-        # own. The SDK's p.announce() carries the catalogue's placement
-        # transforms (0.7.1), but takes no coverage_frame_ref: it writes its own
-        # earth-fixed FrameRef, whose uuid is empty, and Appendix G makes the uuid
-        # the identity key. This repository's discovery core refuses it, so the
-        # catalogue would vanish from /search. Filed against spatialdds-py (S11's
-        # passthrough, S14's empty uuid); this goes when the release does.
-        announce_participant = DomainParticipant(participant.domain)
-        announcer = AnnouncePublisher(announce_participant)
-        announcer.publish(from_json(TypedAnnounce, announce))
+        # The participant's own announce, with the catalogue's venue frame as its
+        # coverage frame and its placement transforms (spatialdds 0.7.3, S11 and
+        # S14). It lists no lanes: the inventory rides the well-known content
+        # topic, which an announce does not list, and replies go where each query
+        # asks. tick() refreshes it inside its TTL; close() departs it.
+        announce_document(participant, announce, [])
         print(f"announce topic: {sd.dds.registry.well_known('Announce').topic}")
         print(f"announce service_id: {announce['service_id']} (kind=CONTENT)")
         logger.log_message(
@@ -364,16 +356,9 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
         resolver = _start_resolver(dataset)
         print("resolver: http://%s:%d/.well-known/spatialdds/resolver" % resolver.server_address)
 
-        # An Announce is a lease, not a birth certificate: re-published well
-        # inside its TTL, as the inventory's floor re-publishes each item.
-        refresh_every = max(10.0, ttl_sec / 3.0)
-        next_refresh = time.time() + refresh_every
+        # An Announce is a lease, not a birth certificate: tick() re-publishes it
+        # every ttl/3, as the inventory's floor re-publishes each item.
         while True:
-            if time.time() >= next_refresh:
-                announce["stamp"] = SpatialDDSValidator.now_time()
-                announcer.publish(from_json(
-                    TypedAnnounce, announce))
-                next_refresh = time.time() + refresh_every
             participant.tick()
             serve_coverage(coverage, announce)
             time.sleep(0.05)
@@ -383,8 +368,6 @@ def run_server(seed_path: str, show_message_content: bool, detailed_content: boo
         if resolver is not None:
             resolver.shutdown()
         participant.close(reason="the catalogue stopped")
-        if announcer is not None:
-            announcer.close()
 
     return 0
 

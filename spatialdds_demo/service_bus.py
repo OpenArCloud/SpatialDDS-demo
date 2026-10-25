@@ -76,6 +76,12 @@ class VpsService:
                                           topic=TOPIC_VPS_RESULT)
         self._service_id = service_id_base(service_id)
 
+    @property
+    def endpoints(self):
+        """The query lane it reads and the response lane it writes: what a
+        VPS announces, because the query lane is where requests go."""
+        return [self._reader, self._writer]
+
     def addressed_to_us(self, service_id: str) -> bool:
         """
         Whether a request naming ``service_id`` is this service's to answer.

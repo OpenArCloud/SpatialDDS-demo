@@ -7,24 +7,20 @@ import threading
 import time
 from typing import Any, Dict
 
-from cyclonedds.domain import DomainParticipant
-
 import spatialdds as sd
 from spatialdds.dds import from_json, to_json
 from spatialdds.dds.types.spatial.argeo import VpsRequest, VpsResponse
 from spatialdds.dds.types.spatial.disco import (
-    Announce as TypedAnnounce,
     CoverageResponse as TypedCoverageResponse,
 )
 
-from spatialdds_demo.discovery_bus import AnnouncePublisher
 from spatialdds_demo.lanes import (
     SCENE, TOPIC_SOURCE_ANNOUNCE_PREVIEW, TOPIC_SOURCE_FALLBACK,
     TOPIC_SOURCE_MANIFEST, TOPIC_SOURCE_REQUEST, TOPIC_SOURCE_SPEC,
     TOPIC_VPS_QUERY, TOPIC_VPS_RESULT, blob_reader,
 )
 from spatialdds_demo.service_bus import CoverageService, VpsService
-from spatialdds_validation import SpatialDDSValidator
+from spatialdds_demo.stream import announce_document
 from spatialdds_test import (
     SpatialDDSLogger,
     VPSServiceV15,
@@ -162,16 +158,10 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     # is left for that service to answer.
     vps = VpsService(participant, service.service_id)
     coverage = CoverageService(participant)
-    # **Labelled workaround, until spatialdds 0.7.3.** The announce is still
-    # this repository's own AnnouncePublisher, on a raw participant of its
-    # own, because the SDK's p.announce() lists only the lanes a participant
-    # writes. A VPS *reads* its query lane, and has to announce where
-    # requests go, as the real OpenVPS does (its announce lists both lanes).
-    # It also passes no auth_hint. Filed against spatialdds-py; both go when
-    # the release that adds them does.
-    announce_participant = DomainParticipant(participant.domain)
-    announcer = AnnouncePublisher(announce_participant)
-    announcer.publish(from_json(TypedAnnounce, announce))
+    # The participant's own announce, listing the query lane the VPS reads
+    # beside the response lane it writes, as OpenVPS's does (spatialdds 0.7.3,
+    # S11). Refreshed by tick() inside its TTL, and departed by close().
+    announce_document(participant, announce, vps.endpoints)
     print(f"announce topic: {sd.dds.registry.well_known('Announce').topic}")
     print("announce qos: DISCOVERY_ANNOUNCE "
           "(RELIABLE + TRANSIENT_LOCAL + KEEP_LAST(1), keyed on service_id)")
@@ -204,16 +194,10 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
     # lapses. Publishing once at startup and never again means a service that
     # is running perfectly disappears from every cache after its TTL — which
     # is what happened here, silently, once the demo had been up ten minutes.
-    # Re-publish well inside the window.
-    refresh_every = max(10.0, float(announce.get("ttl_sec", 300)) / 3.0)
-    next_refresh = time.time() + refresh_every
-
+    # tick() re-publishes it every ttl/3.
     try:
         while not stopping.is_set():
-            if time.time() >= next_refresh:
-                announce["stamp"] = SpatialDDSValidator.now_time()
-                announcer.publish(from_json(TypedAnnounce, announce))
-                next_refresh = time.time() + refresh_every
+            participant.tick()
             blobs.poll()
             serve_localize(vps)
             serve_coverage(coverage)
@@ -222,7 +206,6 @@ def run_server(show_message_content: bool, detailed_content: bool) -> int:
         pass
 
     # Graceful shutdown: dispose the instance (spec MUST) and publish Depart.
-    announcer.close()
     participant.close(reason="the mock VPS stopped")
     return 0
 

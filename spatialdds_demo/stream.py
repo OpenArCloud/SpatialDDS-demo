@@ -36,6 +36,29 @@ class UndeclaredTopic(KeyError):
     """A publish to a topic no announce declared."""
 
 
+def announce_document(participant: "sd.dds.Participant",
+                      announce: Dict[str, Any], endpoints: Sequence[Any]
+                      ) -> Dict[str, Any]:
+    """Announce what an Announce document says, through `p.announce`.
+
+    For a service that builds its announce as a document (the demo's
+    builders, the AR mock services) rather than as arguments. The document
+    is read through the SDK's codec first, so it reaches the builder in N.1
+    whatever older dialect it was written in. Its `topics` rows are not
+    used: the announced lanes are `endpoints`, the participant's own writers
+    and readers, each described by its own TopicMeta, never by hand.
+    """
+    doc = to_json(sd.dds.from_json(sd.dds.class_for("Announce"), announce))
+    return participant.announce(
+        doc["kind"], coverage=doc["coverage"], ttl_sec=int(doc["ttl_sec"]),
+        name=doc["name"], org=doc["org"], version=doc["version"],
+        hints={h["key"]: h["value"] for h in doc["hints"]},
+        caps=doc["caps"], manifest_uri=doc["manifest_uri"] or None,
+        transforms=doc["transforms"], service_id=doc["service_id"],
+        topics=list(endpoints), auth_hint=doc["auth_hint"],
+        coverage_frame_ref=doc["coverage_frame_ref"])
+
+
 class StreamPublisher:
     """
     Typed writers for the lanes an announce declares, and the announce itself.
@@ -69,18 +92,7 @@ class StreamPublisher:
         """
         writers = [self._declare(row["name"], row["type"], row["qos_profile"])
                    for row in announce.get("topics") or []]
-        return self._participant.announce(
-            announce["kind"], coverage=announce.get("coverage") or [],
-            ttl_sec=int(announce.get("ttl_sec") or 300),
-            name=announce.get("name", ""), org=announce.get("org", ""),
-            version=announce.get("version", ""),
-            hints={h["key"]: h["value"] for h in announce.get("hints") or []},
-            caps=announce.get("caps"),
-            manifest_uri=announce.get("manifest_uri") or None,
-            transforms=announce.get("transforms") or [],
-            service_id=announce["service_id"], topics=writers,
-            auth_hint=announce.get("auth_hint", ""),
-            coverage_frame_ref=announce.get("coverage_frame_ref"))
+        return announce_document(self._participant, announce, writers)
 
     def announce_lanes(self, service_id: str, kind: str,
                        lanes_: Sequence[Tuple[str, str, str]], *,
