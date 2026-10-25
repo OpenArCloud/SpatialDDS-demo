@@ -51,4 +51,8 @@ spatialdds_ros==0.3.0
 # downgrade this one. 0.7.1 -> 0.7.2 the same day: 0.7.2 adds `sd.dds.extend`,
 # without which this repository's own `oarc.*` types could not be converted,
 # keyed or recorded by the SDK (spatialdds-py finding 69, found here).
-spatialdds[dds,server]==0.7.2
+# 0.7.2 -> 0.7.3 on 2026-10-25: §2's lane templates open (the plan lane the
+# bridges read), frames carry their derived uuid (so SDK announces pass this
+# repository's discovery core), and an announce lists the lanes a service reads
+# (spatialdds-py finding 70, S11-S15, found here).
+spatialdds[dds,server]==0.7.3

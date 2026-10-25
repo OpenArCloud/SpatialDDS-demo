@@ -13,9 +13,10 @@ Two types are the exception, because §2 gives each a lane template of its
 own and §3.3.1 makes such a template normative where it is defined (and allows
 it an extra segment): a PlannedTrajectory "SHOULD be advertised on the topic
 spatialdds/<scene>/plan/<agent_id>/trajectory/v1", an EntityBinding on
-spatialdds/<scene>/entity/binding/v1. This deployment follows both. (The SDK's
-check refuses the six-segment plan template as of 0.7.2, which is
-spatialdds-py S15; these two are held to their templates here instead.)
+spatialdds/<scene>/entity/binding/v1. This deployment follows both. The
+templates are read from the SDK's registry, which reads them from §2's own
+sentences as of spatialdds 0.7.3; until then its check refused the plan
+template (spatialdds-py S15), and this file kept its own copy.
 
 The subjects are the publishers' own sources of names, read as they publish
 them: the announce builders, the lane tables, the topic functions and the ROS
@@ -61,24 +62,16 @@ def load(relpath: str):
     return module
 
 
-#: §2's lane templates, quoted (SpatialDDS-spec v1.8, 02-idl-profiles.md:39, :45).
-SPEC_TEMPLATES = {
-    "planned_trajectory": "spatialdds/<scene>/plan/<agent_id>/trajectory/v1",
-    "entity_binding": "spatialdds/<scene>/entity/binding/v1",
-}
-
-
-def _fits(topic: str, template: str) -> bool:
-    have, want = topic.split("/"), template.split("/")
-    return len(have) == len(want) and all(
-        h and (w.startswith("<") or h == w) for h, w in zip(have, want))
+#: §2's lane templates, as the SDK's registry read them from the spec.
+SPEC_TEMPLATES = {t: r.profile_template for t, r in
+                  sd.dds.registry.registrations().items() if r.profile_template}
 
 
 def problem(topic: str, type_name: str):
     """Why `topic` is not this deployment's name for a `type_name` lane, or None."""
     template = SPEC_TEMPLATES.get(type_name)
     if template is not None:
-        return None if _fits(topic, template) else (
+        return None if sd.dds.registry.fits_template(topic, template) else (
             f"§2 gives {type_name} the lane {template}")
     try:
         sd.dds.registry.check_topic(topic, type_name)
@@ -106,6 +99,12 @@ class NameRule(unittest.TestCase):
     def test_the_rule_admits_its_own_form(self):
         self.assertIsNone(
             problem("spatialdds/op/cam0/video_frame/v1", "video_frame"))
+
+    def test_the_registry_holds_both_of_section_2s_templates(self):
+        self.assertEqual(SPEC_TEMPLATES, {
+            "planned_trajectory": "spatialdds/<scene>/plan/<agent_id>/trajectory/v1",
+            "entity_binding": "spatialdds/<scene>/entity/binding/v1",
+        })
 
     def test_a_templated_type_takes_its_template(self):
         self.assertIsNone(problem(
