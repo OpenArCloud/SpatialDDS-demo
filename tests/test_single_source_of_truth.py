@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-No module-level name in this package is assigned twice, and the tempo
-re-exports are the tempo values.
+No module-level name in this package is assigned twice, and the cadence
+re-exports are the SDK's values (`spatialdds.recency`, which replaced this
+package's `tempo.py` at the SDK adoption).
 
 **Why this is a gate.** `model_service` carried a ~10-line block of constants
 twice, plus four literals that shadowed what it had imported from `tempo.py` —
@@ -90,14 +91,14 @@ class NothingIsAssignedTwice(unittest.TestCase):
         self.assertEqual(offenders, [], "\n".join(offenders))
 
 
-class TheTempoNumbersComeFromTempo(unittest.TestCase):
+class TheCadenceNumbersComeFromTheSdk(unittest.TestCase):
     """
     The re-exports are checked by value, not only by absence of shadowing.
 
-    `model_service` deliberately re-exports tempo's numbers under its own
+    `model_service` deliberately re-exports the cadence numbers under its own
     historical names — its tests name them and its documented behaviour uses
     them. That is legitimate; what is not is those names drifting from what
-    `tempo` says.
+    `spatialdds.recency` says.
     """
 
     PAIRS = (("LATCH_EVERY_N_MOVES", "LATCH_EVERY_N"),
@@ -105,26 +106,27 @@ class TheTempoNumbersComeFromTempo(unittest.TestCase):
              ("IDLE_FLUSH_FACTOR", "IDLE_FACTOR"),
              ("GAP_SMOOTHING", "GAP_SMOOTHING"))
 
-    def test_each_re_export_equals_its_tempo_value(self):
+    def test_each_re_export_equals_its_sdk_value(self):
         service = importlib.import_module("spatialdds_demo.model_service")
-        tempo = importlib.import_module("spatialdds_demo.tempo")
+        recency = importlib.import_module("spatialdds.recency")
         for ours, theirs in self.PAIRS:
             with self.subTest(name=ours):
                 self.assertEqual(
-                    getattr(service, ours), getattr(tempo, theirs),
-                    f"model_service.{ours} has drifted from tempo.{theirs}; "
-                    f"tempo is the single source for the fast tier's cadence")
+                    getattr(service, ours), getattr(recency, theirs),
+                    f"model_service.{ours} has drifted from "
+                    f"spatialdds.recency.{theirs}; the SDK is the single "
+                    f"source for the fast tier's cadence")
 
     def test_the_pairs_are_not_stale(self):
         """Every name this test claims to check must still exist."""
         service = importlib.import_module("spatialdds_demo.model_service")
-        tempo = importlib.import_module("spatialdds_demo.tempo")
+        recency = importlib.import_module("spatialdds.recency")
         for ours, theirs in self.PAIRS:
             with self.subTest(name=ours):
                 self.assertTrue(hasattr(service, ours),
                                 f"model_service no longer defines {ours}")
-                self.assertTrue(hasattr(tempo, theirs),
-                                f"tempo no longer defines {theirs}")
+                self.assertTrue(hasattr(recency, theirs),
+                                f"spatialdds.recency no longer defines {theirs}")
 
 
 if __name__ == "__main__":

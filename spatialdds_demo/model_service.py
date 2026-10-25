@@ -73,9 +73,10 @@ SOURCE_ID = "svc:model:demo/venue"
 # delivery -- see ModelPublisher.retire.
 TOMBSTONE_SETTLE_S = 1.5
 
-# The fast tier's cadence rules live in spatialdds_demo/tempo.py, because the
-# robot bridge owns FAST entities too and two publishers answering the same
-# question differently is the duplicate-matcher mistake from Part 2. Re-exported
+# The fast tier's cadence rules live in the SDK (`spatialdds.recency`,
+# `sd.Recency`), which took them over from this package's tempo.py: two
+# publishers answering the same question differently is the duplicate-matcher
+# mistake from Part 2. Re-exported
 # here under their old names: the numbers are still part of this service's
 # documented behaviour, and its tests name them.
 LATCH_EVERY_N_MOVES = LATCH_EVERY_N
@@ -89,7 +90,7 @@ IDLE_FLUSH_FACTOR = IDLE_FACTOR
 # behind and converges on the next pose that arrives.
 # The value is the SDK's `spatialdds.recency.LATCH_EVERY_N`, re-exported above. It used to be
 # repeated here as a literal, which shadowed the import: the two agreed,
-# so nothing broke, and changing tempo.py would silently not have
+# so nothing broke, and changing the source would silently not have
 # reached this module.
 
 # And the flush that makes rest state exact. When a thing stops moving, the
@@ -462,7 +463,7 @@ class ModelPublisher:
         # and when its last fast pose went out. Both exist only for the fast
         # tier; a SLOW entity is latched on every move as it always was.
         # When to rewrite a FAST entity's latched record, and when it has
-        # stopped moving. See spatialdds_demo/tempo.py.
+        # stopped moving. See spatialdds.recency.
         self._tempo = sd.Recency()
 
     def publish_georeference(self, transform: FrameTransform) -> None:

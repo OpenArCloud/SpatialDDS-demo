@@ -58,7 +58,7 @@ than where it is. Disposing would say something stronger and false -- that
 the robot is gone -- when all we know is that we have stopped hearing from it.
 
 The silence threshold is derived from the observed cadence, not fixed: see
-`spatialdds_demo/tempo.py` for why a fixed one produced 94 "it stopped" events
+`spatialdds.recency` (once this package's tempo.py) for why a fixed one produced 94 "it stopped" events
 while nothing had stopped.
 """
 
