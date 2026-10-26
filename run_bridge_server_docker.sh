@@ -60,6 +60,13 @@ trap cleanup EXIT INT TERM
 # writers would put one robot in two places. The bridge refuses rather than
 # joins, but not starting it is better than being refused.
 #
+# SPATIALDDS_CLAIMS — the OWM 0.2 relationship prototype's two asserters
+# that are services of their own, on by default with the model layer: the
+# zone watch twice (the robot within the fountain, from the robot's latched
+# record and from its fast lane) and the near fuser (the robot near each
+# duck). The venue's declared edges and duck_mover's come with those
+# services, whatever this says. See docs/owm-02-census.md.
+#
 # This note lives here, above the invocation, and must stay here. It sat
 # inside the `docker run` line-continuation below from 2026-09-07 to
 # 2026-09-30, where a comment ends the command: docker received the flags
@@ -85,6 +92,7 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
   -e SPATIALDDS_ROBOT_SIM="${SPATIALDDS_ROBOT_SIM:-0}" \
   -e SPATIALDDS_POND_WATCH="${SPATIALDDS_POND_WATCH:-0}" \
   -e SPATIALDDS_DUCK_MOVER="${SPATIALDDS_DUCK_MOVER:-1}" \
+  -e SPATIALDDS_CLAIMS="${SPATIALDDS_CLAIMS:-1}" \
   -e SPATIALDDS_MOCK_VPS="${SPATIALDDS_MOCK_VPS:-1}" \
   -e SPATIALDDS_VPS_SERVICE_ID="${SPATIALDDS_VPS_SERVICE_ID:-svc:vps:demo/austin-downtown}" \
   -e SPATIALDDS_VPS_SERVICE_NAME="${SPATIALDDS_VPS_SERVICE_NAME:-MockVPS-Austin}" \
@@ -121,6 +129,11 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
       fi; \
       if [ \"\$SPATIALDDS_DUCK_MOVER\" = \"1\" ]; then \
         python3 -m spatialdds_demo.duck_mover >\"\$BRIDGE_LOG_DIR/mover_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
+      fi; \
+      if [ \"\$SPATIALDDS_CLAIMS\" = \"1\" ]; then \
+        python3 -m spatialdds_demo.zone_watch --evidence latched >\"\$BRIDGE_LOG_DIR/zone_latched_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
+        python3 -m spatialdds_demo.zone_watch --evidence fast >\"\$BRIDGE_LOG_DIR/zone_fast_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
+        python3 -m spatialdds_demo.near_fuser >\"\$BRIDGE_LOG_DIR/near_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
       fi; \
       python3 -m bridges.web_bridge.binding --host 0.0.0.0 --port 8089 \
         --domain \"\$SPATIALDDS_DDS_DOMAIN\" --token \"\$SPATIALDDS_BINDING_TOKEN\" \
