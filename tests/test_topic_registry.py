@@ -70,6 +70,9 @@ UNREGISTERED = {
     "lanes.TOPIC_VPS_RESULT": "demo-owned VPS lane (a §3.3.2 deployment extension)",
     "lanes.TOPIC_BOOTSTRAP_QUERY": "demo-owned bootstrap type (idl/demo18)",
     "lanes.TOPIC_BOOTSTRAP_RESPONSE": "demo-owned bootstrap type (idl/demo18)",
+    "lanes.RELATIONSHIP_TOPIC": "demo-owned extension (§3.3.2): the OWM 0.2 "
+                                "relationship prototype, which spatial.owm/0.1 "
+                                "reserves as open design",
     "lanes.BLOB_TOPIC": "1.8 defines BlobChunk and names no lane (candidates 9.6)",
     "lanes.anchors_delta": "`anchor_delta` is registered as a type, with no name",
     "lanes.reply_topic": "CoverageResponse rides the query's reply_topic",

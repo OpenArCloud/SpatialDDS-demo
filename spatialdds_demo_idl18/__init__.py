@@ -5,5 +5,6 @@
 
 import spatialdds.dds.types  # noqa: F401  -- the root the annotations name
 from . import oarc_demo
+from . import oarc_owm
 
-__all__ = ["oarc_demo"]
+__all__ = ["oarc_demo", "oarc_owm"]

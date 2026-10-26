@@ -33,6 +33,7 @@ import spatialdds as sd
 
 from spatialdds_demo_idl18.oarc_demo import (
     BootstrapQuery, BootstrapResponse, FusionCoverage)
+from spatialdds_demo_idl18.oarc_owm import Relationship
 
 SCENE = "ut-austin-littlefield"
 
@@ -141,6 +142,18 @@ EXTENSIONS = {
 }
 for _name, _cls in EXTENSIONS.items():
     sd.dds.extend(_name, _cls, OARC_IDL)
+
+#: The OWM 0.2 relationship prototype, in a file of its own so that the
+#: schema records above do not change with it (docs/owm-02-census.md).
+OWM02_IDL = OARC_IDL.parent / "oarc_owm02.idl"
+RELATIONSHIP = "oarc.relationship"
+sd.dds.extend(RELATIONSHIP, Relationship, OWM02_IDL)
+EXTENSIONS[RELATIONSHIP] = Relationship
+#: Its lane, under the census ruling's scene / stream / type rule: the entity
+#: lane's stream, then the registered name. Named here, beside the other
+#: deployment-owned lanes, so the topic gate's scan of this module finds it.
+RELATIONSHIP_STREAM = "world"
+RELATIONSHIP_TOPIC = sd.dds.topic_name(SCENE, RELATIONSHIP_STREAM, RELATIONSHIP)
 
 #: Names this deployment gives pinned types that §3.3.2 does not register.
 #: `blob_chunk` is the blob lane's: the spec leaves that lane unnamed
