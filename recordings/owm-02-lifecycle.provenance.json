@@ -1,0 +1,380 @@
+{
+  "recording": "owm-02-lifecycle.mcap",
+  "sha256": "cd1f0d280e169673f1f49a5e07fe81da3b718915b3a8fc3b44953490e0ef600a",
+  "bytes": 679631,
+  "captured_utc": "2026-10-26T03:29:49Z",
+  "capture_seconds": 540.03,
+  "scene": "ut-austin-littlefield",
+  "dds_domain": 1,
+  "types": "spatial.owm/0.1 (provisional), and the OWM 0.2 prototype's oarc.relationship (demo-owned extension)",
+  "spec_tag": "v1.8",
+  "spec_commit": "4b5652c",
+  "idl_source": "the IDL spatialdds 0.7.3 ships (SpatialDDS-spec v1.8, 4b5652c)",
+  "message_encoding": "cdr (XCDR2, serialized by CycloneDDS)",
+  "schema_encoding": "omgidl",
+  "schemas": {
+    "oarc_owm::Relationship": "bc2b167c672a126b44d8419cbcfea03e15d9b9029a08a7bf36b2938de6a35d37",
+    "spatial::owm::Entity": "cc2b51335b3c2c5c284b0f72d8564dbf5ad414b3adaa8ef374568c0bbe5c7f03",
+    "spatial::owm::ModelCommand": "cc2b51335b3c2c5c284b0f72d8564dbf5ad414b3adaa8ef374568c0bbe5c7f03",
+    "spatial::owm::ModelPose": "cc2b51335b3c2c5c284b0f72d8564dbf5ad414b3adaa8ef374568c0bbe5c7f03"
+  },
+  "samples": {
+    "spatialdds/ut-austin-littlefield/world/entity/v1": 1135,
+    "spatialdds/ut-austin-littlefield/world/model_pose/v1": 5082,
+    "spatialdds/ut-austin-littlefield/world/model_command/v1": 2887,
+    "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1": 176
+  },
+  "disposes": [
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-latched:3d9b48d10f04507c"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-latched:3d9b48d10f04507c"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-latched:3d9b48d10f04507c"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-latched:3d9b48d10f04507c"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:bc26363ca49e5516"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:2316487536395375"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.near:c9ea4755df3c5a91"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f"
+    },
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-latched:3d9b48d10f04507c"
+    }
+  ],
+  "dispose_records": 84,
+  "dispose_record_label": "spatialdds-web:dispose",
+  "dispose_records_consumed_by": "the gateway's recording loader (spatialdds >= 0.7.0), ordered against the messages by seq on the log-time clock",
+  "unnameable_disposes": 1,
+  "no_writer_instance_ends": 1,
+  "latched_writer_left": [
+    {
+      "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+      "key": "rel:svc:claims:demo.zone-latched:3d9b48d10f04507c",
+      "at_utc": "2026-10-26T03:33:17Z"
+    }
+  ],
+  "volatile_instance_ends": 0,
+  "driven_by": "tools/capture_owm02_lifecycle.sh (scripted, nav2 tier)",
+  "recorded_by": "tools/record_owm_session.py"
+}
