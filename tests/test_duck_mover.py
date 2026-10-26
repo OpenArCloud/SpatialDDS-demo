@@ -354,6 +354,15 @@ class WritesNothing(unittest.TestCase):
         self.assertEqual(writers, ["model_command"],
                          f"the mover must only write commands; found {writers}")
         self.assertNotIn("TOPIC_MODEL_RELATIONSHIP_V1", source)
+        # Since the OWM 0.2 prototype it also asserts its own edges, through
+        # the one claims writer every asserter uses. That is not a model
+        # topic the service owns: each asserter owns the instances it keys,
+        # so the single-writer rule holds there by construction. Counted, so
+        # a second way of writing claims from here fails.
+        self.assertEqual(source.count("ClaimWriter("), 1)
+        self.assertEqual(re.findall(r"\.writer\(", source),
+                         [".writer("],
+                         "one direct writer, the command lane's")
 
 
 class Wandering(unittest.TestCase):

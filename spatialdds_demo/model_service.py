@@ -44,6 +44,7 @@ from spatialdds.recency import (
     GAP_SMOOTHING, IDLE_FACTOR, IDLE_FLOOR_S, LATCH_EVERY_N,
 )
 
+from spatialdds_demo import claims
 from spatialdds_demo.lanes import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, SCENE,
 )
@@ -207,6 +208,21 @@ DUCKS: List[Tuple[str, str, Tuple[float, float, float], List[float]]] = [
      [0.0, 0.0, 0.0, 1.0]),                                   # facing east
     ("ent:duck:east", "Skipper", (16.5, -10.5, -1.423),
      [0.0, 0.0, 0.3826834323650898, 0.9238795325112867]),     # facing north-east
+]
+
+# What the venue declares about how its parts compose, as edges on the OWM 0.2
+# prototype's relationship lane (docs/owm-02-census.md, ruled 2026-10-25).
+#
+# Part-of, and not containment. Both pairs also nest as boxes, but a
+# containment edge between two published extents says only what any client
+# can compute from them; "the pond is part of the fountain" says what no box
+# does. Wikidata agrees (Q810524 is part of Q483453), which is where the
+# entity types are borrowed from too. The venue itself is not an entity, so
+# nothing here claims "the venue contains the pond": edges point at entities,
+# and none is minted to decorate one.
+DECLARED_EDGES: List[Tuple[str, str, str]] = [
+    ("ent:pond:littlefield", claims.PART_OF, "ent:fountain:littlefield"),
+    ("ent:shallows:littlefield", claims.PART_OF, "ent:pond:littlefield"),
 ]
 
 
@@ -459,6 +475,10 @@ class ModelPublisher:
             FrameTransform, type_name="frame_transform", stream="frames",
             qos_profile=MODEL_LATCHED, on_exit="keep")
         self._published: Dict[str, Entity] = {}
+        # The venue's declared edges (DECLARED_EDGES), on the OWM 0.2
+        # prototype's relationship lane. This service is their asserter
+        # because it is the authority that declared both ends.
+        self.claims = claims.ClaimWriter(participant)
         # Per FAST entity: moves since the latched record was last refreshed,
         # and when its last fast pose went out. Both exist only for the fast
         # tier; a SLOW entity is latched on every move as it always was.
@@ -472,6 +492,17 @@ class ModelPublisher:
     def publish_entity(self, entity: Entity) -> None:
         self._entities.write(entity)
         self._published[entity.entity_id] = entity
+
+    def publish_declared_edges(self) -> List[str]:
+        """Assert every declared edge whose two ends this service holds."""
+        out = []
+        for subject, predicate, obj in DECLARED_EDGES:
+            if subject in self._published and obj in self._published:
+                edge = self.claims.hold(subject, predicate, obj,
+                                        Basis.DECLARED)
+                if edge is not None:
+                    out.append(edge.id)
+        return out
 
     def owns(self, entity_id: str) -> bool:
         return entity_id in self._published
@@ -491,11 +522,21 @@ class ModelPublisher:
         person: a tombstone and its dispose issued in the same millisecond
         reach a human as a thing that simply vanished.
 
-        Returns the rel_ids that were cascaded.
+        Returns the ids of the edges that were cascaded: this service's own
+        edges touching the entity, retired in front of the tombstone, so that
+        none of them is left pointing at it. Other asserters' edges about the
+        entity are theirs to retire, when they see the withdrawal; until then
+        they dangle, which is a finding of the 0.2 prototype rather than a
+        defect here (docs/owm-02-worked-example.md).
         """
         entity = self._published.get(entity_id)
         if entity is None:
             raise KeyError(entity_id)
+        cascaded = [e.id for e in self.claims.held().values()
+                    if entity_id in (e.subject_ref, e.object_ref)]
+        self.claims.retire_involving(
+            entity_id, claims.PARTY_RETIRED,
+            f"{entity_id} was retired: {reason}", valid_until=_now())
 
         # Read-modify-write on our own latched copy: state and stamp change,
         # nothing else does. Pose, type, refs and extent are what the entity
@@ -506,18 +547,13 @@ class ModelPublisher:
         entity.stamp = _now()
         self._entities.write(entity)
 
-        # There is no edge cascade any more, and the `settle` pause stays
-        # anyway: it is the gap between the tombstone and the dispose, which
-        # is what gives a reader a chance to see why the entity went before
-        # the instance stops existing. That was never about edges.
+        # The `settle` pause is the gap between the tombstone and the
+        # dispose, which gives a reader a chance to see why the entity went
+        # before the instance stops existing. It was never about edges.
         #
-        # What used to happen here: every edge touching this entity was
-        # disposed first, so nothing was left pointing at a tombstone.
-        # `spatial.owm/0.1` carries no relationship type, so an unmigrated
-        # consumer that still holds pre-1.8 edges now keeps a dangling one
-        # until it migrates. The cost is recorded in the census's GAP row,
-        # not papered over here -- the return value stays a list so callers
-        # read "nothing cascaded" rather than "no cascade exists".
+        # The edge cascade above was empty by construction from the 1.8
+        # migration, which retired the demo's Relationship type, until the
+        # OWM 0.2 prototype brought one back as an extension.
         time.sleep(settle)
 
         # The SDK's withdrawal: the terminal sample again, then the dispose,
@@ -526,7 +562,6 @@ class ModelPublisher:
         # stream (nothing else on this key in between), not the wall clock.
         self._entities.withdraw(entity_id, reason=reason)
         del self._published[entity_id]
-        cascaded: List[str] = []
         return cascaded
 
     def move(self, entity_id: str, pose: PoseSE3) -> Tuple[float, float, float]:
@@ -680,7 +715,14 @@ class ModelPublisher:
         until the SDK adoption. The participant's own `on_exit="withdraw"`
         would do the same at its close; doing it here keeps this object's
         contract for a caller that closes the publisher and not the
-        participant, as the tests do."""
+        participant, as the tests do.
+
+        The declared edges go first, with the asserter-stopped reason, so
+        that no edge outlives either of its ends."""
+        for edge in list(self.claims.held().values()):
+            self.claims.retire(edge.subject_ref, edge.predicate,
+                               edge.object_ref, claims.ASSERTER_STOPPED,
+                               f"{SOURCE_ID} stopped cleanly")
         for entity_id in list(self._published):
             try:
                 self._entities.withdraw(entity_id, reason=reason)
@@ -769,8 +811,12 @@ def run_server(domain_id: Optional[int] = None, quiet: bool = False) -> int:
         print(f"model: entity {entity.entity_id} — {entity.basis.name}/"
               f"{entity.layer.name}, {placed}, {refs}")
     print(f"model: seeded {len(entities)} entities; latched, holding")
-    print("model: no relationship lane — spatial.owm/0.1 carries no "
-          "relationship type (see docs/owm-1.8-census.md)")
+    for rid in publisher.publish_declared_edges():
+        edge = publisher.claims.held()[rid]
+        print(f"model: edge {edge.subject_ref} part-of {edge.object_ref} — "
+              f"DECLARED, {rid}")
+    print(f"model: relationship topic {publisher.claims.topic} (the OWM 0.2 "
+          f"prototype's oarc.relationship; spatial.owm/0.1 has none)")
 
     # The command lane. Retirement arrives here rather than being written
     # around us, because only the writer that latched a sample can make it

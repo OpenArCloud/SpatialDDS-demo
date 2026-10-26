@@ -407,18 +407,19 @@ class Retirement(unittest.TestCase):
         ACTIVE sample stays latched, and a reader joining afterwards is handed
         a live duck -- measured, and written up in SPEC_COMPLIANCE.
 
-        It used to assert the edge cascade too: retiring the duck disposed
-        `rel:contains:pond-duck-east` in front of the tombstone. There is no
-        relationship type under `spatial.owm/0.1`, so the cascade is empty by
-        construction, and the assertion below says that rather than being
-        dropped -- an empty list nobody checks is how a removed cascade turns
-        into a silently broken one.
+        It asserts the edge cascade too, which is empty for a duck: the
+        service cascades only its own edges, and since the OWM 0.2 prototype
+        the edges about ducks are duck_mover's (`tests/test_claims.py` covers
+        a cascade that is not empty, the pond's). Before the prototype it was
+        empty because `spatial.owm/0.1` carries no relationship type. The
+        assertion stays, because an empty list nobody checks is how a removed
+        cascade turns into a silently broken one.
         """
         participant, publisher = self._publisher(DOMAIN + 4)
         target = "ent:duck:east"
         cascaded = publisher.retire(target, "taken in for the winter", settle=0.2)
         self.assertEqual(cascaded, [],
-                         "there are no edges to cascade under spatial.owm/0.1")
+                         "the service holds no edges about a duck")
         time.sleep(0.5)
 
         try:

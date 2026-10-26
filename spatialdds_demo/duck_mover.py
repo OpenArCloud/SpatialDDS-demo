@@ -56,11 +56,12 @@ from typing import Dict, List, Optional, Tuple
 
 import spatialdds as sd
 
+from spatialdds_demo import claims
 from spatialdds_demo.lanes import (
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, SCENE)
 from spatialdds_demo.model_service import TYPE_RUBBER_DUCK, live_log
 from spatialdds.dds.types.builtin import Time
-from spatialdds.dds.types.spatial.owm import Entity, ModelCommand
+from spatialdds.dds.types.spatial.owm import Basis, Entity, ModelCommand
 from spatialdds.dds.types.spatial.core import Aabb3, PoseSE3
 
 REQUESTER_ID = "svc:mover:demo/ducks"
@@ -286,6 +287,10 @@ class DuckMover:
         self._commands = participant.writer("model_command",
                                             qos_profile=MODEL_COMMAND)
         self._bounds_entity = bounds_entity
+        # Each duck within the bounds entity, on the OWM 0.2 prototype's
+        # relationship lane. See `assert_containment` for why this service is
+        # the asserter, and why the basis is DECLARED.
+        self.claims = claims.ClaimWriter(participant)
         self._rng = rng or random.Random()
         self._entities: Dict[str, Entity] = {}
         self._counter = 0
@@ -310,6 +315,9 @@ class DuckMover:
                 # say which instance a dispose was for, and the mover kept
                 # asking to move a duck that no longer existed.
                 self._entities.pop(ev.key, None)
+                self.claims.retire_involving(
+                    ev.key, claims.PARTY_RETIRED,
+                    f"{ev.key} was withdrawn ({ev.reason})")
         poses = [ev.data for ev in self._poses.take()
                  if isinstance(ev, sd.Sample)]
         for pose in poses:
@@ -368,6 +376,41 @@ class DuckMover:
              if TYPE_RUBBER_DUCK in e.type_uris and e.has_pose
              and e.state.name == "ACTIVE"),
             key=lambda e: e.entity_id)
+
+    def assert_containment(self) -> List[str]:
+        """
+        Hold `sfWithin(duck, bounds entity)` for every duck. Returns the new ids.
+
+        **This service is the asserter because it is what makes the claim
+        true.** The ducks stay in the shallows only because this clamp keeps
+        them there; run with `--bounds declared` and they leave, so a venue
+        asserting "the ducks are in the shallows" would be asserting
+        something it does not control. The object follows the configuration,
+        so the edge names the box the ducks are actually kept in.
+
+        **DECLARED, as enforced policy.** The claim is the rule this service
+        applies, set by its `--bounds` configuration, and not a measurement:
+        it never reads where a duck is to decide it. A consumer cannot
+        compute it from a snapshot either, because a snapshot says where a
+        duck is, and this says where a duck will be kept. That is what makes
+        it worth an edge when the geometry is on the bus anyway. A duck moved
+        out of the box by somebody else's `move` command is outside it until
+        this clamp's next step brings it back, a fraction of a second, and
+        the edge does not retract for that.
+        """
+        if self.bounds() is None:
+            return []
+        new = []
+        for duck in self.ducks():
+            edge = self.claims.hold(
+                duck.entity_id, claims.SF_WITHIN, self._bounds_entity,
+                Basis.DECLARED,
+                meta=[("oarc.claim.enforced_by",
+                       f"duck_mover's clamp into {self._bounds_entity}'s "
+                       f"extent, inset {INSET_M:g} m")])
+            if edge is not None:
+                new.append(edge.id)
+        return new
 
     # --- asking for a change ----------------------------------------------
 
@@ -491,6 +534,7 @@ class DuckMover:
         bounds = self.bounds()
         if bounds is None:
             return None
+        self.assert_containment()
         ducks = self.ducks()
         if not ducks:
             return None
@@ -551,7 +595,8 @@ def run(domain_id: Optional[int] = None,
 
     print(f"mover: stopping after {moved} moves. The ducks stay where they are "
           f"— the model service owns their poses, not this process.")
-    participant.close(reason="the duck mover stopped")
+    participant.close(reason=f"{claims.ASSERTER_STOPPED}: the duck mover "
+                             f"stopped cleanly")
     return 0
 
 
