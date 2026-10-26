@@ -68,7 +68,9 @@ test('the panel lists every asserter, and the filter shows one', async ({ page }
 
 test('the robot in the fountain: two rows, and the fountain lit', async ({ page, request }) => {
   test.skip(!robot, 'no robot publishing — run scripts/run_robot_tier.sh');
-  test.setTimeout(240_000);
+  // Two legs of up to 180 s each, from wherever the previous robot spec
+  // left it: 240 s was measured too little in the full suite.
+  test.setTimeout(480_000);
   await readyPage(page);
   await page.locator('#btnToggleClaims').click();
   const lit = () => page.evaluate((id: string) => {
@@ -80,6 +82,18 @@ test('the robot in the fountain: two rows, and the fountain lit', async ({ page,
     const r = (await venueEntities(request))
       .find((e: any) => e.entity_id === 'ent:robot:tb3');
     return Math.hypot(r.pose.t[0] - x, r.pose.t[1] - y);
+  };
+  // Arrived means nav2 has finished, and the honest signal for that here is
+  // the robot standing still: within 1.5 m is not nav2's tolerance. A goal
+  // sent while nav2 is still finishing the last one is a preemption, and
+  // measured on this tier nav2 then reported the *new* goal succeeded at the
+  // old goal's position ("Reached the goal!" in the same tick), so the robot
+  // never moved and nothing said so.
+  const settled = (x: number, y: number) => async () => {
+    const a = await near(x, y)();
+    await new Promise((r) => setTimeout(r, 3000));
+    const b = await near(x, y)();
+    return a < 1.5 && Math.abs(a - b) < 0.05;
   };
   const within = async () => (await rows(page).allInnerTexts())
     .filter((t: string) => t.includes('within') && t.includes(FOUNTAIN)
@@ -96,8 +110,8 @@ test('the robot in the fountain: two rows, and the fountain lit', async ({ page,
   const north = await sendCommand(request, 'goto', 'ent:robot:tb3',
                                   { t: [12, -2, -0.84], q: [0, 0, 0, 1] });
   expect((await north.json()).outcome, await north.text()).toBe('accepted');
-  await expect.poll(near(12, -2), { timeout: 180_000, intervals: [1000] })
-    .toBeLessThan(1.5);
+  await expect.poll(settled(12, -2), { timeout: 180_000, intervals: [1000] })
+    .toBe(true);
   // Both zone watches, as two rows about one proposition.
   await expect.poll(within, { timeout: 10_000 }).toBe(2);
   await expect.poll(lit, { timeout: 10_000 }).toBe(4);
@@ -106,8 +120,8 @@ test('the robot in the fountain: two rows, and the fountain lit', async ({ page,
   const back = await sendCommand(request, 'goto', 'ent:robot:tb3',
                                  { t: [17, -23, -0.84], q: [0, 0, 0, 1] });
   expect((await back.json()).outcome, await back.text()).toBe('accepted');
-  await expect.poll(near(17, -23), { timeout: 180_000, intervals: [1000] })
-    .toBeLessThan(1.5);
+  await expect.poll(settled(17, -23), { timeout: 180_000, intervals: [1000] })
+    .toBe(true);
   await expect.poll(within, { timeout: 10_000 }).toBe(0);
   await expect.poll(lit, { timeout: 10_000 }).toBe(2);
   const retired = await page.locator('#claimsOverlayBody tr.retired').allInnerTexts();

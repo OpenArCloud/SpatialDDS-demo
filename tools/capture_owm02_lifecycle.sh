@@ -70,7 +70,10 @@ wait_edges() {
   done
   say "GAVE UP waiting for [${want}], have [${got}]"; return 1
 }
-# Wait until the robot's latched record is within 1.5 m of (x, y).
+# Wait until the robot's latched record is within 1.5 m of (x, y) and has
+# stopped: nav2 has finished. A goal sent before then is a preemption, and on
+# this tier nav2 was measured reporting the new goal succeeded at the old
+# goal's position without moving (claims-stack.spec.ts says more).
 arrive() {
   local x="$1" y="$2" limit="$3" at
   for _ in $(seq 1 "$limit"); do
@@ -78,7 +81,14 @@ arrive() {
 import json, math, sys
 t = json.load(sys.stdin)['pose']['t']
 print(f'{t[0]:.1f},{t[1]:.1f}', 'yes' if math.hypot(t[0]-$x, t[1]-$y) < 1.5 else 'no')")
-    case "$at" in *yes) say "robot at ${at% *}"; return 0;; esac
+    case "$at" in *yes)
+      sleep 3
+      again=$(curl -s "$GW/$SCENE/world/entity/v1/ent:robot:tb3" | python3 -c "
+import json, sys
+t = json.load(sys.stdin)['pose']['t']
+print(f'{t[0]:.1f},{t[1]:.1f}')")
+      [ "$again" = "${at% *}" ] && { say "robot at ${at% *}, stopped"; return 0; };;
+    esac
     sleep 1
   done
   say "GAVE UP waiting for the robot at ($x, $y); it is at ${at% *}"; return 1
