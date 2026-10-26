@@ -147,7 +147,10 @@ for _name, _cls in EXTENSIONS.items():
 #: schema records above do not change with it (docs/owm-02-census.md).
 OWM02_IDL = OARC_IDL.parent / "oarc_owm02.idl"
 RELATIONSHIP = "oarc.relationship"
-sd.dds.extend(RELATIONSHIP, Relationship, OWM02_IDL)
+#: The registration itself, kept: it carries the schema record a gateway
+#: serving the lane needs (`bridges/web_bridge/binding.py`), and the SDK
+#: offers no public way to look a registration up again.
+RELATIONSHIP_EXTENSION = sd.dds.extend(RELATIONSHIP, Relationship, OWM02_IDL)
 EXTENSIONS[RELATIONSHIP] = Relationship
 #: Its lane, under the census ruling's scene / stream / type rule: the entity
 #: lane's stream, then the registered name. Named here, beside the other

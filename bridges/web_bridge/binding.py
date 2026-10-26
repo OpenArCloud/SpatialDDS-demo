@@ -66,7 +66,8 @@ from spatialdds.server import (                                # noqa: E402
 import spatialdds as sd                                        # noqa: E402
 
 from spatialdds_demo.lanes import (                            # noqa: E402
-    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, SCENE)
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, RELATIONSHIP,
+    RELATIONSHIP_EXTENSION, RELATIONSHIP_STREAM, SCENE)
 from spatialdds.dds.types.spatial.core import FrameTransform        # noqa: E402
 
 #: Who this bridge is when it writes: the command lane is its one writer.
@@ -122,6 +123,21 @@ ACCESS: dict[str, str] = {
     # from "who may drive it". N.4's advice is about what a resource
     # describes, and what this one describes is an instruction.
     "spatial.owm.ModelCommand": gateway.OPERATOR,
+    # The OWM 0.2 prototype's edges, public for the reason the entities are:
+    # what they describe is a fountain, its parts, a simulated robot and
+    # three rubber ducks, never a person. The judgement is this venue's, as
+    # above. An edge about a person would be an observation of one, and a
+    # deployment carrying those would not get this row.
+    "oarc_owm.Relationship": gateway.PUBLIC,
+}
+
+#: Lanes the package's `gateway.DURABILITY` has no row for, by what their
+#: writers do. The table knows the pinned types; an extension falls through
+#: to "not latched", which for the relationship lane would serve no snapshot
+#: to a late joiner while the bus hands it every edge. MODEL_LATCHED is what
+#: every asserter opens it with (`spatialdds_demo/claims.py`).
+LATCHED: dict[str, bool] = {
+    "oarc_owm.Relationship": True,
 }
 
 #: Each lane by what a reader opens it with, its profile, and its type's FQN.
@@ -140,7 +156,24 @@ LANES: list[tuple[dict, Any, str]] = [
     # name model_service writes it on.
     (dict(type_=FrameTransform, type_name="frame_transform", stream="frames"),
      MODEL_LATCHED, "spatial.core.FrameTransform"),
+    # The OWM 0.2 relationship prototype: a demo-owned extension, so its
+    # schema comes from its registration rather than from the pin (below).
+    (dict(type_=RELATIONSHIP, stream=RELATIONSHIP_STREAM),
+     MODEL_LATCHED, "oarc_owm.Relationship"),
 ]
+
+
+def schema_record(fqn: str) -> tuple[str, bytes]:
+    """The IDL a lane's type is defined by: the pin's, or an extension's own.
+
+    An extension registered with `sd.dds.extend()` carries the record a
+    recording embeds for it, its includes' closure and then its own body,
+    which is exactly what the gateway's model needs. The pin does not have
+    it, and asked for it would refuse.
+    """
+    if fqn == RELATIONSHIP_EXTENSION.fqn:
+        return fqn.replace(".", "::"), RELATIONSHIP_EXTENSION.record
+    return pin.schema_record(fqn.replace(".", "::"))
 
 
 def lane_topic(spec: dict) -> str:
@@ -159,7 +192,7 @@ def build_state() -> gateway.State:
     would be two type systems in one process.
     """
     model, idl = pin.model_from_records(
-        [pin.schema_record(fqn.replace(".", "::")) for _s, _q, fqn in LANES],
+        [schema_record(fqn) for _s, _q, fqn in LANES],
         whence=f"spatialdds {sd.__version__} (SpatialDDS-spec {sd.SPEC_TAG})")
     st = gateway.State(
         source="live DDS",
@@ -171,7 +204,7 @@ def build_state() -> gateway.State:
         topic = lane_topic(spec)
         _scene, stream, type_seg, version = topic.split("/")[1:]
         latched, _default_access = gateway.DURABILITY.get(
-            fqn, (False, gateway.OPERATOR))
+            fqn, (LATCHED.get(fqn, False), gateway.OPERATOR))
         # Durability from the package's table, access from this endpoint's
         # own classification. See ACCESS above for why the two come from
         # different places.
