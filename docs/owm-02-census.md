@@ -211,3 +211,17 @@ recording, which the tap embeds.
    here. The spec reserves the question (Appendix E, "Reserved"), and the
    brief restates the shape. Shape findings need a target to be filed
    against as proposed edits.
+
+## Amended after the ruling (2026-10-25)
+
+Ruled as asked, with three changes made during the build:
+- **The `near` URI.** It is `https://demo.spatialdds.org/owm/0.2/predicate/near#15m`.
+  The `oarc.dev` domain above was a guess; `demo.spatialdds.org` is the
+  demo's own and the only OARC domain already in use. As ruled, the
+  threshold is in the fragment, and it is also in meta.
+- **The lifecycle members.** They are `state` and `state_reason`, not the
+  brief's `lifecycle` and `reason`, because the SDK's `withdraw()` finds
+  them by those names.
+- **The 0.2 design document.** It is to land in the spec repository as a
+  proposal; the edits this batch produces are listed in
+  [`owm-02-worked-example.md`](owm-02-worked-example.md) §3, until it does.
