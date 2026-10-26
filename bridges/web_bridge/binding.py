@@ -267,8 +267,20 @@ class Pump:
                     self.removals += 1
                     moved += 1
                     continue
+                if isinstance(ev, sd.Liveliness):
+                    # A writer's presence, passed on in the gateway's own
+                    # event shape. Not a removal, and the latched set is
+                    # untouched: the record stands. Until the OWM 0.2
+                    # prototype this pump dropped it, so a browser could not
+                    # tell an edge whose asserter was killed from one whose
+                    # asserter is alive, which is the whole of what a claim
+                    # inheriting crash semantics means to a reader.
+                    if ev.key:
+                        gw_http.notify(self.app, topic, gateway.liveliness(
+                            topic, ev.key, ev.alive))
+                    continue
                 if not isinstance(ev, sd.Sample):
-                    continue                  # liveliness, the replay marker
+                    continue                  # the replay marker
                 doc = self._project(fqn, ev.data)
                 key = str(doc.get(res.key, "")) if res.key else ""
                 if res.latched:

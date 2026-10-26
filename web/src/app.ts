@@ -1053,8 +1053,10 @@ function renderClaims() {
       if (retired) {
         r.className = 'retired';
       }
+      const gone = !retired && claimStore.writerGone.has(c.id);
       for (const v of [c.subject_ref, predicateLabel(c.predicate), c.object_ref,
-        c.asserter, c.basis, validity(c),
+        c.asserter, c.basis,
+        validity(c) + (gone ? ' — asserter not alive' : ''),
         retired ? c.state_reason
           : (c.has_confidence ? c.confidence.toFixed(2) : '—')]) {
         r.insertCell().textContent = v;

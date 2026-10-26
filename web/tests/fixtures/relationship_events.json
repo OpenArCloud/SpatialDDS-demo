@@ -251,6 +251,12 @@
    "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
    "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f",
    "reason": "no longer holds: ent:robot:tb3 left ent:fountain:littlefield's extent"
+  },
+  {
+   "event": "liveliness",
+   "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+   "key": "rel:svc:claims:demo.zone-latched:3d9b48d10f04507c",
+   "alive": false
   }
  ]
 }

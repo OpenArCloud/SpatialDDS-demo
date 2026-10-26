@@ -13,7 +13,7 @@ The edges are the ones the venue asserts, at fixed times so the file does
 not change on every run: both zone watches' claims about one proposition,
 the near fuser's derived edge with its lineage, a declared part-of, and
 duck_mover's enforced containment. Then the replay marker, then one zone
-watch's edge retiring with its reason.
+watch's edge retiring with its reason, then the other zone watch killed.
 
     python3 tools/make_relationship_fixture.py
 """
@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO))
 
 from spatialdds.dds.types.spatial.common import KV  # noqa: E402
 from spatialdds.dds.types.spatial.owm import Basis  # noqa: E402
-from spatialdds.server import webjson, xcdr2  # noqa: E402
+from spatialdds.server import gateway, webjson, xcdr2  # noqa: E402
 
 from bridges.web_bridge import binding  # noqa: E402
 from spatialdds_demo import claims  # noqa: E402
@@ -100,6 +100,9 @@ def main() -> int:
                    "data": project(terminal)})
     events.append({"event": "dispose", "topic": topic, "key": fast.id,
                    "reason": terminal.state_reason})
+    # The latched zone watch killed: its writer's liveliness ends, in the
+    # gateway's own event shape, and nothing is disposed.
+    events.append(gateway.liveliness(topic, latched.id, False))
     OUT.write_text(json.dumps({
         "$comment": "Written by tools/make_relationship_fixture.py; see its "
                     "docstring. Do not edit by hand.",

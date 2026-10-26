@@ -56,6 +56,7 @@ export type LaneEvent = {
   data?: Record<string, unknown>;
   reason?: string;
   replayed?: number;
+  alive?: boolean;
 };
 
 /** The edge in force for each id, and the most recent retirements. */
@@ -63,6 +64,12 @@ export class ClaimStore {
   readonly live = new Map<string, Claim>();
   /** Newest first, with the reason the asserter gave. */
   readonly retired: Claim[] = [];
+  /**
+   * Edges in force whose asserter's liveliness has ended. A killed asserter
+   * withdraws nothing, so its edges stand; what a reader can know is that
+   * nobody is asserting them any more, and the panel says so.
+   */
+  readonly writerGone = new Set<string>();
   constructor(private readonly keepRetired = 8) {}
 
   /** Apply one event. Returns what changed, for the log. */
@@ -83,11 +90,23 @@ export class ClaimStore {
       }
       const was = this.live.get(claim.id);
       this.live.set(claim.id, claim);
+      this.writerGone.delete(claim.id);
       return was ? null : `claim: ${describe(claim)}`;
+    }
+    if (ev.event === 'liveliness' && ev.key) {
+      const claim = this.live.get(ev.key);
+      if (ev.alive) {
+        this.writerGone.delete(ev.key);
+        return null;
+      }
+      this.writerGone.add(ev.key);
+      return claim ? `claim's asserter is gone, the edge stands: ${describe(claim)}`
+        : null;
     }
     if (ev.event === 'dispose' && ev.key) {
       const gone = this.live.get(ev.key);
       this.live.delete(ev.key);
+      this.writerGone.delete(ev.key);
       return gone ? `claim withdrawn: ${describe(gone)} (${ev.reason ?? ''})`
         : null;
     }

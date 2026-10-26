@@ -11,12 +11,18 @@ bus. What is asserted is what a browser gets:
 * an edge held on the bus is in the collection GET, and its instance GET;
 * a WebSocket subscriber is handed it in the replay;
 * the edge's withdrawal reaches that live subscriber as a dispose carrying
-  the asserter's reason, and the collection stops holding it.
+  the asserter's reason, and the collection stops holding it;
+* a killed asserter's edge stays in the collection, and the live subscriber
+  is told its writer's liveliness ended, with no dispose (item 4, as a
+  browser sees it).
 
 Needs a DDS domain, and skips loudly without one.
 """
 import asyncio
 import json
+import os
+import signal
+import subprocess
 import sys
 import threading
 import time
@@ -129,6 +135,69 @@ class RelationshipLaneThroughTheBinding(unittest.TestCase):
             events.append(event)
             if done(event):
                 return events
+
+
+class AKilledAssertersEdgeThroughTheBinding(unittest.TestCase):
+
+    SCRIPT = (
+        "import sys, time\n"
+        "sys.path.insert(0, {repo!r})\n"
+        "import spatialdds as sd\n"
+        "from spatialdds.dds.types.spatial.owm import Basis\n"
+        "from spatialdds_demo import claims\n"
+        "from spatialdds_demo.lanes import SCENE\n"
+        "p = sd.participant(SCENE, domain={domain}, service_id='svc:test:doomed')\n"
+        "claims.ClaimWriter(p).hold('ent:robot:tb3', claims.SF_WITHIN,\n"
+        "    'ent:fountain:littlefield', Basis.OBSERVED,\n"
+        "    valid_from=claims.now_time())\n"
+        "print('held', flush=True)\n"
+        "time.sleep(120)\n")
+
+    def test_liveliness_lost_reaches_a_subscriber_and_nothing_is_disposed(self):
+        st = binding.build_state()
+        app = gw_http.make_app(st, "http://test", "tok", publish_enabled=False,
+                               live_subscriptions=True)
+        try:
+            pump = binding.Pump(st, app, DOMAIN + 1)
+        except Exception as exc:
+            raise unittest.SkipTest(f"DDS-UNAVAILABLE: {exc}")
+        self.addCleanup(lambda: pump.participant.close(reason="test over"))
+        threading.Thread(target=pump.run, daemon=True).start()
+        self.addCleanup(pump.stop)
+        child = subprocess.Popen(
+            [sys.executable, "-c",
+             self.SCRIPT.format(repo=str(REPO), domain=DOMAIN + 1)],
+            stdout=subprocess.PIPE, text=True,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        self.addCleanup(lambda: child.poll() is None and child.kill())
+        self.assertEqual(child.stdout.readline().strip(), "held")
+        asyncio.run(self._kill_and_watch(app, child))
+
+    async def _kill_and_watch(self, app, child):
+        server = TestServer(app)
+        await server.start_server()
+        try:
+            async with ClientSession() as http:
+                base = str(server.make_url(PATH))
+                lane = RelationshipLaneThroughTheBinding
+                docs = await lane._until(self, http, base, lambda d: d)
+                [edge] = docs
+                async with http.ws_connect(base) as ws:
+                    await lane._read_until(
+                        self, ws, lambda e: e.get("event") == "end_of_replay")
+                    child.send_signal(signal.SIGKILL)
+                    events = await lane._read_until(
+                        self, ws, lambda e: e.get("event") == "liveliness",
+                        timeout=20.0)
+                    self.assertEqual(events[-1]["key"], edge["id"])
+                    self.assertFalse(events[-1]["alive"])
+                    self.assertNotIn("dispose", [e.get("event") for e in events])
+                async with http.get(base) as r:
+                    self.assertEqual([d["id"] for d in await r.json()],
+                                     [edge["id"]],
+                                     "a killed asserter's edge stands")
+        finally:
+            await server.close()
 
 
 if __name__ == "__main__":

@@ -79,6 +79,17 @@ test('a retirement keeps its reason and valid_until, and the dispose removes it'
   expect([...store.containment().keys()]).toEqual([FOUNTAIN]);
 });
 
+test("a killed asserter's edge stands, marked as nobody's any more", () => {
+  const store = replayed();
+  for (const ev of after) {
+    store.apply(ev);
+  }
+  const latched = store.rows('svc:claims:demo/zone-latched');
+  expect(latched).toHaveLength(1);
+  expect(store.writerGone.has(latched[0].id)).toBe(true);
+  expect(store.writerGone.size).toBe(1);
+});
+
 test('predicates and validity read as a person would', () => {
   const store = replayed();
   const labels = store.rows().map((c) => predicateLabel(c.predicate)).sort();
