@@ -9,6 +9,9 @@ import {
 import { LOOKING_NORTH_UPRIGHT, mockDiscover, mockLocalize }
   from './mock_spatialdds';
 import {
+  ClaimStore, predicateLabel, subscribeClaims, validity, type Claim
+} from './claims';
+import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
   BASIS_VALUES, catalogRefId,
   disambiguate, displayName, localInFrame, matchesBasis, modelEntityToItem, observeRest, parseBasisFilter,
@@ -40,6 +43,10 @@ const sendRobotBtn = document.getElementById('btnSendRobot') as HTMLButtonElemen
 const modeBadgeEl = document.getElementById('modeBadge') as HTMLSpanElement | null;
 const ddsOverlayEl = document.getElementById('ddsOverlay') as HTMLDivElement | null;
 const ddsOverlayBodyEl = document.getElementById('ddsOverlayBody') as HTMLPreElement | null;
+const toggleClaimsBtn = document.getElementById('btnToggleClaims') as HTMLButtonElement | null;
+const claimsOverlayEl = document.getElementById('claimsOverlay') as HTMLDivElement | null;
+const claimsBodyEl = document.getElementById('claimsOverlayBody') as HTMLDivElement | null;
+const claimsAsserterEl = document.getElementById('claimsAsserter') as HTMLSelectElement | null;
 
 const markerSvg = encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
@@ -89,6 +96,15 @@ let ddsSocket: WebSocket | null = null;
 // Present only when something is publishing; see handleDiscover.
 // The multiplexer's teardown, not a socket: there are two now.
 let modelUnsubscribe: (() => void) | null = null;
+// The OWM 0.2 prototype's claims: one store, read by the panel and the
+// highlight alike, so the two cannot disagree about what is in force.
+const claimStore = new ClaimStore();
+let claimsUnsubscribe: (() => void) | null = null;
+let claimsVisible = false;
+// The validity column reads "4.2 s ago", which goes stale between events.
+let claimsTimer: number | null = null;
+// The zones lit by an observed containment, so they can be put back.
+const highlightedZones = new Set<string>();
 const modelItems = new Map<string, CatalogItem>();
 // The frames and catalogue rows the last discovery resolved against, kept so a
 // live entity update can be placed without re-querying anything.
@@ -943,6 +959,134 @@ async function bootstrapModelOnce(): Promise<void> {
   appLog(`model:loaded ${modelPlaced} entities over N.3` +
          (plan.hidden ? `; ${plan.hidden} hidden by basis filter` : ''));
   connectModelStream();
+  connectClaimsStream();
+}
+
+/**
+ * The relationship lane, beside the model's. Public and latched like the
+ * entity lane, so a late tab is replayed every edge in force.
+ */
+function connectClaimsStream() {
+  if (claimsUnsubscribe) {
+    return;
+  }
+  claimsUnsubscribe = subscribeClaims({
+    onStatus: (line) => appLog(line),
+    onReplayComplete: (replayed) =>
+      appLog(`claims replayed ${replayed} latched sample(s), now live`),
+    onEvent: (ev) => {
+      const line = claimStore.apply(ev);
+      if (line) {
+        appLog(line);
+      }
+      renderClaims();
+      applyContainmentHighlight();
+    }
+  });
+}
+
+/**
+ * Light the extent of every zone an observed containment says something is
+ * in, and put back every zone it no longer does.
+ *
+ * The extent's own colour says what kind of claim the *extent* is (basis);
+ * the highlight says something else, that an edge depends on it right now.
+ * So it is a change of width and colour on the existing wireframe, restored
+ * from the entity's basis, never a second box.
+ */
+const CONTAINMENT_HIGHLIGHT = Cesium.Color.fromCssColorString('rgba(255, 255, 255, 0.95)');
+
+function applyContainmentHighlight() {
+  if (!viewer) {
+    return;
+  }
+  const lit = claimStore.containment();
+  for (const zone of new Set([...highlightedZones, ...lit.keys()])) {
+    const box = viewer.entities.getById(`${zone}-extent`)?.box;
+    if (!box) {
+      continue;
+    }
+    const on = lit.has(zone);
+    box.outlineColor = new Cesium.ConstantProperty(on ? CONTAINMENT_HIGHLIGHT
+      : extentColour((modelItems.get(zone)?.entity as ModelEntity | undefined)?.basis));
+    box.outlineWidth = new Cesium.ConstantProperty(on ? 4 : 2);
+    if (on) {
+      highlightedZones.add(zone);
+    } else {
+      highlightedZones.delete(zone);
+    }
+  }
+}
+
+/** The claims panel, from the store. Text nodes only: edges are bus data. */
+function renderClaims() {
+  if (claimsAsserterEl) {
+    const wanted = claimsAsserterEl.value;
+    const have = ['', ...claimStore.asserters()];
+    if ([...claimsAsserterEl.options].map((o) => o.value).join('|') !== have.join('|')) {
+      claimsAsserterEl.replaceChildren(...have.map((a) => {
+        const o = document.createElement('option');
+        o.value = a;
+        o.textContent = a || 'every asserter';
+        return o;
+      }));
+      claimsAsserterEl.value = have.includes(wanted) ? wanted : '';
+    }
+  }
+  if (!claimsBodyEl || !claimsVisible) {
+    return;
+  }
+  const asserter = claimsAsserterEl?.value ?? '';
+  const table = (claims: Claim[], retired: boolean) => {
+    const t = document.createElement('table');
+    const head = ['subject', 'predicate', 'object', 'asserter', 'basis',
+      'validity', retired ? 'reason' : 'confidence'];
+    const hr = t.insertRow();
+    for (const h of head) {
+      const th = document.createElement('th');
+      th.textContent = h;
+      hr.appendChild(th);
+    }
+    for (const c of claims) {
+      const r = t.insertRow();
+      r.dataset.claimId = c.id;
+      if (retired) {
+        r.className = 'retired';
+      }
+      for (const v of [c.subject_ref, predicateLabel(c.predicate), c.object_ref,
+        c.asserter, c.basis, validity(c),
+        retired ? c.state_reason
+          : (c.has_confidence ? c.confidence.toFixed(2) : '—')]) {
+        r.insertCell().textContent = v;
+      }
+    }
+    return t;
+  };
+  const live = claimStore.rows(asserter);
+  const gone = claimStore.retired.filter((c) => !asserter || c.asserter === asserter);
+  const parts: Node[] = [table(live, false)];
+  if (gone.length) {
+    const h = document.createElement('h4');
+    h.textContent = 'recently retired';
+    parts.push(h, table(gone, true));
+  }
+  claimsBodyEl.replaceChildren(...parts);
+}
+
+function toggleClaims() {
+  claimsVisible = !claimsVisible;
+  if (toggleClaimsBtn) {
+    toggleClaimsBtn.textContent = `Claims: ${claimsVisible ? 'On' : 'Off'}`;
+  }
+  claimsOverlayEl?.classList.toggle('hidden', !claimsVisible);
+  if (claimsTimer !== null) {
+    window.clearInterval(claimsTimer);
+    claimsTimer = null;
+  }
+  if (claimsVisible) {
+    claimsTimer = window.setInterval(renderClaims, 1000);
+  }
+  renderClaims();
 }
 
 /** The readout counts both sources, because the user sees one scene. */
@@ -2135,6 +2279,11 @@ export function initApp() {
   toggleRestOverlayBtn?.addEventListener('click', () => {
     toggleRestOverlay();
   });
+
+  toggleClaimsBtn?.addEventListener('click', () => {
+    toggleClaims();
+  });
+  claimsAsserterEl?.addEventListener('change', () => renderClaims());
 
   // Record from startup, not from when the panel is opened, so the calls the
   // app made while booting (/health, and the first discovery) are already

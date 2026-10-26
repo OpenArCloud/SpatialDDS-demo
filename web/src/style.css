@@ -200,3 +200,81 @@ body {
   letter-spacing: 0.04em; color: #0b0e14; background: #fad600; padding: 1px 6px; border-radius: 3px; }
 #framePreview { position: absolute; top: 50%; left: 50%; height: 152px; width: auto;
   transform: translate(-50%, -50%) rotate(-90deg); display: block; }
+
+/* The claims panel: the OWM 0.2 prototype's edges, on the left so it can be
+   open beside the DDS and REST panels. A table, not a graph view, as ruled. */
+#claimsOverlay {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  width: min(640px, 92vw);
+  max-height: 45vh;
+  z-index: 12;
+  background: rgba(8, 12, 18, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: #e9eef5;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  backdrop-filter: blur(6px);
+}
+
+#claimsOverlay.hidden {
+  display: none;
+}
+
+#claimsOverlayHeader {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#claimsAsserter {
+  font-size: 11px;
+  text-transform: none;
+}
+
+#claimsOverlayBody {
+  padding: 6px 10px 10px;
+  overflow: auto;
+  font-size: 11px;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+#claimsOverlayBody table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+#claimsOverlayBody th,
+#claimsOverlayBody td {
+  text-align: left;
+  padding: 3px 6px 3px 0;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#claimsOverlayBody th {
+  color: #8fa3bd;
+  font-weight: 600;
+}
+
+#claimsOverlayBody .retired td {
+  color: #8fa3bd;
+}
+
+#claimsOverlayBody h4 {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  color: #8fa3bd;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}

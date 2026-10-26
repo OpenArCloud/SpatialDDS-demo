@@ -1,0 +1,256 @@
+{
+ "$comment": "Written by tools/make_relationship_fixture.py; see its docstring. Do not edit by hand.",
+ "events": [
+  {
+   "event": "sample",
+   "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+   "key": "rel:svc:claims:demo.zone-latched:3d9b48d10f04507c",
+   "data": {
+    "id": "rel:svc:claims:demo.zone-latched:3d9b48d10f04507c",
+    "subject_ref": "ent:robot:tb3",
+    "predicate": "http://www.opengis.net/ont/geosparql#sfWithin",
+    "object_ref": "ent:fountain:littlefield",
+    "basis": "OBSERVED",
+    "asserter": "svc:claims:demo/zone-latched",
+    "has_confidence": false,
+    "confidence": 0.0,
+    "derived_from": [],
+    "stamp": {
+     "sec": "1792960000",
+     "nanosec": 500000000
+    },
+    "has_valid_from": true,
+    "valid_from": {
+     "sec": "1792960000",
+     "nanosec": 100000000
+    },
+    "has_valid_until": false,
+    "valid_until": {
+     "sec": "0",
+     "nanosec": 0
+    },
+    "meta": [
+     {
+      "key": "oarc.claim.evidence",
+      "value": "latched"
+     }
+    ],
+    "state": "CREATED",
+    "state_reason": ""
+   }
+  },
+  {
+   "event": "sample",
+   "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+   "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f",
+   "data": {
+    "id": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f",
+    "subject_ref": "ent:robot:tb3",
+    "predicate": "http://www.opengis.net/ont/geosparql#sfWithin",
+    "object_ref": "ent:fountain:littlefield",
+    "basis": "OBSERVED",
+    "asserter": "svc:claims:demo/zone-fast",
+    "has_confidence": false,
+    "confidence": 0.0,
+    "derived_from": [],
+    "stamp": {
+     "sec": "1792960000",
+     "nanosec": 500000000
+    },
+    "has_valid_from": true,
+    "valid_from": {
+     "sec": "1792959999",
+     "nanosec": 400000000
+    },
+    "has_valid_until": false,
+    "valid_until": {
+     "sec": "0",
+     "nanosec": 0
+    },
+    "meta": [
+     {
+      "key": "oarc.claim.evidence",
+      "value": "fast"
+     }
+    ],
+    "state": "CREATED",
+    "state_reason": ""
+   }
+  },
+  {
+   "event": "sample",
+   "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+   "key": "rel:svc:claims:demo.near:2316487536395375",
+   "data": {
+    "id": "rel:svc:claims:demo.near:2316487536395375",
+    "subject_ref": "ent:robot:tb3",
+    "predicate": "https://demo.spatialdds.org/owm/0.2/predicate/near#15m",
+    "object_ref": "ent:duck:east",
+    "basis": "DERIVED",
+    "asserter": "svc:claims:demo/near",
+    "has_confidence": false,
+    "confidence": 0.0,
+    "derived_from": [
+     {
+      "topic": "spatialdds/ut-austin-littlefield/world/model_pose/v1",
+      "key": "ent:robot:tb3",
+      "stamp": {
+       "sec": "1792959990",
+       "nanosec": 0
+      }
+     },
+     {
+      "topic": "spatialdds/ut-austin-littlefield/world/model_pose/v1",
+      "key": "ent:duck:east",
+      "stamp": {
+       "sec": "1792959989",
+       "nanosec": 800000000
+      }
+     }
+    ],
+    "stamp": {
+     "sec": "1792960000",
+     "nanosec": 500000000
+    },
+    "has_valid_from": true,
+    "valid_from": {
+     "sec": "1792959990",
+     "nanosec": 0
+    },
+    "has_valid_until": false,
+    "valid_until": {
+     "sec": "0",
+     "nanosec": 0
+    },
+    "meta": [
+     {
+      "key": "oarc.near.threshold_m",
+      "value": "15"
+     }
+    ],
+    "state": "CREATED",
+    "state_reason": ""
+   }
+  },
+  {
+   "event": "sample",
+   "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+   "key": "rel:svc:model:demo.venue:161b39af985a5167",
+   "data": {
+    "id": "rel:svc:model:demo.venue:161b39af985a5167",
+    "subject_ref": "ent:pond:littlefield",
+    "predicate": "http://www.wikidata.org/prop/direct/P361",
+    "object_ref": "ent:fountain:littlefield",
+    "basis": "DECLARED",
+    "asserter": "svc:model:demo/venue",
+    "has_confidence": false,
+    "confidence": 0.0,
+    "derived_from": [],
+    "stamp": {
+     "sec": "1792960000",
+     "nanosec": 500000000
+    },
+    "has_valid_from": false,
+    "valid_from": {
+     "sec": "0",
+     "nanosec": 0
+    },
+    "has_valid_until": false,
+    "valid_until": {
+     "sec": "0",
+     "nanosec": 0
+    },
+    "meta": [],
+    "state": "CREATED",
+    "state_reason": ""
+   }
+  },
+  {
+   "event": "sample",
+   "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+   "key": "rel:svc:mover:demo.ducks:194dc8bb608f5021",
+   "data": {
+    "id": "rel:svc:mover:demo.ducks:194dc8bb608f5021",
+    "subject_ref": "ent:duck:east",
+    "predicate": "http://www.opengis.net/ont/geosparql#sfWithin",
+    "object_ref": "ent:shallows:littlefield",
+    "basis": "DECLARED",
+    "asserter": "svc:mover:demo/ducks",
+    "has_confidence": false,
+    "confidence": 0.0,
+    "derived_from": [],
+    "stamp": {
+     "sec": "1792960000",
+     "nanosec": 500000000
+    },
+    "has_valid_from": false,
+    "valid_from": {
+     "sec": "0",
+     "nanosec": 0
+    },
+    "has_valid_until": false,
+    "valid_until": {
+     "sec": "0",
+     "nanosec": 0
+    },
+    "meta": [
+     {
+      "key": "oarc.claim.enforced_by",
+      "value": "duck_mover's clamp"
+     }
+    ],
+    "state": "CREATED",
+    "state_reason": ""
+   }
+  },
+  {
+   "event": "end_of_replay",
+   "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+   "replayed": 5
+  },
+  {
+   "event": "sample",
+   "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+   "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f",
+   "data": {
+    "id": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f",
+    "subject_ref": "ent:robot:tb3",
+    "predicate": "http://www.opengis.net/ont/geosparql#sfWithin",
+    "object_ref": "ent:fountain:littlefield",
+    "basis": "OBSERVED",
+    "asserter": "svc:claims:demo/zone-fast",
+    "has_confidence": false,
+    "confidence": 0.0,
+    "derived_from": [],
+    "stamp": {
+     "sec": "1792960000",
+     "nanosec": 500000000
+    },
+    "has_valid_from": true,
+    "valid_from": {
+     "sec": "1792959999",
+     "nanosec": 400000000
+    },
+    "has_valid_until": true,
+    "valid_until": {
+     "sec": "1792960020",
+     "nanosec": 0
+    },
+    "meta": [
+     {
+      "key": "oarc.claim.evidence",
+      "value": "fast"
+     }
+    ],
+    "state": "RETIRED",
+    "state_reason": "no longer holds: ent:robot:tb3 left ent:fountain:littlefield's extent"
+   }
+  },
+  {
+   "event": "dispose",
+   "topic": "spatialdds/ut-austin-littlefield/world/oarc.relationship/v1",
+   "key": "rel:svc:claims:demo.zone-fast:ac4ade1f9b2a595f",
+   "reason": "no longer holds: ent:robot:tb3 left ent:fountain:littlefield's extent"
+  }
+ ]
+}

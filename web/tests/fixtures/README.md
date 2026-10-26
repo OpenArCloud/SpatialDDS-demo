@@ -32,3 +32,13 @@ the local fusion stack. Refresh it by bringing that stack up
 `http://localhost:8088/`, and saving the first frame whose `sub_id` is
 `conflict`. `fusion-dashboard.spec.ts` feeds it to the dashboard, along with a
 `PROXIMITY_ALERT` copy of it.
+
+`relationship_events.json` is the OWM 0.2 prototype's relationship lane as
+the binding sends it over N.5: five edges' replay, the marker, then one
+edge's terminal sample and dispose. Each sample goes through the binding's
+own projection (XCDR2 decode against the extension's schema record, then
+N.1), so `claims.ts` is held to the wire. Regenerate from the repo root:
+
+```bash
+python3 tools/make_relationship_fixture.py
+```

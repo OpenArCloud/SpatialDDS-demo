@@ -24,6 +24,7 @@
           <button id="btnToggleDdsOverlay" type="button">DDS Messages: Off</button>
           <button id="btnToggleRestOverlay" type="button">REST Messages: Off</button>
           <button id="btnSendRobot" type="button">Send Robot: Off</button>
+          <button id="btnToggleClaims" type="button">Claims: Off</button>
           <button id="btnClear" type="button">Clear</button>
         </div>
         <pre id="readout">status: idle</pre>
@@ -43,6 +44,15 @@
       <div id="ddsOverlay" class="overlay hidden">
         <div id="ddsOverlayHeader">DDS Messages (on the bus)</div>
         <pre id="ddsOverlayBody"></pre>
+      </div>
+      <div id="claimsOverlay" class="overlay hidden">
+        <div id="claimsOverlayHeader">
+          <span>Claims (OWM 0.2 prototype)</span>
+          <select id="claimsAsserter" title="Show one asserter's claims">
+            <option value="">every asserter</option>
+          </select>
+        </div>
+        <div id="claimsOverlayBody"></div>
       </div>
       <div id="cesiumContainer"></div>
     </div>
