@@ -67,7 +67,7 @@ import spatialdds as sd                                        # noqa: E402
 
 from spatialdds_demo.lanes import (                            # noqa: E402
     MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, RELATIONSHIP,
-    RELATIONSHIP_EXTENSION, RELATIONSHIP_STREAM, SCENE)
+    RELATIONSHIP_STREAM, SCENE, schema_record)
 from spatialdds.dds.types.spatial.core import FrameTransform        # noqa: E402
 
 #: Who this bridge is when it writes: the command lane is its one writer.
@@ -157,23 +157,12 @@ LANES: list[tuple[dict, Any, str]] = [
     (dict(type_=FrameTransform, type_name="frame_transform", stream="frames"),
      MODEL_LATCHED, "spatial.core.FrameTransform"),
     # The OWM 0.2 relationship prototype: a demo-owned extension, so its
-    # schema comes from its registration rather than from the pin (below).
+    # schema comes from its registration rather than from the pin
+    # (`lanes.schema_record`).
     (dict(type_=RELATIONSHIP, stream=RELATIONSHIP_STREAM),
      MODEL_LATCHED, "oarc_owm.Relationship"),
 ]
 
-
-def schema_record(fqn: str) -> tuple[str, bytes]:
-    """The IDL a lane's type is defined by: the pin's, or an extension's own.
-
-    An extension registered with `sd.dds.extend()` carries the record a
-    recording embeds for it, its includes' closure and then its own body,
-    which is exactly what the gateway's model needs. The pin does not have
-    it, and asked for it would refuse.
-    """
-    if fqn == RELATIONSHIP_EXTENSION.fqn:
-        return fqn.replace(".", "::"), RELATIONSHIP_EXTENSION.record
-    return pin.schema_record(fqn.replace(".", "::"))
 
 
 def lane_topic(spec: dict) -> str:

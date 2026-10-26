@@ -158,6 +158,23 @@ EXTENSIONS[RELATIONSHIP] = Relationship
 RELATIONSHIP_STREAM = "world"
 RELATIONSHIP_TOPIC = sd.dds.topic_name(SCENE, RELATIONSHIP_STREAM, RELATIONSHIP)
 
+
+def schema_record(fqn: str) -> tuple:
+    """The IDL a lane's type is defined by, as `(schema name, bytes)`.
+
+    The pin's for a pinned type, and an extension's own record for this
+    repository's: its includes' closure, then its body, which is what a
+    recording embeds and what a gateway's model is built from. The pin does
+    not have an extension, and asked for one refuses. One function, so the
+    binding and the recorder cannot disagree about what a type is.
+    """
+    if fqn == RELATIONSHIP_EXTENSION.fqn:
+        return fqn.replace(".", "::"), RELATIONSHIP_EXTENSION.record
+    # Imported here: the server half is an extra, and most of this
+    # repository's programs only ever open lanes.
+    from spatialdds.server import pin
+    return pin.schema_record(fqn.replace(".", "::"))
+
 #: Names this deployment gives pinned types that §3.3.2 does not register.
 #: `blob_chunk` is the blob lane's: the spec leaves that lane unnamed
 #: (spatialdds-py candidates 9.6), so its announced `TopicMeta.type` is ours.

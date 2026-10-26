@@ -51,18 +51,21 @@ if str(REPO) not in sys.path:
 from mcap.writer import Writer  # noqa: E402
 
 import spatialdds as sd  # noqa: E402
-from spatialdds.server import mcapmeta, pin  # noqa: E402
+from spatialdds.server import mcapmeta  # noqa: E402
 
 from spatialdds_demo.lanes import (  # noqa: E402
-    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, SCENE)
+    MODEL_COMMAND, MODEL_FAST, MODEL_LATCHED, RELATIONSHIP,
+    RELATIONSHIP_STREAM, SCENE, schema_record)
 
 #: The lanes the demo publishes, by registered type, with the profile each is
-#: read with. The relationship lane is absent because `spatial.owm/0.1`
-#: carries no relationship type.
+#: read with, and any stream the type's row does not give. The relationship
+#: lane is the OWM 0.2 prototype's demo-owned extension (`spatial.owm/0.1`
+#: has none); its schema is its registration's own record.
 LANES = [
-    ("model_entity", MODEL_LATCHED),
-    ("model_pose", MODEL_FAST),
-    ("model_command", MODEL_COMMAND),
+    ("model_entity", MODEL_LATCHED, {}),
+    ("model_pose", MODEL_FAST, {}),
+    ("model_command", MODEL_COMMAND, {}),
+    (RELATIONSHIP, MODEL_LATCHED, {"stream": RELATIONSHIP_STREAM}),
 ]
 
 #: Removals are recorded only on lanes whose data is latched, and the reason is
@@ -93,9 +96,9 @@ def record(out: Path, seconds: float, domain_id: int,
     """Capture every lane for `seconds`, and return the provenance."""
     participant = sd.participant(SCENE, domain=domain_id)
     readers = [(type_name, participant.reader(type_name, qos_profile=qos,
-                                              settle_s=0.3))
-               for type_name, qos in LANES]
-    latched = {r.topic for (_t, r), (_n, qos) in zip(readers, LANES)
+                                              settle_s=0.3, **kw))
+               for type_name, qos, kw in LANES]
+    latched = {r.topic for (_t, r), (_n, qos, _kw) in zip(readers, LANES)
                if qos.latched}
 
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -118,6 +121,9 @@ def record(out: Path, seconds: float, domain_id: int,
         disposes: list[dict] = []
         unnamed_disposes = 0
         no_writer_ends = 0
+        # Per instance on a latched lane, each writer that left without
+        # withdrawing: a killed asserter's edges, which stand.
+        writer_left: list[dict] = []
         volatile_ends = 0
 
         deadline = started + seconds
@@ -129,6 +135,11 @@ def record(out: Path, seconds: float, domain_id: int,
                         # A writer leaving, not a removal anyone performed.
                         if not ev.alive:
                             no_writer_ends += 1
+                            if topic in latched and ev.key:
+                                writer_left.append({
+                                    "topic": topic, "key": ev.key,
+                                    "at_utc": time.strftime(
+                                        "%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
                         continue
                     if isinstance(ev, sd.Dispose):
                         if topic not in latched:
@@ -149,7 +160,7 @@ def record(out: Path, seconds: float, domain_id: int,
                     sample = ev.data
                     fqn = sd.dds.fqn_of(sample)
                     if fqn not in schemas:
-                        name, data = pin.schema_record(fqn.replace(".", "::"))
+                        name, data = schema_record(fqn)
                         schemas[fqn] = (writer.register_schema(
                             name=name, encoding="omgidl", data=data), data)
                     if topic not in channel_ids:
@@ -187,7 +198,8 @@ def record(out: Path, seconds: float, domain_id: int,
         "capture_seconds": round(elapsed, 2),
         "scene": SCENE,
         "dds_domain": domain_id,
-        "types": "spatial.owm/0.1 (provisional)",
+        "types": "spatial.owm/0.1 (provisional), and the OWM 0.2 "
+                 "prototype's oarc.relationship (demo-owned extension)",
         "spec_tag": sd.SPEC_TAG,
         "spec_commit": sd.SPEC_COMMIT,
         "idl_source": f"the IDL spatialdds {sd.__version__} ships "
@@ -207,6 +219,9 @@ def record(out: Path, seconds: float, domain_id: int,
         # Instances whose writer left rather than disposed. Counted and not
         # recorded: a publisher exiting is not a removal.
         "no_writer_instance_ends": no_writer_ends,
+        # Which of those were on latched lanes: records left standing by a
+        # writer that went away, e.g. an asserter that was killed.
+        "latched_writer_left": writer_left,
         # Instances that ended on a VOLATILE lane: counted, never recorded.
         "volatile_instance_ends": volatile_ends,
         "driven_by": driver,
@@ -234,8 +249,8 @@ def main() -> int:
 
     print(f"record: scene {SCENE}, domain {args.domain}, "
           f"{args.seconds:.0f}s")
-    for type_name, qos in LANES:
-        print(f"record: {sd.dds.topic_name(SCENE, None, type_name)}  "
+    for type_name, qos, kw in LANES:
+        print(f"record: {sd.dds.topic_name(SCENE, kw.get('stream'), type_name)}  "
               f"<- {type_name} ({qos.name})")
     prov = record(args.out, args.seconds, args.domain, args.driver)
     side = args.out.with_suffix(".provenance.json")
