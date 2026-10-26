@@ -50,6 +50,7 @@ from spatialdds.dds.types.spatial.owm import Basis, Entity, LifecycleState
 
 from spatialdds_demo import claims
 from spatialdds_demo.lanes import MODEL_FAST, MODEL_LATCHED, SCENE
+from spatialdds_demo.model_service import live_log
 
 ROBOT_ID = "ent:robot:tb3"
 FOUNTAIN_ID = "ent:fountain:littlefield"
@@ -173,6 +174,7 @@ class ZoneWatch:
 
 
 def run(evidence: str, domain_id: Optional[int] = None) -> int:
+    live_log()
     participant = sd.participant(SCENE, domain=domain_id,
                                  service_id=SOURCE_IDS[evidence])
     watch = ZoneWatch(participant, evidence)

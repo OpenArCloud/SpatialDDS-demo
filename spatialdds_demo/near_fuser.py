@@ -41,7 +41,7 @@ from spatialdds.dds.types.spatial.owm import Basis, Entity, LifecycleState
 from spatialdds_demo import claims
 from spatialdds_demo.duck_mover import AVOID_ENTITY_ID, AVOID_RADIUS_M
 from spatialdds_demo.lanes import MODEL_FAST, MODEL_LATCHED, SCENE
-from spatialdds_demo.model_service import TYPE_RUBBER_DUCK
+from spatialdds_demo.model_service import TYPE_RUBBER_DUCK, live_log
 
 SOURCE_ID = "svc:claims:demo/near"
 POLL_S = 0.1
@@ -150,6 +150,7 @@ class NearFuser:
 
 
 def run(domain_id: Optional[int] = None) -> int:
+    live_log()
     participant = sd.participant(SCENE, domain=domain_id, service_id=SOURCE_ID)
     fuser = NearFuser(participant)
     print(f"near_fuser: {SOURCE_ID} asserts {fuser.predicate} from "

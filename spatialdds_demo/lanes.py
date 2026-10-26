@@ -213,6 +213,7 @@ DECLARED_PROFILES = {
     "oarc.fusion_coverage": "MAP_META",
     "oarc.bootstrap_query": "MAP_META",
     "oarc.bootstrap_response": "MAP_META",
+    "oarc.relationship": "MODEL_LATCHED",  # latched per edge, as entities are
     "blob_chunk": "GEOM_TILE",
     "frame_transform": "MODEL_LATCHED",
     "model_entity": "MODEL_LATCHED",

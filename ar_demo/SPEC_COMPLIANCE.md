@@ -463,14 +463,17 @@ protocol — flows this demo needs and the spec does not describe.
 | `oarc.fusion_coverage` | `oarc_demo::FusionCoverage` | No type for fusion coverage metrics — a per-operator "no single source could build this" scoreboard, an aggregate diagnostic rather than track content |
 | `oarc.bootstrap_query` | `oarc_demo::BootstrapQuery` | No bootstrap exchange. A participant is assumed to know its domain id and QoS profile already, which is exactly what a fresh device does not |
 | `oarc.bootstrap_response` | `oarc_demo::BootstrapResponse` | as above |
-<!-- extension-count: 3 -->
-Three, down from twelve. The catalogue's pair (`oarc.catalog_query` /
+| `oarc.relationship` | `oarc_owm::Relationship` | `spatial.owm/0.1` reserves relationships as open design. This prototypes the 0.2 design's Relationship against the running venue, as `oarc_model` prototyped 0.1, to produce evidence for that design rather than wire text (`docs/owm-02-census.md`, `docs/owm-02-worked-example.md`) |
+<!-- extension-count: 4 -->
+Four. Three are what is left of twelve, and the fourth is new: the OWM 0.2
+relationship prototype. The catalogue's pair (`oarc.catalog_query` /
 `oarc.catalog_response`) retired in the 1.8 migration, when the catalogue moved
 onto `ContentAnnounce` → content manifest — see "The catalogue, on 1.8's own
 chain" below. The world-model rows that stood here went earlier, when the
 model lanes moved onto 1.8's registered `model_entity` (§3.3.2).
 `tests/test_topic_discovery.py` holds this table and that count to
-`topic_types.EXTENSIONS`.
+`lanes.EXTENSIONS` (it named `topic_types.EXTENSIONS` until the SDK adoption
+retired that module).
 
 ### `oarc_model` — the prototype that became `spatial.owm/0.1`
 
