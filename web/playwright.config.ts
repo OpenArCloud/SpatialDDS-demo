@@ -35,12 +35,12 @@ export default defineConfig({
   projects: [
     {
       name: 'stack',
-      testMatch: /(model-stack|robot-goto|robot-captures)\.spec\.ts/,
+      testMatch: /(model-stack|robot-goto|robot-captures|claims-stack)\.spec\.ts/,
       workers: 1
     },
     {
       name: 'isolated',
-      testIgnore: /(model-stack|robot-goto|robot-captures)\.spec\.ts/
+      testIgnore: /(model-stack|robot-goto|robot-captures|claims-stack)\.spec\.ts/
     }
   ],
   webServer: {
