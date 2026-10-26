@@ -288,7 +288,13 @@ asserter's edge looked exactly like a live one.
 | `web/tests/claims-store.spec.ts` (6) | the panel's store against a fixture the binding's own projection wrote | 2 |
 | `web/tests/claims-stack.spec.ts` (2) | the panel, the filter, the robot driven in and out, the fountain lit and unlit | 1 |
 
-**Suites:** in the batch report.
+**Suites.**
+- The full tier: 13 passed, 0 failed. Its host suite: 631 passed and 20
+  skipped, including this batch's 15 tests.
+- Playwright, against the stack and the nav2 tier:
+  - the stack project 14 of 14, in its normal order;
+  - the isolated project 85 passed and 3 skipped, the same three as before
+    the batch.
 
 ## 3. Proposed edits to the 0.2 design document
 
@@ -359,12 +365,17 @@ there. Each names its origin.
     operator-scoped;
   - two observations: registrations cannot be looked up, and `extend()`
     resolves includes from the pin's root.
+- **Filed against spatialdds-ros, as its finding 12:** a goal sent while
+  nav2 is still finishing the last one is a preemption, and nav2 reported
+  the *new* goal succeeded at the old goal's position in the same tick. The
+  robot never moved, and SUCCEEDED owes no refusal, so nothing reached the
+  record. Measured from nav2's log; `claims-stack.spec.ts` and the film
+  driver now wait for the robot to stand still before the next goal.
 - **Seen on the robot tier, not filed:** a goal sent mid-route at the
   pond's south-east corner left the robot inside the keep-out's shoulder.
   From there nav2 abandoned every later goal, and each abandonment reached
   the robot's record as a refusal (spatialdds_ros 0.4.1), until the tier
-  restarted. Reproduced twice while writing `claims-stack.spec.ts`, which
-  now waits for each arrival.
+  restarted. Seen twice while writing `claims-stack.spec.ts`.
 - **Deferred, as the brief states:**
   - same-as, paired with the awareness adoption;
   - HTTP claim publishing;
