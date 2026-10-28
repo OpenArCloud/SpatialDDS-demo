@@ -298,8 +298,10 @@ asserter's edge looked exactly like a live one.
 
 ## 3. Proposed edits to the 0.2 design document
 
-Each is filed against the design document, in the spec repo, once it lands
-there. Each names its origin.
+Each is filed against the design document, which is in the spec repo as a
+proposal: [`proposals/owm-0.2-relationships/`](https://github.com/OpenArCloud/SpatialDDS-spec/tree/main/proposals/owm-0.2-relationships). E1, E2, E3 and E5's
+causes were ruled and are made there; the rest are in its `edits.md`, open
+for the working group. Each names its origin.
 
 - **E1. Consumption: silence is not a contrary claim.** Verbatim, as ruled.
   Example: two near asserters at 6 m and at 15 m. Between 6 and 15 m one

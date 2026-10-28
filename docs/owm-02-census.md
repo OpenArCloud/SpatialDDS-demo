@@ -222,6 +222,7 @@ Ruled as asked, with three changes made during the build:
 - **The lifecycle members.** They are `state` and `state_reason`, not the
   brief's `lifecycle` and `reason`, because the SDK's `withdraw()` finds
   them by those names.
-- **The 0.2 design document.** It is to land in the spec repository as a
-  proposal; the edits this batch produces are listed in
-  [`owm-02-worked-example.md`](owm-02-worked-example.md) §3, until it does.
+- **The 0.2 design document.** It is in the spec repository as a
+  proposal, [`proposals/owm-0.2-relationships/`](https://github.com/OpenArCloud/SpatialDDS-spec/tree/main/proposals/owm-0.2-relationships), with the edits
+  this batch produces filed against it (listed also in
+  [`owm-02-worked-example.md`](owm-02-worked-example.md) §3).
