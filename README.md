@@ -55,6 +55,13 @@ cd web && VITE_SPATIALDDS_BINDING_URL=http://localhost:5173 \
 
 The two variables let **Send Robot** carry its credential through the dev
 server's proxy; plain `npm run dev` still shows the venue live.
+The **Claims** overlay, on by default, draws the OWM 0.2 prototype's edges in
+the scene coloured by basis, with a strip below that shows each one's life
+and whether it ended because the relationship did or because its asserter
+stopped saying so; click any edge for its provenance, and a derived one lights
+the evidence it was computed from. Switching **Claims** off returns the venue
+to exactly what `spatial.owm/0.1` alone draws, which is the before and after
+of what 0.2 adds.
 **[Full recipe →](docs/ismar-owm.md)**
 
 ## Demos

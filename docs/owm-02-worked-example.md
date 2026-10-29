@@ -11,6 +11,11 @@ design's shape (`idl/demo18/oarc_owm02.idl`). It is not spec text, and the
 spec is unchanged. The census and the ruling behind every choice here are
 in [`owm-02-census.md`](owm-02-census.md).
 
+To watch these records rather than read them, open the venue with the
+**Claims** overlay on ([README §2](../README.md#2--open-world-model)): each
+edge drawn where its parties are, a strip of their lifetimes, and a
+provenance card per edge.
+
 **The session.** `recordings/owm-02-lifecycle.mcap`, 540 s on the stack as
 it ships: `spatialdds[dds,server]==0.7.3`, `spatialdds_ros==0.4.1` on the
 nav2 tier, and every asserter running. `tools/capture_owm02_lifecycle.sh`
