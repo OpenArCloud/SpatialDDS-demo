@@ -24,7 +24,7 @@
           <button id="btnToggleDdsOverlay" type="button">DDS Messages: Off</button>
           <button id="btnToggleRestOverlay" type="button">REST Messages: Off</button>
           <button id="btnSendRobot" type="button">Send Robot: Off</button>
-          <button id="btnToggleClaims" type="button">Claims: Off</button>
+          <button id="btnToggleClaims" type="button" class="prominent" aria-pressed="true" title="The world model's claims about the venue: edges in the scene, the timeline strip and the provenance card">Claims: On</button>
           <button id="btnClear" type="button">Clear</button>
         </div>
         <pre id="readout">status: idle</pre>
@@ -54,6 +54,15 @@
         </div>
         <div id="claimsOverlayBody"></div>
       </div>
+      <div id="claimsStrip" aria-label="Claims timeline">
+        <div id="claimsStripHeader">
+          <span class="stripTitle">Claims <span class="stripWindow">last 3 min</span></span>
+          <span id="claimsLegend"></span>
+          <button id="btnClaimsTable" type="button" title="Every edge in force, as a table">Table</button>
+        </div>
+        <div id="claimsStripBody"></div>
+      </div>
+      <div id="claimCard" class="hidden" role="dialog" aria-label="Claim provenance"></div>
       <div id="cesiumContainer"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>

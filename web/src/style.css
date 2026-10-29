@@ -205,8 +205,8 @@ body {
    open beside the DDS and REST panels. A table, not a graph view, as ruled. */
 #claimsOverlay {
   position: absolute;
-  bottom: 12px;
-  left: 12px;
+  bottom: calc(var(--strip-h) + var(--strip-bottom) + 12px);
+  left: var(--strip-left);
   width: min(640px, 92vw);
   max-height: 45vh;
   z-index: 12;
@@ -277,4 +277,368 @@ body {
   color: #8fa3bd;
   text-transform: uppercase;
   letter-spacing: 0.4px;
+}
+
+/* -- the claims overlay -------------------------------------------------------
+   One switch (the toolbar's Claims button) over the edges in the scene, this
+   strip, the provenance card and the table. The strip sits clear of the
+   toolbar column so neither covers the other. */
+:root {
+  --strip-left: 252px;
+  --strip-h: 140px;
+  --strip-bottom: 36px;
+  --claims-ground: rgba(8, 12, 18, 0.9);
+  --claims-rule: rgba(255, 255, 255, 0.08);
+  --claims-ink: #e9eef5;
+  --claims-quiet: #8fa3bd;
+}
+
+#controls button.prominent {
+  border-color: rgba(233, 238, 245, 0.55);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+#controls button.prominent[aria-pressed='true'] {
+  background: #e9eef5;
+  color: #0b0f14;
+}
+
+#controls button.prominent[aria-pressed='true']:hover {
+  background: #ffffff;
+}
+
+#controls button.prominent:focus-visible,
+#claimsStrip button:focus-visible,
+#claimCard button:focus-visible {
+  outline: 2px solid #9cc7ff;
+  outline-offset: 2px;
+}
+
+#claimsStrip {
+  position: absolute;
+  left: var(--strip-left);
+  right: 12px;
+  /* Clear of Cesium's timeline along the bottom edge. */
+  bottom: var(--strip-bottom);
+  height: var(--strip-h);
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  background: var(--claims-ground);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: var(--claims-ink);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+
+#claimsStrip.hidden {
+  display: none;
+}
+
+#claimsStripHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--claims-rule);
+  font-size: 11px;
+}
+
+.stripTitle {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.stripWindow {
+  margin-left: 4px;
+  font-weight: 400;
+  color: var(--claims-quiet);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+#claimsLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  flex: 1;
+  color: var(--claims-quiet);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.legendGap {
+  width: 6px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+#btnClaimsTable {
+  padding: 3px 9px;
+  font-size: 11px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #1f2a3a;
+  color: var(--claims-ink);
+  cursor: pointer;
+}
+
+#btnClaimsTable:hover {
+  background: #2b3a52;
+}
+
+#claimsStripBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 6px;
+  font-size: 11px;
+}
+
+.claimAxis,
+.claimGroup {
+  display: grid;
+  grid-template-columns: minmax(180px, 30%) 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.claimAxis {
+  position: sticky;
+  top: 0;
+  height: 18px;
+  background: var(--claims-ground);
+  z-index: 1;
+}
+
+.claimTicks {
+  position: relative;
+  height: 100%;
+}
+
+.claimTick {
+  position: absolute;
+  top: 3px;
+  transform: translateX(-50%);
+  color: var(--claims-quiet);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.claimTick:first-child {
+  transform: none;
+}
+
+.claimTick:last-child {
+  transform: translateX(-100%);
+}
+
+.claimGroup {
+  padding: 3px 0;
+  border-top: 1px solid var(--claims-rule);
+}
+
+.claimGroupLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.claimProp {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asserterBadge {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--claims-quiet);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.claimTracks {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* The track carries the minute grid, so bars can be read against time. */
+.claimTrack {
+  position: relative;
+  height: 9px;
+  background-image: linear-gradient(to right, var(--claims-rule) 1px, transparent 1px);
+  background-size: 33.333% 100%;
+}
+
+.claimBar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px 0 0 3px;
+  background: var(--basis);
+  cursor: pointer;
+}
+
+.claimBar:hover,
+.claimBar.selected {
+  box-shadow: 0 0 0 1.5px #ffffff;
+}
+
+/* In force: runs to now, with a soft leading edge. */
+.claimBar[data-end-kind='open'] {
+  box-shadow: 4px 0 8px -2px var(--basis);
+}
+
+/* The relationship ended: the world changed. A hard cap. */
+.claimBar[data-end-kind='relationship'] {
+  border-right: 3px solid #ffffff;
+}
+
+/* The assertion ended: somebody stopped saying it. It fades rather than
+   stops, and its edge is dotted, because the world was not consulted. */
+.claimBar[data-end-kind='assertion'] {
+  background: linear-gradient(to right, var(--basis) 55%, transparent);
+  border-right: 2px dotted var(--basis);
+}
+
+/* In force, and nobody asserts it now. */
+.claimBar[data-writer-gone='true'] {
+  background: repeating-linear-gradient(-45deg, var(--basis) 0 4px,
+    transparent 4px 7px);
+}
+
+.endSample {
+  width: 22px;
+  height: 8px;
+  border-radius: 2px 0 0 2px;
+  background: #8fa3bd;
+}
+
+.endSample.relationship {
+  border-right: 3px solid #ffffff;
+}
+
+.endSample.assertion {
+  background: linear-gradient(to right, #8fa3bd 50%, transparent);
+  border-right: 2px dotted #8fa3bd;
+}
+
+.claimEmpty {
+  padding: 10px 0;
+  color: var(--claims-quiet);
+}
+
+#claimCard {
+  position: absolute;
+  right: 12px;
+  bottom: calc(var(--strip-h) + var(--strip-bottom) + 12px);
+  width: min(360px, 90vw);
+  max-height: 52vh;
+  overflow: auto;
+  z-index: 13;
+  background: rgba(8, 12, 18, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  color: var(--claims-ink);
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+}
+
+#claimCard.hidden {
+  display: none;
+}
+
+.claimCardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--claims-rule);
+}
+
+.claimCardTitle {
+  flex: 1;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.claimCardClose {
+  border: 0;
+  background: transparent;
+  color: var(--claims-quiet);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.claimCardClose:hover {
+  color: #ffffff;
+}
+
+#claimCard table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4px 0;
+}
+
+#claimCard th,
+#claimCard td {
+  text-align: left;
+  vertical-align: top;
+  padding: 3px 10px;
+}
+
+#claimCard th {
+  width: 92px;
+  color: var(--claims-quiet);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+#claimCard td {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.claimCardEnd,
+.claimCardCited {
+  margin: 4px 10px 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--claims-quiet);
+}
+
+.claimCardEnd.relationship {
+  border-left: 3px solid #ffffff;
+}
+
+.claimCardEnd.assertion {
+  border-left: 2px dotted var(--claims-quiet);
+}
+
+.claimCardCited {
+  border-left: 3px solid #ffffff;
+  color: var(--claims-ink);
 }

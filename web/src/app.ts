@@ -11,6 +11,8 @@ import { LOOKING_NORTH_UPRIGHT, mockDiscover, mockLocalize }
 import {
   ClaimStore, predicateLabel, subscribeClaims, validity, type Claim
 } from './claims';
+import { ClaimsOverlay } from './claims_overlay';
+import { basisCss } from './claims_view';
 import {
   BRIDGE_URL, bridgeDiscover, bridgeFindService, bridgeHealth, bridgeLocalize,
   BASIS_VALUES, catalogRefId,
@@ -44,7 +46,11 @@ const modeBadgeEl = document.getElementById('modeBadge') as HTMLSpanElement | nu
 const ddsOverlayEl = document.getElementById('ddsOverlay') as HTMLDivElement | null;
 const ddsOverlayBodyEl = document.getElementById('ddsOverlayBody') as HTMLPreElement | null;
 const toggleClaimsBtn = document.getElementById('btnToggleClaims') as HTMLButtonElement | null;
+const claimsTableBtn = document.getElementById('btnClaimsTable') as HTMLButtonElement | null;
 const claimsOverlayEl = document.getElementById('claimsOverlay') as HTMLDivElement | null;
+const claimsStripEl = document.getElementById('claimsStrip') as HTMLDivElement | null;
+const claimsStripBodyEl = document.getElementById('claimsStripBody') as HTMLDivElement | null;
+const claimCardEl = document.getElementById('claimCard') as HTMLDivElement | null;
 const claimsBodyEl = document.getElementById('claimsOverlayBody') as HTMLDivElement | null;
 const claimsAsserterEl = document.getElementById('claimsAsserter') as HTMLSelectElement | null;
 
@@ -100,6 +106,10 @@ let modelUnsubscribe: (() => void) | null = null;
 // highlight alike, so the two cannot disagree about what is in force.
 const claimStore = new ClaimStore();
 let claimsUnsubscribe: (() => void) | null = null;
+// The overlay: edges in the scene, the strip and the card, behind the one
+// Claims switch. Made once the viewer exists.
+let claimsOverlay: ClaimsOverlay | null = null;
+// The table of edges in force, now a detail view opened from the strip.
 let claimsVisible = false;
 // The validity column reads "4.2 s ago", which goes stale between events.
 let claimsTimer: number | null = null;
@@ -979,10 +989,24 @@ function connectClaimsStream() {
       if (line) {
         appLog(line);
       }
+      claimsOverlay?.apply(ev);
       renderClaims();
       applyContainmentHighlight();
     }
   });
+}
+
+/** The overlay, once there is a viewer to draw it in. */
+function ensureClaimsOverlay(): ClaimsOverlay | null {
+  if (claimsOverlay || !viewer || !claimsStripEl || !claimsStripBodyEl || !claimCardEl) {
+    return claimsOverlay;
+  }
+  claimsOverlay = new ClaimsOverlay({
+    viewer,
+    item: (id) => modelItems.get(id),
+    onVisibilityChange: () => applyContainmentHighlight()
+  }, claimStore, claimsStripEl, claimsStripBodyEl, claimCardEl);
+  return claimsOverlay;
 }
 
 /**
@@ -1000,7 +1024,9 @@ function applyContainmentHighlight() {
   if (!viewer) {
     return;
   }
-  const lit = claimStore.containment();
+  // Part of the overlay: switched off, the venue is drawn as it was before it.
+  const lit = claimsOverlay?.visible === false
+    ? new Map<string, Set<string>>() : claimStore.containment();
   for (const zone of new Set([...highlightedZones, ...lit.keys()])) {
     const box = viewer.entities.getById(`${zone}-extent`)?.box;
     if (!box) {
@@ -1075,10 +1101,29 @@ function renderClaims() {
   claimsBodyEl.replaceChildren(...parts);
 }
 
+/**
+ * The one switch: every claims element in the scene, the strip, the card and
+ * the table. Its label is the demo's thesis, so it says plainly what it
+ * shows; off, the venue renders as it did before the overlay existed.
+ */
 function toggleClaims() {
-  claimsVisible = !claimsVisible;
+  const overlay = ensureClaimsOverlay();
+  const on = !(overlay?.visible ?? true);
+  overlay?.setVisible(on);
   if (toggleClaimsBtn) {
-    toggleClaimsBtn.textContent = `Claims: ${claimsVisible ? 'On' : 'Off'}`;
+    toggleClaimsBtn.textContent = `Claims: ${on ? 'On' : 'Off'}`;
+    toggleClaimsBtn.setAttribute('aria-pressed', String(on));
+  }
+  if (!on && claimsVisible) {
+    toggleClaimsTable();
+  }
+}
+
+/** The table of edges in force, opened from the strip. */
+function toggleClaimsTable() {
+  claimsVisible = !claimsVisible;
+  if (claimsTableBtn) {
+    claimsTableBtn.textContent = claimsVisible ? 'Hide table' : 'Table';
   }
   claimsOverlayEl?.classList.toggle('hidden', !claimsVisible);
   if (claimsTimer !== null) {
@@ -1585,17 +1630,14 @@ function isUnobserved(item: CatalogItem): boolean {
   return (item.entity as ModelEntity | undefined)?.state === 'UNOBSERVED';
 }
 
+/**
+ * OBSERVED measured (the tiles saw it), DECLARED asserted by the venue,
+ * DERIVED computed by somebody, AUTHORED or unstated grey. The palette is
+ * the claims overlay's too (`claims_view.BASIS_CSS`), so an edge and a box
+ * that are the same kind of claim are the same colour.
+ */
 function extentColour(basis: string | undefined): Cesium.Color {
-  switch (basis) {
-    case 'OBSERVED':                            // measured; the tiles saw it
-      return Cesium.Color.fromCssColorString('rgba(95, 196, 205, 0.9)');
-    case 'DECLARED':                            // asserted by the venue
-      return Cesium.Color.fromCssColorString('rgba(240, 196, 78, 0.9)');
-    case 'DERIVED':                             // computed by somebody
-      return Cesium.Color.fromCssColorString('rgba(197, 128, 240, 0.9)');
-    default:                                    // AUTHORED, or unstated
-      return Cesium.Color.fromCssColorString('rgba(200, 200, 200, 0.75)');
-  }
+  return Cesium.Color.fromCssColorString(basisCss(basis));
 }
 
 function addItemEntity(item: CatalogItem) {
@@ -2214,6 +2256,12 @@ export function initApp() {
     (window as any).__sendRobotTo = sendRobotTo;
     (window as unknown as Record<string, unknown>).__viewer = viewer;
   }
+  // On from the start: the claims are the demo's thesis, and the switch is
+  // for the before/after, not for finding them.
+  const overlay = ensureClaimsOverlay();
+  if (new URLSearchParams(location.search).has('debug')) {
+    (window as any).__claimsOverlay = overlay;
+  }
 
   viewer.scene.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(START_LON, START_LAT, START_HEIGHT_M),
@@ -2284,6 +2332,9 @@ export function initApp() {
 
   toggleClaimsBtn?.addEventListener('click', () => {
     toggleClaims();
+  });
+  claimsTableBtn?.addEventListener('click', () => {
+    toggleClaimsTable();
   });
   claimsAsserterEl?.addEventListener('change', () => renderClaims());
 

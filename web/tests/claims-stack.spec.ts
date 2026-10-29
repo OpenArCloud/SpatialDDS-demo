@@ -49,8 +49,9 @@ const rows = (page: any) => page.locator('#claimsOverlayBody table').first()
 
 test('the panel lists every asserter, and the filter shows one', async ({ page }) => {
   await readyPage(page);
-  await page.locator('#btnToggleClaims').click();
+  // The table is a detail view of the overlay, which is on by default.
   await expect(page.locator('#btnToggleClaims')).toHaveText('Claims: On');
+  await page.locator('#btnClaimsTable').click();
   // The declared edges are always there: two part-of, three ducks within.
   await expect.poll(async () => rows(page).count(), { timeout: 20_000 })
     .toBeGreaterThanOrEqual(5);
@@ -72,7 +73,7 @@ test('the robot in the fountain: two rows, and the fountain lit', async ({ page,
   // left it: 240 s was measured too little in the full suite.
   test.setTimeout(480_000);
   await readyPage(page);
-  await page.locator('#btnToggleClaims').click();
+  await page.locator('#btnClaimsTable').click();
   const lit = () => page.evaluate((id: string) => {
     const box = (window as any).__viewer.entities.getById(`${id}-extent`)?.box;
     return box ? box.outlineWidth.getValue() : null;
