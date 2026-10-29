@@ -1,13 +1,17 @@
-"""The cyclonedds `wait_for_acks` workaround in `spatialdds_demo.lanes`, held to its reason.
+"""A clean stop with a peer that cannot ack finishes, on the SDK alone.
 
-Two checks. The bug is still in the installed cyclonedds, so the workaround
-still has a reason to exist (when this fails, delete the workaround and this
-file). And with it in place, a timeout is False, as documented, so the SDK's
-`close()` finishes. The second needs a bus and a reader that cannot ack, so it
-runs in the demo image (CYCLONEDDS_URI set) and skips elsewhere.
+cyclonedds-python 11.0.1's `DataWriter.wait_for_acks` raises AttributeError
+where it is documented to return False (`pub.py:325`), so the SDK's
+`close()`, which awaits acks after each dispose and Depart, exited with a
+traceback and skipped its remaining flushes. This repository patched
+cyclonedds in `spatialdds_demo.lanes` until spatialdds 0.7.4, which reads
+that AttributeError as the timeout it is (spatialdds-py S17). The patch is
+gone, and these hold the SDK to the fix: nothing here patches cyclonedds,
+and an unacked flush is False and `close()` finishes. The second needs a bus
+and a reader that cannot ack, so it runs in the demo image (CYCLONEDDS_URI
+set) and skips elsewhere.
 """
 
-import inspect
 import os
 import signal
 import subprocess
@@ -22,23 +26,21 @@ if str(REPO) not in sys.path:
 
 
 class AckTimeout(unittest.TestCase):
-    def test_the_bug_is_still_there(self):
+    def test_nothing_here_patches_cyclonedds(self):
         from cyclonedds.pub import DataWriter
 
-        from spatialdds_demo import lanes
+        from spatialdds_demo import lanes  # noqa: F401  -- what used to patch
 
-        self.assertTrue(lanes.ACK_TIMEOUT_WORKAROUND)
-        source = inspect.getsource(DataWriter.wait_for_acks._oarc_broken)
-        self.assertIn("Exception.DDS_RETCODE_TIMEOUT", source,
-                      "cyclonedds no longer has the wait_for_acks bug: remove "
-                      "the workaround in spatialdds_demo/lanes.py and this test")
+        self.assertFalse(hasattr(DataWriter.wait_for_acks, "_oarc_workaround"),
+                         "cyclonedds is patched again: the SDK owns this "
+                         "(spatialdds 0.7.4, S17)")
 
     def test_a_close_with_a_reader_that_cannot_ack_finishes(self):
         if not os.getenv("CYCLONEDDS_URI"):
             raise unittest.SkipTest("DDS-UNAVAILABLE: run in the demo image")
         import spatialdds as sd
 
-        from spatialdds_demo import lanes  # noqa: F401  -- the workaround
+        from spatialdds_demo import lanes  # noqa: F401  -- as every process does
 
         domain = 44
         topic = "spatialdds/ack/x/geopose/v1"
@@ -60,7 +62,7 @@ class AckTimeout(unittest.TestCase):
             for i in range(200):
                 w.write(sd.geopose(30.0 + i * 1e-4, -97.0))
             self.assertFalse(w._flush(0.5), "an unacked flush is False")
-            p.close(flush_s=0.5)          # raised AttributeError without it
+            p.close(flush_s=0.5)          # raised AttributeError until 0.7.4
         finally:
             child.kill()
             child.wait()
