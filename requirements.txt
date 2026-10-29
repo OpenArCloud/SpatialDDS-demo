@@ -46,7 +46,10 @@ pytest>=7.0.0
 # the first time: the pose floor, writers that do not dispose on exit, and the
 # awareness node, installed and unconfigured (it refuses to start without its
 # parameters).
-spatialdds_ros==0.4.1
+# 0.4.1 -> 0.4.2 on 2026-10-28: nav2 reporting success far from the goal
+# (the preemption the OWM 0.2 prototype measured, its finding 12) reaches the
+# robot's record as a refusal, in `nav.status`, rather than nothing.
+spatialdds_ros==0.4.2
 
 # The SDK this repository's plumbing runs on: the native participant
 # (`[dds]`) and the embedded gateway the web bridge serves the binding with
@@ -62,4 +65,12 @@ spatialdds_ros==0.4.1
 # bridges read), frames carry their derived uuid (so SDK announces pass this
 # repository's discovery core), and an announce lists the lanes a service reads
 # (spatialdds-py finding 70, S11-S15, found here).
-spatialdds[dds,server]==0.7.3
+# 0.7.3 -> 0.7.4 on 2026-10-28: what this repository found, fixed (findings
+# 71 and 72), and the three labelled workarounds for it gone. `sd.stamp`
+# normalises (S16), so `payloads.stamp` is retired; `close()` reads
+# cyclonedds' ack-timeout AttributeError as the timeout it is (S17), so
+# `lanes` no longer patches cyclonedds; and `withdraw()` takes the type's
+# other members (S18), so a retired edge is one terminal sample, not two.
+# It also publishes a schema for an extension (S19) and serves a recorded
+# lane with the durability its writer opened (S20).
+spatialdds[dds,server]==0.7.4
