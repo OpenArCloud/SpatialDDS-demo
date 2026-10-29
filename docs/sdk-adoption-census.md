@@ -461,7 +461,7 @@ below to the tree at the census.
 
 <!-- census:shrink -->
 - `spatialdds_demo/` at f4890e8: 24 modules, 6744 lines
-- `spatialdds_demo/` now: 19 modules, 5863 lines (-881, -13%)
+- `spatialdds_demo/` now: 19 modules, 5847 lines (-897, -13%)
 - `spatialdds_idl18`: 3813 -> 0 lines
 - `spatialdds_demo_idl18`: 120 -> 205 lines
 - gone: blob (184), dds_transport (264), discovery_bus (256), json_mapping (267), qos_profiles (210), tempo (120), topic_types (189), topics (266), typed_transport (356)

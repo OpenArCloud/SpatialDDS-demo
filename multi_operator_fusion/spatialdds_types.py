@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence
 
+import spatialdds as sd
+
 from spatialdds_demo import payloads
 from spatialdds_demo import lanes as _lanes
 
@@ -33,7 +35,7 @@ SCHEMA_EVENTS = payloads.SCHEMA_EVENTS
 # The primitives and the spec-type builders live in spatialdds_demo.payloads
 # so this module and the ROS 2 bridge cannot grow different ideas of what a
 # Detection3D looks like. They did, and both were wrong.
-_stamp = payloads.stamp
+_stamp = sd.stamp
 
 
 _vec = payloads.vec

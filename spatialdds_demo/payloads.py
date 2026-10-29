@@ -25,6 +25,9 @@ from __future__ import annotations
 import uuid as _uuid
 from typing import Any, Dict, List, Sequence
 
+# The SDK's core only: `spatialdds` imports no CycloneDDS until `.dds` is.
+from spatialdds import stamp as _sd_stamp
+
 SCHEMA_CORE = "spatial.core/1.8"
 SCHEMA_SEMANTICS = "spatial.semantics/1.8"
 SCHEMA_EVENTS = "spatial.events/1.8"
@@ -35,25 +38,6 @@ SCHEMA_DISCOVERY = "spatial.discovery/1.8"
 #: `{"discriminator": "COV_NONE", "none": 0}` in the demo's own JSON dialect
 #: until the SDK adoption retired that dialect.
 COV_NONE = {"type": "COV_NONE"}
-
-
-def stamp(timestamp_s: float) -> Dict[str, Any]:
-    """Float epoch seconds as a ``builtin::Time``, in N.1: `sec` is int64, so a
-    decimal string.
-
-    The census has this REPLACED by `sd.stamp`, and it stays, labelled, until
-    that normalises: in spatialdds 0.7.3, `sd.stamp(5.9999999999)` has
-    `nanosec` 1000000000 and `sd.stamp(-0.25)` is +0.75 s (spatialdds-py S16).
-    This one carries both into range."""
-    sec = int(timestamp_s)
-    nsec = int(round((timestamp_s - sec) * 1_000_000_000))
-    if nsec >= 1_000_000_000:
-        sec += 1
-        nsec -= 1_000_000_000
-    elif nsec < 0:
-        sec -= 1
-        nsec += 1_000_000_000
-    return {"sec": str(sec), "nanosec": nsec}
 
 
 def vec(value, keys: Sequence[str] = ("x", "y", "z"),
@@ -76,9 +60,9 @@ def vec(value, keys: Sequence[str] = ("x", "y", "z"),
 #: publisher as correct by construction -- so this restates exactly what a
 #: 1.7 FrameRef said. The one source for it: ``spatialdds_demo.absent``
 #: derives the typed form from this, and every dict builder splats it, so
-#: there is no second copy of the claim to drift. Kept here, in a stdlib-only
-#: module, rather than in ``absent`` so that building a dict never has to
-#: import CycloneDDS.
+#: there is no second copy of the claim to drift. Kept here, in a module that
+#: imports no CycloneDDS, rather than in ``absent``, so that building a dict
+#: never has to.
 ABSENT_SCALE = {
     "has_scale": False,
     "scale_status": "SCALE_UNKNOWN",
@@ -182,7 +166,7 @@ def framed_pose(x: float, y: float, z: float, q: Sequence[float],
                  "q": vec(q, ("x", "y", "z", "w"))},
         "frame_ref": frame_ref(frame_ref_fqn),
         "cov": dict(COV_NONE),
-        "stamp": stamp(timestamp_s),
+        "stamp": _sd_stamp(timestamp_s),
     }
 
 
@@ -219,7 +203,7 @@ def detection3d(det_id: str, class_id: str, score: float,
         "cov_rot": [0.0] * 9,
         "has_track_id": False,
         "track_id": "",
-        "stamp": stamp(timestamp_s),
+        "stamp": _sd_stamp(timestamp_s),
         "source_id": str(source_id),
         "has_attributes": False,
         # MetaKV carries typed `entries` (a sequence of common::KV) as well
@@ -259,6 +243,6 @@ def detection_set(set_id: str, source_operator: str, frame_ref_fqn: str,
         "has_tile": False,
         "tile_key": {"level": 0, "x": 0, "y": 0, "z": 0},
         "dets": list(dets),
-        "stamp": stamp(timestamp_s),
+        "stamp": _sd_stamp(timestamp_s),
         "source_id": str(source_operator),
     }

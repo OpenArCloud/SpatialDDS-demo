@@ -13,7 +13,8 @@ the only thing that would ever have noticed is a strict peer.
 
 So the hand-written constants are asserted equal to the generated ones.
 They stay literals in ``payloads`` rather than imports, because that module
-is deliberately stdlib-only; this gate is the price of that choice.
+deliberately imports no generated types (only the SDK's core, for
+``stamp``); this gate is the price of that choice.
 """
 from __future__ import annotations
 
