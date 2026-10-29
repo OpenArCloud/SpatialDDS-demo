@@ -158,11 +158,21 @@ class Writer(unittest.TestCase):
                          RelationshipLifecycle.REVISED)
 
     def test_retirement_is_a_terminal_sample_with_its_reason_then_a_dispose(self):
+        # Every sample, not the last per instance, so two terminal samples
+        # are not folded into one before they are counted. History is the
+        # reader's own and plays no part in matching.
+        every = self.watcher.reader(
+            RELATIONSHIP, stream=claims.STREAM, qos_profile=dataclasses.replace(
+                MODEL_LATCHED, name="TEST_EVERY", history="KEEP_ALL"))
         self.claims.hold(ROBOT, claims.SF_WITHIN, FOUNTAIN, Basis.OBSERVED,
                          valid_from=claims.to_time(10))
         self.claims.retire(ROBOT, claims.SF_WITHIN, FOUNTAIN,
                            claims.NO_LONGER_HOLDS, "it left",
                            valid_until=claims.to_time(20))
+        retired = [s for s in samples(gather(every, lambda ev: disposes(ev)))
+                   if s.state == RelationshipLifecycle.RETIRED]
+        self.assertEqual(len(retired), 1, "one terminal sample, not two: the "
+                         "SDK's withdraw() closes valid_until (0.7.4, S18)")
         events = gather(self.reader, lambda ev: disposes(ev))
         terminal = samples(events)[-1]
         self.assertEqual(terminal.state, RelationshipLifecycle.RETIRED)

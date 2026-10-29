@@ -197,25 +197,23 @@ class ClaimWriter:
     def retire(self, subject: str, predicate: str, obj: str, cause: str,
                detail: str, valid_until: Optional[Time] = None
                ) -> Optional[Relationship]:
-        """Withdraw a held proposition: terminal sample, then dispose.
+        """Withdraw a held proposition: one terminal sample, then dispose.
 
-        The terminal sample is written here first because it carries
-        `valid_until`, which the SDK's `withdraw()` cannot set: it rewrites
-        only `state`, `state_reason` and `stamp`, the members it finds by
-        name. `withdraw()` then writes it once more, restamped, and disposes.
+        The SDK's `withdraw()` writes the terminal sample with `valid_until`
+        closed as given, and disposes (spatialdds 0.7.4). Until then it could
+        set only `state`, `state_reason` and `stamp`, so this wrote the
+        terminal sample itself first and every retirement carried two (S18).
+        Returns the edge as it was last held, or None if it was not.
         """
         rid = edge_id(self.asserter, subject, predicate, obj)
         prior = self._held.pop(rid, None)
         if prior is None:
             return None
-        reason = f"{cause}: {detail}"
-        terminal = dataclasses.replace(
-            prior, stamp=now_time(), state=RelationshipLifecycle.RETIRED,
-            state_reason=reason, has_valid_until=valid_until is not None,
-            valid_until=valid_until if valid_until is not None else ZERO)
-        self._w.write(terminal)
-        self._w.withdraw(rid, reason=reason)
-        return terminal
+        self._w.withdraw(rid, reason=f"{cause}: {detail}",
+                         has_valid_until=valid_until is not None,
+                         valid_until=valid_until if valid_until is not None
+                         else ZERO)
+        return prior
 
     def retire_involving(self, entity_id: str, cause: str, detail: str,
                          valid_until: Optional[Time] = None) -> int:
