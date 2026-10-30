@@ -53,6 +53,19 @@ The evidence from exactly that sequence, run against the unmodified gateway
 and the spec's own conformance suite, is in
 [`recordings/owm-littlefield.evidence.md`](../recordings/owm-littlefield.evidence.md).
 
+And it can be **written** with no stack at all. Since spatialdds 0.8.0 the
+same gateway accepts entities and claims over HTTP, and this repository's OWM
+0.2 relationship type rides as the claim (`serve --extension
+spatialdds_demo.lanes`). [`examples/world_from_curl.sh`](../examples/world_from_curl.sh)
+populates a world with curl, keeps an observed entity fresh with `?refresh=`,
+lets it lapse, and withdraws the rest, each DELETE with its reason;
+[`examples/watch_world.py`](../examples/watch_world.py) shows what a subscriber
+sees. A gateway on a bus (`--dds-domain N`) writes the same samples there, and
+the venue's own readers (`MODEL_LATCHED`, the demo's `Relationship`) take them
+as ordinary samples. The spec is `tests/test_world_from_curl.py`; it needs a
+0.8 gateway (`SPATIALDDS_GATEWAY_PYTHON`) while this repository pins 0.7.4,
+and skips saying so otherwise.
+
 One latched topic, `spatialdds/ut-austin-littlefield/world/entity/v1`:
 TRANSIENT_LOCAL, KEEP_LAST(1) per key. That is what makes late join work: a
 client opening a tab is handed the whole model by the middleware, unrequested,
