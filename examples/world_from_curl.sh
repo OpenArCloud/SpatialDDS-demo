@@ -92,6 +92,7 @@ d = d if isinstance(d, dict) else {}
 a = "asserter=" + repr(d["asserter"]) if "asserter" in d else ""
 print(d.get("type") or a)' "$out")
   rm -f "$out"
+  LAST_CODE=$code LAST_NOTE=$note
   printf '%-9s %-34s %s %s\n' "$step" "$what" "$code" "$note"
 }
 
@@ -104,7 +105,14 @@ call populate "cyclist (OBSERVED), ?refresh=$REFRESH" PUT "$ENT/ent:cyclist?refr
      "$(entity ent:cyclist OBSERVED 0.0 0.0 cyclist)"
 call populate "near: cyclist -> bench" PUT "$REL/near-1" \
      "$(relationship near-1 ent:cyclist https://example.org/predicate/near ent:bench)"
-call populate "the relationship, as served" GET "$REL/near-1"
+# An endpoint that serves no claim type says so: claims need the gateway to
+# serve one (--extension spatialdds_demo.lanes). The entities go on without it.
+CLAIMS=1
+case "$LAST_NOTE" in *:not-publishable)
+  CLAIMS=0
+  echo "populate  ... this endpoint serves no oarc.relationship lane; the claim is skipped" ;;
+esac
+[ "$CLAIMS" = 1 ] && call populate "the relationship, as served" GET "$REL/near-1"
 
 half=$(python3 -c "print($REFRESH / 2)")
 for i in $(seq 1 "$ROUNDS"); do
@@ -120,6 +128,6 @@ sleep "$wait_s"
 call lapse "cyclist, after its interval" GET "$ENT/ent:cyclist"
 call lapse "bench, under the same silence" GET "$ENT/ent:bench"
 
-call withdraw "near-1" DELETE "$REL/near-1?reason=cyclist%20left"
+[ "$CLAIMS" = 1 ] && call withdraw "near-1" DELETE "$REL/near-1?reason=cyclist%20left"
 call withdraw "bench" DELETE "$ENT/ent:bench?reason=bench%20removed%20for%20repainting"
 call withdraw "bench, after" GET "$ENT/ent:bench"

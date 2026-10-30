@@ -58,7 +58,8 @@ same gateway accepts entities and claims over HTTP, and this repository's OWM
 0.2 relationship type rides as the claim (`serve --extension
 spatialdds_demo.lanes`). [`examples/world_from_curl.sh`](../examples/world_from_curl.sh)
 populates a world with curl, keeps an observed entity fresh with `?refresh=`,
-lets it lapse, and withdraws the rest, each DELETE with its reason;
+lets it lapse, and withdraws the rest, each DELETE with its reason (against an
+endpoint that serves no claim type it says so and skips the claim);
 [`examples/watch_world.py`](../examples/watch_world.py) shows what a subscriber
 sees. A gateway on a bus (`--dds-domain N`) writes the same samples there, and
 the venue's own readers (`MODEL_LATCHED`, the demo's `Relationship`) take them

@@ -140,8 +140,11 @@ def parse_watch(lines):
     return out
 
 
-class WorldFromCurl(unittest.TestCase):
-    """One journey through the example; each test reads one stage of it."""
+class Journey(unittest.TestCase):
+    """One run of the example; each test reads one stage of it."""
+
+    #: Whether the gateway serves this repository's claim type.
+    CLAIMS = True
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -168,8 +171,9 @@ class WorldFromCurl(unittest.TestCase):
         base = f"http://127.0.0.1:{port}"
         cls.gw = subprocess.Popen(
             [GATEWAY_PY, "-m", "spatialdds.serve", "--publish", "--tokens",
-             str(tmp / "t.json"), "--extension", "spatialdds_demo.lanes",
-             "--dds-domain", str(domain), "--no-journal", "--port", str(port)],
+             str(tmp / "t.json"), "--dds-domain", str(domain), "--no-journal",
+             "--port", str(port)]
+            + (["--extension", "spatialdds_demo.lanes"] if cls.CLAIMS else []),
             stdout=open(tmp / "serve.log", "w"), stderr=subprocess.STDOUT,
             env=env)
         cls.bus = None
@@ -227,6 +231,10 @@ class WorldFromCurl(unittest.TestCase):
 
     def events(self, where: list, key: str) -> list:
         return [e for e in where if e[3] == key]
+
+
+class WorldFromCurl(Journey):
+    """The whole example, claims included."""
 
     def test_populate(self):
         self.assertEqual(self.line("populate", "bench (DECLARED)")[0], "201")
@@ -294,6 +302,39 @@ class WorldFromCurl(unittest.TestCase):
                                   [e[2:] for e in ev], ev)
                     self.assertIn(("dispose", key, "", reason),
                                   [e[2:] for e in ev], ev)
+
+
+
+class EntitiesOnly(Journey):
+    """A gateway serving no claim type, as demo.spatialdds.org does on 0.8.1.
+
+    The example says the claim is skipped and runs the rest: an endpoint
+    without a claim lane is a configuration, not a failure.
+    """
+    CLAIMS = False
+
+    def test_claim_skipped_and_said(self):
+        self.assertEqual(self.line("populate", "near: cyclist -> bench"),
+                         ["405", "urn:spatialdds-web:problem:not-publishable"])
+        self.assertIn("populate  ... this endpoint serves no oarc.relationship "
+                      "lane; the claim is skipped", self.example)
+        self.assertFalse([ln for ln in self.example
+                          if ln.startswith(("withdraw  near-1",
+                                            "populate  the relationship"))])
+
+    def test_entities_unchanged(self):
+        self.assertEqual(self.line("populate", "bench (DECLARED)")[0], "201")
+        self.assertEqual(self.line("lapse", "cyclist, after its interval")[0], "404")
+        self.assertEqual(self.line("lapse", "bench, under the same silence")[0], "200")
+        self.assertEqual(self.line("withdraw", "bench")[0], "204")
+        for name, where in (("socket", self.socket), ("bus", self.bus.events)):
+            with self.subTest(where=name):
+                cyc = self.events(where, "ent:cyclist")
+                self.assertIn(("sample", "ent:cyclist", "RETIRED", "refresh lapsed"),
+                              [e[2:] for e in cyc])
+                self.assertIn(("dispose", "ent:cyclist", "", "refresh lapsed"),
+                              [e[2:] for e in cyc])
+                self.assertFalse(self.events(where, "near-1"))
 
 
 if __name__ == "__main__":
