@@ -16,6 +16,10 @@ from the checkout beside this one. Two kinds of name are deployed:
   topics. Reading those here, from the spec text, by a parser that is not the
   SDK's generator, is a second reading of the same rows.
 
+The crossing scene's lanes (`scenarios/crossing/scene.py`) are deployed too,
+under a second scene: the same registered rows and this repository's
+extension, found by value as `lanes.py`'s are.
+
 Until the SDK adoption the subject was `spatialdds_demo/topics.py`, and the
 pin was `scripts/generate_types.py`'s, from which the v1.8 IDL tree was
 vendored.
@@ -49,6 +53,7 @@ if str(REPO) not in sys.path:
 import spatialdds as sd                                       # noqa: E402
 
 from spatialdds_demo import lanes                              # noqa: E402
+from scenarios.crossing import scene as crossing               # noqa: E402
 
 SPEC_CHECKOUT = REPO.parent / "SpatialDDS-spec"
 REGISTRY_FILE = sd.dds.registry.pin()["source"]
@@ -62,6 +67,8 @@ REGISTERED = {
     "model_entity": "model_entity",
     "model_pose": "model_pose",
     "model_command": "model_command",
+    "crossing.ENTITY_TOPIC": "model_entity",
+    "crossing.POSE_TOPIC": "model_pose",
 }
 
 #: Deployed names the registry has no row for, and why that is right.
@@ -77,6 +84,10 @@ UNREGISTERED = {
     "lanes.anchors_delta": "`anchor_delta` is registered as a type, with no name",
     "lanes.reply_topic": "CoverageResponse rides the query's reply_topic",
     "frame_transform": "spec type with no topic name in the registry",
+    "crossing.RELATIONSHIP_TOPIC": "the same demo-owned extension, in the "
+                                   "crossing scene",
+    "crossing.FRAMES_TOPIC": "spec type with no topic name in the registry; "
+                             "the crossing scene's georeference",
 }
 
 #: Deployed name -> the registered name it knowingly differs from. Empty: see
@@ -148,6 +159,11 @@ def deployed() -> dict[str, str]:
     # As model_service opens it: stream "frames", an unregistered type.
     out["frame_transform"] = sd.dds.registry.topic_name(
         lanes.SCENE, "frames", "frame_transform")
+    # The crossing scene's, by value, as lanes.py's are.
+    for name in dir(crossing):
+        value = getattr(crossing, name)
+        if isinstance(value, str) and value.startswith("spatialdds/"):
+            out[f"crossing.{name}"] = value
     return out
 
 
