@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Two traffic lanes each way with a sidewalk (lane 0 of every road edge is
+     the sidewalk); 50 km/h. The rail line admits rail only, and the road
+     lanes refuse it, so the level crossing controls road links alone. -->
+<edges>
+  <edge id="art_w_cw"  from="W"  to="CW" numLanes="2" speed="13.89" sidewalkWidth="3" disallow="rail rail_urban rail_electric rail_fast tram"/>
+  <edge id="art_cw_rx" from="CW" to="RX" numLanes="2" speed="13.89" sidewalkWidth="3" disallow="rail rail_urban rail_electric rail_fast tram"/>
+  <edge id="art_rx_e"  from="RX" to="E"  numLanes="2" speed="13.89" sidewalkWidth="3" disallow="rail rail_urban rail_electric rail_fast tram"/>
+  <edge id="art_e_rx"  from="E"  to="RX" numLanes="2" speed="13.89" sidewalkWidth="3" disallow="rail rail_urban rail_electric rail_fast tram"/>
+  <edge id="art_rx_cw" from="RX" to="CW" numLanes="2" speed="13.89" sidewalkWidth="3" disallow="rail rail_urban rail_electric rail_fast tram"/>
+  <edge id="art_cw_w"  from="CW" to="W"  numLanes="2" speed="13.89" sidewalkWidth="3" disallow="rail rail_urban rail_electric rail_fast tram"/>
+  <edge id="rail_s_x"  from="RS" to="RX" numLanes="1" speed="25" allow="rail"/>
+  <edge id="rail_x_n"  from="RX" to="RN" numLanes="1" speed="25" allow="rail"/>
+</edges>

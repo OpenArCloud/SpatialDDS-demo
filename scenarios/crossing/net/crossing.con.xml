@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The signalless pedestrian crosswalk: pedestrians have priority on it. -->
+<connections>
+  <crossing node="CW" edges="art_w_cw art_cw_w" priority="true"/>
+</connections>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The crossing scene's street, hand-authored in the scene frame map/crossing:
+     metres, ENU, x east and y north. One east-west arterial (y = 0), an
+     unsignalled crosswalk at x = 0, and a north-south rail line meeting the
+     arterial at a level crossing at x = 120. Axis-aligned on purpose: every
+     zone the scenario authors is then an exact box, not an approximation.
+     Built into crossing.net.xml by scenarios/crossing/build_net.py. -->
+<nodes>
+  <node id="W"  x="-300" y="0"    type="priority"/>
+  <node id="CW" x="0"    y="0"    type="priority"/>
+  <node id="RX" x="120"  y="0"    type="rail_crossing"/>
+  <node id="E"  x="400"  y="0"    type="priority"/>
+  <node id="RS" x="120"  y="-600" type="priority"/>
+  <node id="RN" x="120"  y="400"  type="priority"/>
+</nodes>

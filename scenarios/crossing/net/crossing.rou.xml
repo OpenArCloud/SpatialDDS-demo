@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The crossing scene's actors and their plans. Times are simulation seconds
+     from the start of the session; the two beats are timed here.
+
+     Beat 1, the bus occludes: bus-3 dwells at its stop just before the
+     crosswalk; ped-17 waits at the kerb ahead of the bus, then crosses while
+     car-a1 approaches in the adjacent lane, behind and beside the bus.
+     Beat 2, the gate declares: train-7 runs north over the level crossing
+     while car-a1 (eastbound) and car-b2 (westbound) approach it.
+
+     The protagonists, car-a1 and car-b2, are speed-controlled over TraCI by
+     the world service on a consumer's command (world.py); here they are only
+     inserted. Everything else is SUMO-native. Sorted by depart, as SUMO
+     requires. -->
+<routes>
+  <vType id="car" vClass="passenger" length="4.6" width="1.85" maxSpeed="16.7"/>
+  <vType id="bus" vClass="bus" length="12.0" width="2.55" maxSpeed="13.9"/>
+  <vType id="train" vClass="rail" length="120.0" width="3.0" maxSpeed="20.0" accel="0.5" decel="0.8"/>
+  <vType id="pedestrian" vClass="pedestrian" width="0.6" length="0.4" maxSpeed="1.3"/>
+
+  <route id="east" edges="art_w_cw art_cw_rx art_rx_e"/>
+  <route id="west" edges="art_e_rx art_rx_cw art_cw_w"/>
+  <route id="north" edges="rail_s_x rail_x_n"/>
+
+  <!-- ped-17 walks the south sidewalk to the crosswalk and crosses north.
+       The wait at the kerb, ahead of where the bus stops, is the scenario's
+       choreography (scenario.json), held by the world service: a SUMO stop
+       would park the person beside the sidewalk, not at the kerb. -->
+  <person id="ped-17" type="pedestrian" depart="0" departPos="270">
+    <walk edges="art_w_cw art_cw_w" arrivalPos="20"/>
+  </person>
+
+  <!-- bus-3 stops with its nose 8 m before the crosswalk. -->
+  <vehicle id="bus-3" type="bus" route="east" depart="0" departLane="1" departSpeed="max">
+    <stop lane="art_w_cw_1" endPos="290" duration="30"/>
+  </vehicle>
+
+  <vehicle id="car-a2" type="car" route="east" depart="2" departLane="2" departSpeed="max"/>
+  <vehicle id="car-b1" type="car" route="west" depart="4" departLane="2" departSpeed="max"/>
+  <!-- Unaffiliated background traffic: no operator publishes these. -->
+  <flow id="bg-e" type="car" route="east" begin="5" end="80" probability="0.12" departLane="best" departSpeed="max"/>
+  <flow id="bg-w" type="car" route="west" begin="5" end="80" probability="0.12" departLane="best" departSpeed="max"/>
+  <vehicle id="car-a1" type="car" route="east" depart="12" departLane="2" departSpeed="max"/>
+  <vehicle id="car-b3" type="car" route="west" depart="16" departLane="1" departSpeed="max"/>
+  <vehicle id="car-a3" type="car" route="east" depart="20" departLane="1" departSpeed="max"/>
+  <vehicle id="car-b2" type="car" route="west" depart="30" departLane="2" departSpeed="max"/>
+  <vehicle id="train-7" type="train" route="north" depart="40" departSpeed="max"/>
+
+</routes>

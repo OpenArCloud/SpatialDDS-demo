@@ -1,0 +1,7 @@
+# The crossing scene's simulator, pinned exactly, on top of the repository's
+# own requirements.txt (which pins spatialdds[dds,server]). Headless only:
+# the scene never opens sumo-gui. 1.28.0 (2026-10-08) ships wheels for
+# macOS arm64 and manylinux x86_64/aarch64, and these three are one release.
+eclipse-sumo==1.28.0
+traci==1.28.0
+sumolib==1.28.0
