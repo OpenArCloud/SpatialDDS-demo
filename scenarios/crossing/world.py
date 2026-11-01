@@ -23,7 +23,13 @@ SUMO's is clockwise from north.
 rather than left to SUMO's own models:
 
 * the protagonists' speed, on a consumer's command (`speed`), and their lane:
-  they keep the lane they were inserted in, so their path is the scenario's;
+  they keep the lane they were inserted in, so their path is the scenario's.
+  A command either sets the speed (`v`; -1 hands it back to SUMO) or caps it
+  (`cap`: under it SUMO's own following still drives; null lifts it), and
+  may set SUMO's speed mode (`speed_mode`). A cap is lowered no faster than
+  the vehicle's own deceleration allows, step by step: SUMO treats a maximum
+  speed as a hard limit and would otherwise meet a sudden one with emergency
+  braking. A cap of 0 holds the vehicle stopped once it is;
 * the level crossing (`crossing`), which the gate controller owns: the node is
   a SUMO `rail_crossing`, and from the first step its road links are held in
   the state the controller last commanded (open until then), so the arms move
@@ -92,6 +98,8 @@ class World:
         self._links: Dict[str, int] = {}
         self._kinds: Dict[str, str] = {}
         self._dims: Dict[str, tuple] = {}
+        self._max_speed: Dict[str, float] = {}
+        self._caps: Dict[str, float] = {}
         self.t = 0.0
         self.n = 0
 
@@ -140,10 +148,20 @@ class World:
             if vid not in self.protagonists:
                 raise ValueError(f"{vid} is not a protagonist; only the "
                                  "protagonists are speed-controlled")
-            if vid in self._traci.vehicle.getIDList():
+            veh = self._traci.vehicle
+            if vid in veh.getIDList():
                 if "speed_mode" in cmd:
-                    self._traci.vehicle.setSpeedMode(vid, int(cmd["speed_mode"]))
-                self._traci.vehicle.setSpeed(vid, float(cmd["v"]))
+                    veh.setSpeedMode(vid, int(cmd["speed_mode"]))
+                if "v" in cmd:
+                    veh.setSpeed(vid, float(cmd["v"]))
+                if "cap" in cmd:
+                    self._max_speed.setdefault(vid, veh.getMaxSpeed(vid))
+                    if cmd["cap"] is None:
+                        self._caps.pop(vid, None)
+                        veh.setMaxSpeed(vid, self._max_speed[vid])
+                        veh.setSpeed(vid, -1.0)
+                    else:
+                        self._caps[vid] = float(cmd["cap"])
         else:
             raise ValueError(f"unknown command {kind!r}")
         return dict(cmd, applied_at=round(self.t + self.step_s, 6))
@@ -163,6 +181,7 @@ class World:
             _at, _seq, cmd = heapq.heappop(self._queue)
             applied.append(self._apply(cmd))
         self._choreograph()
+        self._enforce_caps()
         self._traci.simulationStep()
         self.n += 1
         self.t = round(self.n * self.step_s, 6)
@@ -200,6 +219,21 @@ class World:
             if h["state"] == "held" and upcoming >= h["release_at_s"] - 1e-9:
                 self._traci.person.setSpeed(pid, float(h["release_speed_mps"]))
                 h["state"] = "released"
+
+    def _enforce_caps(self) -> None:
+        veh = self._traci.vehicle
+        live = set(veh.getIDList())
+        for vid, cap in list(self._caps.items()):
+            if vid not in live:
+                del self._caps[vid]
+                continue
+            v = veh.getSpeed(vid)
+            allowed = max(cap, v - veh.getDecel(vid) * self.step_s)
+            if allowed <= 0.0:
+                veh.setSpeed(vid, 0.0)           # held, not crept at
+            else:
+                veh.setSpeed(vid, -1.0)
+                veh.setMaxSpeed(vid, allowed)
 
     def _actors(self) -> Dict[str, Dict[str, Any]]:
         v, p = self._traci.vehicle, self._traci.person

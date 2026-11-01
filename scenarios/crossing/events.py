@@ -17,9 +17,14 @@ two beats' motion, measured on ground truth rather than on what anyone
 asserted.
 
 **On the bus**, from the recording: each record's first appearance, every
-change of its lifecycle state, each gate state the controller declared, and
-every dispose, all on the session's clock (a record's stamp, or a dispose's
-log time, less the epoch the world service announced). These are what the
+change of its lifecycle state, each gate state the controller declared, each
+claim's every sample (by what it says, its state and its basis), and every
+dispose, all on the session's clock (a record's stamp, or a dispose's log
+time, less the epoch the world service announced). A claim is stamped by
+`claims.ClaimWriter` on the wall clock, which at rate 1 is the session's.
+
+**Actuation**, from the truth log: each protagonist's first command for each
+reason its controller gave, as the world applied it. These are what the
 participants asserted, so they show that a rerun reproduces the assertions
 and not only the street.
 
@@ -108,6 +113,12 @@ def extract(path: Path) -> Dict[str, float]:
         for c in fr["applied"]:
             if c.get("cmd") == "crossing":
                 ev.setdefault(f"gate {c['state']}", c["applied_at"])
+        for c in fr["applied"]:
+            if c.get("cmd") == "speed" and c.get("why"):
+                reason = c["why"].split(":")[0]
+                if reason.startswith("claim "):
+                    reason = "claim " + c["why"].split("(")[1].split(",")[0]
+                ev.setdefault(f"{c['id']} command: {reason}", c["applied_at"])
         for car in SCENARIO["protagonists"]:
             a = actors.get(car)
             for z in ("crosswalk", "crossing-zone"):
@@ -130,12 +141,26 @@ def recorded(mcap: Path, epoch: float, rate: float = 1.0) -> Dict[str, float]:
     """Events on the bus, on the session clock (see the module docstring)."""
     from mcap.reader import make_reader
     from spatialdds.dds.types.spatial.owm import Entity
+    from spatialdds_demo_idl18.oarc_owm import Relationship
+    import spatialdds_demo.lanes  # noqa: F401  registers the extension
 
     ev: Dict[str, float] = {}
     last: Dict[str, tuple] = {}
     with open(mcap, "rb") as f:
         reader = make_reader(f)
+        claims_seen: Dict[str, int] = {}
         for _sch, ch, msg in reader.iter_messages(log_time_order=True):
+            if "/world/oarc.relationship/" in ch.topic:
+                r = Relationship.deserialize(msg.data)
+                t = round((r.stamp.sec + r.stamp.nanosec / 1e9 - epoch)
+                          * (rate or 1.0), 1)
+                what = (f"claim {r.subject_ref.split(':')[-1]} "
+                        f"{r.predicate.rsplit('/', 1)[-1].split('#')[-1]} "
+                        f"{r.object_ref.split(':')[-1]} {r.state.name} "
+                        f"{r.basis.name}")
+                claims_seen[what] = claims_seen.get(what, 0) + 1
+                ev[f"{what} #{claims_seen[what]}"] = t
+                continue
             if "/world/entity/" not in ch.topic:
                 continue
             e = Entity.deserialize(msg.data)

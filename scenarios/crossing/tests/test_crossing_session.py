@@ -1,20 +1,39 @@
 #!/usr/bin/env python3
-"""A whole crossing session on the pinned SDK: every participant runs clean.
+"""Two whole crossing sessions on the pinned SDK, and the teeth they show.
 
-Runs `scenarios/crossing/run_session.py` unpaced on a domain of its own: the
-world service, the map author, both operators, mmwave-ut-04 and gate-ctl-9,
-recorded. Asserts what a unit test of any one module cannot: that each
-participant exits 0 through the SDK the repository pins, and that the
-recording holds every lane's records, withdrawals with their reasons, and the
-gate's declared states.
+Runs `scenarios/crossing/run_session.py` twice at once, in real time (rate 1:
+the controllers act on the bus as it happens, so time has to be real), each
+on a domain of its own: every participant, recorded, with a live subscriber
+to the claims. In the second, mmwave-ut-04 is SIGKILLed at t = 25 s, before
+it predicts anything about ped-17.
 
-This exists because one was missing. The first sessions on the pinned
-spatialdds crashed three of five participants at their first withdrawal (the
-pinned `withdraw()` refuses a stamp; docs/crossing-census.md), and nothing
-smaller had run a withdrawal at all.
+Asserts what a unit test of any one module cannot: that each participant
+exits 0 through the SDK the repository pins (the killed one excepted, and
+it exits by the signal), that every participant kept up with the world, that
+the recording holds every lane's records, withdrawals with their reasons and
+the gate's declared states, and the four teeth, measured by
+`scenarios/crossing/teeth.py`:
+
+1. with the unit, car-a1 begins its stop for ped-17 seconds before it can
+   see it, stops short of the crosswalk, and keeps metres from it; silenced,
+   it begins later, ends up in the crosswalk, and comes closer; the
+   silenced unit's claims lose liveliness and are never disposed or retired;
+2. car-b2 begins its stop on gate-9's declaration, before the arms move;
+   the native traffic at the head of each queue brakes only once they do;
+3. C1, as the live subscriber received it: predicted ahead, revised to
+   OBSERVED on the same id, retired "no longer holds", disposed;
+4. every reference C5 derives from resolves, in the recording, to C3.
+
+And car-a1's perception on the bus: operator-a's record of ped-17 never
+names car-a1 while the bus blocks car-a1's line of sight.
+
+The whole-session test exists because one was missing: the first sessions on
+the pinned spatialdds crashed three of five participants at their first
+withdrawal (docs/crossing-census.md, finding 1), and nothing smaller had run
+a withdrawal at all.
 
 Needs the pinned SUMO (`scenarios/crossing/requirements.txt`); skips saying
-so without it. About a minute.
+so without it. About two minutes.
 """
 from __future__ import annotations
 
@@ -27,7 +46,11 @@ REPO = Path(__file__).resolve().parents[3]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-DOMAIN = 63
+from scenarios.crossing.tests.teeth_checks import TheTeeth   # noqa: E402
+
+DOMAINS = (63, 62)
+#: The silenced arm's kill.
+KILL = ("mmwave-ut-04", 25.0)
 OBB_KEYS = ("demo.obb.length_m", "demo.obb.width_m", "demo.obb.height_m")
 
 
@@ -48,7 +71,7 @@ def encloses(e, length: float, width: float, height: float) -> bool:
     return lo[2] - eps <= z and z + height <= hi[2] + eps
 
 
-class AWholeSession(unittest.TestCase):
+class AWholeSession(TheTeeth, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -61,16 +84,28 @@ class AWholeSession(unittest.TestCase):
         from mcap.reader import make_reader
         from spatialdds.dds.types.spatial.owm import Entity
 
-        from scenarios.crossing import run_session
+        from concurrent.futures import ThreadPoolExecutor
+        from scenarios.crossing import run_session, teeth
         from scenarios.crossing.scene import ENTITY_TOPIC, FRAMES_TOPIC, POSE_TOPIC
         cls.tmp = tempfile.TemporaryDirectory()
         tmp = Path(cls.tmp.name)
-        cls.result = run_session.run(tmp / "s.mcap", DOMAIN, 0.0, 42,
-                                     logs=tmp, settle_s=2.0)
-        cls.logs = tmp
+        (tmp / "full").mkdir()
+        (tmp / "silenced").mkdir()
+        with ThreadPoolExecutor(2) as pool:
+            full = pool.submit(run_session.run, tmp / "full" / "s.mcap",
+                               DOMAINS[0], 1.0, 42, logs=tmp / "full",
+                               settle_s=2.0)
+            silenced = pool.submit(run_session.run, tmp / "silenced" / "s.mcap",
+                                   DOMAINS[1], 1.0, 42, logs=tmp / "silenced",
+                                   settle_s=2.0, kill=KILL)
+            cls.result, cls.silenced = full.result(), silenced.result()
+        cls.logs = tmp / "full"
+        cls.teeth = teeth.measure(tmp / "full" / "s.mcap",
+                                  tmp / "silenced" / "s.mcap")
+        cls.session = teeth.Session(tmp / "full" / "s.mcap")
         cls.counts, cls.sources, cls.reasons, cls.gate = {}, set(), set(), []
         cls.tracks, cls.unenclosed, cls.undimensioned = 0, [], []
-        with open(tmp / "s.mcap", "rb") as f:
+        with open(tmp / "full" / "s.mcap", "rb") as f:
             reader = make_reader(f)
             for _s, ch, msg in reader.iter_messages(log_time_order=True):
                 cls.counts[ch.topic] = cls.counts.get(ch.topic, 0) + 1
@@ -100,10 +135,25 @@ class AWholeSession(unittest.TestCase):
         cls.tmp.cleanup()
 
     def test_every_process_exits_clean(self):
-        bad = {n: rc for n, rc in self.result["returncodes"].items() if rc != 0}
-        detail = "".join(f"\n--- {n}\n" + (self.logs / f"{n}.log").read_text()[-1500:]
-                         for n in bad)
-        self.assertEqual(bad, {}, detail)
+        for arm, result in (("full", self.result), ("silenced", self.silenced)):
+            bad = {n: rc for n, rc in result["returncodes"].items()
+                   if rc != 0 and n not in result["killed"]}
+            logs = self.logs.parent / arm
+            detail = "".join(f"\n--- {n}\n" + (logs / f"{n}.log").read_text()[-1500:]
+                             for n in bad)
+            self.assertEqual(bad, {}, f"{arm}{detail}")
+        self.assertEqual(self.silenced["killed"], {KILL[0]: KILL[1]})
+        self.assertEqual(self.silenced["returncodes"][KILL[0]], -9)
+
+    def test_every_participant_kept_up_with_the_world(self):
+        """A participant that falls behind publishes stale records stamped as
+        fresh; the controllers would act on them (finding 75)."""
+        import re
+        for log in sorted(self.logs.glob("*.log")):
+            m = re.search(r"behind the world: median [\d.]+ s, 99th percentile "
+                          r"([\d.]+) s", log.read_text())
+            if m:
+                self.assertLess(float(m.group(1)), 0.1, log.name)
 
     def test_every_lane_was_recorded(self):
         for topic in self.topics:
@@ -114,6 +164,10 @@ class AWholeSession(unittest.TestCase):
             "svc:crossing:map", "svc:crossing:operator-a",
             "svc:crossing:operator-b", "svc:crossing:mmwave-ut-04",
             "svc:crossing:gate-ctl-9"})
+        asserters = {d["asserter"] for _t, d in self.session.edges}
+        self.assertEqual(asserters, {"svc:crossing:mmwave-ut-04",
+                                     "svc:crossing:gate-ctl-9",
+                                     "svc:crossing:fuser"})
 
     def test_withdrawals_carry_their_reasons(self):
         self.assertGreater(self.disposes, 0)
