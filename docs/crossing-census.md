@@ -200,7 +200,9 @@ pose) would let both state what they know on the wire.
 
 ## 5. Claims for Batch 2
 
-All on the relationship lane, through `claims.ClaimWriter` unchanged.
+All on the relationship lane, through `claims.ClaimWriter` unchanged. As
+built in Batch 2, with C4's predicate changed and held for ruling, in
+`docs/crossing-claims.md` §2 and §8 (S1).
 
 | # | asserter | subject | predicate | object | basis | validity |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -280,9 +282,11 @@ The beats, from ground truth:
 | 72.5, 75.5 | arms rising; open |
 | 76.3 | car-a1 and car-b2 cross, from the queue |
 
-**The recorded session**, the committed one (`run_session.py`, rate 1, every
+**The recorded session**, Batch 1's (`run_session.py`, rate 1, every
 process exit 0): 13,857 samples (1,384 entity, 12,472 pose, 1 georeference,
-0 relationship), 48 dispose records, 588,969 bytes.
+0 relationship), 48 dispose records, 588,969 bytes. Committed in Batch 1;
+Batch 2 replaced it with the pair in `docs/crossing-claims.md` §3, which
+earned its own validation. The numbers here are as measured then.
 
 **Its payloads**, served by the pinned gateway (`python -m spatialdds.serve
 --mcap`) and read back by `tools/validate_served_owm.py`: 13,857 validated
@@ -332,8 +336,9 @@ crossing entries.
    29 s; it is now the junction, and a test holds it there.
 5. **The first beat timing hid ped-17 for 0.6 s.** car-a1 came into its 60 m
    range only as ped-17 stepped out; with the kerb release at 34 s the bus
-   hides it for 3.2 s (31.8–35.0), and car-a1 first sees it from 18.9 m at
-   11.3 m/s, measured on ground truth.
+   hides it for 3.2 s (31.8–35.0), and car-a1 first sees it from
+   x = −18.9 m, 20.3 m from it, at 11.3 m/s, measured on ground truth.
+   (Corrected in Batch 2: this said "from 18.9 m", which is the position.)
 
 ## 9. Not in this batch
 
