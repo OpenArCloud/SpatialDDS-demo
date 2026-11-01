@@ -38,7 +38,9 @@
     "label": "Emulated roadside sensing unit: tracks are ground truth filtered by range and line of sight, not a radio model."
   },
   "operator_sensing": {
-    "range_m": 60.0
+    "range_m": 60.0,
+    "sensor_height_m": 1.2,
+    "label": "Emulated vehicle perception: ground truth filtered by range and line of sight from each fleet car, not a sensor model."
   },
   "gate": {
     "entity": "gate-9",

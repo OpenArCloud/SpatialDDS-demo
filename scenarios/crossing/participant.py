@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import signal
 import sys
+import time
 from typing import Callable, Optional
 
 import spatialdds as sd
@@ -51,6 +52,10 @@ def run(name: str, make: Callable[["sd.dds.Participant"], object],
     participant = sd.participant(SCENE, domain=args.domain, service_id=sid)
     asserter = make(participant)
     feed: Optional[TruthFeed] = None
+    # How long after the world sent each frame this participant took it up:
+    # what it publishes is stamped with the frame's time, so a participant
+    # that falls behind publishes late records on time.
+    behind: list = []
     reason = f"{claims.ASSERTER_STOPPED}: {sid} stopped cleanly"
     try:
         feed = TruthFeed(name, host=args.host, port=args.port)
@@ -63,6 +68,7 @@ def run(name: str, make: Callable[["sd.dds.Participant"], object],
                 if hasattr(asserter, "on_start"):
                     asserter.on_start(to_time(feed.stamp_of(0.0)))
                 started = True
+            behind.append((time.time() - frame["wall"], frame["t"]))
             asserter.on_truth(frame, to_time(feed.stamp_of(frame["t"])))
         reason = f"{claims.ASSERTER_STOPPED}: {sid}, the session ended"
     except Stop:
@@ -71,6 +77,11 @@ def run(name: str, make: Callable[["sd.dds.Participant"], object],
         if feed is not None:
             feed.close()
         participant.close(reason=reason)
+    if behind:
+        lag = sorted(behind)
+        print(f"{name}: behind the world: median {lag[len(lag) // 2][0]:.3f} s, "
+              f"99th percentile {lag[int(len(lag) * 0.99)][0]:.3f} s, most "
+              f"{lag[-1][0]:.3f} s at t={lag[-1][1]:.1f}", flush=True)
     print(f"{name}: closed ({reason})", flush=True)
     return 0
 

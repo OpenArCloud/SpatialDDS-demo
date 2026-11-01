@@ -197,7 +197,14 @@ class Publisher:
         self.source = participant.service_id
         self._entities = participant.writer(
             "model_entity", qos_profile=MODEL_LATCHED, on_exit="withdraw")
-        self._poses = participant.writer("model_pose", qos_profile=MODEL_FAST)
+        # Unvalidated at the source, this lane only: the pinned SDK's validated
+        # write() re-reads every vendored schema from disk per sample (7 ms a
+        # pose on the host measured), which put the operators 1.4 s behind
+        # the world at some forty writes a step (docs/crossing-claims.md,
+        # finding 75). A pose is one fixed shape; the recording's every
+        # payload is validated end to end.
+        self._poses = participant.writer("model_pose", qos_profile=MODEL_FAST,
+                                         validate=False)
         self._recency = sd.Recency(latch_every=latch_every)
         #: Each held entity as last asserted, latched or not.
         self._latest: Dict[str, Entity] = {}
