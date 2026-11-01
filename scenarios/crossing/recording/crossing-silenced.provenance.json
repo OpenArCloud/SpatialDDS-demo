@@ -1,0 +1,398 @@
+{
+  "recording": "crossing-silenced.mcap",
+  "sha256": "829a9f0c0f65814427595bb8fadb4d06c7a4187efbddf717c54af1daf8c74603",
+  "bytes": 789718,
+  "captured_utc": "2026-11-01T02:04:35Z",
+  "capture_seconds": 109.14,
+  "scene": "crossing",
+  "dds_domain": 65,
+  "types": "spatial.owm/0.1 (provisional), the OWM 0.2 prototype's oarc.relationship (demo-owned extension), and spatial.core.FrameTransform",
+  "spec_tag": "v1.8",
+  "spec_commit": "4b5652c",
+  "idl_source": "the IDL spatialdds 0.7.4 ships (SpatialDDS-spec v1.8, 4b5652c)",
+  "message_encoding": "cdr (XCDR2, serialized by CycloneDDS)",
+  "schema_encoding": "omgidl",
+  "schemas": {
+    "oarc_owm::Relationship": "bc2b167c672a126b44d8419cbcfea03e15d9b9029a08a7bf36b2938de6a35d37",
+    "spatial::core::FrameTransform": "202d88b9e98ddf4cdbe13f158d16d743f6c1237f6e673a61362f5c09730507ac",
+    "spatial::owm::Entity": "cc2b51335b3c2c5c284b0f72d8564dbf5ad414b3adaa8ef374568c0bbe5c7f03",
+    "spatial::owm::ModelPose": "cc2b51335b3c2c5c284b0f72d8564dbf5ad414b3adaa8ef374568c0bbe5c7f03"
+  },
+  "samples": {
+    "spatialdds/crossing/world/entity/v1": 2016,
+    "spatialdds/crossing/world/model_pose/v1": 17195,
+    "spatialdds/crossing/world/oarc.relationship/v1": 5,
+    "spatialdds/crossing/frames/frame_transform/v1": 1
+  },
+  "disposes": [
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-w.1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bus-3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:ped-17"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:car-a2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:car-b1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.0"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:car-b3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:car-b2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:car-a2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:car-b1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.0"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:car-a2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-w.2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.4"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-w.1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.5"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:car-b1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-w.0"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bus-3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bus-3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.0"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:car-a3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:car-b3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:car-a1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:train-7"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.4"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:ped-17"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.5"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:ped-17"
+    },
+    {
+      "topic": "spatialdds/crossing/world/oarc.relationship/v1",
+      "key": "rel:svc:crossing:gate-ctl-9:47f96f34ebb85d80"
+    },
+    {
+      "topic": "spatialdds/crossing/world/oarc.relationship/v1",
+      "key": "rel:svc:crossing:fuser:134dc1f26af15b5e"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.0"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:car-a3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bus-3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:car-a1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:car-b2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.5"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-e.4"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:car-b3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.4"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.6"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.5"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-w.7"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-e.1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:car-a3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:gate-ctl-9:gate-9"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:crosswalk"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:stop-zone"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:crossing-zone"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:lane-east-outer"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:lane-east-inner"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:lane-west-inner"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:lane-west-outer"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:rail-line"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:bldg-nw"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:bldg-sw"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:bldg-mid-s"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:bldg-mid-n"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:bldg-se"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:map:bldg-ne"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:car-b2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-b:bg-w.3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-e.4"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:car-a1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-e.0"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-e.3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-e.2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bg-e.5"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:operator-a:bus-3"
+    }
+  ],
+  "dispose_records": 81,
+  "dispose_record_label": "spatialdds-web:dispose",
+  "unnameable_disposes": 0,
+  "no_writer_instance_ends": 56,
+  "latched_writer_left": [
+    {
+      "topic": "spatialdds/crossing/world/oarc.relationship/v1",
+      "key": "rel:svc:crossing:mmwave-ut-04:91fc9c9467085ee4"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:mmwave-ut-04:car-a2"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:mmwave-ut-04:bg-w.0"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:mmwave-ut-04:bus-3"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:mmwave-ut-04:ped-17"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:mmwave-ut-04:car-b1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:mmwave-ut-04:bg-w.1"
+    },
+    {
+      "topic": "spatialdds/crossing/world/entity/v1",
+      "key": "ent:mmwave-ut-04:self"
+    },
+    {
+      "topic": "spatialdds/crossing/frames/frame_transform/v1",
+      "key": "earth-fixed->map/crossing"
+    }
+  ],
+  "volatile_instance_ends": 0,
+  "driven_by": "scenarios/crossing/run_session.py (seed 42, rate 1, scripted: no person drove it; SIGKILL mmwave-ut-04 at t=25)",
+  "recorded_by": "scenarios/crossing/record.py"
+}
