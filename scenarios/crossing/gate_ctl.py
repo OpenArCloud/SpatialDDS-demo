@@ -15,10 +15,14 @@ and commands it to the world ahead of time (`world.World.command` with `at`):
 
 so the arms move when the controller said they would, to the step. Its gate,
 `ent:gate-ctl-9:gate-9`, is DECLARED: the actuator stating its own state,
-`demo.gate_state`, as the world reports it applied. Batch 2 adds the
-controller's claim, "gate-9 closes crossing-zone", declared at t_d with
-valid_from the arms-down time; this module already holds the schedule that
-claim will state.
+`demo.gate_state`, as the world reports it applied.
+
+**Its claim, C3, DECLARED**: `gate-9 demo:closes crossing-zone`, asserted at
+detection with `valid_from` the arms-down time it has just commanded: not a
+prediction but the actuator stating its own intent, ahead of anything
+physical. It is retired, "no longer holds", when the world reports the arms
+up (`open`), with `valid_until` that instant. `derived_from` is empty: a
+declaration rests on the declarer's authority, not on records it read.
 """
 from __future__ import annotations
 
@@ -28,8 +32,10 @@ import spatialdds as sd
 from spatialdds.dds.types.spatial.core import Aabb3
 from spatialdds.dds.types.spatial.owm import Basis, ModelLayer
 
+from spatialdds_demo import claims
 from scenarios.crossing import participant as runner
-from scenarios.crossing.scene import SCENARIO, Publisher, entity, entity_id
+from scenarios.crossing.scene import (
+    DEMO_CLOSES, SCENARIO, Publisher, decided, entity, entity_id, to_time)
 
 GATE = SCENARIO["gate"]
 NAME = GATE["controller"]
@@ -77,6 +83,9 @@ class GateController:
         self.feed = None                       # set by run(), for commands
         self.state = "open"
         self.plan = GateSchedule()
+        self.claims = claims.ClaimWriter(p)
+        self.subject = entity_id(NAME, GATE["entity"])
+        self.zone = entity_id("map", ZONE["id"])
 
     def gate_record(self, stamp):
         (x0, y0, _), (x1, y1, _) = ZONE["min_xyz"], ZONE["max_xyz"]
@@ -97,10 +106,28 @@ class GateController:
             self.feed.send(cmd)
             print(f"{NAME}: t={t:.1f} {self.plan.train}: {cmd['state']} at "
                   f"t={cmd['at']:.1f}", flush=True)
+            if cmd["state"] == "closed":
+                # The epoch is the feed's: stamp_of(t) is epoch + t.
+                self.claims.hold(
+                    self.subject, DEMO_CLOSES, self.zone, Basis.DECLARED,
+                    valid_from=to_time(self.feed.stamp_of(cmd["at"])),
+                    meta=[("demo.schedule", ", ".join(
+                        f"{k} {v:.1f}" for k, v in self.plan.schedule.items())),
+                        ("demo.train", self.plan.train), decided(t)])
+                print(f"{NAME}: t={t:.1f} C3 CREATED DECLARED valid_from "
+                      f"+{cmd['at'] - t:.2f}s", flush=True)
         applied = frame["crossings"].get(self.node, self.state)
         if applied != self.state:
             self.state = applied
             self.pub.assert_entity(self.gate_record(stamp), now=t, moving=False)
+            if applied == "open" and self.claims.holds(
+                    self.subject, DEMO_CLOSES, self.zone):
+                self.claims.retire(
+                    self.subject, DEMO_CLOSES, self.zone,
+                    claims.NO_LONGER_HOLDS, f"{GATE['entity']} arms up",
+                    valid_until=stamp)
+                print(f"{NAME}: t={t:.1f} C3 RETIRED no longer holds",
+                      flush=True)
 
 
 def make(p):

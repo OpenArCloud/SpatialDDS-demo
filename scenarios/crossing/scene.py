@@ -35,6 +35,7 @@ from spatialdds.dds.types.spatial.owm import (
     Basis, Entity, LifecycleState, ModelLayer, ModelPose)
 from spatialdds.frames import EARTH_FIXED_FQN, enu_to_ecef_pose
 
+from spatialdds_demo import claims
 from spatialdds_demo.lanes import (
     MODEL_FAST, MODEL_LATCHED, RELATIONSHIP, RELATIONSHIP_STREAM)
 
@@ -74,6 +75,29 @@ TYPE = {
     "gate": WD + "Q852010",                # "boom barrier"
     "roadside_unit": WD + "Q140775115",
 }
+
+# -- predicates -------------------------------------------------------------------
+
+#: GeoSPARQL Simple Features (OGC 22-047r1): within is DE-9IM T*F**F***, the
+#: fountain's (`claims.SF_WITHIN`); intersects is "not disjoint", Table 2.
+SF_WITHIN = claims.SF_WITHIN
+SF_INTERSECTS = "http://www.opengis.net/ont/geosparql#sfIntersects"
+#: The scene's own two, on the demo's domain: explicitly not proposed spec
+#: vocabulary (docs/crossing-census.md, the claims ruling).
+DEMO_CLOSES = "https://demo.spatialdds.org/predicate/closes"
+DEMO_BLOCKED_BY = "https://demo.spatialdds.org/predicate/blockedBy"
+
+
+#: Every claim's simulation time of decision, in meta. `claims.ClaimWriter`
+#: stamps a claim with the wall clock and every other record of the scene is
+#: on the simulation's, so this is what a claim's stamp is measured against
+#: (docs/crossing-claims.md, the clocks).
+DECIDED_T = "demo.decided_t"
+
+
+def decided(t: float) -> Tuple[str, str]:
+    return (DECIDED_T, f"{t:.1f}")
+
 
 # -- service ids and entity ids -------------------------------------------------
 
