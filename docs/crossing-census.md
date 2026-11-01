@@ -201,8 +201,10 @@ pose) would let both state what they know on the wire.
 ## 5. Claims for Batch 2
 
 All on the relationship lane, through `claims.ClaimWriter` unchanged. As
-built in Batch 2, with C4's predicate changed and held for ruling, in
-`docs/crossing-claims.md` §2 and §8 (S1).
+built in Batch 2 (`docs/crossing-claims.md` §2), with one change to the
+ruled list: **C4 is `geo:sfIntersects`, not `geo:sfWithin`**, because a
+120 m train is never within a 12.8 m zone and the ruled predicate would have
+been false at every instant (S1 there). Ruled after Batch 2: approved.
 
 | # | asserter | subject | predicate | object | basis | validity |
 | --- | --- | --- | --- | --- | --- | --- |

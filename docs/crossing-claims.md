@@ -58,7 +58,7 @@ maximum speed with emergency braking, measured at about 8 m/s² before this.
 
 Every claim carries `demo.decided_t`, the simulation time it was decided
 at (§7). C4 departs from the ruled inventory, for the reason in §8 finding
-S1; it is held for ruling.
+S1; ruled after Batch 2: approved.
 
 ## 3. The committed sessions
 
@@ -351,8 +351,8 @@ zone 12.8 m long is never within it: DE-9IM *within* needs every point of
 the subject in the object (`zones.within`; the test
 `test_the_train_is_never_within_the_crossing_zone`). Built as
 `geo:sfIntersects`, which is true from contact to clearance (63.8 to 70.5).
-**For ruling:** keep `sfIntersects`, or name the zone's occupancy some other
-way. C1 and C2 stay `sfWithin`: a pedestrian and a bus do fit.
+**Ruled:** `sfIntersects` approved, and the census records why its list
+changed. C1 and C2 stay `sfWithin`: a pedestrian and a bus do fit.
 
 **S2. SUMO yields to pedestrians from its own ground truth unless told
 not to.** Speed mode 7 (right of way and red lights off) still braked
@@ -371,6 +371,23 @@ crossing; the train braked for it. The scene's pose lane is written with
 `validate=False` (`scene.Publisher`), the recording validated end to end
 instead, and the session test holds every participant within 0.1 s of the
 world.
+
+**Freshness, the evidence.** What finding 75 did to a consumer, measured in
+a development session before the mitigation (rate 1, seed 42; its logs were
+not committed, the numbers are from them). car-b2's controller placed its
+car by operator-b's record of it. From 48 s the record's stamp ran behind
+the wall clock by 0.9 s, by 1.6 s at 54 s; every record was stamped with
+the step it described, so nothing on the record said it was late. At 53.5
+the controller computed "stop 2.9 m ahead" for a car whose front was then
+2.7 m past its stop point: it believed the car 5.6 m back from where it
+was. car-b2 entered the crossing zone at 53.1, with the arms down since
+49.6, and stopped there, front at x = 122.3 inside the zone (118.5 to
+124.7). train-7, SUMO-native, braked for it from 20 m/s to 16.0 and
+entered the zone 1.4 s late (65.2 against 63.8). A record's stamp says
+when the world was as described, not when the record was written; a
+consumer acting on it needs to know how old it is when it arrives, and
+nothing on the wire told it. That is the case for a refresh or freshness
+contract on the fast lane, from the consumer's side.
 
 **76. `take()` takes at most 256 samples while saying it takes every event
 that has arrived** (filed, finding 76). Read, not hit: the busiest take
