@@ -9,7 +9,9 @@
   recording; the tracks keep to their grid.
 * **The page stands alone.** One HTML file and the asset: it loads nothing
   but three.js, pinned, from cdnjs, the fonts, and the asset beside it.
-* **The page runs.** In a real browser, two loops with no console error.
+* **The page runs.** In a real browser, two loops with no console error;
+  gate-9's arms, read from the drawn geometry, lie across the roadway with
+  their tips meeting over the lanes when closed, and stand when open.
   Needs Node and web/'s Playwright with its Chromium; skips naming what to
   install without them, and runs once they are there.
 """
@@ -153,6 +155,7 @@ class InABrowser(unittest.TestCase):
         result = json.loads(out.stdout.strip().splitlines()[-1])
         self.assertEqual(result["errors"], [])
         self.assertGreaterEqual(result["loops"], 2)
+        self.assertEqual(result["gate"], [])
 
 
 if __name__ == "__main__":

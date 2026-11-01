@@ -3,8 +3,8 @@
 //
 //   node crossing/check.mjs http://127.0.0.1:8765/ OUT_DIR [--loops-only]
 //
-// Prints one JSON line: {errors: [...], loops: n, shots: [...]}; exits 1 on
-// any console error or page error.
+// Prints one JSON line: {errors: [...], loops: n, gate: [...], shots: [...]};
+// exits 1 on any console error or page error, or any gate failure.
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,6 +37,44 @@ while (Date.now() < until) {
 }
 await ctx.close();
 
+// The gate's arms, read from the drawn geometry against the asset's own
+// road: closed, each lies across the roadway from its pivot with the tips
+// meeting over the lanes (an arm swung outward lies beyond the shoulder);
+// open, each stands vertical.
+const gate = [];
+{
+  const c = await browser.newContext({ viewport: { width: 1100, height: 1000 } });
+  const p = await c.newPage();
+  watch(p, 'gate');
+  const at = async (t) => {
+    await p.goto(`${base}?t=${t}&paused`);
+    await p.waitForFunction(() => window.__replay !== undefined);
+    await p.waitForTimeout(300);
+    return p.evaluate(() => window.__replay.arms());
+  };
+  const asset = await (await fetch(new URL('crossing-replay.json', base))).json();
+  const t0 = asset.meta.window.session_start;
+  const ys = asset.map.lanes.flatMap((L) => [L.box[1], L.box[3]]);
+  const y0 = Math.min(...ys), y1 = Math.max(...ys), slack = 0.3;
+  const closed = asset.gate.find((g) => g.state === 'closed');
+  const open = asset.gate.findLast((g) => g.state === 'open');
+  const down = await at(t0 + closed.t + 2);
+  down.forEach((a, i) => {
+    if (a.y[0] < y0 - slack || a.y[1] > y1 + slack) gate.push(`closed: arm ${i} spans y ${a.y.map((v) => v.toFixed(2))}, beyond the roadway ${y0}..${y1}`);
+    if (a.y[1] - a.y[0] < (y1 - y0) / 2 - 1.5) gate.push(`closed: arm ${i} reaches only ${(a.y[1] - a.y[0]).toFixed(2)} m across`);
+    if (a.up[1] > 1.6) gate.push(`closed: arm ${i} top at ${a.up[1].toFixed(2)} m, not lowered`);
+  });
+  if (down.length === 2) {
+    const [s, n] = down[0].y[0] < down[1].y[0] ? down : [down[1], down[0]];
+    if (n.y[0] - s.y[1] > 1.5) gate.push(`closed: tips ${(n.y[0] - s.y[1]).toFixed(2)} m apart, not meeting over the lanes`);
+  } else gate.push(`expected two arms, found ${down.length}`);
+  const up = await at(t0 + open.t + 2);
+  up.forEach((a, i) => {
+    if (a.up[1] < 5) gate.push(`open: arm ${i} top at ${a.up[1].toFixed(2)} m, not raised`);
+  });
+  await c.close();
+}
+
 const shots = [];
 if (flag !== '--loops-only') {
   const views = [
@@ -64,5 +102,5 @@ if (flag !== '--loops-only') {
   }
 }
 await browser.close();
-console.log(JSON.stringify({ errors, loops, shots }));
-process.exit(errors.length ? 1 : 0);
+console.log(JSON.stringify({ errors, loops, gate, shots }));
+process.exit(errors.length || gate.length ? 1 : 0);

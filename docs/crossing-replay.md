@@ -91,10 +91,13 @@ recording's, every ending its recorded reason; every narration line names a
 source, every record source exists in the recording; tracks keep to their
 grid; the page loads only the pinned three.js, the fonts and the asset; and,
 in Chromium through web/'s Playwright (`web/crossing/check.mjs`), two loops
-at 16× with no console error (skips, naming the install, without Node or the
-browser). Plants, each confirmed in the file first: one changed byte in the
+at 16× with no console error, and gate-9's arms read back from the drawn
+geometry: closed, each lies across the roadway from its pivot with the tips
+meeting over the lanes; open, each stands (skips, naming the install,
+without Node or the browser). Plants, each confirmed in the file first: one changed byte in the
 asset failed the regeneration test; a thrown error in the page's narration
-failed the browser test. Also run once at real speed: two loops, no console
+failed the browser test; the arms mirrored (swung out past the shoulders,
+as first drawn) failed the gate check. Also run once at real speed: two loops, no console
 error.
 
 **Found on the way, fixed:** Chromium's software GL dropped whole line
