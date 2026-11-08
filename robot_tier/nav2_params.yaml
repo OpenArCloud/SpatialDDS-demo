@@ -18,6 +18,15 @@
 # Both costmaps roll with the robot rather than sitting on a static map,
 # because there is no map -- the venue is described by the model, and the part
 # of it that constrains a robot arrives through the filter.
+#
+# **The global costmap carries a second filter: claims** (2026-11-08, the
+# claims batch). `spatialdds_ros`'s robot node draws the scene's trusted claims
+# into `/spatialdds_robot/claims/mask`, at a cost below lethal, and this
+# filter paints it. The keep-out is law and is lethal on both costmaps; a
+# claim is somebody's advice and is on the global costmap only, so it bends
+# the plan and leaves the controller's local costmap -- what the robot itself
+# decides to drive through -- to the venue's law alone. Who is trusted is the
+# robot node's `claims_trust` (`_bringup.sh`); this only says where it lands.
 amcl:
   ros__parameters:
     use_sim_time: false
@@ -116,11 +125,19 @@ global_costmap:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
         inflation_radius: 0.55
-      filters: ["keepout_filter"]
+      filters: ["keepout_filter", "claims_filter"]
       keepout_filter:
         plugin: "nav2_costmap_2d::KeepoutFilter"
         enabled: true
         filter_info_topic: "/costmap_filter_info"
+      # The same plugin as the keep-out, given a mask of advisory values:
+      # KeepoutFilter writes a mask cell's cost where it exceeds the cell's
+      # own, so 1..99 raise the cost and 100 would be a wall. The robot node
+      # refuses 100.
+      claims_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: true
+        filter_info_topic: "/spatialdds_robot/claims/filter_info"
 
 planner_server:
   ros__parameters:

@@ -10,7 +10,9 @@ export PYTHONPATH=/ws:$PYTHONPATH
 export SPATIALDDS_TRANSPORT=dds
 export SPATIALDDS_DDS_DOMAIN=${SPATIALDDS_DDS_DOMAIN:-1}
 export CYCLONEDDS_URI=file:///etc/cyclonedds.xml
-PARAMS=/ws/robot_tier/nav2_params.yaml
+# Overridable only so the claims tooth can plant a parameter file with the
+# claims filter removed and watch its first arm fail (tools/claims_tooth.sh).
+PARAMS=${NAV2_PARAMS:-/ws/robot_tier/nav2_params.yaml}
 
 # **The image carries `spatialdds_ros` from requirements.txt, and a stale
 # image has the wrong one or none.** Checked here, before anything starts,
@@ -54,6 +56,17 @@ sleep 3
 #
 # Anchorless on purpose: `model_service` publishes this frame's
 # FrameTransform and the scene keeps the single claim.
+#
+# **And it reads the scene's claims** (2026-11-08): trusted claims become an
+# advisory cost on the global costmap (`nav2_params.yaml`, `claims_filter`).
+# Trusted is one asserter, the plaza's hazard camera, on OBSERVED only, and
+# nothing in the running stack is that camera: the layer draws nothing until
+# something is (`tools/claims_tooth.sh` scripts one). The venue's own
+# asserters, the zone watches and the near fuser, are deliberately not
+# trusted: a duck near the pond is not a reason to plan round it.
+# `SPATIALDDS_CLAIMS_TRUST` replaces the rule, which is how the tooth's
+# filter-arm plant widens it. Shoulder 0.5 m: the 0.22 m radius nav2 is given,
+# plus margin, a little under the keep-out's 0.9 because a claim is advice.
 python3 -m spatialdds_ros.robot_node --ros-args \
   -p scene:=ut-austin-littlefield \
   -p entity_id:=ent:robot:tb3 \
@@ -63,7 +76,10 @@ python3 -m spatialdds_ros.robot_node --ros-args \
   -p ground_z:=-0.84 \
   -p domain:=${SPATIALDDS_DDS_DOMAIN:-1} \
   -p content_refs:='[catalog:dcef7c31-1d5f-54aa-9344-899912f9d34a]' \
-  -p external_refs:='[wikidata=Q4810574]' &
+  -p external_refs:='[wikidata=Q4810574]' \
+  -p claims:=true \
+  -p claims_trust:="['${SPATIALDDS_CLAIMS_TRUST:-svc:hazard:plaza-cam OBSERVED}']" \
+  -p claims_shoulder_m:=0.5 &
 sleep 2
 
 ros2 run nav2_planner planner_server    --ros-args --params-file "$PARAMS" &

@@ -114,17 +114,22 @@ class TheRobotLaneTypesAgreeOnTheWire(unittest.TestCase):
             self.assertIn(expected, names)
 
     def test_every_type_the_library_uses_matches_the_sdk_s(self):
+        """Spec types against the SDK's; `oarc_owm`, which is no spec type
+        and which 0.5.0 vendors for its claims lane, against this
+        repository's own, which is where its IDL lives."""
         for module, name in self.types:
             with self.subTest(type=f"{module}.{name}"):
+                home = ("spatialdds_demo_idl18" if module.startswith("oarc_")
+                        else "spatialdds.dds.types")
                 ours = getattr(importlib.import_module(
-                    f"spatialdds.dds.types.{module}"), name)
+                    f"{home}.{module}"), name)
                 theirs = getattr(importlib.import_module(
                     f"spatialdds_idl18.{module}"), name)
                 if not hasattr(theirs, "__idl__"):
                     continue          # an enum or a typedef: checked through its users
                 self.assertEqual(_minimal(ours), _minimal(theirs),
-                                 f"{module}.{name}: the library's type and the "
-                                 f"SDK's are not the same on the wire")
+                                 f"{module}.{name}: the library's type and "
+                                 f"{home}'s are not the same on the wire")
 
 
 if __name__ == "__main__":

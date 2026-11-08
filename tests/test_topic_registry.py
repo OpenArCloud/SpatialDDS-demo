@@ -220,24 +220,51 @@ class TheDeployedNamesAreTheRegisteredOnes(unittest.TestCase):
                                      f"{name} is now registered as {row!r}")
 
     def test_the_library_release_says_the_same(self):
-        """The strings the pinned spatialdds_ros release publishes are the
-        demo's, so the registry check above covers them too — checked
-        against the release requirements.txt pins, not whatever is
-        installed."""
+        """The strings the pinned spatialdds_ros publishes are the demo's, so
+        the registry check above covers them too — checked against the
+        requirements.txt pin, not whatever is installed.
+
+        The pin is a release (`spatialdds_ros==X`) or, in the window of
+        developing against an unreleased change, a commit
+        (`spatialdds_ros @ git+…@<sha>`), and each is checked its own way:
+        a release by version, a commit by the commit pip recorded at install
+        (PEP 610's `direct_url.json`), so a stale install of either fails."""
+        import importlib.metadata
+        import json
+
         import spatialdds_ros
         from spatialdds_ros.announce import ANNOUNCE_TOPIC
         from spatialdds_ros.topics import Topics
-        pin = re.search(r"^spatialdds_ros==(\S+)",
-                        (REPO / "requirements.txt").read_text(), re.M).group(1)
-        self.assertEqual(spatialdds_ros.__version__, pin,
-                         "installed spatialdds_ros is not the pinned release: "
-                         "pip install -r requirements.txt")
+        text = (REPO / "requirements.txt").read_text()
+        release = re.search(r"^spatialdds_ros==(\S+)", text, re.M)
+        commit = re.search(
+            r"^spatialdds_ros @ git\+\S+@([0-9a-f]{7,40})\s*$", text, re.M)
+        self.assertTrue(release or commit,
+                        "requirements.txt pins no spatialdds_ros")
+        if release:
+            self.assertEqual(spatialdds_ros.__version__, release.group(1),
+                             "installed spatialdds_ros is not the pinned "
+                             "release: pip install -r requirements.txt")
+        else:
+            raw = importlib.metadata.distribution(
+                "spatialdds_ros").read_text("direct_url.json")
+            installed = (json.loads(raw).get("vcs_info", {})
+                         .get("commit_id", "") if raw else "")
+            self.assertTrue(
+                installed.startswith(commit.group(1)),
+                f"installed spatialdds_ros is not the pinned commit "
+                f"{commit.group(1)} (pip recorded {installed or 'none'}): "
+                f"pip install -r requirements.txt")
         lib, ours = Topics(lanes.SCENE), self.deployed
         self.assertEqual(lib.entity, ours["model_entity"])
         self.assertEqual(lib.pose, ours["model_pose"])
         self.assertEqual(lib.command, ours["model_command"])
         self.assertEqual(lib.frame_transform, ours["frame_transform"])
         self.assertEqual(ANNOUNCE_TOPIC, ours["Announce"])
+        # 0.5.0 reads and writes the claims lane: the same string the
+        # venue's asserters publish on, or the layer reads an empty lane.
+        if hasattr(lib, "relationship"):
+            self.assertEqual(lib.relationship, ours["lanes.RELATIONSHIP_TOPIC"])
 
 
 if __name__ == "__main__":

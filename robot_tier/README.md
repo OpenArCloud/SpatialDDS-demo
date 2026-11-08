@@ -74,16 +74,44 @@ Three things in there are load-bearing and were each found the hard way:
 The venue frame is the map frame: the plaza's origin *is* `map`, so no static
 transform is needed between the model and the planner.
 
+## How a claim becomes a cost
+
+The keep-out is the venue's law. A claim is somebody's advice, and since
+2026-11-08 the tier reads those too: `spatialdds_ros`'s robot node (0.5.0)
+draws each **trusted** claim on the scene's relationship lane into
+`/spatialdds_robot/claims/mask`, and a second `KeepoutFilter`,
+`claims_filter`, paints it on the **global costmap only**:
+
+- **A cost, not a wall.** The mask carries 50 of 100, which the filter paints
+  as 127 of nav2's 254; the planner prefers to go round and can still go
+  through. The keep-out stays lethal on both costmaps.
+- **Trusted is one camera, OBSERVED only** (`claims_trust` in `_bringup.sh`):
+  `svc:hazard:plaza-cam`, which nothing in the running stack is. The venue's
+  own asserters (the zone watches, the near fuser, the duck mover) are not
+  trusted, and the node logs each of their claims as "no trust rule admits
+  it" when it first sees it: once for a claim that holds, and again each time
+  a churning one is re-asserted (the near fuser's, 29 times in one private run).
+- **A killed asserter's observation leaves the costmap** when its liveliness
+  ends, about 10 s after the kill, and is not treated as retired.
+- **The mask is on the global costmap's own grid.** A mask with an origin of
+  its own is received and never painted; the same mechanism as the canvas
+  note above, measured exactly in `spatialdds-ros`'s finding 14.
+
+`tools/claims_tooth.sh` shows all of it on this image, in a container of its
+own: a scripted camera's hazard bends the route, its SIGKILL stops bending it,
+and a stranger's identical claim never did (`docs/ros-claims.md`).
+
 ## What is in here
 
 | File | What it is |
 |---|---|
 | `Dockerfile` | ROS Humble + nav2, and this repo's CycloneDDS 11.0.1 built from source beside ROS's 0.10.5 |
-| `_bringup.sh` | in-container launch: sim, keep-out node, `robot_bridge --source ros`, four nav2 servers, lifecycle manager |
+| `_bringup.sh` | in-container launch: sim, keep-out node, `spatialdds_ros.robot_node` (claims on), four nav2 servers, lifecycle manager |
 | `keepout_node.py` | declared bounds → costmap filter mask |
 | `plaza_sim_node.py` | kinematic base: publishes `/odom` and tf, consumes `/cmd_vel` |
-| `nav2_params.yaml` | NavFn global planner, DWB controller, `KeepoutFilter` in both costmaps |
-| `_*_probe.py` | one-shot diagnostics — bounds, mask, costmap, drive, plan. Not part of the demo |
+| `nav2_params.yaml` | NavFn global planner, DWB controller, `KeepoutFilter` in both costmaps, `claims_filter` in the global one |
+| `_*_probe.py` | one-shot diagnostics — bounds, mask, costmap, drive, plan, claims. Not part of the demo |
+| `_claims_tooth_run.sh` | the claims tooth's in-container driver, started by `tools/claims_tooth.sh` |
 
 ### No Gazebo, on purpose
 

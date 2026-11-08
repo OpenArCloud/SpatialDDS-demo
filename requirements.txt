@@ -49,7 +49,15 @@ pytest>=7.0.0
 # 0.4.1 -> 0.4.2 on 2026-10-28: nav2 reporting success far from the goal
 # (the preemption the OWM 0.2 prototype measured, its finding 12) reaches the
 # robot's record as a refusal, in `nav.status`, rather than nothing.
-spatialdds_ros==0.4.2
+# 0.4.2 -> a commit on 2026-11-08, the window this file allows a commit pin
+# for: the claims batch (docs/ros-claims.md) consumes the library's unreleased
+# 0.5.0 from its `claims-consumer` branch, `cb38ec2`: the claims layer the
+# robot tier now runs, perception publishing, and the relationship type. **It
+# resolves once that branch is pushed**, and goes back to `spatialdds_ros==0.5.0`
+# when 0.5.0 is released; tests/test_topic_registry.py checks either form
+# against what is installed. Rebuild the tier image when it moves
+# (robot_tier/README.md).
+spatialdds_ros @ git+https://github.com/OpenArCloud/spatialdds-ros@cb38ec25253842b6f21b8e9a8c25e0fe804c6a50
 
 # The SDK this repository's plumbing runs on: the native participant
 # (`[dds]`) and the embedded gateway the web bridge serves the binding with

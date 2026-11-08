@@ -5,40 +5,30 @@ The robot's northbound half: a sensed pose becomes a model entity.
     python3 -m spatialdds_demo.robot_bridge            # with the built-in sim
     python3 -m spatialdds_demo.robot_bridge --source ros
 
-**This was to have retired on 2026-10-19 in favour of `spatialdds_ros`, and
-did not.** The adoption is blocked on one field: the library's `RobotAdapter`
-hard-codes `content_refs=[]` with no configuration for it, and this robot's
-`catalog:` reference is what makes the page draw a TurtleBot rather than a pin.
-There is no demo-side workaround — the library publishes no reference at all,
-so no reader can find one. Filed for spatialdds-ros; see
-`docs/ros-adoption-blocker.md` for the whole argument and
-`docs/ros-adoption-census.md` for the four seams that *are* ready. When
-`content_refs` becomes configurable, `RobotBridge`, `already_published`,
-`_now` and `yaw_quaternion` retire (247 lines), `PlazaSim` and
-`KinematicNavigator` stay as the venue's own geometry, and `_run_kinematic`
-shrinks to wiring. The library is already a pinned dependency, so that is one
-commit.
+**The robot lane runs on `spatialdds_ros`; this is what of it is the venue's.**
+The adoption was deferred on 2026-10-19 on one library field (the robot's
+`catalog:` reference, without which the page draws a pin;
+`docs/ros-adoption-blocker.md`), the library made the field configurable the
+same day (`e7b897d`), and the swap landed in `d6413d7`, as
+`docs/ros-adoption-census.md` laid it out. `RobotBridge`, its own
+`already_published`, `_now` and `yaw_quaternion` retired into the library's
+`RobotAdapter`; what stays is the venue's own geometry, `PlazaSim` and its
+mask, `KinematicNavigator`, and the wiring that hands them to the adapter.
+This header said the swap was still blocked until 2026-11-08, three weeks
+after it was not; the claims batch (`docs/ros-claims.md`) corrected it.
 
-**This is a ROS node that speaks SpatialDDS, not a protocol converter.** It
-subscribes to what a navigating robot already publishes and publishes
-`spatial.owm/0.1` directly.
+**A participant that speaks SpatialDDS, not a protocol converter.** It
+publishes `spatial.owm/0.1` directly, through the library's adapter.
 
-**What it actually subscribes to, since this said `/amcl_pose` for a while and
-meant it as a description of the design rather than of the code.** The ROS
-path reads `nav_msgs/Odometry` on `/odom` (see `_run_with_ros`). In the demo's
-tier that is map-frame by construction: `robot_tier/plaza_sim_node.py`
-publishes `map -> odom` as a *static identity* transform, and says so — "this
-sim knows exactly where the robot is, so there is no drift for a localizer to
-correct". On a real robot it is not: odom drifts against map, which is the
-entire reason AMCL publishes a correction, so reading `/odom` there would
-publish a slowly-diverging claim about where the robot sits on the earth with
-every number looking plausible. The right input is a map-frame pose — the TF
-chain `map -> base_link`, which is what nav2 itself consumes — and that is
-what `spatialdds_ros.robot_node` defaults to. This function keeps `/odom`
-because it is correct for the simulator it runs in, and retires with the
-adoption rather than being half-fixed on its way out. Nothing is translated into an envelope type
-and back; there is no new wire mapping in `bridges/ros2_bridge` for this,
-because it is a citizen of both worlds rather than a translator between them.
+**The ROS path is the library's node now, not this file.** It read
+`nav_msgs/Odometry` on `/odom`, which is map-frame only in the demo's tier,
+where `robot_tier/plaza_sim_node.py` publishes `map -> odom` as a static
+identity; on a localizing robot it would publish a slowly-diverging claim
+about where the robot sits on the earth. `spatialdds_ros.robot_node` reads the
+TF chain `map -> base_link` by default, which is what nav2 itself consumes,
+and `robot_tier/_bringup.sh` runs it; `--source ros` here prints that
+invocation and exits. Nothing is translated into an envelope type and back:
+the robot is a citizen of both worlds rather than a translator between them.
 
 It owns exactly one instance, `ent:robot:tb3`, the way pondwatch owns its
 pond, and it writes nothing else. The pose-lane rule relaxes from "the model
@@ -295,7 +285,7 @@ def _library_version() -> str:
 def run(domain_id: Optional[int] = None, source: str = "kinematic",
         hz: float = SIM_HZ) -> int:
     # The library's lanes are on a raw participant, because spatialdds_ros
-    # (0.4.1 still) takes one: a labelled workaround until the ROS rebase (census
+    # (0.5.0 still) takes one: a labelled workaround until the ROS rebase (census
     # filing S7). Its domain is read the way the SDK reads it, and refused the
     # same way when it is not set, rather than defaulting to 0.
     if domain_id is None:
