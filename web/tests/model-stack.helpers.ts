@@ -141,7 +141,26 @@ export async function sendCommand(
   });
 }
 
+/**
+ * The stack container these specs drive, or null when none is running.
+ *
+ * `SPATIALDDS_STACK_CONTAINER` names it exactly. Without it, the first
+ * `dds_bridge` container listed, which is the one `run_bridge_server_docker.sh`
+ * starts; with two stacks up that is aim-by-position, and a spec would drive
+ * whichever happened to be listed first. Added 2026-11-08 so the claims batch
+ * could run these specs against a private stack beside a running one.
+ */
 export function container(): string | null {
+  const named = process.env.SPATIALDDS_STACK_CONTAINER;
+  if (named) {
+    try {
+      const up = execSync(`docker ps --filter name=^${named}$ --format '{{.Names}}'`,
+                          { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+      return up === named ? named : null;
+    } catch {
+      return null;
+    }
+  }
   try {
     const name = execSync("docker ps --format '{{.Names}}' | grep dds_bridge | head -1",
                           { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();

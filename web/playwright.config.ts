@@ -1,5 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
+/** The specs that drive or read the one running venue; see `projects`. */
+const STACK = /(model-stack|robot-goto|robot-captures|robot-render|nav-refusal|claims-stack|claims-overlay-stack)\.spec\.ts/;
+
 export default defineConfig({
   testDir: './tests',
   // Always rebuild; see tests/global-setup.ts for why this is not left to
@@ -32,15 +35,24 @@ export default defineConfig({
   // Per-project `workers: 1` is Playwright's own answer for a shared
   // resource, and this stack is exactly that -- one bus, one model service,
   // one robot.
+  //
+  // `robot-render` and `nav-refusal` joined it on 2026-11-08. Both read the
+  // running venue (the first localizes against it, the second borrows its
+  // live robot record) and were in `isolated`, so they ran beside the stack
+  // specs. In the claims batch, against a private stack, both timed out
+  // waiting for the page (no localization in 40 s, no `model:loaded` in
+  // 90 s) when run beside robot-goto, and both passed run serially. Which
+  // shared thing they contended for was not isolated; that they share the
+  // venue is enough to put them here.
   projects: [
     {
       name: 'stack',
-      testMatch: /(model-stack|robot-goto|robot-captures|claims-stack|claims-overlay-stack)\.spec\.ts/,
+      testMatch: STACK,
       workers: 1
     },
     {
       name: 'isolated',
-      testIgnore: /(model-stack|robot-goto|robot-captures|claims-stack|claims-overlay-stack)\.spec\.ts/
+      testIgnore: STACK
     }
   ],
   webServer: {

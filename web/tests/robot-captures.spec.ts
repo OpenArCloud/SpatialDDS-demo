@@ -20,7 +20,11 @@ import {
  */
 
 const OUT = process.env.P44_OUT || join(tmpdir(), 'spatialdds-robot');
-const TIER = 'robot_tier';
+// `SPATIALDDS_TIER_CONTAINER` names another tier, as
+// `SPATIALDDS_STACK_CONTAINER` names another stack (model-stack.helpers.ts):
+// this file kills and restarts the tier's sim, so it must never reach a tier
+// it was not pointed at. Added 2026-11-08 for the claims batch's private run.
+const TIER = process.env.SPATIALDDS_TIER_CONTAINER || 'robot_tier';
 // ROBOT_START_XY in spatialdds_demo/plaza.py, copied rather than imported
 // because this is TypeScript reading a Python constant.
 //
@@ -81,7 +85,7 @@ function lethalCells(): number {
 function tierRunning(): boolean {
   try {
     const out = execSync(
-      "docker exec robot_tier pgrep -c -f 'spatialdds_ros.robot_node' 2>/dev/null",
+      `docker exec ${TIER} pgrep -c -f 'spatialdds_ros.robot_node' 2>/dev/null`,
       { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
     return Number(out) > 0;
   } catch {

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { BRIDGE_URL } from './model-stack.helpers';
 
 /**
  * A failed localization must not read as a successful one.
@@ -19,7 +20,10 @@ import { expect, test } from '@playwright/test';
  *
  * Hermetic by interception: no bridge, no bus, no VPS.
  */
-const BRIDGE = 'http://localhost:8088';
+// The URL the bundle was built against, not the dev default: intercepting
+// `localhost:8088` while the page talks to another bridge would let it reach a
+// real one, and this spec would no longer be hermetic (2026-11-08).
+const BRIDGE = BRIDGE_URL;
 
 const HEALTH = { status: 'ok', dds_domain: 0 };
 
