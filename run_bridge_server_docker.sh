@@ -67,6 +67,14 @@ trap cleanup EXIT INT TERM
 # duck). The venue's declared edges and duck_mover's come with those
 # services, whatever this says. See docs/owm-02-census.md.
 #
+# SPATIALDDS_BINDING_PUBLIC_URL — where clients reach the model binding,
+# `http://localhost:8089` by default, which is what `-p 8089:8089` below
+# makes true on this machine. It is what the binding advertises in every
+# service manifest's topic URLs. Without it the binding advertised its bind
+# address, `http://0.0.0.0:8089`, which a client following the manifest
+# reaches only by accident on this host (spatialdds-py finding 83). Set it to
+# the URL a remote reader uses when the stack is served beyond this machine.
+#
 # This note lives here, above the invocation, and must stay here. It sat
 # inside the `docker run` line-continuation below from 2026-09-07 to
 # 2026-09-30, where a comment ends the command: docker received the flags
@@ -82,6 +90,7 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
   -e PYTHONUNBUFFERED=1 \
   -e SPATIALDDS_TRANSPORT=dds \
   -e SPATIALDDS_DDS_DOMAIN="${SPATIALDDS_DDS_DOMAIN:-1}" \
+  -e SPATIALDDS_BINDING_PUBLIC_URL="${SPATIALDDS_BINDING_PUBLIC_URL:-http://localhost:8089}" \
   -e CYCLONEDDS_URI=file:///etc/cyclonedds.xml \
   -e PYTHONPATH=/app \
   -e BRIDGE_LOG_BTS="${bts}" \
@@ -136,6 +145,7 @@ docker run --rm -p 8088:8088 -p 8089:8089 --name "${bridge_name}" \
         python3 -m spatialdds_demo.near_fuser >\"\$BRIDGE_LOG_DIR/near_\$BRIDGE_LOG_BTS.log\" 2>&1 &\
       fi; \
       python3 -m bridges.web_bridge.binding --host 0.0.0.0 --port 8089 \
+        --public-url \"\$SPATIALDDS_BINDING_PUBLIC_URL\" \
         --domain \"\$SPATIALDDS_DDS_DOMAIN\" --token \"\$SPATIALDDS_BINDING_TOKEN\" \
         >\"\$binding_log\" 2>&1 &\
     fi; \
