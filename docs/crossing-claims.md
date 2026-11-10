@@ -367,10 +367,21 @@ pose write validated, 0.01 ms with `validate=False`; `webjson.schemas()`
 alone, 3.74 ms a call over 112 files. At about 40 writes a step the
 operators fell 1.4 s behind the world, published records stamped on time
 and 1.4 s stale, and car-b2, placed by them, stopped inside the closed
-crossing; the train braked for it. The scene's pose lane is written with
+crossing; the train braked for it. The scene's pose lane was written with
 `validate=False` (`scene.Publisher`), the recording validated end to end
 instead, and the session test holds every participant within 0.1 s of the
 world.
+
+**75, closed.** spatialdds-py's `next-release` compiles each type's schema
+once a process and removes `validate=False`: a validated pose write costs
+0.12 ms, against 5.11 ms on that branch before the fix and 0.009 ms written
+unvalidated (its `gates/write_validation_cost.py`, budget 1 ms). The pose lane
+is validated now, as every write is, landing with the pin that carries the
+fix. Measured with that SDK under the pinned SUMO: the scene's suite passes as
+on 0.7.4 with the lane unvalidated (72 passed and 39 subtests, both ways); and
+with the SDK's caches planted out, the session test fails, a participant
+0.759 s behind the world and a claim's latency 109 ms, so the suite holds the
+lane's cost.
 
 **Freshness, the evidence.** What finding 75 did to a consumer, measured in
 a development session before the mitigation (rate 1, seed 42; its logs were
