@@ -23,10 +23,10 @@ then the dispose.
   and the bench under the same silence is still served;
 * **withdraw**: each DELETE arrives with its own reason, both places.
 
-The gateway needs spatialdds 0.8.0 or later; this repository pins 0.7.4
-(requirements.txt) for its own stack. The gateway's interpreter is
-`SPATIALDDS_GATEWAY_PYTHON`, or this one. When it has an older spatialdds the
-whole spec skips and says so, and it arms itself on the day the pin moves.
+The gateway needs spatialdds 0.8.0 or later, which this repository pins since
+0.8.3 (requirements.txt), so it runs with the host suite. The gateway's
+interpreter is `SPATIALDDS_GATEWAY_PYTHON`, or this one. When it has an older
+spatialdds the whole spec skips and says so.
 """
 import ast
 import os
@@ -152,7 +152,7 @@ class Journey(unittest.TestCase):
         if not at_least_080(v):
             raise unittest.SkipTest(
                 f"the example needs a spatialdds>=0.8.0 gateway; {GATEWAY_PY} "
-                f"has {v or 'none'} (requirements.txt pins 0.7.4). Set "
+                f"has {v or 'none'} (requirements.txt pins 0.8.3). Set "
                 f"SPATIALDDS_GATEWAY_PYTHON to an interpreter with 0.8.")
         cls.tmp = tempfile.TemporaryDirectory()
         tmp = Path(cls.tmp.name)

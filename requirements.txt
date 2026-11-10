@@ -79,4 +79,11 @@ spatialdds_ros==0.5.0
 # other members (S18), so a retired edge is one terminal sample, not two.
 # It also publishes a schema for an extension (S19) and serves a recorded
 # lane with the durability its writer opened (S20).
-spatialdds[dds,server]==0.7.4
+# 0.7.4 -> 0.8.3 on 2026-11-09: every write validated and its cost bounded
+# (finding 75: a validated pose write 0.12 ms, from 7), so the crossing
+# scene's pose lane drops validate=False, which 0.8.3 removes; per-scene
+# --public (finding 84); search() reads every page (82); and the binding's
+# advertised origin is checked (83, whose launcher half is this repository's
+# --public-url). 0.8.0 to 0.8.2 came between: the HTTP write surface, entity
+# and claim publishing with refresh-or-lapse, no phantom lanes.
+spatialdds[dds,server]==0.8.3
